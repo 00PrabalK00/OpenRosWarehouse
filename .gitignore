@@ -1,0 +1,48 @@
+# ROS2 colcon build artifacts
+build/
+install/
+log/
+
+# Python byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# C/C++ compiled objects
+*.o
+*.d
+*.so
+*.a
+*.dylib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# egg / dist info
+*.egg-info/
+dist/
+*.egg
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Node / JS
+node_modules/
+npm-debug.log*
+
+# Misc local files
+*.zip
+*.pdf
+tmp_*.js
+plot_controller.py
+ip
+src.zip
