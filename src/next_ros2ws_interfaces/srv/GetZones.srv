@@ -1,0 +1,6 @@
+# Request: Get all zones
+---
+# Response
+bool success
+next_ros2ws_interfaces/Zone[] zones
+string message

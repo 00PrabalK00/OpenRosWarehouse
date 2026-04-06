@@ -1,0 +1,4 @@
+---
+bool ok
+string message
+string mappings_json

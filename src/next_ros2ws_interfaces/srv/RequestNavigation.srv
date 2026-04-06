@@ -1,0 +1,9 @@
+string requester
+string goal_type
+string goal_name
+geometry_msgs/PoseStamped[] waypoints
+string[] zone_names
+bool[] shelf_checks
+---
+bool ok
+string message

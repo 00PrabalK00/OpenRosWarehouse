@@ -1,0 +1,14 @@
+# Follow a sequence of waypoints
+geometry_msgs/PoseStamped[] waypoints
+# Optional parallel zone names; empty string means no zone action at that waypoint
+string[] zone_names
+# Optional parallel shelf-check flags; true enables post-arrival shelf detection/docking at that waypoint
+bool[] shelf_checks
+---
+bool success
+string message
+uint32 completed
+---
+uint32 current_index
+uint32 total
+string status

@@ -1,0 +1,5 @@
+string requester
+string reason
+---
+bool ok
+string message

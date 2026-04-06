@@ -1,0 +1,6 @@
+# Request: Get all saved layouts
+---
+# Response
+bool success
+next_ros2ws_interfaces/Layout[] layouts
+string message

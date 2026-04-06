@@ -1,0 +1,6 @@
+string mappings_json
+bool confirmed
+---
+bool ok
+string message
+bool require_confirmation

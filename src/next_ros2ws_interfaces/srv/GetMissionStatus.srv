@@ -1,0 +1,10 @@
+---
+bool ok
+bool active
+bool paused
+string state
+string type
+string[] data
+int32 progress
+string interrupted_by
+string message

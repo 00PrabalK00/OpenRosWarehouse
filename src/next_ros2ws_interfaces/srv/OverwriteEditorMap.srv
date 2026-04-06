@@ -1,0 +1,5 @@
+string image
+float64[] origin
+---
+bool ok
+string message

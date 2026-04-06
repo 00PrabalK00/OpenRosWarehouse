@@ -1,0 +1,7 @@
+string layer
+string object_json
+---
+bool ok
+string message
+string object_id
+string layers_json

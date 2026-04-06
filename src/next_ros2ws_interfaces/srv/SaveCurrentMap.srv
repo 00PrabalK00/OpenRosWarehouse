@@ -1,0 +1,5 @@
+---
+bool ok
+string message
+string map_yaml_path
+string map_image_path

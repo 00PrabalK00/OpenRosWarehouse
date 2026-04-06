@@ -1,0 +1,7 @@
+---
+bool ok
+bool active
+int32 current_index
+int32 total_zones
+string current_zone
+string message

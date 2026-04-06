@@ -1,0 +1,4 @@
+string[] zones
+---
+bool ok
+string message
