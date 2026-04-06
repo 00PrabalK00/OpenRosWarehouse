@@ -1,0 +1,178 @@
+# Improved Relocalization Configuration
+# Place this in your config directory and load with --params-file
+
+auto_reloc:
+  ros__parameters:
+    # Topics and frames
+    map_topic: '/map'
+    scan_topic: '/scan'
+    scan2_topic: '/scan2'
+    base_frame: 'base_link'
+
+    # Lidar transforms (update these for your robot!)
+    front_lidar_x: 0.35
+    front_lidar_y: 0.0
+    front_lidar_yaw: 3.14159  # pi radians
+    rear_lidar_x: -0.35
+    rear_lidar_y: 0.0
+    rear_lidar_yaw: 0.0
+    front_scan_frame: 'laser_front_frame'
+    rear_scan_frame: 'laser_rear_frame'
+    allow_manual_lidar_fallback: false
+
+    # Scan processing
+    scan_downsample: 3        # Use every 3rd point (balance speed vs accuracy)
+    max_points: 120           # Max points per scan (increased from 90)
+    min_scan_points: 30       # Min required for relocalization (reduced from 40)
+    max_scan_time_diff_sec: 0.20
+    # Temporal bundle across recent scans for better global constraints.
+    use_scan_bundle: true
+    bundle_scan_count: 6
+    bundle_window_sec: 1.2
+    bundle_sync_slop_sec: 0.10
+    bundle_max_points: 360
+    bundle_motion_compensate_odom: true
+    odom_frame: 'odom'
+
+    # Map processing
+    occupied_threshold: 65    # Occupancy grid threshold for "occupied"
+
+    # Multi-resolution search (RECOMMENDED)
+    use_multi_resolution: true
+    coarse_samples: 800       # Stage 1: global coverage
+    medium_samples: 400       # Stage 2: zoom into promising regions
+    fine_samples: 200         # Stage 3: precise refinement
+    medium_radius_m: 3.0      # Radius for medium search
+    fine_radius_m: 1.0        # Radius for fine search
+
+    # Scoring (IMPROVED)
+    use_robust_scoring: true  # Use Huber loss instead of pure Gaussian
+    sigma: 0.18               # Matching tolerance (meters)
+    huber_delta: 0.10         # Huber threshold in meters
+    unknown_penalty_exp: 1.5  # Softer unknown penalty (was 2.0)
+    distance_clip_m: 1.5      # Clip very-far residuals (meters)
+    sample_near_obstacles_dist_m: 1.5  # Prefer candidates closer to map structure
+
+    # Optional scan-axis yaw pruning to reduce corridor false matches.
+    use_pca_yaw_pruning: false
+    pca_yaw_window_deg: 90.0
+
+    # Yaw search angles
+    coarse_yaw_steps: 48      # Stage 1: sweep full circle
+    medium_yaw_steps: 24      # Stage 2: refine promising angles
+    fine_yaw_steps: 13        # Stage 3: precise angle refinement
+    fine_yaw_span_deg: 10.0   # +/- degrees for fine search
+
+    # Particle filter refinement (OPTIONAL - adds ~0.5s but improves accuracy)
+    use_particle_refinement: true
+    num_particles: 50         # Particles to sample
+    particle_xy_std: 0.15     # Position standard deviation (m)
+    particle_yaw_std_deg: 8.0 # Orientation standard deviation (deg)
+    particle_iterations: 3    # Refinement iterations
+
+    # Validation thresholds - RELAXED for better success rate
+    # Adjust these based on your environment (see IMPROVEMENTS_GUIDE.md)
+    min_accept_score: 0.28         # Minimum score to accept (was 0.32)
+    min_known_ratio: 0.60          # Min fraction of scan in known space (was 0.65)
+    min_score_margin: 0.025        # Min gap to second-best (was 0.030)
+    # Curve-edge margin leniency (keeps straight-line scans strict).
+    curve_edge_margin_relax_enabled: true
+    curve_edge_ratio_start: 0.30
+    curve_edge_ratio_full: 0.65
+    curve_edge_margin_relax_max: 0.70
+    allow_unambiguous_margin_bypass: true   # Allow margin-only failures if clustering is unambiguous
+    margin_bypass_min_score: 0.00           # Optional floor; keep 0.0 to bypass any margin-only unambiguous reject
+    max_mean_dist_m: 0.18          # Max average distance to obstacles (was 0.16)
+    min_hit_ratio: 0.30            # Min fraction of direct hits (was 0.35)
+
+    # Adaptive thresholding (RECOMMENDED)
+    use_adaptive_thresholds: true  # Auto-adjust based on candidate distribution
+
+    # Ambiguity detection - IMPROVED
+    ambiguity_distance_m: 1.5      # Distance to check for competing poses
+    min_far_score_margin: 0.050    # Required margin vs distant candidates
+    use_spatial_clustering: true   # Better ambiguity detection via clustering
+    cluster_eps: 0.8               # Clustering radius (meters)
+
+    # Local-prior search (tries local search first if prior available)
+    use_local_prior_search: true
+    local_search_radius_m: 3.0     # Search radius around prior (was 2.5)
+    local_yaw_span_deg: 70.0       # +/- yaw range around prior (was 55.0)
+    local_min_accept_score: 0.22   # More lenient for local search
+    local_min_known_ratio: 0.50    # More lenient for local search
+    require_good_prior_for_local_search: true
+    # Manual place -> auto refine is a human-paced workflow, so keep the
+    # local-prior window wide enough for AMCL or /initialpose to seed it.
+    local_prior_max_age_sec: 8.0
+    local_prior_max_cov_sum: 1.5
+    amcl_pose_topic: '/amcl_pose'
+
+    # Startup auto relocalization flow (optional)
+    auto_relocate_on_startup: false
+    startup_delay_sec: 4.0
+    startup_spin_before_match: false
+    startup_spin_speed: 0.25
+    startup_spin_duration_sec: 2.0
+    startup_spin_settle_sec: 0.25
+    cmd_vel_topic: '/cmd_vel'
+
+# ------------------------------------------------------------------
+# ENVIRONMENT-SPECIFIC CONFIGURATIONS
+# Copy the relevant section below and adjust main params above
+# ------------------------------------------------------------------
+
+# FOR SYMMETRIC ENVIRONMENTS (hallways, warehouses):
+symmetric_environment:
+  ros__parameters:
+    ambiguity_distance_m: 2.0
+    min_far_score_margin: 0.080
+    use_spatial_clustering: true
+    cluster_eps: 0.6
+
+# FOR CLUTTERED/DYNAMIC ENVIRONMENTS (offices, retail):
+cluttered_environment:
+  ros__parameters:
+    use_robust_scoring: true
+    huber_delta: 0.12
+    min_known_ratio: 0.55
+    min_accept_score: 0.25
+
+# FOR SPARSE/OPEN ENVIRONMENTS (parking lots):
+sparse_environment:
+  ros__parameters:
+    sigma: 0.22
+    max_mean_dist_m: 0.22
+    min_scan_points: 25
+    min_known_ratio: 0.55
+
+# FOR HIGHLY FEATURED ENVIRONMENTS (dense obstacles):
+featured_environment:
+  ros__parameters:
+    sigma: 0.15
+    min_hit_ratio: 0.40
+    scan_downsample: 2
+    max_points: 150
+
+# FOR SPEED-CRITICAL APPLICATIONS (sacrifice accuracy for speed):
+speed_optimized:
+  ros__parameters:
+    use_multi_resolution: true
+    coarse_samples: 500
+    medium_samples: 200
+    fine_samples: 100
+    coarse_yaw_steps: 36
+    use_particle_refinement: false
+    scan_downsample: 4
+
+# FOR MAXIMUM ACCURACY (sacrifice speed):
+accuracy_optimized:
+  ros__parameters:
+    use_multi_resolution: true
+    coarse_samples: 1200
+    medium_samples: 600
+    fine_samples: 300
+    coarse_yaw_steps: 72
+    use_particle_refinement: true
+    particle_iterations: 5
+    scan_downsample: 2
+    max_points: 180
