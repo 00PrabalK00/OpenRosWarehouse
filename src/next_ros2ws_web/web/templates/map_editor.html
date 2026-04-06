@@ -1,0 +1,2773 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Editor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ================================================================
+           Map Editor — Industrial HMI Shell (matches home page design)
+           ================================================================ */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary:       #0a0e14;
+            --bg-secondary:     #121720;
+            --bg-chrome:        #1B1F27;
+            --bg-canvas:        #13161D;
+            --bg-elevated:      #232933;
+            --border-chrome:    #252B38;
+            --border-primary:   #283444;
+            --text-primary:     #e2e8f0;
+            --text-secondary:   #a0aec0;
+            --text-tertiary:    #718096;
+            --text-field-label: #6B7794;
+            --text-field-value: #C5CDD9;
+            --accent-normal:    #4299e1;
+            --accent-success:   #48bb78;
+            --accent-critical:  #fc8181;
+            --accent-warning:   #ed8936;
+            --selected-blue:    #2669C8;
+            --selected-blue-dim: rgba(38, 105, 200, 0.14);
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .editor-root {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* ── Context Toolbar (matches home page tab-navigation) ─── */
+        .toolbar {
+            display: flex;
+            align-items: stretch;
+            background: var(--bg-chrome);
+            border-bottom: 1px solid var(--border-chrome);
+            height: 64px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            position: relative;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .toolbar::-webkit-scrollbar {
+            display: none;
+            height: 0;
+        }
+
+        /* Section container — label above, buttons below */
+        .ctx-section {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 6px 8px 5px;
+            border-right: 1px solid var(--border-chrome);
+            flex-shrink: 0;
+            gap: 4px;
+        }
+
+        .ctx-section-lbl {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #8ea2c6;
+            line-height: 1.2;
+            white-space: nowrap;
+            padding-left: 2px;
+        }
+
+        .ctx-section-row {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        /* ── Icon + Label buttons (mode-rail-btn style, horizontal) */
+        .tool-btn, .editor-action-btn {
+            width: 46px;
+            height: 38px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(18, 24, 33, 0.96) 0%, rgba(11, 15, 24, 0.98) 100%);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            transition: background 0.14s, color 0.14s, border-color 0.14s;
+            padding: 3px;
+            position: relative;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 18px rgba(2, 6, 23, 0.12);
+        }
+
+        .tool-btn i, .editor-action-btn i {
+            font-size: 13px;
+            line-height: 1;
+        }
+
+        .tool-lbl {
+            font-size: 7px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .tool-btn:hover {
+            background: linear-gradient(180deg, rgba(29, 38, 52, 0.96) 0%, rgba(18, 24, 36, 0.98) 100%);
+            color: var(--text-primary);
+            border-color: rgba(96, 165, 250, 0.26);
+        }
+
+        .tool-btn.active {
+            background: linear-gradient(180deg, rgba(24, 54, 102, 0.38) 0%, rgba(14, 28, 54, 0.62) 100%);
+            color: #a9d0ff;
+            border-color: rgba(59, 130, 246, 0.34);
+            box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.10), 0 10px 20px rgba(15, 23, 42, 0.16);
+        }
+
+        .tool-btn.active::before {
+            display: none;
+        }
+
+        /* Zone tool colour variants */
+        .tool-btn.zone-nogo:hover    { background: rgba(151, 34, 34, 0.22); color: #f4b1b1; border-color: rgba(185, 70, 70, 0.34); }
+        .tool-btn.zone-nogo.active   { background: rgba(151, 34, 34, 0.18); color: #f2b7b7; border-color: rgba(185, 70, 70, 0.30); }
+
+        .tool-btn.zone-slow:hover    { background: rgba(120, 53, 15, 0.22); color: #f3c186; border-color: rgba(204, 121, 61, 0.34); }
+        .tool-btn.zone-slow.active   { background: rgba(120, 53, 15, 0.18); color: #f0c795; border-color: rgba(204, 121, 61, 0.30); }
+
+        .tool-btn.zone-restrict:hover  { background: rgba(91, 33, 46, 0.24); color: #f2b6c5; border-color: rgba(170, 91, 115, 0.34); }
+        .tool-btn.zone-restrict.active { background: rgba(91, 33, 46, 0.18); color: #efc1cb; border-color: rgba(170, 91, 115, 0.30); }
+
+        .tool-btn.path-tool:hover    { background: rgba(38, 105, 200, 0.18); color: #9ec6ff; border-color: rgba(38, 105, 200, 0.34); }
+        .tool-btn.path-tool.active   { background: rgba(38, 105, 200, 0.14); color: #9ec6ff; border-color: rgba(38, 105, 200, 0.30); }
+
+        /* Action button variants */
+        .editor-action-btn:hover {
+            background: linear-gradient(180deg, rgba(29, 38, 52, 0.96) 0%, rgba(18, 24, 36, 0.98) 100%);
+            color: var(--text-primary);
+            border-color: rgba(96, 165, 250, 0.26);
+        }
+
+        .editor-action-btn.active {
+            background: linear-gradient(180deg, rgba(24, 54, 102, 0.38) 0%, rgba(14, 28, 54, 0.62) 100%);
+            color: #a9d0ff;
+            border-color: rgba(59, 130, 246, 0.34);
+        }
+
+        .editor-action-btn.primary { color: #9ec6ff; }
+        .editor-action-btn.primary:hover { background: rgba(38, 105, 200, 0.18); color: #c9ddff; border-color: rgba(38, 105, 200, 0.32); }
+
+        .editor-action-btn.danger { color: #f0b0b0; }
+        .editor-action-btn.danger:hover { background: rgba(151, 34, 34, 0.18); color: #ffd5d5; border-color: rgba(185, 70, 70, 0.32); }
+
+        .editor-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .editor-action-btn.tinted-info {
+            color: #7fd4ff;
+        }
+
+        .editor-action-btn.tinted-info:hover {
+            background: rgba(127,212,255,0.12);
+            color: #7fd4ff;
+            border-color: rgba(127,212,255,0.28);
+        }
+
+        /* Overlay buttons (inside settings popover and toolbar overlay section) */
+        .nudge-btn, .step-btn, .overlay-btn {
+            border: 1px solid var(--border-chrome);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            transition: all 0.15s ease;
+        }
+
+        .nudge-btn { width: 30px; height: 30px; line-height: 28px; text-align: center; }
+        .step-btn, .overlay-btn { padding: 5px 8px; }
+
+        .nudge-btn:hover, .step-btn:hover { background: #253244; border-color: #3a4d66; }
+
+        /* Toolbar overlay buttons (icon+label) */
+        .overlay-btn.toolbar-overlay {
+            width: 42px;
+            height: 38px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            padding: 3px;
+            border-color: rgba(148, 163, 184, 0.18);
+            background: linear-gradient(180deg, rgba(18, 24, 33, 0.96) 0%, rgba(11, 15, 24, 0.98) 100%);
+            color: var(--text-secondary);
+            border-radius: 8px;
+            font-size: 13px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 18px rgba(2, 6, 23, 0.12);
+        }
+
+        .overlay-btn.toolbar-overlay:hover { background: linear-gradient(180deg, rgba(29, 38, 52, 0.96) 0%, rgba(18, 24, 36, 0.98) 100%); color: var(--text-primary); border-color: rgba(96, 165, 250, 0.26); }
+        .overlay-btn.toolbar-overlay.active { background: linear-gradient(180deg, rgba(24, 54, 102, 0.38) 0%, rgba(14, 28, 54, 0.62) 100%); color: #a9d0ff; border-color: rgba(59,130,246,0.34); }
+
+        /* Popover overlay buttons */
+        .overlay-btn:not(.toolbar-overlay).active {
+            background: var(--selected-blue-dim);
+            border-color: var(--selected-blue);
+            color: var(--selected-blue);
+        }
+
+        .step-btn.active {
+            background: var(--selected-blue-dim);
+            border-color: var(--selected-blue);
+            color: var(--selected-blue);
+        }
+
+        /* Zoom readout badge */
+        .zoom-readout {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 46px;
+            height: 22px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 4px;
+            background: var(--bg-canvas);
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-family: 'Roboto Mono', Consolas, Monaco, monospace;
+            padding: 0 4px;
+        }
+
+        /* Layout chip */
+        .layout-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border-chrome);
+            background: var(--bg-elevated);
+            font-size: 11px;
+            color: var(--text-primary);
+            white-space: nowrap;
+            max-width: 130px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .layout-chip.is-empty { border-color: #5b3a3a; background: #2a1a1a; color: #d7a0a0; }
+
+        /* Settings popover */
+        .editor-popover {
+            position: fixed;
+            top: 64px;
+            right: 8px;
+            left: auto;
+            z-index: 40;
+            width: min(640px, calc(100vw - 28px));
+            background: rgba(13, 18, 26, 0.97);
+            border: 1px solid var(--border-chrome);
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.65);
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            backdrop-filter: blur(4px);
+        }
+
+        .editor-popover[hidden] { display: none; }
+
+        .popover-stack { display: grid; gap: 10px; }
+        .popover-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+        .popover-block {
+            border: 1px solid var(--border-chrome);
+            background: rgba(27, 36, 48, 0.72);
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        .nudge-grid {
+            display: grid;
+            grid-template-columns: 30px 30px 30px;
+            grid-template-rows: 30px 30px 30px;
+            gap: 4px;
+        }
+
+        .brush-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+        .brush-label input { accent-color: var(--accent-normal); }
+        .brush-value { min-width: 28px; text-align: right; font-size: 12px; color: var(--text-secondary); }
+
+        .step-row, .overlay-row, .rotate-row { display: flex; align-items: center; gap: 6px; }
+
+        /* Canvas area */
+        .canvas-wrap {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            background: var(--bg-canvas);
+            overflow: hidden;
+            padding: 8px 12px 14px;
+        }
+
+        #editor {
+            max-width: 96vw;
+            max-height: calc(100vh - 80px);
+            background: #0f1318;
+            border: 1px solid var(--border-chrome);
+            border-radius: 8px;
+            box-shadow: 0 12px 50px rgba(0, 0, 0, 0.55);
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        /* Status readout overlay */
+        .status {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            background: rgba(13, 18, 26, 0.92);
+            border: 1px solid var(--border-chrome);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            color: var(--text-primary);
+            font-family: 'Roboto Mono', Consolas, monospace;
+            backdrop-filter: blur(2px);
+        }
+
+        .zone-label {
+            position: absolute;
+            pointer-events: none;
+            font-size: 11px;
+            color: #ffffff;
+            background: rgba(20, 24, 30, 0.75);
+            padding: 2px 6px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+        }
+
+        .origin-readout {
+            font-size: 11px;
+            color: var(--text-secondary);
+            min-width: 140px;
+            font-family: 'Roboto Mono', Consolas, Monaco, monospace;
+        }
+
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0;
+            margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+            white-space: nowrap; border: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="editor-root">
+        <header class="toolbar" id="toolbar">
+
+            <!-- ── DRAW TOOLS ────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Draw</div>
+                <div class="ctx-section-row">
+                    <button class="tool-btn active" data-tool="add" title="Paint obstacles (brush)">
+                        <i class="fas fa-pen"></i>
+                        <span class="tool-lbl">Add</span>
+                    </button>
+                    <button class="tool-btn" data-tool="erase" title="Erase obstacles">
+                        <i class="fas fa-eraser"></i>
+                        <span class="tool-lbl">Erase</span>
+                    </button>
+                    <button class="tool-btn" data-tool="wall_line" title="Draw wall line — click start then end point (renders as dots in Dotted View)">
+                        <i class="fas fa-ruler"></i>
+                        <span class="tool-lbl">Wall Line</span>
+                    </button>
+                    <button class="tool-btn" data-tool="move_zone" title="Move selected zone">
+                        <i class="fas fa-up-down-left-right"></i>
+                        <span class="tool-lbl">Move</span>
+                    </button>
+                    <button class="tool-btn" data-tool="rotate_zone" title="Rotate selected zone">
+                        <i class="fas fa-rotate"></i>
+                        <span class="tool-lbl">Rotate</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── ZONES & PATHS ──────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Zones &amp; Paths</div>
+                <div class="ctx-section-row">
+                    <button class="tool-btn zone-nogo" data-tool="nogo" title="Paint No-Go zone (robot excluded area)">
+                        <i class="fas fa-ban"></i>
+                        <span class="tool-lbl">No-Go</span>
+                    </button>
+                    <button class="tool-btn zone-slow" data-tool="slow" title="Paint Slow zone (speed-limited corridor)">
+                        <i class="fas fa-person-walking"></i>
+                        <span class="tool-lbl">Slow</span>
+                    </button>
+                    <button class="tool-btn zone-restrict" data-tool="restricted" title="Paint Restricted zone (authorised personnel only)">
+                        <i class="fas fa-lock"></i>
+                        <span class="tool-lbl">Restrict</span>
+                    </button>
+                    <button class="tool-btn path-tool" data-tool="add_path" title="Create navigation path between zones">
+                        <i class="fas fa-route"></i>
+                        <span class="tool-lbl">Path</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── MAP / ORIGIN ───────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Map</div>
+                <div class="ctx-section-row">
+                    <button class="tool-btn" id="move-origin-toggle" title="Drag to reposition map origin">
+                        <i class="fas fa-crosshairs"></i>
+                        <span class="tool-lbl">Origin</span>
+                    </button>
+                    <span id="layout-chip" class="layout-chip" title="Active map">active_map</span>
+                </div>
+            </div>
+
+            <!-- ── EDIT ───────────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Edit</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="undo-btn" title="Undo last stroke">
+                        <i class="fas fa-rotate-left"></i>
+                        <span class="tool-lbl">Undo</span>
+                    </button>
+                    <button class="editor-action-btn danger" id="clear-obstacles-btn" title="Clear all painted obstacles" onclick="if(!confirm('Clear all obstacles from map?'))return;">
+                        <i class="fas fa-trash-can"></i>
+                        <span class="tool-lbl">Clear</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── VIEW ──────────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">View</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="pan-btn" data-tool="pan" title="Drag to pan map view">
+                        <i class="fas fa-hand"></i>
+                        <span class="tool-lbl">Pan</span>
+                    </button>
+                    <button class="editor-action-btn" id="map-zoom-out-btn" title="Zoom out">
+                        <i class="fas fa-magnifying-glass-minus"></i>
+                        <span class="tool-lbl">Zoom −</span>
+                    </button>
+                    <span class="zoom-readout" id="zoom-readout">100%</span>
+                    <button class="editor-action-btn" id="map-zoom-in-btn" title="Zoom in">
+                        <i class="fas fa-magnifying-glass-plus"></i>
+                        <span class="tool-lbl">Zoom +</span>
+                    </button>
+                    <button class="editor-action-btn" id="map-zoom-reset-btn" title="Reset zoom to 100%">
+                        <i class="fas fa-house"></i>
+                        <span class="tool-lbl">Reset</span>
+                    </button>
+                    <button class="editor-action-btn" id="grid-toggle-btn" title="Toggle metric grid overlay">
+                        <i class="fas fa-border-all"></i>
+                        <span class="tool-lbl">Grid</span>
+                    </button>
+                    <button class="editor-action-btn" id="measure-btn" data-tool="measure" title="Measure distance on map">
+                        <i class="fas fa-ruler-horizontal"></i>
+                        <span class="tool-lbl">Measure</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── OVERLAYS ───────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Overlays</div>
+                <div class="ctx-section-row">
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="zones" title="Toggle zone outlines">
+                        <i class="fas fa-draw-polygon"></i>
+                        <span class="tool-lbl">Zones</span>
+                    </button>
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="paths" title="Toggle path lines">
+                        <i class="fas fa-route"></i>
+                        <span class="tool-lbl">Paths</span>
+                    </button>
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="robot" title="Toggle robot position">
+                        <i class="fas fa-robot"></i>
+                        <span class="tool-lbl">Robot</span>
+                    </button>
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="axes" title="Toggle coordinate axes">
+                        <i class="fas fa-plus"></i>
+                        <span class="tool-lbl">Axes</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── DOTTED MAP EDITOR ─────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Dotted Map</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn tinted-info" id="dotted-view-btn" title="Toggle dotted map view and editor">
+                        <i class="fas fa-th-large"></i>
+                        <span class="tool-lbl">Dotted Edit</span>
+                    </button>
+                    <button class="editor-action-btn" id="dot-place-robot-btn" data-tool="set_robot_pose" title="Place the robot pose on the map with heading" style="display:none">
+                        <i class="fas fa-location-crosshairs"></i>
+                        <span class="tool-lbl">Place Bot</span>
+                    </button>
+                    <button class="editor-action-btn" id="dot-auto-reloc-btn" title="Run Auto Reloc against the current map" style="display:none">
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        <span class="tool-lbl">Reloc</span>
+                    </button>
+                    <button class="editor-action-btn" id="dot-refresh-btn" title="Refresh the dotted map render" style="display:none">
+                        <i class="fas fa-sync-alt"></i>
+                        <span class="tool-lbl">Refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── WAYPOINTS ──────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">Waypoints</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="add-waypoint-btn" data-tool="add_waypoint" title="Place a named waypoint / docking station">
+                        <i class="fas fa-map-pin"></i>
+                        <span class="tool-lbl">Waypoint</span>
+                    </button>
+                    <button class="editor-action-btn" id="add-dock-btn" data-tool="add_dock" title="Place a robot docking/charging station">
+                        <i class="fas fa-plug"></i>
+                        <span class="tool-lbl">Dock</span>
+                    </button>
+                    <button class="editor-action-btn" id="add-queue-btn" data-tool="add_queue" title="Mark a queue / staging area">
+                        <i class="fas fa-list-ol"></i>
+                        <span class="tool-lbl">Queue</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── FILE ──────────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">File</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn primary" id="save-permanent-btn" title="Save map to disk">
+                        <i class="fas fa-floppy-disk"></i>
+                        <span class="tool-lbl save-lbl">Save</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── SETTINGS (right-aligned) ──────────────────────── -->
+            <div class="ctx-section" style="margin-left:auto; border-right:none;">
+                <div class="ctx-section-lbl">Adjust</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="editor-settings-toggle" title="Map shift, brush size &amp; overlay settings">
+                        <i class="fas fa-sliders"></i>
+                        <span class="tool-lbl">Settings</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="editor-settings-popover" class="editor-popover" hidden>
+                <div class="popover-stack">
+                    <div class="popover-block popover-row">
+                        <button class="step-btn active" data-shift-step="0.05" title="5cm">5</button>
+                        <button class="step-btn" data-shift-step="0.10" title="10cm">10</button>
+                        <button class="step-btn" data-shift-step="0.25" title="25cm">25</button>
+                        <div class="nudge-grid" aria-label="Map shift controls">
+                            <span></span>
+                            <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0.05" title="Shift Up">▲</button>
+                            <span></span>
+                            <button class="nudge-btn" data-shift-dx="-0.05" data-shift-dy="0" title="Shift Left">◀</button>
+                            <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0" title="Center">•</button>
+                            <button class="nudge-btn" data-shift-dx="0.05" data-shift-dy="0" title="Shift Right">▶</button>
+                            <span></span>
+                            <button class="nudge-btn" data-shift-dx="0" data-shift-dy="-0.05" title="Shift Down">▼</button>
+                            <span></span>
+                        </div>
+                        <button class="nudge-btn" data-yaw-delta="-2" title="Rotate Left">⟲</button>
+                        <button class="nudge-btn" data-yaw-delta="2" title="Rotate Right">⟳</button>
+                        <button class="nudge-btn" id="origin-reset" title="Recenter">⌖</button>
+                    </div>
+
+                    <div class="popover-block popover-row">
+                        <label class="brush-label" for="brush">◍</label>
+                        <input id="brush" type="range" min="2" max="60" value="14">
+                        <span id="brush-value" class="brush-value">14</span>
+                        <button class="overlay-btn active" data-overlay="zones" aria-label="Zones" title="Zones">▦</button>
+                        <button class="overlay-btn active" data-overlay="paths" aria-label="Paths" title="Paths">⤳</button>
+                        <button class="overlay-btn active" data-overlay="robot" aria-label="Robot" title="Robot">◉</button>
+                        <button class="overlay-btn active" data-overlay="axes" aria-label="Axes" title="Axes">╋</button>
+                    </div>
+
+                    <div class="popover-block popover-row">
+                        <label class="brush-label" for="wall-line-width">↔</label>
+                        <input id="wall-line-width" type="range" min="1" max="30" value="1">
+                        <span id="wall-line-width-value" class="brush-value">1</span>
+                        <span style="font-size:12px; color:var(--text-secondary); min-width:58px;">Wall px</span>
+                    </div>
+                </div>
+
+                <div class="popover-block">
+                    <div id="origin-readout" class="origin-readout">x: 0.000 | y: 0.000 | yaw: 0.00°</div>
+                    <label class="sr-only" for="origin-x">Shift X</label>
+                    <input id="origin-x" type="number" step="0.01" value="0" class="sr-only">
+                    <label class="sr-only" for="origin-y">Shift Y</label>
+                    <input id="origin-y" type="number" step="0.01" value="0" class="sr-only">
+                    <label class="sr-only" for="origin-yaw">Map Yaw</label>
+                    <input id="origin-yaw" type="number" step="0.01" value="0" class="sr-only">
+                </div>
+            </div>
+        </header>
+
+        <main class="canvas-wrap">
+            <canvas id="editor"></canvas>
+            <div class="status" id="status">Loading map...</div>
+        </main>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("editor");
+        const ctx = canvas.getContext("2d");
+        const brushSlider = document.getElementById("brush");
+        const brushValue = document.getElementById("brush-value");
+        const wallLineWidthSlider = document.getElementById("wall-line-width");
+        const wallLineWidthValue = document.getElementById("wall-line-width-value");
+        const statusEl = document.getElementById("status");
+        const originXInput = document.getElementById("origin-x");
+        const originYInput = document.getElementById("origin-y");
+        const originYawInput = document.getElementById("origin-yaw");
+        const originResetBtn = document.getElementById("origin-reset");
+        const originReadout = document.getElementById("origin-readout");
+        const undoBtn = document.getElementById("undo-btn");
+        const layoutChip = document.getElementById("layout-chip");
+        const moveOriginToggle = document.getElementById("move-origin-toggle");
+        const panBtn = document.getElementById("pan-btn");
+        const zoomInBtn = document.getElementById("map-zoom-in-btn");
+        const zoomOutBtn = document.getElementById("map-zoom-out-btn");
+        const zoomResetBtn = document.getElementById("map-zoom-reset-btn");
+        const zoomReadoutEl = document.getElementById("zoom-readout");
+        const gridToggleBtn = document.getElementById("grid-toggle-btn");
+        const measureBtn = document.getElementById("measure-btn");
+        const settingsToggleBtn = document.getElementById("editor-settings-toggle");
+        const settingsPopover = document.getElementById("editor-settings-popover");
+        const shiftStepButtons = Array.from(document.querySelectorAll("button[data-shift-step]"));
+        const shiftNudgeButtons = Array.from(document.querySelectorAll("button[data-shift-dx]"));
+        const yawButtons = Array.from(document.querySelectorAll("button[data-yaw-delta]"));
+        const overlayButtons = Array.from(document.querySelectorAll("button[data-overlay]"));
+
+        const API = {
+            preview: "/api/editor/map/preview",
+            activeMap: "/api/map/get_active",
+            editorReload: "/api/editor/map/reload",
+            editorPreview: "/api/editor/map/preview",
+            robotPose: "/api/robot/pose",
+            robotSetPose: "/api/robot/set_pose",
+            scan: "/api/scan",
+            autoRelocate: "/api/auto_relocate",
+            overwrite: "/api/editor/map/overwrite",
+            saveCurrent: "/api/editor/map/save_current",
+            zoneSave: "/api/zones/save",
+            zones: "/api/zones",
+            zoneUpdate: "/api/zones/update",
+            paths: "/api/paths",
+            pathSave: "/api/path/save",
+            layouts: "/api/layouts",
+            dottedOverlay: "/api/map/dotted_overlay",
+            map: "/api/map"
+        };
+
+        const editCanvas = document.createElement("canvas");
+        const editCtx = editCanvas.getContext("2d");
+
+        const savedBrushSize = Number(window.localStorage.getItem("mapEditorBrushSize"));
+        if (Number.isFinite(savedBrushSize)) {
+            const minBrush = Number(brushSlider.min) || 2;
+            const maxBrush = Number(brushSlider.max) || 60;
+            brushSlider.value = String(Math.max(minBrush, Math.min(maxBrush, Math.round(savedBrushSize))));
+        }
+        brushValue.textContent = String(brushSlider.value);
+
+        const savedWallLineWidth = Number(window.localStorage.getItem("mapEditorWallLineWidth"));
+        if (Number.isFinite(savedWallLineWidth)) {
+            const minWall = Number(wallLineWidthSlider.min) || 1;
+            const maxWall = Number(wallLineWidthSlider.max) || 30;
+            wallLineWidthSlider.value = String(Math.max(minWall, Math.min(maxWall, Math.round(savedWallLineWidth))));
+        }
+        wallLineWidthValue.textContent = String(wallLineWidthSlider.value);
+
+        const state = {
+            tool: "add",
+            brush: Number(brushSlider.value),
+            wallLineWidth: Number(wallLineWidthSlider.value),
+            pointerDown: false,
+            dragStart: null,
+            startYaw: 0,
+            startOriginPx: 0,
+            startOriginPy: 0,
+            mapInfo: null,
+            origin: { x: 0, y: 0, yaw: 0 },
+            originPx: 0,
+            originPy: 0,
+            initialOrigin: { x: 0, y: 0, yaw: 0 },
+            robotPose: null,
+            saveTimer: null,
+            mapReady: false,
+            zones: new Map(),
+            paths: new Map(),
+            loadedMapPath: "",
+            activeMapPath: "",
+            draggingZoneId: null,
+            dragOffsetMap: null,
+            pendingFromZone: null,
+            undoStack: [],
+            strokeSnapshot: null,
+            lineStart: null,
+            linePreviewEnd: null,
+            draggingOrigin: false,
+            rotatingZoneId: null,
+            rotateStartYaw: 0,
+            rotateStartAngle: 0,
+            currentLayout: null,
+            moveOriginEnabled: false,
+            draggingView: false,
+            viewDragStart: null,
+            shiftStep: 0.05,
+            showGrid: false,
+            measurement: {
+                start: null,
+                end: null
+            },
+            overlayVisibility: {
+                zones: true,
+                paths: true,
+                robot: true,
+                axes: true
+            },
+            dottedViewMode: false,
+            dottedBgImage: null,
+            dottedSegments: [],
+            dottedLineStart: null,
+            dottedPreviewEnd: null,
+            scanPoints: [],
+            scanSource: "",
+            scanOrigin: null,
+            robotPosePlacementStart: null,
+            robotPosePlacementPreviewEnd: null,
+            dottedRefreshTimer: null,
+            view: {
+                scale: 1,
+                minScale: 0.35,
+                maxScale: 6.0,
+                offsetX: 0,
+                offsetY: 0
+            }
+        };
+
+        const TOOL_ZONE_PRESETS = {
+            nogo: {
+                prefix: "NOGO",
+                label: "No-Go zone",
+                type: "no_go",
+                speed: 0.5
+            },
+            slow: {
+                prefix: "SLOW",
+                label: "Slow zone",
+                type: "slow",
+                speed: 0.2
+            },
+            restricted: {
+                prefix: "RESTRICT",
+                label: "Restricted zone",
+                type: "restricted",
+                speed: 0.5
+            },
+            add_waypoint: {
+                prefix: "WAYPOINT",
+                label: "Waypoint",
+                type: "waypoint",
+                speed: 0.5
+            },
+            add_dock: {
+                prefix: "DOCK",
+                label: "Dock",
+                type: "dock",
+                speed: 0.5
+            },
+            add_queue: {
+                prefix: "QUEUE",
+                label: "Queue marker",
+                type: "queue",
+                speed: 0.5
+            }
+        };
+
+        const TOOL_HINTS = {
+            add: "Obstacle brush enabled",
+            erase: "Obstacle erase brush enabled",
+            wall_line: "Click start point, then end point to draw a wall line — width is adjustable in Settings",
+            pan: "Drag the map viewport",
+            move_zone: "Drag a zone to reposition it",
+            rotate_zone: "Drag around a zone to rotate it",
+            nogo: "Click the map to place a No-Go zone marker",
+            slow: "Click the map to place a Slow zone marker",
+            restricted: "Click the map to place a Restricted zone marker",
+            add_path: "Click a start zone, then an end zone",
+            measure: "Click two points to measure distance",
+            add_waypoint: "Click the map to place a waypoint",
+            add_dock: "Click the map to place a dock",
+            add_queue: "Click the map to place a queue marker",
+            dot_wall: "Dotted map editor — click start, then end point to draw a wall segment (Esc to cancel)",
+            dot_erase: "Dotted map editor — click near a segment to erase it",
+            set_robot_pose: "Place Robot: click robot position, then click again to set heading"
+        };
+
+        function updateZoomReadout() {
+            if (!zoomReadoutEl) {
+                return;
+            }
+            zoomReadoutEl.textContent = `${Math.round(state.view.scale * 100)}%`;
+        }
+
+        function syncCanvasCursor() {
+            let cursor = "crosshair";
+            if (state.draggingView) {
+                cursor = "grabbing";
+            } else if (state.tool === "pan") {
+                cursor = "grab";
+            } else if (state.tool === "move_zone") {
+                cursor = state.draggingZoneId ? "grabbing" : "grab";
+            } else if (state.tool === "rotate_zone") {
+                cursor = "alias";
+            } else if (state.moveOriginEnabled && state.draggingOrigin) {
+                cursor = "grabbing";
+            }
+            canvas.style.cursor = cursor;
+        }
+
+        function basename(path) {
+            const raw = String(path || "").trim();
+            if (!raw) {
+                return "";
+            }
+            const parts = raw.split(/[\\/]+/);
+            return parts[parts.length - 1] || raw;
+        }
+
+        function sanitizeName(raw, fallback = "") {
+            const clean = String(raw || "")
+                .trim()
+                .replace(/[^A-Za-z0-9_\-]+/g, "_")
+                .replace(/^_+|_+$/g, "");
+            return clean || String(fallback || "").trim();
+        }
+
+        function nextSuggestedZoneName(prefix) {
+            const safePrefix = sanitizeName(prefix, "ZONE").toUpperCase();
+            const existing = new Set(
+                Array.from(state.zones.keys()).map((name) => String(name || "").trim().toUpperCase())
+            );
+            let index = 1;
+            while (existing.has(`${safePrefix}_${String(index).padStart(2, "0")}`)) {
+                index += 1;
+            }
+            return `${safePrefix}_${String(index).padStart(2, "0")}`;
+        }
+
+        async function getJson(url, options) {
+            const response = await fetch(url, options);
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (err) {
+                data = {};
+            }
+            return { response, data };
+        }
+
+        async function postJson(url, payload) {
+            return getJson(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload || {})
+            });
+        }
+
+        function clampZoom(value) {
+            return Math.max(state.view.minScale, Math.min(state.view.maxScale, value));
+        }
+
+        function zoomAt(factor, screenX, screenY) {
+            const oldScale = state.view.scale;
+            const nextScale = clampZoom(oldScale * factor);
+            if (!Number.isFinite(nextScale) || Math.abs(nextScale - oldScale) < 1e-6) {
+                return;
+            }
+
+            const worldX = (screenX - state.view.offsetX) / oldScale;
+            const worldY = (screenY - state.view.offsetY) / oldScale;
+            state.view.scale = nextScale;
+            state.view.offsetX = screenX - worldX * nextScale;
+            state.view.offsetY = screenY - worldY * nextScale;
+            updateZoomReadout();
+            draw();
+        }
+
+        function resetZoom() {
+            state.view.scale = 1;
+            state.view.offsetX = 0;
+            state.view.offsetY = 0;
+            updateZoomReadout();
+            draw();
+        }
+
+        function updateStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function setLayoutStatus(mapPath) {
+            const label = basename(mapPath).replace(/\.ya?ml$/i, "");
+            if (label) {
+                layoutChip.textContent = label;
+                layoutChip.classList.remove("is-empty");
+                layoutChip.title = String(mapPath);
+            } else {
+                layoutChip.textContent = "none";
+                layoutChip.classList.add("is-empty");
+                layoutChip.title = "No active map";
+            }
+        }
+
+        function syncGridButton() {
+            gridToggleBtn?.classList.toggle("active", !!state.showGrid);
+        }
+
+        function syncOverlayButtons(key) {
+            const enabled = !!state.overlayVisibility[key];
+            document.querySelectorAll(`button[data-overlay="${key}"]`).forEach((button) => {
+                button.classList.toggle("active", enabled);
+            });
+        }
+
+        function resetMeasurement(options = {}) {
+            state.measurement.start = null;
+            state.measurement.end = null;
+            if (!options.silent && state.tool === "measure") {
+                updateStatus(TOOL_HINTS.measure);
+            }
+        }
+
+        function resolveToolSelection(tool) {
+            if (!state.dottedViewMode) {
+                return tool;
+            }
+            if (tool === "add") {
+                return "dot_wall";
+            }
+            if (tool === "erase") {
+                return "dot_erase";
+            }
+            return tool;
+        }
+
+        function toolbarButtonMatchesTool(buttonTool, activeTool) {
+            if (buttonTool === activeTool) {
+                return true;
+            }
+            if (!state.dottedViewMode) {
+                return false;
+            }
+            if (activeTool === "dot_wall" && buttonTool === "add") {
+                return true;
+            }
+            if (activeTool === "dot_erase" && buttonTool === "erase") {
+                return true;
+            }
+            return false;
+        }
+
+        function setTool(tool) {
+            tool = resolveToolSelection(tool);
+            if ((tool === "move_zone" || tool === "rotate_zone") && state.zones.size === 0) {
+                updateStatus("No zones available to edit");
+                return;
+            }
+            if (tool === "add_path" && state.zones.size < 2) {
+                updateStatus("Need at least 2 zones to create a path");
+                return;
+            }
+
+            state.tool = tool;
+            state.pendingFromZone = null;
+            state.lineStart = null;
+            state.linePreviewEnd = null;
+            state.dottedLineStart = null;
+            state.dottedPreviewEnd = null;
+            state.robotPosePlacementStart = null;
+            state.robotPosePlacementPreviewEnd = null;
+            if (tool !== "measure") {
+                resetMeasurement({ silent: true });
+            }
+
+            document.querySelectorAll("#toolbar button[data-tool]").forEach(btn => {
+                btn.classList.toggle("active", toolbarButtonMatchesTool(btn.dataset.tool, tool));
+            });
+
+            const baseMessage = TOOL_HINTS[tool] || `Tool: ${tool}`;
+            if ((tool === "move_zone" || tool === "rotate_zone" || tool === "add_path") && !state.currentLayout) {
+                updateStatus(`${baseMessage} (editing live zones/paths)`);
+            } else {
+                updateStatus(baseMessage);
+            }
+            syncCanvasCursor();
+            draw();
+        }
+
+        document.querySelectorAll("#toolbar button[data-tool]").forEach(btn => {
+            btn.addEventListener("click", () => setTool(btn.dataset.tool));
+        });
+
+        moveOriginToggle.addEventListener("click", () => {
+            state.moveOriginEnabled = !state.moveOriginEnabled;
+            moveOriginToggle.classList.toggle("active", state.moveOriginEnabled);
+            syncCanvasCursor();
+            updateStatus(state.moveOriginEnabled ? "Move Origin enabled" : "Move Origin disabled");
+        });
+
+        settingsToggleBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const shouldOpen = settingsPopover.hasAttribute("hidden");
+            if (shouldOpen) {
+                settingsPopover.removeAttribute("hidden");
+                settingsToggleBtn.classList.add("active");
+                window.requestAnimationFrame(() => {
+                    positionSettingsPopover();
+                });
+            } else {
+                settingsPopover.setAttribute("hidden", "");
+                settingsToggleBtn.classList.remove("active");
+            }
+        });
+
+        settingsPopover.addEventListener("click", (event) => {
+            event.stopPropagation();
+        });
+
+        document.addEventListener("click", () => {
+            settingsPopover.setAttribute("hidden", "");
+            settingsToggleBtn.classList.remove("active");
+        });
+
+        window.addEventListener("resize", () => {
+            positionSettingsPopover();
+        });
+
+        brushSlider.addEventListener("input", () => {
+            state.brush = Number(brushSlider.value);
+            brushValue.textContent = String(state.brush);
+            window.localStorage.setItem("mapEditorBrushSize", String(state.brush));
+        });
+
+        wallLineWidthSlider.addEventListener("input", () => {
+            state.wallLineWidth = Number(wallLineWidthSlider.value);
+            wallLineWidthValue.textContent = String(state.wallLineWidth);
+            window.localStorage.setItem("mapEditorWallLineWidth", String(state.wallLineWidth));
+            if (state.tool === "wall_line") {
+                draw();
+            }
+        });
+
+        shiftStepButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const step = Number(btn.dataset.shiftStep);
+                if (!Number.isFinite(step) || step <= 0) {
+                    return;
+                }
+                state.shiftStep = step;
+                shiftStepButtons.forEach((candidate) => {
+                    candidate.classList.toggle("active", candidate === btn);
+                });
+            });
+        });
+
+        shiftNudgeButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const dxBase = Number(btn.dataset.shiftDx);
+                const dyBase = Number(btn.dataset.shiftDy);
+                if (!Number.isFinite(dxBase) || !Number.isFinite(dyBase)) {
+                    return;
+                }
+                if (dxBase === 0 && dyBase === 0) {
+                    return;
+                }
+                applyMapTransform(dxBase * (state.shiftStep / 0.05), dyBase * (state.shiftStep / 0.05), 0, "shift");
+            });
+        });
+
+        yawButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const yawDeltaDeg = Number(btn.dataset.yawDelta);
+                if (!Number.isFinite(yawDeltaDeg) || yawDeltaDeg === 0) {
+                    return;
+                }
+                applyMapTransform(0, 0, yawDeltaDeg, "yaw");
+            });
+        });
+
+        overlayButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const key = String(btn.dataset.overlay || "").trim();
+                if (!key || !(key in state.overlayVisibility)) {
+                    return;
+                }
+                state.overlayVisibility[key] = !state.overlayVisibility[key];
+                syncOverlayButtons(key);
+                draw();
+            });
+        });
+
+        gridToggleBtn?.addEventListener("click", () => {
+            state.showGrid = !state.showGrid;
+            syncGridButton();
+            updateStatus(state.showGrid ? "Metric grid enabled" : "Metric grid disabled");
+            draw();
+        });
+
+        undoBtn.addEventListener("click", () => {
+            if (!state.mapReady || state.undoStack.length === 0) {
+                updateStatus("Nothing to undo");
+                return;
+            }
+            const snapshot = state.undoStack.pop();
+            editCtx.putImageData(snapshot, 0, 0);
+            draw();
+            saveEdits("undo");
+        });
+
+        document.getElementById("save-permanent-btn").addEventListener("click", async () => {
+            if (!state.mapReady) {
+                updateStatus("Map not ready");
+                return;
+            }
+
+            const btn = document.getElementById("save-permanent-btn");
+            const saveLbl = btn.querySelector(".save-lbl");
+            const originalText = saveLbl ? saveLbl.textContent : btn.textContent;
+            btn.disabled = true;
+            if (saveLbl) { saveLbl.textContent = "…"; } else { btn.textContent = "…"; }
+
+            try {
+                updateStatus("Saving to disk...");
+                const resp = await fetch(API.saveCurrent, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({})
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    updateStatus("✓ Saved! Reloading map...");
+                    await loadMap({ forceReload: true });
+                    updateStatus("✓ Map saved and reloaded. " + (data.message || ""));
+                } else {
+                    updateStatus("Save failed: " + (data.error || data.message || "Unknown error"));
+                }
+            } catch (err) {
+                updateStatus("Save error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                if (saveLbl) { saveLbl.textContent = originalText; } else { btn.textContent = originalText; }
+            }
+        });
+
+        function syncOriginInputs() {
+            originXInput.value = "0.000";
+            originYInput.value = "0.000";
+            originYawInput.value = state.origin.yaw.toFixed(3);
+            if (originReadout) {
+                const yawDeg = (state.origin.yaw * 180 / Math.PI);
+                originReadout.textContent = `x: ${state.origin.x.toFixed(3)} | y: ${state.origin.y.toFixed(3)} | yaw: ${yawDeg.toFixed(2)}°`;
+            }
+        }
+
+        function applyMapTransform(dxMeters, dyMeters, yawDeltaDeg = 0, reason = "map-transform") {
+            const dx = Number(dxMeters);
+            const dy = Number(dyMeters);
+            const yawDeg = Number(yawDeltaDeg);
+            if (!Number.isFinite(dx) || !Number.isFinite(dy) || !Number.isFinite(yawDeg)) {
+                updateStatus("Invalid transform input");
+                return;
+            }
+            if (dx !== 0 || dy !== 0) {
+                translateMapImage(dx, dy);
+            }
+            if (yawDeg !== 0) {
+                state.origin.yaw += yawDeg * Math.PI / 180.0;
+            }
+            syncOriginInputs();
+            draw();
+            saveEdits(reason);
+            if (reason === "shift") {
+                updateStatus(`Map shifted by (${dx.toFixed(2)}m, ${dy.toFixed(2)}m)`);
+            } else if (reason === "yaw") {
+                updateStatus(`Map yaw adjusted by ${yawDeg.toFixed(1)}°`);
+            }
+        }
+
+        originResetBtn.addEventListener("click", () => {
+            state.origin = { ...state.initialOrigin };
+            updateOriginPixel();
+            syncOriginInputs();
+            draw();
+            saveEdits("recenter");
+        });
+
+        function rotatePoint(x, y, angle, ox, oy) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const dx = x - ox;
+            const dy = y - oy;
+            return {
+                x: ox + dx * cos - dy * sin,
+                y: oy + dx * sin + dy * cos
+            };
+        }
+
+        function updateOriginPixel() {
+            const res = state.mapInfo.resolution;
+            const height = editCanvas.height;
+            state.originPx = (0 - state.origin.x) / res;
+            state.originPy = height - (0 - state.origin.y) / res;
+        }
+
+        function updateOriginFromPixel(px, py) {
+            const res = state.mapInfo.resolution;
+            const height = editCanvas.height;
+            state.origin.x = -px * res;
+            state.origin.y = (py - height) * res;
+        }
+
+        function mapPixelToCanvas(x, y) {
+            const rotated = rotatePoint(x, y, state.origin.yaw, state.originPx, state.originPy);
+            return {
+                x: rotated.x * state.view.scale + state.view.offsetX,
+                y: rotated.y * state.view.scale + state.view.offsetY
+            };
+        }
+
+        function canvasToMapPixel(x, y) {
+            const unscaledX = (x - state.view.offsetX) / state.view.scale;
+            const unscaledY = (y - state.view.offsetY) / state.view.scale;
+            return rotatePoint(unscaledX, unscaledY, -state.origin.yaw, state.originPx, state.originPy);
+        }
+
+        function worldToMapPixel(wx, wy) {
+            const res = state.mapInfo.resolution;
+            const px = (wx - state.origin.x) / res;
+            const py = editCanvas.height - (wy - state.origin.y) / res;
+            return { x: px, y: py };
+        }
+
+        function mapPixelToWorld(px, py) {
+            const res = state.mapInfo.resolution;
+            const wx = state.origin.x + px * res;
+            const wy = state.origin.y + (editCanvas.height - py) * res;
+            return { x: wx, y: wy };
+        }
+
+        function applyMapViewportTransform(context) {
+            context.translate(state.view.offsetX, state.view.offsetY);
+            context.scale(state.view.scale, state.view.scale);
+            context.translate(state.originPx, state.originPy);
+            context.rotate(state.origin.yaw);
+            context.translate(-state.originPx, -state.originPy);
+        }
+
+        function drawAxes(px, py, angle, size, label) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const xEnd = { x: px + size * cos, y: py + size * sin };
+            const yEnd = { x: px - size * sin, y: py + size * cos };
+
+            ctx.save();
+            ctx.lineWidth = 2;
+
+            ctx.strokeStyle = "#ff5252";
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(xEnd.x, xEnd.y);
+            ctx.stroke();
+
+            ctx.strokeStyle = "#00e676";
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(yEnd.x, yEnd.y);
+            ctx.stroke();
+
+            ctx.fillStyle = "#ff5252";
+            ctx.fillRect(xEnd.x - 2, xEnd.y - 2, 4, 4);
+            ctx.fillStyle = "#00e676";
+            ctx.fillRect(yEnd.x - 2, yEnd.y - 2, 4, 4);
+
+            if (label) {
+                ctx.fillStyle = "rgba(0,0,0,0.7)";
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 1;
+                const textWidth = ctx.measureText(label).width;
+                ctx.fillRect(px - textWidth / 2 - 4, py - 22, textWidth + 8, 16);
+                ctx.strokeRect(px - textWidth / 2 - 4, py - 22, textWidth + 8, 16);
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 11px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(label, px, py - 10);
+            }
+            ctx.restore();
+        }
+
+        function drawGrid() {
+            if (!state.showGrid || !state.mapReady || !state.mapInfo) {
+                return;
+            }
+
+            let spacingMeters = 1;
+            while (((spacingMeters / state.mapInfo.resolution) * state.view.scale) < 26) {
+                spacingMeters *= 2;
+            }
+
+            const minWorldX = state.origin.x;
+            const maxWorldX = state.origin.x + (editCanvas.width * state.mapInfo.resolution);
+            const minWorldY = state.origin.y;
+            const maxWorldY = state.origin.y + (editCanvas.height * state.mapInfo.resolution);
+            const startWorldX = Math.floor(minWorldX / spacingMeters) * spacingMeters;
+            const startWorldY = Math.floor(minWorldY / spacingMeters) * spacingMeters;
+
+            ctx.save();
+            applyMapViewportTransform(ctx);
+
+            for (let wx = startWorldX; wx <= maxWorldX + spacingMeters; wx += spacingMeters) {
+                const px = (wx - state.origin.x) / state.mapInfo.resolution;
+                const isMajor = Math.round(wx / (spacingMeters * 5)) === (wx / (spacingMeters * 5));
+                ctx.strokeStyle = isMajor ? "rgba(84, 151, 255, 0.24)" : "rgba(84, 151, 255, 0.12)";
+                ctx.lineWidth = isMajor ? (1.4 / state.view.scale) : (1 / state.view.scale);
+                ctx.beginPath();
+                ctx.moveTo(px, 0);
+                ctx.lineTo(px, editCanvas.height);
+                ctx.stroke();
+            }
+
+            for (let wy = startWorldY; wy <= maxWorldY + spacingMeters; wy += spacingMeters) {
+                const py = editCanvas.height - ((wy - state.origin.y) / state.mapInfo.resolution);
+                const isMajor = Math.round(wy / (spacingMeters * 5)) === (wy / (spacingMeters * 5));
+                ctx.strokeStyle = isMajor ? "rgba(84, 151, 255, 0.24)" : "rgba(84, 151, 255, 0.12)";
+                ctx.lineWidth = isMajor ? (1.4 / state.view.scale) : (1 / state.view.scale);
+                ctx.beginPath();
+                ctx.moveTo(0, py);
+                ctx.lineTo(editCanvas.width, py);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function drawMeasurement() {
+            if (!state.measurement.start) {
+                return;
+            }
+
+            const startMap = worldToMapPixel(state.measurement.start.x, state.measurement.start.y);
+            const startCanvas = mapPixelToCanvas(startMap.x, startMap.y);
+            ctx.save();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "#ffe373";
+            ctx.fillStyle = "#ffe373";
+            ctx.beginPath();
+            ctx.arc(startCanvas.x, startCanvas.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (state.measurement.end) {
+                const endMap = worldToMapPixel(state.measurement.end.x, state.measurement.end.y);
+                const endCanvas = mapPixelToCanvas(endMap.x, endMap.y);
+                const distanceMeters = Math.hypot(
+                    state.measurement.end.x - state.measurement.start.x,
+                    state.measurement.end.y - state.measurement.start.y
+                );
+                const midX = (startCanvas.x + endCanvas.x) / 2;
+                const midY = (startCanvas.y + endCanvas.y) / 2;
+                const label = `${distanceMeters.toFixed(2)} m`;
+
+                ctx.beginPath();
+                ctx.moveTo(startCanvas.x, startCanvas.y);
+                ctx.lineTo(endCanvas.x, endCanvas.y);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(endCanvas.x, endCanvas.y, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.font = "600 12px Inter";
+                ctx.textAlign = "center";
+                const textWidth = ctx.measureText(label).width;
+                ctx.fillStyle = "rgba(12, 17, 24, 0.88)";
+                ctx.strokeStyle = "rgba(255, 227, 115, 0.9)";
+                ctx.lineWidth = 1;
+                ctx.fillRect(midX - (textWidth / 2) - 7, midY - 22, textWidth + 14, 18);
+                ctx.strokeRect(midX - (textWidth / 2) - 7, midY - 22, textWidth + 14, 18);
+                ctx.fillStyle = "#fff4b8";
+                ctx.fillText(label, midX, midY - 9);
+            }
+            ctx.restore();
+        }
+
+        function drawWallLinePreview() {
+            if (state.tool !== "wall_line" || !state.lineStart || !state.linePreviewEnd) return;
+            const startC = mapPixelToCanvas(state.lineStart.x, state.lineStart.y);
+            const endC   = mapPixelToCanvas(state.linePreviewEnd.x, state.linePreviewEnd.y);
+            const previewWidth = Math.max(1.5, Math.min(36, state.wallLineWidth * state.view.scale));
+            ctx.save();
+            ctx.strokeStyle = "#4299e1";
+            ctx.lineWidth = previewWidth;
+            ctx.lineCap = "round";
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(startC.x, startC.y);
+            ctx.lineTo(endC.x, endC.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#4299e1";
+            ctx.beginPath(); ctx.arc(startC.x, startC.y, Math.max(4, previewWidth * 0.5), 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(endC.x,   endC.y,   Math.max(3.5, previewWidth * 0.4), 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function getZoneStyle(zone) {
+            const zoneType = String(zone?.type || "normal").trim().toLowerCase();
+            if (zoneType === "no_go" || zoneType === "nogo") {
+                return {
+                    fill: "rgba(252, 129, 74, 0.18)",
+                    stroke: "#ff9a63",
+                    textStroke: "rgba(255, 154, 99, 0.92)"
+                };
+            }
+            if (zoneType === "slow") {
+                return {
+                    fill: "rgba(237, 137, 54, 0.18)",
+                    stroke: "#f6b26a",
+                    textStroke: "rgba(246, 178, 106, 0.92)"
+                };
+            }
+            if (zoneType === "restricted") {
+                return {
+                    fill: "rgba(252, 129, 129, 0.18)",
+                    stroke: "#ff8f8f",
+                    textStroke: "rgba(255, 143, 143, 0.92)"
+                };
+            }
+            if (zoneType === "dock") {
+                return {
+                    fill: "rgba(66, 153, 225, 0.18)",
+                    stroke: "#7dc4ff",
+                    textStroke: "rgba(125, 196, 255, 0.92)"
+                };
+            }
+            if (zoneType === "queue") {
+                return {
+                    fill: "rgba(255, 214, 102, 0.18)",
+                    stroke: "#ffd666",
+                    textStroke: "rgba(255, 214, 102, 0.92)"
+                };
+            }
+            if (zoneType === "waypoint") {
+                return {
+                    fill: "rgba(67, 212, 185, 0.18)",
+                    stroke: "#7ff3de",
+                    textStroke: "rgba(127, 243, 222, 0.92)"
+                };
+            }
+            return {
+                fill: "rgba(37, 140, 102, 0.18)",
+                stroke: "#63f3be",
+                textStroke: "rgba(111, 219, 178, 0.86)"
+            };
+        }
+
+        function draw() {
+            if (!state.mapReady) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            applyMapViewportTransform(ctx);
+            if (state.dottedViewMode && state.dottedBgImage) {
+                ctx.drawImage(state.dottedBgImage, 0, 0);
+            } else {
+                ctx.drawImage(editCanvas, 0, 0);
+            }
+            ctx.restore();
+            drawGrid();
+
+            drawPaths();
+            drawZones();
+            drawMeasurement();
+            drawScanOverlay();
+            drawWallLinePreview();
+            drawDottedUserSegments();
+            drawDottedLinePreview();
+            drawRobotPlacementPreview();
+
+            if (state.overlayVisibility.axes) {
+                const originCanvas = mapPixelToCanvas(state.originPx, state.originPy);
+                drawAxes(originCanvas.x, originCanvas.y, 0, 20, "origin");
+            }
+
+            if (state.robotPose && state.overlayVisibility.robot) {
+                const mapPixel = worldToMapPixel(state.robotPose.x, state.robotPose.y);
+                const robotCanvas = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                if (state.overlayVisibility.axes) {
+                    drawAxes(robotCanvas.x, robotCanvas.y, -state.robotPose.theta, 18, "robot");
+                }
+            }
+        }
+
+        function drawDottedUserSegments() {
+            if (!state.dottedViewMode || state.dottedSegments.length === 0) return;
+            ctx.save();
+            ctx.strokeStyle = "#3b9eff";
+            ctx.lineWidth = Math.max(1.5, 2.5 * state.view.scale);
+            ctx.lineCap = "round";
+            ctx.setLineDash([4, 4]);
+            for (const seg of state.dottedSegments) {
+                const [x1, y1, x2, y2] = seg;
+                const c1 = mapPixelToCanvas(x1, y1);
+                const c2 = mapPixelToCanvas(x2, y2);
+                ctx.beginPath();
+                ctx.moveTo(c1.x, c1.y);
+                ctx.lineTo(c2.x, c2.y);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+
+        function drawDottedLinePreview() {
+            if (!state.dottedViewMode || state.tool !== "dot_wall" || !state.dottedLineStart || !state.dottedPreviewEnd) return;
+            const c1 = mapPixelToCanvas(state.dottedLineStart.x, state.dottedLineStart.y);
+            const c2 = mapPixelToCanvas(state.dottedPreviewEnd.x, state.dottedPreviewEnd.y);
+            ctx.save();
+            ctx.strokeStyle = "#7fd4ff";
+            ctx.lineWidth = Math.max(1.5, 2.5 * state.view.scale);
+            ctx.lineCap = "round";
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(c1.x, c1.y);
+            ctx.lineTo(c2.x, c2.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#7fd4ff";
+            ctx.beginPath(); ctx.arc(c1.x, c1.y, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(c2.x, c2.y, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawRobotPlacementPreview() {
+            if (!state.dottedViewMode || state.tool !== "set_robot_pose" || !state.robotPosePlacementStart) return;
+            const startMap = state.robotPosePlacementStart;
+            const endMap = state.robotPosePlacementPreviewEnd || startMap;
+            const c1 = mapPixelToCanvas(startMap.x, startMap.y);
+            const c2 = mapPixelToCanvas(endMap.x, endMap.y);
+            const dx = c2.x - c1.x;
+            const dy = c2.y - c1.y;
+            const dist = Math.hypot(dx, dy);
+            const angle = dist > 1e-3 ? Math.atan2(dy, dx) : 0.0;
+            const arrowLen = Math.max(20, Math.min(64, dist));
+
+            ctx.save();
+            ctx.translate(c1.x, c1.y);
+            ctx.rotate(angle);
+            ctx.fillStyle = "rgba(66, 153, 225, 0.18)";
+            ctx.strokeStyle = "#7fd4ff";
+            ctx.lineWidth = 2;
+            ctx.fillRect(-12, -10, 24, 20);
+            ctx.strokeRect(-12, -10, 24, 20);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(arrowLen, 0);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(arrowLen, 0);
+            ctx.lineTo(arrowLen - 8, -5);
+            ctx.lineTo(arrowLen - 8, 5);
+            ctx.closePath();
+            ctx.fillStyle = "#7fd4ff";
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawScanOverlay() {
+            if (!state.dottedViewMode || !Array.isArray(state.scanPoints) || state.scanPoints.length === 0) return;
+            ctx.save();
+            ctx.fillStyle = "rgba(98, 232, 255, 0.88)";
+            for (const point of state.scanPoints) {
+                const wx = Number(point?.x);
+                const wy = Number(point?.y);
+                if (!Number.isFinite(wx) || !Number.isFinite(wy)) {
+                    continue;
+                }
+                const mapPixel = worldToMapPixel(wx, wy);
+                const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                ctx.fillRect(Math.round(canvasPos.x) - 1, Math.round(canvasPos.y) - 1, 2, 2);
+            }
+            ctx.restore();
+        }
+
+        function drawZones() {
+            if (!state.overlayVisibility.zones) {
+                return;
+            }
+            ctx.save();
+            ctx.lineWidth = 2.4;
+            state.zones.forEach(zone => {
+                const mapPixel = worldToMapPixel(zone.x, zone.y);
+                const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                const radius = zone.radius_m ? (zone.radius_m / state.mapInfo.resolution) : 12;
+                const drawRadius = Math.max(10, radius);
+                const style = getZoneStyle(zone);
+
+                ctx.beginPath();
+                ctx.fillStyle = style.fill;
+                ctx.strokeStyle = style.stroke;
+                ctx.arc(canvasPos.x, canvasPos.y, drawRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                if (Number.isFinite(zone.yaw)) {
+                    const heading = -zone.yaw;
+                    const hx = canvasPos.x + Math.cos(heading) * (drawRadius + 10);
+                    const hy = canvasPos.y + Math.sin(heading) * (drawRadius + 10);
+                    ctx.strokeStyle = "#ffe373";
+                    ctx.beginPath();
+                    ctx.moveTo(canvasPos.x, canvasPos.y);
+                    ctx.lineTo(hx, hy);
+                    ctx.stroke();
+                }
+
+                const label = zone.name || zone.id;
+                ctx.font = "600 11px Segoe UI";
+                const textW = ctx.measureText(label).width;
+                const lx = canvasPos.x - (textW / 2) - 6;
+                const ly = canvasPos.y - drawRadius - 22;
+                ctx.fillStyle = "rgba(8, 12, 18, 0.82)";
+                ctx.strokeStyle = style.textStroke;
+                ctx.lineWidth = 1.2;
+                ctx.fillRect(lx, ly, textW + 12, 16);
+                ctx.strokeRect(lx, ly, textW + 12, 16);
+                ctx.fillStyle = "#e9fff5";
+                ctx.textAlign = "center";
+                ctx.fillText(label, canvasPos.x, ly + 12);
+            });
+            ctx.restore();
+        }
+
+        function drawPaths() {
+            if (!state.overlayVisibility.paths) {
+                return;
+            }
+            ctx.save();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "#55cfff";
+            ctx.setLineDash([8, 5]);
+
+            state.paths.forEach((path, pathId) => {
+                const pts = getRenderablePathPoints(pathId, path);
+                if (!pts || pts.length < 2) return;
+                ctx.beginPath();
+                pts.forEach((pt, idx) => {
+                    const mapPixel = worldToMapPixel(pt.x, pt.y);
+                    const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                    if (idx === 0) {
+                        ctx.moveTo(canvasPos.x, canvasPos.y);
+                    } else {
+                        ctx.lineTo(canvasPos.x, canvasPos.y);
+                    }
+                });
+                ctx.stroke();
+            });
+
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+
+        function getRenderablePathPoints(pathId, path) {
+            const pts = Array.isArray(path.points) ? path.points.map(p => ({ x: p.x, y: p.y })) : [];
+            if (pts.length < 2) return pts;
+
+            if (pathId.includes("__")) {
+                const parts = pathId.split("__");
+                const from = state.zones.get(parts[0]);
+                const to = state.zones.get(parts[1]);
+                if (from && to) {
+                    pts[0] = { x: from.x, y: from.y };
+                    pts[pts.length - 1] = { x: to.x, y: to.y };
+                }
+            }
+            return pts;
+        }
+
+        function paintCircle(x, y, erase = false) {
+            editCtx.save();
+            editCtx.beginPath();
+            editCtx.arc(x, y, state.brush, 0, Math.PI * 2);
+            if (erase) {
+                editCtx.fillStyle = "#ffffff";
+            } else {
+                editCtx.fillStyle = "#000000";
+            }
+            editCtx.fill();
+            editCtx.restore();
+        }
+
+        function translateMapImage(dxMeters, dyMeters) {
+            if (!state.mapInfo) return;
+            const dxPx = dxMeters / state.mapInfo.resolution;
+            const dyPx = -dyMeters / state.mapInfo.resolution;
+            const temp = document.createElement("canvas");
+            temp.width = editCanvas.width;
+            temp.height = editCanvas.height;
+            const tctx = temp.getContext("2d");
+            tctx.fillStyle = "#ffffff";
+            tctx.fillRect(0, 0, temp.width, temp.height);
+            tctx.drawImage(editCanvas, dxPx, dyPx);
+            editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
+            editCtx.drawImage(temp, 0, 0);
+        }
+
+        function saveEdits(reason) {
+            if (!state.mapReady) return;
+            if (state.saveTimer) clearTimeout(state.saveTimer);
+
+            state.saveTimer = setTimeout(async () => {
+                try {
+                    updateStatus("Saving...");
+                    const image = editCanvas.toDataURL("image/png");
+                    const origin = [state.origin.x, state.origin.y, state.origin.yaw];
+                    const resp = await fetch(API.overwrite, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ image, origin })
+                    });
+                    const data = await resp.json();
+                    if (data.ok) {
+                        updateStatus(`Saved (${reason})`);
+                        scheduleDottedBackgroundRefresh();
+                    } else {
+                        updateStatus(data.message || "Save failed");
+                    }
+                } catch (err) {
+                    updateStatus("Save error");
+                }
+            }, 250);
+        }
+
+        function releasePointerCaptureSafe(pointerId) {
+            if (typeof pointerId !== "number") {
+                return;
+            }
+            try {
+                if (canvas.hasPointerCapture(pointerId)) {
+                    canvas.releasePointerCapture(pointerId);
+                }
+            } catch (err) {
+                // ignore
+            }
+        }
+
+        function cancelPointerInteraction(event) {
+            state.pointerDown = false;
+            state.dragStart = null;
+            state.draggingView = false;
+            state.viewDragStart = null;
+            syncCanvasCursor();
+            releasePointerCaptureSafe(event?.pointerId);
+        }
+
+        function getPos(e) {
+            const r = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / r.width;
+            const scaleY = canvas.height / r.height;
+            return {
+                x: (e.clientX - r.left) * scaleX,
+                y: (e.clientY - r.top) * scaleY
+            };
+        }
+
+        function positionSettingsPopover() {
+            if (!settingsPopover || settingsPopover.hasAttribute("hidden")) {
+                return;
+            }
+            const margin = 8;
+            const rect = settingsToggleBtn.getBoundingClientRect();
+            const width = Math.min(640, Math.max(280, window.innerWidth - 28));
+            settingsPopover.style.width = `${width}px`;
+            settingsPopover.style.right = "auto";
+            settingsPopover.style.left = `${Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin))}px`;
+            const top = Math.max(
+                margin,
+                Math.min(rect.bottom + 8, window.innerHeight - settingsPopover.offsetHeight - margin)
+            );
+            settingsPopover.style.top = `${top}px`;
+        }
+
+        function handleMeasureClick(mapPos) {
+            const worldPos = mapPixelToWorld(mapPos.x, mapPos.y);
+            if (!state.measurement.start || state.measurement.end) {
+                state.measurement.start = worldPos;
+                state.measurement.end = null;
+                updateStatus("Measure: click the end point");
+            } else {
+                state.measurement.end = worldPos;
+                const distanceMeters = Math.hypot(
+                    state.measurement.end.x - state.measurement.start.x,
+                    state.measurement.end.y - state.measurement.start.y
+                );
+                updateStatus(`Measured ${distanceMeters.toFixed(2)} m`);
+            }
+            draw();
+        }
+
+        async function saveZoneFromTool(tool, worldPos) {
+            const preset = TOOL_ZONE_PRESETS[tool];
+            if (!preset) {
+                return;
+            }
+
+            const suggestedName = nextSuggestedZoneName(preset.prefix);
+            const requestedName = window.prompt(`${preset.label} name`, suggestedName);
+            if (requestedName === null) {
+                updateStatus(`${preset.label} placement cancelled`);
+                return;
+            }
+
+            const zoneName = sanitizeName(requestedName, suggestedName);
+            const payload = {
+                name: zoneName,
+                x: worldPos.x,
+                y: worldPos.y,
+                theta: 0,
+                type: preset.type,
+                speed: preset.speed,
+                overwrite: false
+            };
+
+            try {
+                updateStatus(`Saving ${preset.label}...`);
+                let result = await postJson(API.zoneSave, payload);
+                if (result.response.status === 409) {
+                    const shouldOverwrite = window.confirm(result.data.message || `Replace existing zone "${zoneName}"?`);
+                    if (!shouldOverwrite) {
+                        updateStatus(`${preset.label} placement cancelled`);
+                        return;
+                    }
+                    result = await postJson(API.zoneSave, { ...payload, overwrite: true });
+                }
+
+                if (!result.response.ok || result.data.ok === false) {
+                    throw new Error(result.data.message || `Failed to save ${preset.label.toLowerCase()}`);
+                }
+                await loadZones();
+                updateStatus(result.data.message || `${preset.label} saved`);
+            } catch (err) {
+                updateStatus(`${preset.label} save failed: ${err.message}`);
+            }
+        }
+
+        canvas.addEventListener("pointerdown", (e) => {
+            if (!state.mapReady) return;
+            canvas.setPointerCapture(e.pointerId);
+            state.pointerDown = true;
+            const p = getPos(e);
+            const mapPos = canvasToMapPixel(p.x, p.y);
+            const worldPos = mapPixelToWorld(mapPos.x, mapPos.y);
+            const shouldPanView = state.tool === "pan" || e.button === 1 || e.button === 2;
+
+            if (shouldPanView) {
+                state.draggingView = true;
+                state.viewDragStart = {
+                    x: p.x,
+                    y: p.y,
+                    offsetX: state.view.offsetX,
+                    offsetY: state.view.offsetY
+                };
+                syncCanvasCursor();
+                updateStatus("Panning map view");
+                return;
+            }
+
+            if (state.tool === "measure") {
+                handleMeasureClick(mapPos);
+                cancelPointerInteraction(e);
+                return;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(TOOL_ZONE_PRESETS, state.tool)) {
+                saveZoneFromTool(state.tool, worldPos);
+                cancelPointerInteraction(e);
+                return;
+            }
+
+            if (state.moveOriginEnabled) {
+                const originCanvas = mapPixelToCanvas(state.originPx, state.originPy);
+                const dx = p.x - originCanvas.x;
+                const dy = p.y - originCanvas.y;
+                if (dx * dx + dy * dy <= 18 * 18) {
+                    state.draggingOrigin = true;
+                    syncCanvasCursor();
+                    updateStatus("Moving origin");
+                    return;
+                }
+            }
+
+            if (state.tool === "move_zone") {
+                const hit = hitTestZone(p.x, p.y);
+                if (!hit) return;
+                state.draggingZoneId = hit.id;
+                state.dragOffsetMap = {
+                    x: hit.x - worldPos.x,
+                    y: hit.y - worldPos.y
+                };
+                syncCanvasCursor();
+                updateStatus(`Moving ${hit.name || hit.id}`);
+                return;
+            }
+
+            if (state.tool === "rotate_zone") {
+                const hit = hitTestZone(p.x, p.y);
+                if (!hit) return;
+                const mapPixel = worldToMapPixel(hit.x, hit.y);
+                const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                state.rotatingZoneId = hit.id;
+                state.rotateStartYaw = hit.yaw || 0;
+                state.rotateStartAngle = Math.atan2(p.y - canvasPos.y, p.x - canvasPos.x);
+                syncCanvasCursor();
+                updateStatus(`Rotating ${hit.name || hit.id}`);
+                return;
+            }
+
+            if (state.tool === "add_path") {
+                const hit = hitTestZone(p.x, p.y);
+                if (!hit) return;
+                if (!state.pendingFromZone) {
+                    state.pendingFromZone = hit.id;
+                    updateStatus(`Path from ${hit.name || hit.id}...`);
+                } else if (state.pendingFromZone !== hit.id) {
+                    createPathBetween(state.pendingFromZone, hit.id);
+                    state.pendingFromZone = null;
+                }
+                draw();
+                return;
+            }
+
+            if (state.tool === "add" || state.tool === "erase") {
+                state.strokeSnapshot = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+                paintCircle(mapPos.x, mapPos.y, state.tool === "erase");
+                draw();
+            }
+
+            if (state.tool === "wall_line") {
+                if (!state.lineStart) {
+                    // First click — record start point
+                    state.lineStart = { x: mapPos.x, y: mapPos.y };
+                    state.linePreviewEnd = { x: mapPos.x, y: mapPos.y };
+                    updateStatus("Wall Line: click end point (Esc to cancel)");
+                } else {
+                    // Second click — commit line to edit canvas
+                    state.strokeSnapshot = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+                    editCtx.save();
+                    editCtx.strokeStyle = "#000000";
+                    editCtx.lineWidth = Math.max(1, Number(state.wallLineWidth) || 1);
+                    editCtx.lineCap = "round";
+                    editCtx.lineJoin = "round";
+                    editCtx.beginPath();
+                    editCtx.moveTo(state.lineStart.x, state.lineStart.y);
+                    editCtx.lineTo(mapPos.x, mapPos.y);
+                    editCtx.stroke();
+                    editCtx.restore();
+                    state.undoStack.push(state.strokeSnapshot);
+                    state.strokeSnapshot = null;
+                    state.lineStart = null;
+                    state.linePreviewEnd = null;
+                    saveEdits("wall_line");
+                    draw();
+                    updateStatus(TOOL_HINTS.wall_line);
+                }
+                cancelPointerInteraction(e);
+                return;
+            }
+
+            if (state.tool === "dot_wall") {
+                if (!state.dottedLineStart) {
+                    state.dottedLineStart = { x: mapPos.x, y: mapPos.y };
+                    state.dottedPreviewEnd = { x: mapPos.x, y: mapPos.y };
+                    updateStatus("Dotted Wall: click end point (Esc to cancel)");
+                } else {
+                    state.dottedSegments.push([
+                        state.dottedLineStart.x, state.dottedLineStart.y,
+                        mapPos.x, mapPos.y
+                    ]);
+                    state.dottedLineStart = null;
+                    state.dottedPreviewEnd = null;
+                    saveDottedOverlay();
+                    draw();
+                    updateStatus(TOOL_HINTS.dot_wall);
+                }
+                cancelPointerInteraction(e);
+                return;
+            }
+
+            if (state.tool === "dot_erase") {
+                // Remove nearest segment within 12px threshold (in map pixel space)
+                const THRESHOLD = 12 / state.view.scale;
+                let bestIdx = -1, bestDist = Infinity;
+                state.dottedSegments.forEach((seg, idx) => {
+                    const d = pointToSegmentDist(mapPos.x, mapPos.y, seg[0], seg[1], seg[2], seg[3]);
+                    if (d < bestDist) { bestDist = d; bestIdx = idx; }
+                });
+                if (bestIdx >= 0 && bestDist <= THRESHOLD) {
+                    state.dottedSegments.splice(bestIdx, 1);
+                    saveDottedOverlay();
+                    draw();
+                    updateStatus(`Removed segment (${state.dottedSegments.length} remaining)`);
+                }
+                cancelPointerInteraction(e);
+                return;
+            }
+
+            if (state.tool === "set_robot_pose") {
+                if (!state.robotPosePlacementStart) {
+                    state.robotPosePlacementStart = { x: mapPos.x, y: mapPos.y };
+                    state.robotPosePlacementPreviewEnd = { x: mapPos.x, y: mapPos.y };
+                    updateStatus("Place Robot: click again to set heading");
+                } else {
+                    const startMap = state.robotPosePlacementStart;
+                    const endMap = { x: mapPos.x, y: mapPos.y };
+                    state.robotPosePlacementStart = null;
+                    state.robotPosePlacementPreviewEnd = null;
+                    commitRobotPoseFromPreview(startMap, endMap);
+                    draw();
+                    updateStatus(TOOL_HINTS.set_robot_pose);
+                }
+                cancelPointerInteraction(e);
+                return;
+            }
+        });
+
+        canvas.addEventListener("pointermove", (e) => {
+            if (!state.mapReady) return;
+            // Update wall-line preview even when pointer is not held down
+            if (state.tool === "wall_line" && state.lineStart) {
+                const p = getPos(e);
+                const mapPos = canvasToMapPixel(p.x, p.y);
+                state.linePreviewEnd = { x: mapPos.x, y: mapPos.y };
+                draw();
+            }
+            // Update dotted wall preview
+            if (state.tool === "dot_wall" && state.dottedLineStart) {
+                const p = getPos(e);
+                const mapPos = canvasToMapPixel(p.x, p.y);
+                state.dottedPreviewEnd = { x: mapPos.x, y: mapPos.y };
+                draw();
+            }
+            if (state.tool === "set_robot_pose" && state.robotPosePlacementStart) {
+                const p = getPos(e);
+                const mapPos = canvasToMapPixel(p.x, p.y);
+                state.robotPosePlacementPreviewEnd = { x: mapPos.x, y: mapPos.y };
+                draw();
+            }
+            if (!state.pointerDown) return;
+            const p = getPos(e);
+            const mapPos = canvasToMapPixel(p.x, p.y);
+
+            if (state.draggingView && state.viewDragStart) {
+                state.view.offsetX = state.viewDragStart.offsetX + (p.x - state.viewDragStart.x);
+                state.view.offsetY = state.viewDragStart.offsetY + (p.y - state.viewDragStart.y);
+                draw();
+                return;
+            }
+
+            if (state.moveOriginEnabled && state.draggingOrigin) {
+                state.originPx = mapPos.x;
+                state.originPy = mapPos.y;
+                updateOriginFromPixel(state.originPx, state.originPy);
+                syncOriginInputs();
+                draw();
+                return;
+            }
+
+            if (state.tool === "move_zone" && state.draggingZoneId) {
+                const worldPos = mapPixelToWorld(mapPos.x, mapPos.y);
+                const zone = state.zones.get(state.draggingZoneId);
+                if (zone) {
+                    zone.x = worldPos.x + state.dragOffsetMap.x;
+                    zone.y = worldPos.y + state.dragOffsetMap.y;
+                    draw();
+                }
+                return;
+            }
+
+            if (state.tool === "rotate_zone" && state.rotatingZoneId) {
+                const zone = state.zones.get(state.rotatingZoneId);
+                if (zone) {
+                    const mapPixel = worldToMapPixel(zone.x, zone.y);
+                    const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                    const angle = Math.atan2(p.y - canvasPos.y, p.x - canvasPos.x);
+                    zone.yaw = state.rotateStartYaw + (angle - state.rotateStartAngle);
+                    draw();
+                }
+                return;
+            }
+
+            if (state.tool === "add" || state.tool === "erase") {
+                if (!state.strokeSnapshot) {
+                    state.strokeSnapshot = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+                }
+                paintCircle(mapPos.x, mapPos.y, state.tool === "erase");
+                draw();
+                return;
+            }
+
+            if (state.tool === "wall_line" && state.lineStart) {
+                state.linePreviewEnd = { x: mapPos.x, y: mapPos.y };
+                draw();
+                return;
+            }
+
+            return;
+        });
+
+        function finishPointer(e) {
+            if (!state.pointerDown) return;
+            state.pointerDown = false;
+            state.dragStart = null;
+            if (e && typeof e.pointerId === "number") {
+                try {
+                    if (canvas.hasPointerCapture(e.pointerId)) {
+                        canvas.releasePointerCapture(e.pointerId);
+                    }
+                } catch (err) {
+                    // ignore
+                }
+            }
+
+            if (state.moveOriginEnabled && state.draggingOrigin) {
+                state.draggingOrigin = false;
+                syncCanvasCursor();
+                saveEdits("origin-drag");
+                return;
+            }
+
+            if (state.draggingView) {
+                state.draggingView = false;
+                state.viewDragStart = null;
+                syncCanvasCursor();
+                updateStatus(TOOL_HINTS[state.tool] || "Ready");
+                return;
+            }
+
+            if (state.tool === "move_zone" && state.draggingZoneId) {
+                const zone = state.zones.get(state.draggingZoneId);
+                const movedId = state.draggingZoneId;
+                state.draggingZoneId = null;
+                state.dragOffsetMap = null;
+                syncCanvasCursor();
+                if (zone) {
+                    updateZonePose(zone);
+                    updateAttachedPaths(movedId);
+                }
+                state.pointerDown = false;
+                return;
+            }
+
+            if (state.tool === "rotate_zone" && state.rotatingZoneId) {
+                const zone = state.zones.get(state.rotatingZoneId);
+                state.rotatingZoneId = null;
+                syncCanvasCursor();
+                if (zone) {
+                    updateZonePose(zone);
+                }
+                state.pointerDown = false;
+                return;
+            }
+
+            if (state.tool === "add" || state.tool === "erase") {
+                if (state.strokeSnapshot) {
+                    state.undoStack.push(state.strokeSnapshot);
+                    state.strokeSnapshot = null;
+                }
+                saveEdits(state.tool);
+            }
+
+        }
+
+        canvas.addEventListener("pointerup", finishPointer);
+        canvas.addEventListener("pointercancel", finishPointer);
+        canvas.addEventListener("pointerleave", finishPointer);
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && state.tool === "wall_line" && state.lineStart) {
+                state.lineStart = null;
+                state.linePreviewEnd = null;
+                draw();
+                updateStatus(TOOL_HINTS.wall_line);
+            }
+            if (e.key === "Escape" && state.tool === "dot_wall" && state.dottedLineStart) {
+                state.dottedLineStart = null;
+                state.dottedPreviewEnd = null;
+                draw();
+                updateStatus(TOOL_HINTS.dot_wall);
+            }
+            if (e.key === "Escape" && state.tool === "set_robot_pose" && state.robotPosePlacementStart) {
+                state.robotPosePlacementStart = null;
+                state.robotPosePlacementPreviewEnd = null;
+                draw();
+                updateStatus(TOOL_HINTS.set_robot_pose);
+            }
+        });
+        window.addEventListener("pointerup", finishPointer);
+        canvas.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+        });
+
+        canvas.addEventListener("wheel", (event) => {
+            event.preventDefault();
+            const pointer = getPos(event);
+            const zoomFactor = event.deltaY < 0 ? 1.12 : (1 / 1.12);
+            zoomAt(zoomFactor, pointer.x, pointer.y);
+        }, { passive: false });
+
+        zoomInBtn?.addEventListener("click", () => {
+            zoomAt(1.15, canvas.width / 2, canvas.height / 2);
+        });
+
+        zoomOutBtn?.addEventListener("click", () => {
+            zoomAt(1 / 1.15, canvas.width / 2, canvas.height / 2);
+        });
+
+        zoomResetBtn?.addEventListener("click", () => {
+            resetZoom();
+        });
+
+        async function loadMap(options = {}) {
+            const forceReload = !!options.forceReload;
+            let activeMapPath = "";
+            try {
+                const active = await getJson(API.activeMap);
+                if (active.response.ok && active.data.ok !== false) {
+                    activeMapPath = String(active.data.map_yaml_path || active.data.map_path || "").trim();
+                    if (activeMapPath) {
+                        state.activeMapPath = activeMapPath;
+                        setLayoutStatus(activeMapPath);
+                    }
+                }
+            } catch (e) {
+                // Keep last known active map path.
+            }
+
+            let data = null;
+            try {
+                const preview = forceReload
+                    ? await postJson(API.editorReload, {})
+                    : await getJson(API.preview);
+                if (preview.response.ok && preview.data && preview.data.ok && preview.data.image) {
+                    data = preview.data;
+                }
+            } catch (e) {
+                // Retry with a forced editor reload below.
+            }
+
+            if (!data && !forceReload) {
+                try {
+                    const reload = await postJson(API.editorReload, {});
+                    if (reload.response.ok && reload.data && reload.data.ok && reload.data.image) {
+                        data = reload.data;
+                    }
+                } catch (e) {
+                    // handled below
+                }
+            }
+
+            if (!data || !data.image) {
+                updateStatus("Map load failed: editor preview is unavailable");
+                return;
+            }
+
+            state.mapInfo = {
+                resolution: data.resolution,
+                origin: data.origin,
+                width: data.width,
+                height: data.height,
+                negate: data.negate || 0
+            };
+
+            state.origin = {
+                x: data.origin[0] || 0,
+                y: data.origin[1] || 0,
+                yaw: data.origin[2] || 0
+            };
+            state.initialOrigin = { ...state.origin };
+            state.loadedMapPath = String(data.map_yaml_path || activeMapPath || "").trim();
+            if (state.loadedMapPath) {
+                state.activeMapPath = state.loadedMapPath;
+                setLayoutStatus(state.loadedMapPath);
+            }
+
+            const img = new Image();
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                editCanvas.width = img.width;
+                editCanvas.height = img.height;
+                editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
+                editCtx.drawImage(img, 0, 0);
+                updateOriginPixel();
+                state.mapReady = true;
+                syncOriginInputs();
+                updateZoomReadout();
+                updateStatus(`Map loaded: ${basename(state.loadedMapPath || state.activeMapPath) || "active_map"}`);
+                draw();
+            };
+            img.src = `data:image/png;base64,${data.image}`;
+        }
+
+        async function loadZones() {
+            try {
+                const resp = await fetch(API.zones);
+                const data = await resp.json();
+                const zones = data.zones || {};
+                state.zones.clear();
+                Object.entries(zones).forEach(([name, zone]) => {
+                    let x = Number(zone.x);
+                    let y = Number(zone.y);
+                    let yaw = Number(zone.theta);
+                    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                        if (zone.position) {
+                            x = Number(zone.position.x);
+                            y = Number(zone.position.y);
+                        }
+                    }
+                    if (!Number.isFinite(yaw) && zone.orientation) {
+                        const q = zone.orientation;
+                        const siny = 2.0 * (q.w * q.z + q.x * q.y);
+                        const cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+                        yaw = Math.atan2(siny, cosy);
+                    }
+                    state.zones.set(name, {
+                        id: name,
+                        name: zone.name || name,
+                        x: Number.isFinite(x) ? x : 0,
+                        y: Number.isFinite(y) ? y : 0,
+                        yaw: Number.isFinite(yaw) ? yaw : 0,
+                        radius_m: Number(zone.radius_m) || 0,
+                        type: String(zone.type || "normal").trim().toLowerCase(),
+                        speed: Number(zone.speed) || 0.5,
+                        charge_duration: Number(zone.charge_duration) || 0
+                    });
+                });
+                draw();
+            } catch (e) {
+                updateStatus("Zones load failed");
+            }
+        }
+
+        async function loadPaths() {
+            try {
+                const resp = await fetch(API.paths);
+                const data = await resp.json();
+                const paths = data.paths || {};
+                state.paths.clear();
+                Object.entries(paths).forEach(([name, rawPath]) => {
+                    const points = Array.isArray(rawPath)
+                        ? rawPath
+                        : ((rawPath && typeof rawPath === "object" && Array.isArray(rawPath.points)) ? rawPath.points : []);
+                    state.paths.set(name, {
+                        id: name,
+                        points
+                    });
+                });
+                draw();
+            } catch (e) {
+                updateStatus("Paths load failed");
+            }
+        }
+
+        async function loadLayoutInfo() {
+            try {
+                const resp = await fetch(API.layouts);
+                const data = await resp.json();
+                const previousLayout = state.currentLayout;
+                state.currentLayout = data.current || null;
+                if (state.currentLayout && state.currentLayout !== previousLayout) {
+                    updateStatus(`Layout loaded: ${state.currentLayout}`);
+                }
+            } catch (e) {
+                state.currentLayout = null;
+            }
+        }
+
+        async function updateZonePose(zone) {
+            try {
+                const { data } = await postJson(API.zoneUpdate, {
+                    name: zone.id,
+                    x: zone.x,
+                    y: zone.y,
+                    theta: zone.yaw || 0,
+                    overwrite: true
+                });
+                if (data.ok === false) {
+                    updateStatus(data.message || "Zone update failed");
+                } else {
+                    updateStatus(`Zone ${zone.name || zone.id} updated`);
+                }
+            } catch (e) {
+                updateStatus("Zone update failed");
+            }
+        }
+
+        async function savePathToRos(pathId, points) {
+            try {
+                const { data } = await postJson(API.pathSave, {
+                    name: pathId,
+                    path: points,
+                    overwrite: true
+                });
+                if (data.ok === false) {
+                    updateStatus(data.message || "Path save failed");
+                } else {
+                    updateStatus(`Path ${pathId} saved`);
+                }
+            } catch (e) {
+                updateStatus("Path save failed");
+            }
+        }
+
+        function updateAttachedPaths(zoneId) {
+            state.paths.forEach((path, pathId) => {
+                const parts = pathId.split("__");
+                if (parts.length !== 2) return;
+                if (parts[0] !== zoneId && parts[1] !== zoneId) return;
+                const pts = getRenderablePathPoints(pathId, path);
+                if (pts && pts.length >= 2) {
+                    path.points = pts.map(p => ({ x: p.x, y: p.y }));
+                    savePathToRos(pathId, path.points);
+                }
+            });
+        }
+
+        function hitTestZone(px, py, pickRadius = 18) {
+            let best = null;
+            let bestD2 = Infinity;
+            state.zones.forEach(zone => {
+                const mapPixel = worldToMapPixel(zone.x, zone.y);
+                const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
+                const dx = px - canvasPos.x;
+                const dy = py - canvasPos.y;
+                const d2 = dx * dx + dy * dy;
+                if (d2 < bestD2 && d2 < pickRadius * pickRadius) {
+                    bestD2 = d2;
+                    best = zone;
+                }
+            });
+            return best;
+        }
+
+        function createPathBetween(fromId, toId) {
+            const from = state.zones.get(fromId);
+            const to = state.zones.get(toId);
+            if (!from || !to) return;
+
+            const pathId = `${fromId}__${toId}`;
+            const points = [
+                { x: from.x, y: from.y },
+                { x: to.x, y: to.y }
+            ];
+            state.paths.set(pathId, { id: pathId, points });
+            savePathToRos(pathId, points);
+            updateStatus(`Path ${fromId} -> ${toId}`);
+            draw();
+        }
+
+        async function refreshRobotPose() {
+            try {
+                const resp = await fetch(API.robotPose);
+                const data = await resp.json();
+                if (data && data.pose) {
+                    state.robotPose = data.pose;
+                } else {
+                    state.robotPose = null;
+                }
+                draw();
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        async function refreshScanOverlay() {
+            if (!state.dottedViewMode) {
+                return;
+            }
+            try {
+                const resp = await fetch(API.scan);
+                const data = await resp.json();
+                state.scanPoints = Array.isArray(data?.scan) ? data.scan : [];
+                state.scanSource = String(data?.source || "");
+                state.scanOrigin = (data && typeof data.origin === "object" && data.origin) ? data.origin : null;
+                if (!state.robotPose && state.scanOrigin) {
+                    const x = Number(state.scanOrigin.x);
+                    const y = Number(state.scanOrigin.y);
+                    const theta = Number(state.scanOrigin.theta);
+                    if (Number.isFinite(x) && Number.isFinite(y)) {
+                        state.robotPose = {
+                            x,
+                            y,
+                            theta: Number.isFinite(theta) ? theta : 0.0
+                        };
+                    }
+                }
+                draw();
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        async function commitRobotPoseFromPreview(startMap, endMap) {
+            const startWorld = mapPixelToWorld(startMap.x, startMap.y);
+            const endWorld = mapPixelToWorld(endMap.x, endMap.y);
+            const dx = endWorld.x - startWorld.x;
+            const dy = endWorld.y - startWorld.y;
+            const theta = Math.hypot(dx, dy) > 0.03
+                ? Math.atan2(dy, dx)
+                : (Number(state.robotPose?.theta) || 0.0);
+
+            try {
+                updateStatus("Placing robot pose...");
+                const { response, data } = await postJson(API.robotSetPose, {
+                    x: startWorld.x,
+                    y: startWorld.y,
+                    theta
+                });
+                if (!response.ok || data?.ok === false) {
+                    throw new Error(data?.message || "Set robot pose failed");
+                }
+                state.robotPose = {
+                    x: startWorld.x,
+                    y: startWorld.y,
+                    theta
+                };
+                await refreshScanOverlay();
+                draw();
+                updateStatus(data?.message || "Robot pose placed");
+            } catch (err) {
+                updateStatus(`Set pose failed: ${err.message}`);
+            }
+        }
+
+        async function triggerAutoRelocate() {
+            try {
+                updateStatus("Running Auto Reloc...");
+                const { response, data } = await postJson(API.autoRelocate, {});
+                if (!response.ok || data?.ok === false) {
+                    throw new Error(data?.message || "Auto Reloc failed");
+                }
+                await refreshRobotPose();
+                await refreshScanOverlay();
+                updateStatus(data?.message || "Auto Reloc complete");
+            } catch (err) {
+                updateStatus(`Auto Reloc failed: ${err.message}`);
+            }
+        }
+
+        async function syncActiveMapPreviewIfNeeded() {
+            try {
+                const active = await getJson(API.activeMap);
+                if (!active.response.ok || active.data.ok === false) {
+                    return;
+                }
+                const nextActiveMapPath = String(active.data.map_yaml_path || active.data.map_path || "").trim();
+                if (!nextActiveMapPath) {
+                    return;
+                }
+                const activeChanged = nextActiveMapPath !== state.activeMapPath;
+                if (activeChanged) {
+                    state.activeMapPath = nextActiveMapPath;
+                    updateStatus(`Active map changed to ${basename(nextActiveMapPath)} - reloading editor`);
+                    await loadMap({ forceReload: true });
+                }
+            } catch (e) {
+                // ignore background sync failures
+            }
+        }
+
+        function pointToSegmentDist(px, py, x1, y1, x2, y2) {
+            const dx = x2 - x1, dy = y2 - y1;
+            const lenSq = dx * dx + dy * dy;
+            if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+            const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+            return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+        }
+
+        async function loadDottedOverlay() {
+            try {
+                const r = await fetch(API.dottedOverlay);
+                const d = await r.json();
+                if (d && Array.isArray(d.segments)) {
+                    state.dottedSegments = d.segments;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        async function saveDottedOverlay() {
+            try {
+                await fetch(API.dottedOverlay, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ segments: state.dottedSegments })
+                });
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        async function refreshDottedBackground(options = {}) {
+            const silent = !!options.silent;
+            if (!silent) {
+                updateStatus("Refreshing dotted map…");
+            }
+            try {
+                const dottedUrl = new URL(API.editorPreview, window.location.origin);
+                dottedUrl.searchParams.set("dotted", "true");
+                dottedUrl.searchParams.set("_ts", String(Date.now()));
+                const r = await fetch(dottedUrl.toString(), { cache: "no-store" });
+                const d = await r.json();
+                if (d && d.ok && d.image) {
+                    const img = new Image();
+                    img.onload = () => {
+                        state.dottedBgImage = img;
+                        draw();
+                        if (!silent) {
+                            updateStatus("Dotted map ready — use Add, Erase, Place Bot, or Reloc");
+                        }
+                    };
+                    img.src = "data:image/png;base64," + d.image;
+                } else {
+                    if (!silent) {
+                        updateStatus("Dotted map render unavailable");
+                    }
+                }
+            } catch (e) {
+                if (!silent) {
+                    updateStatus("Failed to load dotted map: " + e.message);
+                }
+            }
+        }
+
+        function scheduleDottedBackgroundRefresh(delayMs = 450) {
+            if (!state.dottedViewMode) {
+                return;
+            }
+            if (state.dottedRefreshTimer) {
+                window.clearTimeout(state.dottedRefreshTimer);
+            }
+            state.dottedRefreshTimer = window.setTimeout(async () => {
+                state.dottedRefreshTimer = null;
+                await refreshDottedBackground({ silent: true });
+            }, delayMs);
+        }
+
+        async function toggleDottedView() {
+            state.dottedViewMode = !state.dottedViewMode;
+            const btn = document.getElementById("dotted-view-btn");
+            const dotPlaceRobotBtn = document.getElementById("dot-place-robot-btn");
+            const dotAutoRelocBtn = document.getElementById("dot-auto-reloc-btn");
+            const dotRefreshBtn = document.getElementById("dot-refresh-btn");
+            if (state.dottedViewMode) {
+                btn?.classList.add("active");
+                if (dotPlaceRobotBtn) dotPlaceRobotBtn.style.display = "";
+                if (dotAutoRelocBtn) dotAutoRelocBtn.style.display = "";
+                if (dotRefreshBtn) dotRefreshBtn.style.display = "";
+                await loadDottedOverlay();
+                await refreshDottedBackground();
+                await refreshRobotPose();
+                await refreshScanOverlay();
+                setTool("add");
+            } else {
+                btn?.classList.remove("active");
+                if (dotPlaceRobotBtn) dotPlaceRobotBtn.style.display = "none";
+                if (dotAutoRelocBtn) dotAutoRelocBtn.style.display = "none";
+                if (dotRefreshBtn) dotRefreshBtn.style.display = "none";
+                state.dottedLineStart = null;
+                state.dottedPreviewEnd = null;
+                state.robotPosePlacementStart = null;
+                state.robotPosePlacementPreviewEnd = null;
+                state.scanPoints = [];
+                state.scanSource = "";
+                state.scanOrigin = null;
+                setTool("add");
+                draw();
+            }
+        }
+
+        async function init() {
+            await loadMap({ forceReload: true });
+            await loadLayoutInfo();
+            await loadZones();
+            await loadPaths();
+            syncOriginInputs();
+            syncGridButton();
+            Object.keys(state.overlayVisibility).forEach((key) => syncOverlayButtons(key));
+            setTool("add");
+            syncCanvasCursor();
+
+            document.getElementById("dotted-view-btn")?.addEventListener("click", toggleDottedView);
+            document.getElementById("dot-place-robot-btn")?.addEventListener("click", () => setTool("set_robot_pose"));
+            document.getElementById("dot-auto-reloc-btn")?.addEventListener("click", triggerAutoRelocate);
+            document.getElementById("dot-refresh-btn")?.addEventListener("click", async () => {
+                await saveDottedOverlay();
+                await refreshDottedBackground();
+                await refreshScanOverlay();
+            });
+
+            setInterval(refreshRobotPose, 1000);
+            setInterval(refreshScanOverlay, 900);
+            setInterval(async () => {
+                await syncActiveMapPreviewIfNeeded();
+                await loadLayoutInfo();
+                await loadZones();
+                await loadPaths();
+            }, 5000);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

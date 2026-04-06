@@ -1,0 +1,3928 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/logo.jpg" type="image/jpeg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <title>Next Robotics Operator Panel</title>
+    <style>
+        :root {
+            --bg: #0c1220;
+            --panel: #131c31;
+            --panel-2: #1a2540;
+            --border: #2a3b66;
+            --text: #e8eefc;
+            --text-dim: #9eb0d7;
+            --ok: #2fb36d;
+            --warn: #f4b740;
+            --danger: #e63d3d;
+            --danger-dark: #be2f2f;
+            --btn: #2f5dd9;
+            --btn-hover: #3a6ae9;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at top, #182646 0%, #0c1220 55%);
+            color: var(--text);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .shell {
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            height: 68px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(10, 16, 29, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 18px;
+        }
+
+        .brand-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-logo {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            border: 1px solid #3a4f81;
+            background: #0c1427;
+            object-fit: cover;
+        }
+
+        .brand-kicker {
+            font-size: 11px;
+            font-weight: 700;
+            color: #b7c9ef;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+
+        .title-wrap h1 {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+        }
+
+        .title-wrap p {
+            margin-top: 3px;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .lock-btn {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text-dim);
+            border-radius: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .lock-btn:hover {
+            color: var(--text);
+            border-color: #3b4e81;
+        }
+
+        .content {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            padding: 16px;
+        }
+
+        .panel {
+            background: linear-gradient(180deg, var(--panel) 0%, #11192d 100%);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            min-height: 0;
+        }
+
+        .map-panel {
+            width: 100%;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .control-strip {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            display: grid;
+            grid-template-columns: minmax(240px, 1fr) auto minmax(340px, 1.6fr);
+            gap: 10px;
+            align-items: stretch;
+            background: linear-gradient(180deg, rgba(18, 29, 51, 0.96) 0%, rgba(15, 25, 42, 0.92) 100%);
+        }
+
+        .control-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(13, 23, 42, 0.8);
+            padding: 10px 12px;
+            min-height: 0;
+        }
+
+        .trip-inline {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            column-gap: 10px;
+            row-gap: 2px;
+            align-items: center;
+        }
+
+        .trip-inline .trip-state {
+            grid-column: 1 / -1;
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .stop-card {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 180px;
+            max-width: 220px;
+        }
+
+        .stop-card .stop-btn {
+            width: 100%;
+            min-height: 84px;
+        }
+
+        .dest-inline {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .dest-inline .dest-header {
+            margin-bottom: 8px;
+        }
+
+        .dest-inline .destination-groups {
+            grid-template-rows: none;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            height: 170px;
+        }
+
+        .panel-head {
+            padding: 12px 14px 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            text-align: center;
+        }
+
+        .panel-head h2 {
+            font-size: 17px;
+            font-weight: 750;
+        }
+
+        .map-head-left {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+
+        .map-badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .map-badge {
+            border: 1px solid #35508a;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: #dbeafe;
+            background: rgba(20, 31, 56, 0.9);
+        }
+
+        .map-badge.robot {
+            border-color: #ef4444;
+            color: #fecaca;
+        }
+
+        .map-badge.zone {
+            border-color: #d29922;
+            color: #fde68a;
+        }
+
+        .map-badge.path {
+            border-color: #38bdf8;
+            color: #bae6fd;
+        }
+
+        .map-badge.lidar {
+            border-color: #06b6d4;
+            color: #67e8f9;
+        }
+
+        .panel-note {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .map-tools {
+            display: none;
+        }
+
+        .icon-btn {
+            width: 48px;
+            height: 48px;
+            border: 1px solid #35508a;
+            border-radius: 12px;
+            background: #13213f;
+            color: #dbeafe;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-size: 20px;
+            font-weight: 800;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .icon-btn .icon-glyph {
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .icon-btn .icon-label {
+            display: none;
+        }
+
+        .icon-btn:hover {
+            border-color: #4d74c3;
+            background: #1a305f;
+        }
+
+        .icon-btn.active {
+            border-color: #38bdf8;
+            color: #38bdf8;
+            background: rgba(14, 116, 144, 0.28);
+        }
+
+        .icon-btn.attention {
+            border-color: #f4b740;
+            color: #f4b740;
+            background: rgba(244, 183, 64, 0.22);
+        }
+
+        .map-tool-btn {
+            border: 1px solid #365188;
+            border-radius: 10px;
+            background: #13213f;
+            color: #dbeafe;
+            width: 44px;
+            height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-size: 21px;
+            font-weight: 800;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .map-tool-btn:hover {
+            border-color: #4d74c3;
+            background: #1a305f;
+        }
+
+        .map-tool-btn.active {
+            border-color: #38bdf8;
+            color: #38bdf8;
+            background: rgba(14, 116, 144, 0.28);
+        }
+
+        .control-strip {
+            display: none;
+        }
+
+        .floating-panels {
+            display: grid;
+            grid-template-columns: minmax(220px, 320px) minmax(320px, 1fr);
+            gap: 12px;
+            padding: 12px 12px 0;
+        }
+
+        .floating-popover {
+            min-width: 0;
+            max-width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(12, 21, 38, 0.95);
+            box-shadow: 0 20px 44px rgba(0, 0, 0, 0.42);
+            overflow: hidden;
+            display: block;
+        }
+
+        .floating-popover.open {
+            display: block;
+        }
+
+        .floating-popover .control-card,
+        .floating-popover .dest-card {
+            border: none;
+            background: transparent;
+            border-radius: 0;
+        }
+
+        #panel-dest {
+            width: 100%;
+        }
+
+        #panel-dest .destination-groups {
+            grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+            grid-template-rows: none;
+            height: min(58vh, 460px);
+        }
+
+        #panel-stop {
+            min-width: 220px;
+        }
+
+        #panel-stop .stop-btn {
+            min-height: 74px;
+            font-size: 20px;
+        }
+
+        .always-stop-wrap {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 55;
+        }
+
+        .always-stop-wrap .stop-btn {
+            min-width: 230px;
+            min-height: 84px;
+            font-size: 24px;
+        }
+
+        /* ── always-visible mission queue panel ── */
+        .always-mission-wrap {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            z-index: 55;
+            background: rgba(8, 14, 32, 0.93);
+            border: 1px solid rgba(80, 123, 202, 0.28);
+            border-radius: 14px;
+            padding: 12px 14px;
+            min-width: 220px;
+            max-width: 280px;
+            max-height: 50vh;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            box-shadow: 0 4px 28px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+        }
+        .amw-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+        .amw-title {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            color: #6e90c8;
+            text-transform: uppercase;
+            flex: 1;
+        }
+        .amw-icon-btn {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: #aabfe0;
+            font-size: 13px;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: background 0.15s;
+        }
+        .amw-icon-btn.danger { color: #f06060; }
+        .amw-icon-btn:disabled { opacity: 0.25; cursor: default; pointer-events: none; }
+        .amw-icon-btn:not(:disabled):hover { background: rgba(255,255,255,0.12); }
+        .amw-state-row {
+            font-size: 12px;
+            font-weight: 600;
+            color: #c8d8f0;
+            line-height: 1.3;
+        }
+        .amw-state-row.state-active { color: #f5a623; }
+        .amw-state-row.state-clear  { color: #5a7090; }
+        .amw-progress-row {
+            font-size: 11px;
+            color: #7a94c0;
+            line-height: 1.3;
+        }
+        .amw-queue {
+            flex: 0 1 auto;
+            overflow-y: auto;
+            max-height: 140px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .amw-queue .mission-item {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.04);
+            color: #8899bb;
+        }
+        .amw-queue .mission-item.current {
+            background: rgba(46,224,122,0.12);
+            color: #2ee07a;
+            font-weight: 700;
+        }
+        .amw-queue .mission-item.done {
+            color: #445566;
+            text-decoration: line-through;
+        }
+        .amw-resume-btn {
+            background: linear-gradient(135deg, #2ee07a 0%, #1bba5e 100%);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            padding: 10px 14px;
+            cursor: pointer;
+            width: 100%;
+            transition: opacity 0.15s, transform 0.1s;
+            box-shadow: 0 2px 10px rgba(46,224,122,0.28);
+        }
+        .amw-resume-btn:disabled {
+            background: rgba(50,60,80,0.6);
+            color: rgba(255,255,255,0.25);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .amw-resume-btn:not(:disabled):hover { opacity: 0.88; }
+        .amw-resume-btn:not(:disabled):active { transform: scale(0.97); }
+        .amw-resume-btn.needs-resume {
+            animation: amw-pulse 1.8s ease-in-out infinite;
+        }
+        @keyframes amw-pulse {
+            0%, 100% { box-shadow: 0 2px 10px rgba(46,224,122,0.28); }
+            50%       { box-shadow: 0 2px 22px rgba(46,224,122,0.65); }
+        }
+
+        .map-wrap {
+            flex: 1;
+            min-height: 0;
+            padding: 12px;
+            position: relative;
+            background:
+                radial-gradient(80% 120% at 50% -20%, rgba(80, 123, 202, 0.16) 0%, rgba(16, 26, 48, 0) 70%),
+                linear-gradient(180deg, rgba(9, 15, 28, 0.65) 0%, rgba(7, 12, 22, 0.22) 100%);
+        }
+
+        .map-controls-dock {
+            display: none;
+        }
+
+        #map-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border-radius: 10px;
+            border: 1px solid #37518a;
+            background: #0a1324;
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #map-canvas.dragging {
+            cursor: grabbing;
+        }
+
+        .side {
+            display: none;
+        }
+
+        .status-card {
+            padding: 14px;
+        }
+
+        .status-card h2 {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .trip-state {
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            color: var(--ok);
+        }
+
+        .trip-state.moving {
+            color: var(--warn);
+        }
+
+        .trip-line {
+            color: var(--text-dim);
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+
+        .stop-btn {
+            border: none;
+            border-radius: 14px;
+            min-height: 86px;
+            font-size: 24px;
+            font-weight: 900;
+            letter-spacing: 0.4px;
+            cursor: pointer;
+            color: #fff;
+            background: linear-gradient(180deg, #ff5a5a 0%, var(--danger) 100%);
+            box-shadow: 0 8px 24px rgba(230, 61, 61, 0.4);
+        }
+
+        .stop-btn:hover {
+            background: linear-gradient(180deg, #ff6f6f 0%, #ef4f4f 100%);
+        }
+
+        .stop-btn:active {
+            background: var(--danger-dark);
+        }
+
+        .stop-btn[disabled] {
+            opacity: 0.72;
+            cursor: wait;
+        }
+
+        .stop-btn.resume-state {
+            background: linear-gradient(180deg, #2ee07a 0%, #1bba5e 100%);
+            box-shadow: 0 8px 24px rgba(31, 190, 94, 0.42);
+        }
+
+        .stop-btn.resume-state:hover {
+            background: linear-gradient(180deg, #42e88c 0%, #26c96b 100%);
+        }
+
+        .stop-btn.resume-state:active {
+            background: #189f52;
+        }
+
+        .dest-card {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 1 1 auto;
+            overflow: hidden;
+        }
+
+        .dest-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+
+        .dest-header h2 {
+            font-size: 16px;
+        }
+
+        .small-btn {
+            border: 1px solid var(--border);
+            background: var(--panel-2);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .small-btn:hover {
+            border-color: #4662a0;
+        }
+
+        .destination-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: #4a6cb5 rgba(12, 18, 32, 0.45);
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            touch-action: pan-y;
+        }
+
+        .destination-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .destination-list::-webkit-scrollbar-track {
+            background: rgba(12, 18, 32, 0.55);
+            border-radius: 999px;
+        }
+
+        .destination-list::-webkit-scrollbar-thumb {
+            background: #4a6cb5;
+            border-radius: 999px;
+            border: 1px solid rgba(16, 26, 46, 0.8);
+        }
+
+        .destination-groups {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        .destination-group {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: rgba(13, 22, 40, 0.7);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .destination-group-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            color: var(--text-dim);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .destination-count {
+            border: 1px solid #3f5f9e;
+            border-radius: 999px;
+            padding: 1px 7px;
+            font-size: 11px;
+            color: #9ec5ff;
+        }
+
+        .destination-btn {
+            border: 1px solid #35508a;
+            background: #1c2d52;
+            color: #ffffff;
+            border-radius: 10px;
+            text-align: left;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+        }
+
+        .destination-name {
+            display: block;
+        }
+
+        .destination-meta {
+            display: block;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #9ec5ff;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+        }
+
+        .destination-btn:hover {
+            border-color: #4a76ce;
+            background: #21427a;
+            transform: translateY(-1px);
+        }
+
+        .mission-card {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mission-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mission-pill {
+            border: 1px solid #3f5f9e;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 11px;
+            color: #9ec5ff;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .mission-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mission-action-btn {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #365188;
+            border-radius: 9px;
+            background: #13213f;
+            color: #dbeafe;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .mission-action-btn:hover {
+            border-color: #4d74c3;
+            background: #1a305f;
+        }
+
+        .mission-action-btn.danger {
+            border-color: #8d2b2b;
+            color: #ffb4b4;
+            background: rgba(110, 23, 23, 0.4);
+        }
+
+        .mission-action-btn.danger:hover {
+            border-color: #b33f3f;
+            background: rgba(139, 31, 31, 0.55);
+        }
+
+        .mission-action-btn:disabled,
+        .mission-action-btn:disabled:hover {
+            opacity: 0.45;
+            cursor: not-allowed;
+            border-color: #3a4c78;
+            background: #121d33;
+            color: #7285ad;
+        }
+
+        .mission-state {
+            font-size: 13px;
+            color: #dbeafe;
+            font-weight: 700;
+        }
+
+        .mission-progress {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .mission-queue {
+            max-height: min(38vh, 250px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 4px;
+        }
+
+        .mission-item {
+            border: 1px solid #35508a;
+            border-radius: 9px;
+            background: rgba(19, 34, 62, 0.78);
+            color: #dbeafe;
+            padding: 8px 10px;
+            font-size: 12px;
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mission-item.current {
+            border-color: #f4b740;
+            background: rgba(244, 183, 64, 0.18);
+            color: #ffe7b6;
+        }
+
+        .empty {
+            font-size: 13px;
+            color: var(--text-dim);
+            padding: 12px;
+            border: 1px dashed #334b80;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .message {
+            min-height: 22px;
+            font-size: 12px;
+            color: var(--text-dim);
+            padding: 0 2px;
+        }
+
+        .message.ok {
+            color: #7de2a7;
+        }
+
+        .message.warn {
+            color: #ffd27e;
+        }
+
+        .message.error {
+            color: #ff9a9a;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 9, 17, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            padding: 16px;
+        }
+
+        .modal-backdrop.open {
+            display: flex;
+        }
+
+        .modal {
+            width: min(430px, 100%);
+            background: #121d34;
+            border: 1px solid #35508a;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .modal h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .modal p {
+            color: var(--text-dim);
+            margin-bottom: 16px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .go-btn {
+            background: var(--btn);
+            border: 1px solid #5f84f0;
+            color: #fff;
+            border-radius: 10px;
+            padding: 9px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .go-btn:hover {
+            background: var(--btn-hover);
+        }
+
+        .cancel-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            border-radius: 10px;
+            padding: 9px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .cancel-btn:hover {
+            color: var(--text);
+            border-color: #4868ad;
+        }
+
+        .auth-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            background: radial-gradient(circle at top, rgba(29, 48, 89, 0.96) 0%, rgba(7, 12, 24, 0.98) 60%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .auth-card {
+            width: min(410px, 100%);
+            background: #13203a;
+            border: 1px solid #36538c;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .auth-card h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+
+        .auth-card p {
+            font-size: 13px;
+            line-height: 1.45;
+            color: var(--text-dim);
+            margin-bottom: 14px;
+        }
+
+        .auth-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        #auth-password {
+            flex: 1;
+            background: #0d162a;
+            border: 1px solid #2e4777;
+            color: #fff;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+        }
+
+        #auth-password:focus {
+            outline: none;
+            border-color: #5480da;
+        }
+
+        #auth-unlock {
+            background: var(--btn);
+            border: 1px solid #5f84f0;
+            color: #fff;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        #auth-unlock:hover {
+            background: var(--btn-hover);
+        }
+
+        #auth-message {
+            margin-top: 10px;
+            min-height: 18px;
+            font-size: 12px;
+            color: #ff9a9a;
+        }
+
+        /* Operator-shell alignment for /user */
+        :root {
+            --shell-bg: #0a0e14;
+            --shell-chrome: #1b1f27;
+            --shell-canvas: #13161d;
+            --shell-inspector: #191d26;
+            --shell-border: #252b38;
+            --shell-border-strong: #31394a;
+            --shell-text: #e2e8f0;
+            --shell-text-dim: #8f9bb2;
+            --shell-text-label: #6b7794;
+            --shell-blue: #2669c8;
+            --shell-blue-soft: rgba(38, 105, 200, 0.16);
+            --shell-green: #1d7a43;
+            --shell-red: #c42b2b;
+            --shell-header-height: 46px;
+        }
+
+        body {
+            background: var(--shell-bg);
+            color: var(--shell-text);
+        }
+
+        .shell {
+            background: var(--shell-bg);
+        }
+
+        .topbar {
+            height: var(--shell-header-height);
+            border-bottom: 1px solid var(--shell-border);
+            background: var(--shell-chrome);
+            padding: 0 10px;
+            gap: 12px;
+            position: relative;
+            z-index: 20;
+        }
+
+        .brand-wrap {
+            gap: 8px;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .brand-logo {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            border-color: var(--shell-border);
+            background: #0f131b;
+        }
+
+        .brand-kicker {
+            display: none;
+        }
+
+        .title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .title-wrap h1 {
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        .title-wrap p {
+            display: none;
+        }
+
+        .header-robot-id {
+            border: 1px solid var(--shell-border);
+            background: #11161f;
+            color: var(--shell-text-dim);
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .topbar-center {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 0 8px;
+        }
+
+        .top-mode-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 24px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(38, 105, 200, 0.38);
+            background: var(--shell-blue-soft);
+            color: #63a6ff;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .top-map-name-indicator {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--shell-text-dim);
+            font-size: 11px;
+            font-family: "Roboto Mono", monospace;
+        }
+
+        .topbar-right {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .header-aux-btn {
+            border-radius: 4px;
+            border-color: var(--shell-border);
+            background: #161b24;
+            color: var(--shell-text-dim);
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .content {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            padding: 0;
+        }
+
+        .map-panel {
+            border: none;
+            border-radius: 0;
+            background: transparent;
+        }
+
+        .operator-layout {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            background: var(--shell-canvas);
+        }
+
+        .map-stage {
+            flex: 1;
+            min-width: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            background: #0f131b;
+        }
+
+        .panel-head {
+            min-height: 42px;
+            padding: 0 14px;
+            border-bottom: 1px solid var(--shell-border);
+            background: var(--shell-chrome);
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            text-align: left;
+        }
+
+        .panel-head h2 {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .map-head-left {
+            justify-content: flex-start;
+            gap: 8px;
+        }
+
+        .map-badges {
+            gap: 5px;
+        }
+
+        .map-badge {
+            border-color: var(--shell-border-strong);
+            background: rgba(17, 22, 31, 0.92);
+            color: #c5cdd9;
+            font-size: 9px;
+            padding: 2px 7px;
+            letter-spacing: 0.05em;
+        }
+
+        .map-wrap {
+            padding: 12px;
+            background:
+                radial-gradient(circle at top, rgba(33, 42, 58, 0.42) 0%, rgba(15, 19, 27, 0) 58%),
+                #0f131b;
+        }
+
+        #map-canvas {
+            border-radius: 12px;
+            border: 1px solid #546175;
+            background: #10151d;
+        }
+
+        .map-stage-footer {
+            padding: 8px 14px 12px;
+            border-top: 1px solid rgba(37, 43, 56, 0.7);
+            background: #121720;
+        }
+
+        .message {
+            min-height: 18px;
+            padding: 0;
+            font-size: 11px;
+            letter-spacing: 0.02em;
+        }
+
+        .operator-sidebar {
+            width: 320px;
+            min-width: 320px;
+            max-width: 320px;
+            border-left: 1px solid var(--shell-border);
+            background: var(--shell-inspector);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .insp-hdr {
+            min-height: 58px;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--shell-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            background: rgba(27, 31, 39, 0.96);
+        }
+
+        .insp-hdr-title {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #cfd8e6;
+        }
+
+        .insp-mode-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 22px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(38, 105, 200, 0.38);
+            background: var(--shell-blue-soft);
+            color: #63a6ff;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .operator-sidebar-body {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .operator-sidebar-body::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .operator-sidebar-body::-webkit-scrollbar-thumb {
+            background: #3a4352;
+            border-radius: 999px;
+        }
+
+        .sidebar-card,
+        .floating-popover,
+        .always-mission-wrap {
+            border: 1px solid var(--shell-border);
+            border-radius: 4px;
+            background: rgba(10, 14, 20, 0.4);
+            box-shadow: none;
+        }
+
+        .card-header,
+        .overview-card-header {
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid var(--shell-border);
+        }
+
+        .card-title {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #d4dbe7;
+        }
+
+        .overview-card {
+            padding: 10px 12px;
+        }
+
+        .view-overview-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .view-overview-item {
+            padding: 7px 8px;
+            border: 1px solid var(--shell-border);
+            border-radius: 4px;
+            background: #11161f;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .view-overview-item.wide {
+            grid-column: 1 / -1;
+        }
+
+        .view-overview-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--shell-text-label);
+        }
+
+        .view-overview-value {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--shell-text);
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+
+        .floating-panels {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            padding: 0;
+        }
+
+        .floating-popover {
+            display: block;
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .floating-popover .control-card,
+        .floating-popover .dest-card {
+            padding: 10px 12px;
+        }
+
+        .dest-header h2 {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #d4dbe7;
+        }
+
+        .small-btn {
+            border-radius: 4px;
+            padding: 6px 9px;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .destination-btn {
+            border-color: var(--shell-border-strong);
+            background: #182334;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+        .destination-btn:hover {
+            border-color: var(--shell-blue);
+            background: #1d2a40;
+            transform: none;
+        }
+
+        .destination-meta {
+            color: #9fb5d8;
+            font-size: 10px;
+        }
+
+        .always-mission-wrap {
+            position: static;
+            left: auto;
+            bottom: auto;
+            min-width: 0;
+            max-width: none;
+            max-height: none;
+            padding: 10px 12px;
+            backdrop-filter: none;
+        }
+
+        .amw-title {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #d4dbe7;
+        }
+
+        .amw-queue {
+            max-height: 180px;
+        }
+
+        .amw-resume-btn {
+            border-radius: 4px;
+            min-height: 34px;
+            font-size: 11px;
+        }
+
+        .stop-btn.header-estop-btn {
+            min-height: 28px;
+            height: 28px;
+            border-radius: 4px;
+            padding: 0 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 10px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            box-shadow: none;
+            white-space: nowrap;
+        }
+
+        .stop-btn-label {
+            font-weight: 800;
+        }
+
+        .global-estop-state {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            color: #ffe2e2;
+        }
+
+        .stop-btn.header-estop-btn.resume-state .global-estop-state {
+            color: #e7fff0;
+        }
+
+        @media (max-width: 1080px) {
+            .content {
+                padding: 0;
+            }
+
+            .control-strip {
+                grid-template-columns: 1fr;
+            }
+
+            .stop-card {
+                max-width: none;
+            }
+
+            .dest-inline .destination-groups {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(120px, 1fr) minmax(120px, 1fr);
+                height: 250px;
+            }
+
+            .map-badges {
+                display: none;
+            }
+
+            .map-tools {
+                display: none;
+            }
+
+            .floating-panels {
+                grid-template-columns: 1fr;
+                padding: 0;
+            }
+
+            .floating-popover,
+            #panel-dest {
+                width: 100%;
+                max-width: 100%;
+            }
+
+            #panel-dest .destination-groups {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+                height: min(62vh, 520px);
+            }
+
+            .stop-btn {
+                min-height: 72px;
+                font-size: 21px;
+            }
+
+            .map-controls-dock {
+                bottom: 18px;
+                padding: 7px;
+            }
+
+            .topbar {
+                height: auto;
+                min-height: var(--shell-header-height);
+                padding: 8px 10px;
+                flex-wrap: wrap;
+            }
+
+            .brand-wrap,
+            .topbar-center,
+            .topbar-right {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .topbar-center {
+                padding: 0;
+            }
+
+            .topbar-right {
+                justify-content: space-between;
+            }
+
+            .operator-layout {
+                flex-direction: column;
+            }
+
+            .operator-sidebar {
+                width: 100%;
+                min-width: 0;
+                max-width: none;
+                border-left: none;
+                border-top: 1px solid var(--shell-border);
+            }
+
+            .map-stage {
+                min-height: 52vh;
+            }
+
+            .view-overview-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand-wrap">
+                <img src="/static/logo.jpg" alt="Next Robotics" class="brand-logo" onerror="this.onerror=null;this.src='/static/next_logo.png';">
+                <div class="title-wrap">
+                    <h1>Next</h1>
+                    <div class="header-robot-id" id="header-robot-id">UGV-01</div>
+                </div>
+            </div>
+            <div class="topbar-center">
+                <span class="top-mode-pill" id="top-mode-pill-label">Operate</span>
+                <span class="top-map-name-indicator" id="top-map-name-indicator">Map not loaded</span>
+            </div>
+            <div class="topbar-right">
+                <button type="button" class="lock-btn header-aux-btn" id="lock-btn">Lock</button>
+                <button type="button" class="stop-btn header-estop-btn" id="stop-btn">
+                    <span class="stop-btn-label" id="stop-btn-label">Emergency Stop</span>
+                    <span class="global-estop-state" id="global-estop-state">Inactive</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="panel map-panel">
+                <div class="operator-layout">
+                    <div class="map-stage">
+                        <div class="panel-head">
+                            <div class="map-head-left">
+                                <h2>Live Map</h2>
+                                <div class="map-badges">
+                                    <span class="map-badge robot">Robot</span>
+                                    <span class="map-badge zone">Zones</span>
+                                    <span class="map-badge path">Paths</span>
+                                    <span class="map-badge lidar">Lidar</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="map-wrap">
+                            <canvas id="map-canvas"></canvas>
+                        </div>
+                        <div class="map-stage-footer">
+                            <div id="ui-message" class="message"></div>
+                        </div>
+                    </div>
+                    <aside class="operator-sidebar">
+                        <div class="insp-hdr">
+                            <span class="insp-hdr-title">Overview</span>
+                            <span class="insp-mode-badge">Operate</span>
+                        </div>
+                        <div class="operator-sidebar-body">
+                            <section class="sidebar-card overview-card" id="view-overview-card">
+                                <div class="overview-card-header">
+                                    <h3 class="card-title">View Overview</h3>
+                                </div>
+                                <div class="view-overview-grid">
+                                    <div class="view-overview-item">
+                                        <span class="view-overview-label">Robot ID</span>
+                                        <span class="view-overview-value" id="view-overview-robot-id">UGV-01</span>
+                                    </div>
+                                    <div class="view-overview-item">
+                                        <span class="view-overview-label">Control Mode</span>
+                                        <span class="view-overview-value" id="view-overview-control-mode">AUTO</span>
+                                    </div>
+                                    <div class="view-overview-item">
+                                        <span class="view-overview-label">Base Frame</span>
+                                        <span class="view-overview-value" id="view-overview-base-frame">base_footprint</span>
+                                    </div>
+                                    <div class="view-overview-item">
+                                        <span class="view-overview-label">Localization</span>
+                                        <span class="view-overview-value" id="view-overview-localization">0%</span>
+                                    </div>
+                                    <div class="view-overview-item">
+                                        <span class="view-overview-label">Speed</span>
+                                        <span class="view-overview-value" id="view-overview-speed">0.00 m/s</span>
+                                    </div>
+                                    <div class="view-overview-item">
+                                        <span class="view-overview-label">Saved Zones</span>
+                                        <span class="view-overview-value" id="view-overview-zones">0</span>
+                                    </div>
+                                    <div class="view-overview-item wide">
+                                        <span class="view-overview-label">Pose (x, y, theta)</span>
+                                        <span class="view-overview-value" id="view-overview-pose">-</span>
+                                    </div>
+                                    <div class="view-overview-item wide">
+                                        <span class="view-overview-label">Active Map</span>
+                                        <span class="view-overview-value" id="view-overview-map">Map not loaded</span>
+                                    </div>
+                                    <div class="view-overview-item wide">
+                                        <span class="view-overview-label">Map Geometry</span>
+                                        <span class="view-overview-value" id="view-overview-map-geometry">Map not loaded</span>
+                                    </div>
+                                    <div class="view-overview-item wide">
+                                        <span class="view-overview-label">Robot Status</span>
+                                        <span class="view-overview-value" id="view-overview-status">Standing by</span>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div class="floating-panels" id="floating-panels">
+                                <section class="floating-popover" id="panel-trip">
+                                    <section class="control-card trip-inline">
+                                        <div id="trip-state" class="trip-state">Idle</div>
+                                        <div id="trip-detail" class="trip-line">Waiting for destination</div>
+                                        <div id="trip-eta" class="trip-line">ETA: --</div>
+                                    </section>
+                                </section>
+
+                                <section class="floating-popover" id="panel-dest">
+                                    <section class="dest-card dest-inline">
+                                        <div class="dest-header">
+                                            <h2>Destinations</h2>
+                                            <button type="button" class="small-btn" id="refresh-destinations-btn">Refresh</button>
+                                        </div>
+                                        <div class="destination-groups">
+                                            <div class="destination-group">
+                                                <div class="destination-group-head">
+                                                    <span>Zones</span>
+                                                    <span id="zone-destination-count" class="destination-count">0</span>
+                                                </div>
+                                                <div id="zone-destination-list" class="destination-list"></div>
+                                            </div>
+                                            <div class="destination-group">
+                                                <div class="destination-group-head">
+                                                    <span>Paths</span>
+                                                    <span id="path-destination-count" class="destination-count">0</span>
+                                                </div>
+                                                <div id="path-destination-list" class="destination-list"></div>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </section>
+                            </div>
+
+                            <section class="always-mission-wrap" id="always-mission-wrap">
+                                <div class="amw-header">
+                                    <span class="amw-title">Mission Queue</span>
+                                    <span class="mission-pill" id="mission-type-pill" style="font-size:10px;padding:2px 8px;"></span>
+                                    <button type="button" class="amw-icon-btn" id="mission-refresh-btn" title="Refresh Queue" aria-label="Refresh Queue">↻</button>
+                                    <button type="button" class="amw-icon-btn danger" id="mission-clear-btn" title="Clear Mission State" aria-label="Clear Mission State">✕</button>
+                                </div>
+                                <div class="amw-state-row state-clear" id="mission-state">No mission to resume</div>
+                                <div class="amw-progress-row" id="mission-progress">Queue is clear</div>
+                                <div class="amw-queue" id="mission-queue"></div>
+                                <button type="button" class="amw-resume-btn" id="mission-resume-btn" disabled>▶ RESUME MISSION</button>
+                            </section>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div class="modal-backdrop" id="confirm-backdrop">
+        <div class="modal">
+            <h3 id="confirm-title">Go to destination?</h3>
+            <p id="confirm-text">The robot will start moving to the selected destination.</p>
+            <div class="modal-actions">
+                <button type="button" class="cancel-btn" id="confirm-cancel-btn">Cancel</button>
+                <button type="button" class="go-btn" id="confirm-go-btn">Go</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="auth-overlay" id="auth-overlay">
+        <div class="auth-card">
+            <h2>Next Robotics Access</h2>
+            <p>Enter the access password to use this screen.</p>
+            <div class="auth-row">
+                <input id="auth-password" type="password" autocomplete="off" placeholder="Password">
+                <button type="button" id="auth-unlock">Unlock</button>
+            </div>
+            <div id="auth-message"></div>
+        </div>
+    </div>
+
+    <script>
+        const AUTH_STORAGE_KEY = 'next_operator_ui_unlocked';
+        const AUTH_CONFIG_URL = '/static/resources/operator_access.yaml';
+        const FALLBACK_PASSWORD = 'nextsmr';
+        const OPERATOR_LOCK_ENABLED = false;
+
+        let appInitialized = false;
+        let pollingTimer = null;
+        let pollingFastTimer = null;
+        let scanRefreshTimer = null;
+        let destinationRefreshTimer = null;
+        let missionRefreshTimer = null;
+        let fastUiRequestInFlight = false;
+        let scanRequestInFlight = false;
+        let expectedPassword = FALLBACK_PASSWORD;
+
+        let mapData = null;
+        let mapImage = null;
+        let mapTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+        let mapFitScale = 1;
+        let mapUserAdjustedView = false;
+        let mapFollowRobotEnabled = false;
+        let mapDragActive = false;
+        let mapDragStartX = 0;
+        let mapDragStartY = 0;
+        let mapDragStartOffsetX = 0;
+        let mapDragStartOffsetY = 0;
+        let mapTouchPanActive = false;
+        let mapTouchStartX = 0;
+        let mapTouchStartY = 0;
+        let mapTouchStartOffsetX = 0;
+        let mapTouchStartOffsetY = 0;
+        let mapPinchActive = false;
+        let mapPinchLastDistance = 0;
+        let robotPose = null;
+        let zoneDestinations = [];
+        let pathDestinations = [];
+        let selectedDestination = null;
+        let activeTrip = null;
+        let previousPathActive = false;
+        let zonesOverlay = {};
+        let pathsOverlay = {};
+        let localizationConfidence = 0.0;
+        let safetyStopActive = false;
+        let overrideActive = false;
+        let currentControlMode = 'unknown';
+        let mapDrawRafQueued = false;
+        let lidarScanPoints = [];
+        let missionStatus = {
+            ok: true,
+            active: false,
+            paused: false,
+            state: 'IDLE',
+            type: '',
+            data: [],
+            progress: 0,
+            interrupted_by: '',
+            message: '',
+        };
+        let activeRobotId = 'UGV-01';
+        let activeRobotBaseFrame = 'base_footprint';
+        let activeMapReference = '';
+        let estimatedSpeedMps = 0.0;
+        let lastRobotPoseSample = null;
+
+        const floatingPanelToggles = {
+            'panel-trip-toggle': 'panel-trip',
+            'panel-dest-toggle': 'panel-dest',
+        };
+
+        const mapCanvas = document.getElementById('map-canvas');
+        const mapCtx = mapCanvas.getContext('2d');
+
+        function requestMapDraw() {
+            if (mapDrawRafQueued) return;
+            mapDrawRafQueued = true;
+            window.requestAnimationFrame(() => {
+                mapDrawRafQueued = false;
+                drawMap();
+            });
+        }
+
+        function setUiMessage(message, level = 'info') {
+            const el = document.getElementById('ui-message');
+            if (!el) return;
+            el.textContent = String(message || '');
+            el.className = `message ${level}`;
+        }
+
+        function setOverviewText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(value || '');
+        }
+
+        function formatMapReferenceLabel(mapReference) {
+            const raw = String(mapReference || '').trim();
+            if (!raw) {
+                const source = String(mapData?.source || '').trim().toLowerCase();
+                if (source === 'live') return 'Live map';
+                if (source === 'static') return 'Static map';
+                return 'Map not loaded';
+            }
+            const fileName = raw.split('/').pop() || raw;
+            return fileName.replace(/\.(yaml|yml)$/i, '') || raw;
+        }
+
+        function formatPoseSummary(pose) {
+            if (!pose || !Number.isFinite(Number(pose.x)) || !Number.isFinite(Number(pose.y))) {
+                return '-';
+            }
+            const headingDeg = Number(pose.theta || 0) * (180 / Math.PI);
+            return `${Number(pose.x).toFixed(2)}, ${Number(pose.y).toFixed(2)}, ${headingDeg.toFixed(1)}°`;
+        }
+
+        function formatMapGeometrySummary() {
+            if (!mapData || !Number.isFinite(Number(mapData.width)) || !Number.isFinite(Number(mapData.height))) {
+                return 'Map not loaded';
+            }
+            const width = Number(mapData.width || 0);
+            const height = Number(mapData.height || 0);
+            const resolution = Number(mapData.resolution || 0);
+            const widthMeters = width * resolution;
+            const heightMeters = height * resolution;
+            if (!Number.isFinite(widthMeters) || !Number.isFinite(heightMeters)) {
+                return `${width}x${height} cells`;
+            }
+            return `${width}x${height} cells | ${widthMeters.toFixed(1)}m x ${heightMeters.toFixed(1)}m`;
+        }
+
+        function formatControlModeLabel(modeRaw) {
+            const mode = String(modeRaw || '').trim().toLowerCase();
+            if (mode === 'manual') return 'MANUAL';
+            if (mode === 'auto' || mode === 'zones' || mode === 'nav') return 'AUTO';
+            if (!mode) return 'UNKNOWN';
+            return mode.toUpperCase();
+        }
+
+        function updateOperatorChrome() {
+            const robotIdLabel = String(activeRobotId || 'UGV-01').trim() || 'UGV-01';
+            const mapLabel = formatMapReferenceLabel(activeMapReference);
+            setOverviewText('header-robot-id', robotIdLabel);
+            setOverviewText('top-map-name-indicator', mapLabel);
+            setOverviewText('view-overview-robot-id', robotIdLabel);
+            setOverviewText('view-overview-base-frame', activeRobotBaseFrame || 'base_footprint');
+            setOverviewText('view-overview-map', mapLabel);
+        }
+
+        function updateOverviewCard() {
+            updateOperatorChrome();
+            setOverviewText('view-overview-control-mode', formatControlModeLabel(currentControlMode));
+            setOverviewText('view-overview-localization', `${Math.max(0, localizationConfidence * 100).toFixed(0)}%`);
+            setOverviewText('view-overview-speed', `${Math.max(0, estimatedSpeedMps).toFixed(2)} m/s`);
+            setOverviewText('view-overview-zones', String(zoneDestinations.length));
+            setOverviewText('view-overview-pose', formatPoseSummary(robotPose));
+            setOverviewText('view-overview-map-geometry', formatMapGeometrySummary());
+            setOverviewText('view-overview-status', getRobotMarkerStatusText());
+        }
+
+        async function refreshOperatorProfile() {
+            const result = await apiCall('/api/settings/robot_profiles');
+            if (!result.ok) {
+                updateOperatorChrome();
+                return;
+            }
+            const activeRobotIdFromApi = String(result.data?.active_robot_id || '').trim();
+            if (activeRobotIdFromApi) {
+                activeRobotId = activeRobotIdFromApi;
+            }
+            const profiles = Array.isArray(result.data?.profiles) ? result.data.profiles : [];
+            const activeProfile = profiles.find((entry) => String(entry?.robot_id || '').trim() === activeRobotId);
+            if (activeProfile) {
+                const baseFrame = String(activeProfile.base_frame || '').trim();
+                const mapAssociation = String(activeProfile.map_association || '').trim();
+                if (baseFrame) activeRobotBaseFrame = baseFrame;
+                if (mapAssociation) activeMapReference = mapAssociation;
+            }
+            updateOperatorChrome();
+            updateOverviewCard();
+        }
+
+        function setTripIdle(detailText = 'Waiting for destination') {
+            const stateEl = document.getElementById('trip-state');
+            const detailEl = document.getElementById('trip-detail');
+            const etaEl = document.getElementById('trip-eta');
+            if (stateEl) {
+                stateEl.textContent = 'Idle';
+                stateEl.classList.remove('moving');
+            }
+            if (detailEl) detailEl.textContent = detailText;
+            if (etaEl) etaEl.textContent = 'ETA: --';
+            updateOverviewCard();
+        }
+
+        function setTripMoving(destinationName, detailText = 'On the way') {
+            const stateEl = document.getElementById('trip-state');
+            const detailEl = document.getElementById('trip-detail');
+            const etaEl = document.getElementById('trip-eta');
+            if (stateEl) {
+                stateEl.textContent = `Moving to ${destinationName}`;
+                stateEl.classList.add('moving');
+            }
+            if (detailEl) detailEl.textContent = detailText;
+            if (etaEl) etaEl.textContent = 'ETA: --';
+            updateOverviewCard();
+        }
+
+        function formatMissionType(typeRaw) {
+            const normalized = String(typeRaw || '').trim().toLowerCase();
+            if (normalized === 'path') return 'Path';
+            if (normalized === 'sequence') return 'Sequence';
+            if (!normalized) return 'Mission';
+            return normalized.replace(/_/g, ' ');
+        }
+
+        function formatMissionInterrupt(reasonRaw) {
+            const normalized = String(reasonRaw || '').trim().toLowerCase();
+            if (normalized === 'estop') return 'E-STOP';
+            if (normalized === 'manual') return 'manual stop';
+            if (!normalized) return 'unknown';
+            return normalized.replace(/_/g, ' ');
+        }
+
+        function normalizeMissionStatusPayload(raw, fallbackOk = false) {
+            const source = (raw && typeof raw === 'object') ? raw : {};
+            const queueData = Array.isArray(source.data) ? source.data : [];
+            return {
+                ok: Boolean(Object.prototype.hasOwnProperty.call(source, 'ok') ? source.ok : fallbackOk),
+                active: Boolean(source.active),
+                paused: Boolean(source.paused),
+                state: String(source.state || 'IDLE'),
+                type: String(source.type || ''),
+                data: queueData.map((item) => String(item || '').trim()).filter((item) => !!item),
+                progress: Math.max(0, Number(source.progress || 0)),
+                interrupted_by: String(source.interrupted_by || ''),
+                message: String(source.message || ''),
+            };
+        }
+
+        function renderMissionQueue() {
+            const status = missionStatus || {};
+            const queue = Array.isArray(status.data) ? status.data : [];
+            const hasStoredMission = Boolean(status.paused || status.active || status.type || queue.length > 0);
+
+            // mission panel is always visible — update border highlight when active
+            const alwaysMissionWrap = document.getElementById('always-mission-wrap');
+            if (alwaysMissionWrap) {
+                alwaysMissionWrap.style.borderColor = status.paused
+                    ? 'rgba(245,166,35,0.55)'
+                    : 'rgba(80,123,202,0.28)';
+            }
+            // update state-row colour class
+            const stateRowEl = document.getElementById('mission-state');
+            if (stateRowEl) {
+                stateRowEl.classList.toggle('state-active', Boolean(status.paused));
+                stateRowEl.classList.toggle('state-clear', !status.paused);
+            }
+
+            const typeEl = document.getElementById('mission-type-pill');
+            if (typeEl) {
+                typeEl.textContent = formatMissionType(status.type || '');
+            }
+
+            const resumeBtn = document.getElementById('mission-resume-btn');
+            if (resumeBtn) {
+                resumeBtn.disabled = !status.paused;
+                resumeBtn.classList.toggle('needs-resume', Boolean(status.paused));
+            }
+
+            const clearBtn = document.getElementById('mission-clear-btn');
+            if (clearBtn) {
+                clearBtn.disabled = !hasStoredMission;
+            }
+
+            const stateEl = document.getElementById('mission-state');
+            const progressEl = document.getElementById('mission-progress');
+            const queueEl = document.getElementById('mission-queue');
+            if (queueEl) queueEl.innerHTML = '';
+
+            if (!status.ok && !status.paused && !hasStoredMission) {
+                if (stateEl) stateEl.textContent = 'Mission queue unavailable';
+                if (progressEl) progressEl.textContent = status.message || 'Could not read mission service';
+                if (queueEl) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty';
+                    empty.textContent = 'Queue unavailable';
+                    queueEl.appendChild(empty);
+                }
+                updateOverviewCard();
+                return;
+            }
+
+            if (!status.paused && !hasStoredMission) {
+                if (stateEl) stateEl.textContent = 'No mission to resume';
+                if (progressEl) progressEl.textContent = 'Queue is clear';
+                if (queueEl) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty';
+                    empty.textContent = 'No queued mission items.';
+                    queueEl.appendChild(empty);
+                }
+                updateOverviewCard();
+                return;
+            }
+
+            const typeLabel = formatMissionType(status.type || '');
+            const interruptText = formatMissionInterrupt(status.interrupted_by || '');
+            if (stateEl) {
+                stateEl.textContent = status.paused
+                    ? `${typeLabel} interrupted by ${interruptText}`
+                    : `${typeLabel} state saved`;
+            }
+
+            const total = queue.length;
+            const pointer = Math.max(0, Math.min(total > 0 ? total - 1 : 0, Math.floor(Number(status.progress || 0))));
+            if (progressEl) {
+                progressEl.textContent = total > 0
+                    ? `Resume from ${Math.min(pointer + 1, total)}/${total}`
+                    : 'Resume point available';
+            }
+
+            if (!queueEl) return;
+            if (total <= 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty';
+                empty.textContent = 'No mission queue entries.';
+                queueEl.appendChild(empty);
+                return;
+            }
+
+            queue.forEach((entry, index) => {
+                const row = document.createElement('div');
+                row.className = 'mission-item';
+                if (index === pointer) {
+                    row.classList.add('current');
+                }
+                const marker = index === pointer ? '▶' : '•';
+                row.textContent = `${marker} ${index + 1}. ${entry}`;
+                queueEl.appendChild(row);
+            });
+            updateOverviewCard();
+        }
+
+        async function refreshMissionStatus(showMessageOnError = false) {
+            const statusResult = await apiCall('/api/mission/status');
+            if (!statusResult.ok) {
+                missionStatus = normalizeMissionStatusPayload(statusResult.data, false);
+                renderMissionQueue();
+                if (showMessageOnError) {
+                    setUiMessage(missionStatus.message || 'Failed to load mission queue', 'error');
+                }
+                return false;
+            }
+
+            missionStatus = normalizeMissionStatusPayload(statusResult.data, true);
+            renderMissionQueue();
+            return true;
+        }
+
+        async function resumeMissionQueue() {
+            const button = document.getElementById('mission-resume-btn');
+            if (button) button.disabled = true;
+            const result = await apiCall('/api/mission/resume', { method: 'POST' });
+            if (result.ok) {
+                setUiMessage(result.data.message || 'Mission resumed', 'ok');
+            } else {
+                setUiMessage(result.data.message || 'Failed to resume mission', 'error');
+            }
+            await refreshMissionStatus(false);
+        }
+
+        async function clearMissionQueueState() {
+            const button = document.getElementById('mission-clear-btn');
+            if (button) button.disabled = true;
+            const result = await apiCall('/api/mission/clear', { method: 'POST' });
+            if (result.ok) {
+                setUiMessage(result.data.message || 'Mission queue cleared', 'ok');
+            } else {
+                setUiMessage(result.data.message || 'Failed to clear mission queue', 'error');
+            }
+            await refreshMissionStatus(false);
+        }
+
+        function parsePasswordFromYaml(text) {
+            const raw = String(text || '');
+            const line = raw.match(/^\s*password\s*:\s*(.+)\s*$/im);
+            if (!line) return '';
+            const cleaned = line[1]
+                .replace(/\s+#.*$/, '')
+                .trim()
+                .replace(/^['"]/, '')
+                .replace(/['"]$/, '')
+                .trim();
+            return cleaned;
+        }
+
+        async function loadOperatorPassword() {
+            try {
+                const response = await fetch(`${AUTH_CONFIG_URL}?t=${Date.now()}`, { cache: 'no-store' });
+                if (!response.ok) {
+                    expectedPassword = FALLBACK_PASSWORD;
+                    return;
+                }
+                const yamlText = await response.text();
+                const parsed = parsePasswordFromYaml(yamlText);
+                expectedPassword = parsed || FALLBACK_PASSWORD;
+            } catch (error) {
+                expectedPassword = FALLBACK_PASSWORD;
+            }
+        }
+
+        function isUnlocked() {
+            return sessionStorage.getItem(AUTH_STORAGE_KEY) === '1';
+        }
+
+        function setUnlocked(value) {
+            if (value) {
+                sessionStorage.setItem(AUTH_STORAGE_KEY, '1');
+            } else {
+                sessionStorage.removeItem(AUTH_STORAGE_KEY);
+            }
+        }
+
+        function showAuthOverlay(show) {
+            const overlay = document.getElementById('auth-overlay');
+            if (!overlay) return;
+            overlay.style.display = show ? 'flex' : 'none';
+        }
+
+        function openConfirm(destination) {
+            selectedDestination = destination || null;
+            if (!selectedDestination) return;
+            const backdrop = document.getElementById('confirm-backdrop');
+            const title = document.getElementById('confirm-title');
+            const text = document.getElementById('confirm-text');
+            const isPath = selectedDestination.kind === 'path';
+            if (title) title.textContent = isPath ? `Follow path ${selectedDestination.name}?` : `Go to zone ${selectedDestination.name}?`;
+            if (text) {
+                if (isPath) {
+                    const typeText = selectedDestination.pathTypeSummary
+                        ? `\nType: ${selectedDestination.pathTypeSummary}`
+                        : '';
+                    text.textContent = `The robot will start following this path.${typeText}`;
+                } else {
+                    text.textContent = 'The robot will start moving to this zone.';
+                }
+            }
+            if (backdrop) backdrop.classList.add('open');
+        }
+
+        function closeConfirm() {
+            selectedDestination = null;
+            const backdrop = document.getElementById('confirm-backdrop');
+            if (backdrop) backdrop.classList.remove('open');
+        }
+
+        function closeFloatingPanels() {
+            Object.values(floatingPanelToggles).forEach((panelId) => {
+                const panel = document.getElementById(panelId);
+                panel?.classList.remove('open');
+            });
+            Object.keys(floatingPanelToggles).forEach((toggleId) => {
+                document.getElementById(toggleId)?.classList.remove('active');
+            });
+        }
+
+        function toggleFloatingPanel(panelId, toggleId) {
+            const panel = document.getElementById(panelId);
+            const toggle = document.getElementById(toggleId);
+            if (!panel || !toggle) return;
+            const shouldOpen = !panel.classList.contains('open');
+            closeFloatingPanels();
+            if (shouldOpen) {
+                panel.classList.add('open');
+                toggle.classList.add('active');
+            }
+        }
+
+        async function apiCall(url, options = {}) {
+            try {
+                const response = await fetch(url, options);
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (_parseError) {
+                    data = {};
+                }
+                const ok = response.ok && (data.ok !== false);
+                return { ok, data, status: response.status };
+            } catch (error) {
+                return { ok: false, data: { message: error.message || 'Request failed' }, status: 0 };
+            }
+        }
+
+        function resizeMapCanvas() {
+            const rect = mapCanvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            mapCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+            mapCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+            mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            applyFitMapTransform(false);
+            requestMapDraw();
+        }
+
+        function getMapCanvasCssSize() {
+            const dpr = window.devicePixelRatio || 1;
+            return {
+                width: Math.max(1, mapCanvas.width / dpr),
+                height: Math.max(1, mapCanvas.height / dpr),
+            };
+        }
+
+        function getFitMapTransform() {
+            if (!mapData || !mapImage) {
+                return null;
+            }
+            const canvasSize = getMapCanvasCssSize();
+            const canvasW = canvasSize.width;
+            const canvasH = canvasSize.height;
+            const imageW = Number(mapImage.width || 0);
+            const imageH = Number(mapImage.height || 0);
+            if (imageW <= 0 || imageH <= 0 || canvasW <= 0 || canvasH <= 0) {
+                return null;
+            }
+            const scale = Math.min(canvasW / imageW, canvasH / imageH);
+            return {
+                scale,
+                offsetX: (canvasW - imageW * scale) / 2,
+                offsetY: (canvasH - imageH * scale) / 2,
+            };
+        }
+
+        function updateMapViewNote() {
+            const followBtn = document.getElementById('map-follow-btn');
+            if (followBtn) {
+                followBtn.classList.toggle('active', mapFollowRobotEnabled);
+                followBtn.setAttribute('aria-pressed', mapFollowRobotEnabled ? 'true' : 'false');
+            }
+        }
+
+        function setMapCanvasDragging(isDragging) {
+            mapCanvas.classList.toggle('dragging', !!isDragging);
+        }
+
+        function clampMapTransform() {
+            if (!mapData || !mapImage) return;
+            const canvasSize = getMapCanvasCssSize();
+            const canvasW = canvasSize.width;
+            const canvasH = canvasSize.height;
+            const scaledW = Number(mapImage.width || 0) * Number(mapTransform.scale || 1);
+            const scaledH = Number(mapImage.height || 0) * Number(mapTransform.scale || 1);
+            if (!Number.isFinite(scaledW) || !Number.isFinite(scaledH) || scaledW <= 0 || scaledH <= 0) {
+                return;
+            }
+
+            const marginX = Math.min(100, canvasW * 0.24);
+            const marginY = Math.min(100, canvasH * 0.24);
+
+            let minX = canvasW - scaledW - marginX;
+            let maxX = marginX;
+            if ((scaledW + marginX * 2) <= canvasW) {
+                minX = maxX = (canvasW - scaledW) / 2;
+            }
+
+            let minY = canvasH - scaledH - marginY;
+            let maxY = marginY;
+            if ((scaledH + marginY * 2) <= canvasH) {
+                minY = maxY = (canvasH - scaledH) / 2;
+            }
+
+            mapTransform.offsetX = Math.max(minX, Math.min(maxX, Number(mapTransform.offsetX || 0)));
+            mapTransform.offsetY = Math.max(minY, Math.min(maxY, Number(mapTransform.offsetY || 0)));
+        }
+
+        function applyFitMapTransform(forceReset = false) {
+            const fit = getFitMapTransform();
+            if (!fit) {
+                mapTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+                mapFitScale = 1;
+                mapUserAdjustedView = false;
+                updateMapViewNote();
+                return;
+            }
+            mapFitScale = fit.scale;
+            if (
+                forceReset
+                || !mapUserAdjustedView
+                || !Number.isFinite(Number(mapTransform.scale))
+                || Number(mapTransform.scale) <= 0
+            ) {
+                mapTransform = { ...fit };
+                mapUserAdjustedView = false;
+            }
+            clampMapTransform();
+            updateMapViewNote();
+        }
+
+        function zoomMapAt(factor, pivotX, pivotY) {
+            if (!mapData || !mapImage) return;
+            const currentScale = Number(mapTransform.scale || mapFitScale || 1);
+            const minScale = Math.max(0.0001, Number(mapFitScale || 1) * 0.65);
+            const maxScale = Math.max(minScale * 2, Number(mapFitScale || 1) * 18.0);
+            const nextScale = Math.max(minScale, Math.min(maxScale, currentScale * Number(factor || 1)));
+            if (!Number.isFinite(nextScale) || Math.abs(nextScale - currentScale) < 1e-5) {
+                return;
+            }
+
+            const px = Number(pivotX);
+            const py = Number(pivotY);
+            const mapX = (px - Number(mapTransform.offsetX || 0)) / currentScale;
+            const mapY = (py - Number(mapTransform.offsetY || 0)) / currentScale;
+            if (!Number.isFinite(mapX) || !Number.isFinite(mapY)) {
+                return;
+            }
+
+            mapTransform.scale = nextScale;
+            mapTransform.offsetX = px - mapX * nextScale;
+            mapTransform.offsetY = py - mapY * nextScale;
+            mapUserAdjustedView = true;
+            mapFollowRobotEnabled = false;
+            clampMapTransform();
+            updateMapViewNote();
+            requestMapDraw();
+        }
+
+        function touchPointOnCanvas(touch, rect) {
+            return {
+                x: Number(touch.clientX) - Number(rect.left),
+                y: Number(touch.clientY) - Number(rect.top),
+            };
+        }
+
+        function touchDistance(p1, p2) {
+            return Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
+        }
+
+        function centerViewOnRobot(force = false) {
+            if (!robotPose || !mapData || !mapImage) return;
+            if (!force && !mapFollowRobotEnabled) return;
+
+            const p = worldToCanvas(robotPose.x, robotPose.y);
+            if (!p) return;
+            const canvasSize = getMapCanvasCssSize();
+            const targetX = canvasSize.width * 0.5;
+            const targetY = canvasSize.height * 0.54;
+            mapTransform.offsetX += (targetX - p.x);
+            mapTransform.offsetY += (targetY - p.y);
+            clampMapTransform();
+            updateMapViewNote();
+            requestMapDraw();
+        }
+
+        function getMapOriginPose() {
+            const origin = Array.isArray(mapData?.origin) ? mapData.origin : [0, 0, 0];
+            return {
+                x: Number(origin[0] || 0),
+                y: Number(origin[1] || 0),
+                yaw: Number(origin[2] || 0),
+            };
+        }
+
+        function worldToMapImagePoint(wx, wy) {
+            if (!mapData || !mapImage) return null;
+            const res = Number(mapData.resolution || 0);
+            if (!Number.isFinite(res) || res <= 0) return null;
+
+            const origin = getMapOriginPose();
+            const dx = Number(wx) - origin.x;
+            const dy = Number(wy) - origin.y;
+            const cosYaw = Math.cos(origin.yaw);
+            const sinYaw = Math.sin(origin.yaw);
+            const localX = dx * cosYaw + dy * sinYaw;
+            const localY = -dx * sinYaw + dy * cosYaw;
+            const imgX = localX / res;
+            const imgY = Number(mapImage.height) - (localY / res);
+            if (!Number.isFinite(imgX) || !Number.isFinite(imgY)) return null;
+
+            return { x: imgX, y: imgY };
+        }
+
+        function mapFrameYawFromWorldYaw(yaw) {
+            return Number(yaw || 0.0) - getMapOriginPose().yaw;
+        }
+
+        function worldToCanvas(wx, wy) {
+            const imagePoint = worldToMapImagePoint(wx, wy);
+            if (!imagePoint) return null;
+
+            return {
+                x: mapTransform.offsetX + imagePoint.x * mapTransform.scale,
+                y: mapTransform.offsetY + imagePoint.y * mapTransform.scale,
+            };
+        }
+
+        function canvasToWorld(cx, cy) {
+            if (!mapData || !mapImage) return null;
+            const scale = Number(mapTransform.scale || 1);
+            if (!Number.isFinite(scale) || scale <= 0) return null;
+
+            const imgX = (Number(cx) - Number(mapTransform.offsetX || 0)) / scale;
+            const imgY = (Number(cy) - Number(mapTransform.offsetY || 0)) / scale;
+            if (!Number.isFinite(imgX) || !Number.isFinite(imgY)) return null;
+
+            const res = Number(mapData.resolution || 0);
+            if (!Number.isFinite(res) || res <= 0) return null;
+
+            const localX = imgX * res;
+            const localY = (Number(mapImage.height) - imgY) * res;
+            const origin = getMapOriginPose();
+            const cosYaw = Math.cos(origin.yaw);
+            const sinYaw = Math.sin(origin.yaw);
+            return {
+                x: origin.x + localX * cosYaw - localY * sinYaw,
+                y: origin.y + localX * sinYaw + localY * cosYaw,
+            };
+        }
+
+        function lerpChannel(a, b, t) {
+            return Math.round(a + (b - a) * t);
+        }
+
+        function lerpRgb(a, b, t) {
+            return [
+                lerpChannel(a[0], b[0], t),
+                lerpChannel(a[1], b[1], t),
+                lerpChannel(a[2], b[2], t),
+            ];
+        }
+
+        function lidarRangeToRgb(rangeMeters) {
+            const r = Number(rangeMeters);
+            if (!Number.isFinite(r) || r < 0) {
+                return [6, 182, 212];
+            }
+            if (r < 2.0) {
+                return lerpRgb([59, 130, 246], [6, 182, 212], r / 2.0);
+            }
+            if (r < 5.0) {
+                return lerpRgb([6, 182, 212], [34, 197, 94], (r - 2.0) / 3.0);
+            }
+            if (r < 10.0) {
+                return lerpRgb([34, 197, 94], [250, 204, 21], (r - 5.0) / 5.0);
+            }
+            return [239, 68, 68];
+        }
+
+        function getRobotMarkerStatusText() {
+            if (safetyStopActive) {
+                return 'Safety stop active';
+            }
+            if (activeTrip && activeTrip.name) {
+                return `Moving to ${activeTrip.name}`;
+            }
+            if (currentControlMode === 'manual') {
+                return 'Manual mode';
+            }
+            return 'Standing by';
+        }
+
+        function drawLidarScanOverlay() {
+            if (!Array.isArray(lidarScanPoints) || lidarScanPoints.length === 0) return;
+
+            const pixelScan = [];
+            for (const point of lidarScanPoints) {
+                const wx = Number(point?.x);
+                const wy = Number(point?.y);
+                if (!Number.isFinite(wx) || !Number.isFinite(wy)) continue;
+                const pixel = worldToCanvas(wx, wy);
+                if (!pixel) continue;
+                let rangeMeters = Number(point?.range);
+                if (!Number.isFinite(rangeMeters) && robotPose) {
+                    const dx = wx - Number(robotPose.x || 0.0);
+                    const dy = wy - Number(robotPose.y || 0.0);
+                    if (Number.isFinite(dx) && Number.isFinite(dy)) {
+                        rangeMeters = Math.hypot(dx, dy);
+                    }
+                }
+                pixelScan.push({ x: pixel.x, y: pixel.y, range: rangeMeters });
+            }
+
+            if (!pixelScan.length) return;
+
+            const pointStep = Math.max(1, Math.floor(pixelScan.length / 350));
+            mapCtx.save();
+            for (let i = 0; i < pixelScan.length; i += pointStep) {
+                const point = pixelScan[i];
+                const rgb = lidarRangeToRgb(point.range);
+                mapCtx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.28)`;
+                mapCtx.beginPath();
+                mapCtx.arc(point.x, point.y, 2.3, 0, 2 * Math.PI);
+                mapCtx.fill();
+            }
+            for (let i = 0; i < pixelScan.length; i += pointStep) {
+                const point = pixelScan[i];
+                const rgb = lidarRangeToRgb(point.range);
+                mapCtx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.92)`;
+                mapCtx.beginPath();
+                mapCtx.arc(point.x, point.y, 1.2, 0, 2 * Math.PI);
+                mapCtx.fill();
+            }
+            mapCtx.restore();
+        }
+
+        function parseOverlayZoneEntries() {
+            if (!zonesOverlay || typeof zonesOverlay !== 'object') return [];
+            return Object.entries(zonesOverlay)
+                .map(([name, zone]) => {
+                    if (!zone || typeof zone !== 'object') return null;
+                    const position = (zone.position && typeof zone.position === 'object') ? zone.position : zone;
+                    const x = Number(position.x);
+                    const y = Number(position.y);
+                    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+                    const orientation = (zone.orientation && typeof zone.orientation === 'object') ? zone.orientation : {};
+                    const yaw = (Number.isFinite(Number(orientation.z)) && Number.isFinite(Number(orientation.w)))
+                        ? (2 * Math.atan2(Number(orientation.z), Number(orientation.w)))
+                        : 0.0;
+                    const metadata = (zone.metadata && typeof zone.metadata === 'object') ? zone.metadata : {};
+                    const rawType = String(zone.type || zone.zone_type || metadata.type || metadata.zone_type || 'normal').trim().toLowerCase();
+                    const zoneType = (rawType === 'action' || rawType === 'charge') ? rawType : 'normal';
+
+                    const zoneName = String(name || '').trim();
+                    const isActiveTarget = !!(
+                        activeTrip
+                        && activeTrip.kind === 'zone'
+                        && String(activeTrip.name || '').trim() === zoneName
+                    );
+
+                    if (isActiveTarget && robotPose && Number.isFinite(Number(robotPose.x)) && Number.isFinite(Number(robotPose.y))) {
+                        const rx = Number(robotPose.x);
+                        const ry = Number(robotPose.y);
+                        const rYaw = Number(robotPose.theta || 0.0);
+                        const distToZone = Math.hypot(rx - x, ry - y);
+                        const yawErr = Math.abs(Math.atan2(Math.sin(rYaw - yaw), Math.cos(rYaw - yaw)));
+                        if (distToZone <= 0.45 && yawErr <= 0.45) {
+                            return {
+                                name: zoneName,
+                                x: rx,
+                                y: ry,
+                                yaw: rYaw,
+                                zoneType,
+                            };
+                        }
+                    }
+
+                    return {
+                        name: zoneName,
+                        x,
+                        y,
+                        yaw,
+                        zoneType,
+                    };
+                })
+                .filter((entry) => !!entry && !!entry.name);
+        }
+
+        function parseOverlayPathEntries() {
+            if (!pathsOverlay || typeof pathsOverlay !== 'object') return [];
+            return Object.entries(pathsOverlay)
+                .map(([name, rawEntry]) => {
+                    const points = Array.isArray(rawEntry)
+                        ? rawEntry
+                        : ((rawEntry && typeof rawEntry === 'object' && Array.isArray(rawEntry.points)) ? rawEntry.points : null);
+                    if (!Array.isArray(points)) return null;
+                    const normalizedPoints = points
+                        .map((point) => {
+                            if (point && typeof point === 'object') {
+                                const x = Number(point.x);
+                                const y = Number(point.y);
+                                if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                                return { x, y };
+                            }
+                            if (Array.isArray(point) && point.length >= 2) {
+                                const x = Number(point[0]);
+                                const y = Number(point[1]);
+                                if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                                return { x, y };
+                            }
+                            return null;
+                        })
+                        .filter((point) => !!point);
+
+                    if (normalizedPoints.length < 2) return null;
+                    return {
+                        name: String(name || '').trim(),
+                        points: normalizedPoints,
+                    };
+                })
+                .filter((entry) => !!entry && !!entry.name);
+        }
+
+        function normalizeLoopType(value, fallback = 'none') {
+            const raw = String(value || '').trim().toLowerCase();
+            if (raw === 'closed' || raw === 'closed_loop' || raw === 'closed-loop') return 'closed';
+            if (raw === 'ping_pong' || raw === 'pingpong' || raw === 'ping-pong' || raw === 'loop') return 'ping_pong';
+            if (raw === 'none' || raw === 'off' || raw === 'false' || raw === '0' || raw === '') return 'none';
+            const fallbackRaw = String(fallback || '').trim().toLowerCase();
+            if (fallbackRaw && fallbackRaw !== raw) return normalizeLoopType(fallbackRaw, 'none');
+            return 'none';
+        }
+
+        function getLoopTypeLabel(loopType) {
+            const normalized = normalizeLoopType(loopType);
+            if (normalized === 'closed') return 'Closed';
+            if (normalized === 'ping_pong') return 'Ping Pong';
+            return 'One Way';
+        }
+
+        function formatPathLengthMeters(lengthMeters) {
+            const length = Number(lengthMeters);
+            if (!Number.isFinite(length)) return '';
+            return `${length.toFixed(2)} m`;
+        }
+
+        function calculateSimplePathLengthMeters(points, settings = {}) {
+            const normalizedPoints = (Array.isArray(points) ? points : [])
+                .map((point) => {
+                    if (point && typeof point === 'object') {
+                        const x = Number(point.x);
+                        const y = Number(point.y);
+                        if (Number.isFinite(x) && Number.isFinite(y)) {
+                            return { x, y };
+                        }
+                    }
+                    if (Array.isArray(point) && point.length >= 2) {
+                        const x = Number(point[0]);
+                        const y = Number(point[1]);
+                        if (Number.isFinite(x) && Number.isFinite(y)) {
+                            return { x, y };
+                        }
+                    }
+                    return null;
+                })
+                .filter((point) => !!point);
+
+            if (normalizedPoints.length < 2) {
+                return 0;
+            }
+
+            let total = 0;
+            for (let i = 1; i < normalizedPoints.length; i++) {
+                total += Math.hypot(
+                    normalizedPoints[i].x - normalizedPoints[i - 1].x,
+                    normalizedPoints[i].y - normalizedPoints[i - 1].y
+                );
+            }
+
+            const loopType = normalizeLoopType(settings?.loop_type, settings?.loop_mode ? 'ping_pong' : 'none');
+            if (loopType === 'closed') {
+                total += Math.hypot(
+                    normalizedPoints[0].x - normalizedPoints[normalizedPoints.length - 1].x,
+                    normalizedPoints[0].y - normalizedPoints[normalizedPoints.length - 1].y
+                );
+            }
+
+            return total;
+        }
+
+        function normalizePathSettings(rawSettings, pointCount = 0) {
+            const incoming = (rawSettings && typeof rawSettings === 'object') ? rawSettings : {};
+            const inferredLoopType = incoming.loop_mode ? 'ping_pong' : 'none';
+            const loopType = normalizeLoopType(incoming.loop_type, inferredLoopType);
+            const normalizedPointCount = Math.max(0, Number(pointCount || 0) || 0);
+            const segmentCount = normalizedPointCount < 2
+                ? 0
+                : ((loopType === 'closed') ? normalizedPointCount : (normalizedPointCount - 1));
+            const maxSegmentIndex = segmentCount - 1;
+            const rawSegments = Array.isArray(incoming.curved_segments) ? incoming.curved_segments : [];
+            const uniqueSegments = new Set();
+            rawSegments.forEach((rawIndex) => {
+                const idx = Number(rawIndex);
+                if (Number.isInteger(idx) && idx >= 0 && idx <= maxSegmentIndex) {
+                    uniqueSegments.add(idx);
+                }
+            });
+            const curvedSegments = Array.from(uniqueSegments).sort((a, b) => a - b);
+            return {
+                loop_type: loopType,
+                loop_mode: loopType !== 'none',
+                curved_segments: curvedSegments,
+                has_curves: curvedSegments.length > 0,
+            };
+        }
+
+        function getPathTypeSummary(settings, lengthMeters = null) {
+            const normalized = normalizePathSettings(settings);
+            const loopLabel = getLoopTypeLabel(normalized.loop_type);
+            const curveLabel = normalized.has_curves ? `Curved ${normalized.curved_segments.length}` : 'Curved No';
+            const lengthLabel = formatPathLengthMeters(lengthMeters);
+            return lengthLabel
+                ? `${loopLabel} • ${curveLabel} • ${lengthLabel}`
+                : `${loopLabel} • ${curveLabel}`;
+        }
+
+        function drawPathOverlays() {
+            const overlays = parseOverlayPathEntries();
+            if (!overlays.length) return;
+
+            overlays.forEach((pathEntry) => {
+                const pixelPoints = pathEntry.points
+                    .map((point) => worldToCanvas(point.x, point.y))
+                    .filter((point) => !!point);
+                if (pixelPoints.length < 2) return;
+
+                mapCtx.save();
+                mapCtx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
+                mapCtx.lineWidth = 2.2;
+                mapCtx.setLineDash([8, 4]);
+                mapCtx.beginPath();
+                mapCtx.moveTo(pixelPoints[0].x, pixelPoints[0].y);
+                for (let i = 1; i < pixelPoints.length; i++) {
+                    mapCtx.lineTo(pixelPoints[i].x, pixelPoints[i].y);
+                }
+                mapCtx.stroke();
+                mapCtx.setLineDash([]);
+                mapCtx.restore();
+
+                mapCtx.save();
+                mapCtx.fillStyle = '#38bdf8';
+                const step = Math.max(1, Math.floor(pixelPoints.length / 25));
+                for (let i = 0; i < pixelPoints.length; i += step) {
+                    mapCtx.beginPath();
+                    mapCtx.arc(pixelPoints[i].x, pixelPoints[i].y, 2.4, 0, 2 * Math.PI);
+                    mapCtx.fill();
+                }
+                mapCtx.restore();
+
+                const labelPoint = pixelPoints[0];
+                mapCtx.save();
+                mapCtx.font = '600 11px Inter, Arial, sans-serif';
+                mapCtx.textAlign = 'center';
+                mapCtx.textBaseline = 'middle';
+                const label = pathEntry.name;
+                const textWidth = mapCtx.measureText(label).width;
+                mapCtx.fillStyle = 'rgba(8, 18, 36, 0.9)';
+                mapCtx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
+                mapCtx.lineWidth = 1;
+                mapCtx.fillRect(labelPoint.x - textWidth / 2 - 6, labelPoint.y - 20, textWidth + 12, 16);
+                mapCtx.strokeRect(labelPoint.x - textWidth / 2 - 6, labelPoint.y - 20, textWidth + 12, 16);
+                mapCtx.fillStyle = '#7dd3fc';
+                mapCtx.fillText(label, labelPoint.x, labelPoint.y - 12);
+                mapCtx.restore();
+            });
+        }
+
+        function zoneTypeVisual(zoneTypeRaw) {
+            const zoneType = String(zoneTypeRaw || 'normal').trim().toLowerCase();
+            if (zoneType === 'action') {
+                return {
+                    color: '#d29922',
+                    fill: 'rgba(210, 153, 34, 0.90)',
+                    icon: '⏩',
+                };
+            }
+            if (zoneType === 'charge') {
+                return {
+                    color: '#00ff88',
+                    fill: 'rgba(0, 255, 136, 0.88)',
+                    icon: '🔌',
+                };
+            }
+            return {
+                color: '#4299e1',
+                fill: 'rgba(66, 153, 225, 0.88)',
+                icon: '',
+            };
+        }
+
+        function normalizeYawDegrees(yaw) {
+            const rawDeg = Number(yaw) * (180.0 / Math.PI);
+            if (!Number.isFinite(rawDeg)) return 0.0;
+            let deg = ((rawDeg + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
+            if (Object.is(deg, -0)) deg = 0;
+            return deg;
+        }
+
+        function getRobotMarkerGeometry() {
+            const mapResolution = Number(mapData?.resolution || 0.05);
+            const scale = Number(mapTransform?.scale || 1);
+            const robotScale = 1.2;
+            const length = (0.5 * robotScale) / mapResolution * scale;
+            const width = (0.3 * robotScale) / mapResolution * scale;
+            const radius = Math.max(length, width) * 0.62;
+            return {
+                length,
+                width,
+                radius,
+            };
+        }
+
+        function drawZoneOverlays() {
+            const overlays = parseOverlayZoneEntries();
+            if (!overlays.length) return;
+
+            overlays.forEach((zoneEntry) => {
+                const p = worldToCanvas(zoneEntry.x, zoneEntry.y);
+                if (!p) return;
+
+                const visual = zoneTypeVisual(zoneEntry.zoneType);
+                const headingDeg = normalizeYawDegrees(zoneEntry.yaw);
+                const geom = getRobotMarkerGeometry();
+                const bodyLength = geom.length;
+                const bodyWidth = geom.width;
+                const noseLength = Math.max(5, Math.min(13, bodyLength * 0.26));
+                const arrowLen = Math.max(12, Math.min(24, bodyLength * 0.58));
+
+                mapCtx.save();
+                mapCtx.translate(p.x, p.y);
+                mapCtx.rotate(-mapFrameYawFromWorldYaw(zoneEntry.yaw));
+                mapCtx.fillStyle = visual.fill;
+                mapCtx.strokeStyle = '#ffffff';
+                mapCtx.lineWidth = 1.8;
+                mapCtx.beginPath();
+                mapCtx.rect(-bodyLength / 2, -bodyWidth / 2, bodyLength, bodyWidth);
+                mapCtx.fill();
+                mapCtx.stroke();
+
+                mapCtx.fillStyle = 'rgba(8, 18, 36, 0.72)';
+                mapCtx.fillRect(bodyLength / 2 - noseLength, -bodyWidth * 0.28, noseLength, bodyWidth * 0.56);
+
+                mapCtx.strokeStyle = visual.color;
+                mapCtx.lineWidth = 2.2;
+                mapCtx.beginPath();
+                mapCtx.moveTo(bodyLength * 0.10, 0);
+                mapCtx.lineTo(bodyLength / 2 + arrowLen, 0);
+                mapCtx.stroke();
+                mapCtx.fillStyle = visual.color;
+                mapCtx.beginPath();
+                mapCtx.moveTo(bodyLength / 2 + arrowLen + 5, 0);
+                mapCtx.lineTo(bodyLength / 2 + arrowLen - 5, -4);
+                mapCtx.lineTo(bodyLength / 2 + arrowLen - 5, 4);
+                mapCtx.closePath();
+                mapCtx.fill();
+
+                mapCtx.fillStyle = '#ffffff';
+                mapCtx.beginPath();
+                mapCtx.arc(0, 0, 1.8, 0, 2 * Math.PI);
+                mapCtx.fill();
+                mapCtx.restore();
+
+                mapCtx.save();
+                const labelTitle = visual.icon ? `${visual.icon} ${zoneEntry.name}` : zoneEntry.name;
+                const labelHeading = `${headingDeg.toFixed(1)} deg`;
+                mapCtx.font = '700 11px Inter, Arial, sans-serif';
+                mapCtx.textAlign = 'center';
+                mapCtx.textBaseline = 'top';
+                const titleWidth = mapCtx.measureText(labelTitle).width;
+                mapCtx.font = '600 10px "Roboto Mono", monospace';
+                const headingWidth = mapCtx.measureText(labelHeading).width;
+                const labelWidth = Math.max(titleWidth, headingWidth) + 12;
+                const labelHeight = 32;
+                const labelX = p.x - labelWidth / 2;
+                const labelY = p.y - (bodyWidth / 2) - 42;
+                mapCtx.fillStyle = 'rgba(8, 18, 36, 0.9)';
+                mapCtx.strokeStyle = visual.color;
+                mapCtx.lineWidth = 1;
+                mapCtx.fillRect(labelX, labelY, labelWidth, labelHeight);
+                mapCtx.strokeRect(labelX, labelY, labelWidth, labelHeight);
+                mapCtx.fillStyle = visual.color;
+                mapCtx.font = '700 11px Inter, Arial, sans-serif';
+                mapCtx.fillText(labelTitle, p.x, labelY + 4);
+                mapCtx.fillStyle = '#dbeafe';
+                mapCtx.font = '600 10px "Roboto Mono", monospace';
+                mapCtx.fillText(labelHeading, p.x, labelY + 18);
+                mapCtx.restore();
+            });
+        }
+
+        function drawRobotMarker() {
+            if (!robotPose || !mapData || !mapImage) return;
+            const p = worldToCanvas(robotPose.x, robotPose.y);
+            if (!p) return;
+
+            const yaw = mapFrameYawFromWorldYaw(robotPose.theta || 0.0);
+            const geom = getRobotMarkerGeometry();
+            const robotLength = geom.length;
+            const robotWidth = geom.width;
+            const robotRadius = geom.radius;
+            const pulse = (Math.sin(Date.now() / 260) + 1.0) / 2.0;
+            const manualModeActive = currentControlMode === 'manual';
+
+            mapCtx.save();
+            const haloFill = safetyStopActive
+                ? `rgba(244, 67, 54, ${0.22 + pulse * 0.30})`
+                : (manualModeActive
+                    ? `rgba(34, 197, 94, ${0.16 + pulse * 0.24})`
+                    : `rgba(66, 153, 225, ${0.14 + pulse * 0.22})`);
+            const haloStroke = safetyStopActive
+                ? `rgba(244, 67, 54, ${0.40 + pulse * 0.35})`
+                : (manualModeActive
+                    ? `rgba(34, 197, 94, ${0.44 + pulse * 0.34})`
+                    : `rgba(125, 211, 252, ${0.38 + pulse * 0.35})`);
+            const haloRadius = robotRadius + 8 + pulse * 6;
+            mapCtx.fillStyle = haloFill;
+            mapCtx.beginPath();
+            mapCtx.arc(p.x, p.y, haloRadius, 0, 2 * Math.PI);
+            mapCtx.fill();
+            mapCtx.strokeStyle = haloStroke;
+            mapCtx.lineWidth = 2.5;
+            mapCtx.beginPath();
+            mapCtx.arc(p.x, p.y, haloRadius, 0, 2 * Math.PI);
+            mapCtx.stroke();
+            mapCtx.restore();
+
+            mapCtx.save();
+            mapCtx.translate(p.x, p.y);
+            mapCtx.rotate(-yaw);
+
+            mapCtx.fillStyle = safetyStopActive ? '#b91c1c' : '#ef4444';
+            mapCtx.strokeStyle = '#ffffff';
+            mapCtx.lineWidth = 3;
+            mapCtx.fillRect(-robotLength / 2, -robotWidth / 2, robotLength, robotWidth);
+            mapCtx.strokeRect(-robotLength / 2, -robotWidth / 2, robotLength, robotWidth);
+
+            if (safetyStopActive) {
+                mapCtx.strokeStyle = '#f44336';
+                mapCtx.lineWidth = 5;
+                mapCtx.setLineDash([5, 5]);
+                mapCtx.globalAlpha = 0.5 + pulse * 0.5;
+                mapCtx.strokeRect(-robotLength / 2 - 5, -robotWidth / 2 - 5, robotLength + 10, robotWidth + 10);
+                mapCtx.setLineDash([]);
+                mapCtx.globalAlpha = 1.0;
+            }
+
+            mapCtx.fillStyle = '#1f2937';
+            mapCtx.fillRect(robotLength / 2 - 6, -robotWidth / 4, 6, robotWidth / 2);
+
+            mapCtx.strokeStyle = '#7dd3fc';
+            mapCtx.lineWidth = 3.5;
+            mapCtx.beginPath();
+            mapCtx.moveTo(robotLength * 0.10, 0);
+            mapCtx.lineTo(robotLength / 2 + 20, 0);
+            mapCtx.stroke();
+            mapCtx.fillStyle = '#7dd3fc';
+            mapCtx.beginPath();
+            mapCtx.moveTo(robotLength / 2 + 26, 0);
+            mapCtx.lineTo(robotLength / 2 + 14, -7);
+            mapCtx.lineTo(robotLength / 2 + 14, 7);
+            mapCtx.closePath();
+            mapCtx.fill();
+            mapCtx.restore();
+
+            const robotTitle = 'Robot';
+            const detailRaw = getRobotMarkerStatusText();
+            const robotDetail = detailRaw.length > 30 ? `${detailRaw.slice(0, 29)}...` : detailRaw;
+            const confText = `${Number(localizationConfidence || 0).toFixed(0)}%`;
+            const confColor = localizationConfidence > 80 ? '#4CAF50' : localizationConfidence > 50 ? '#FFC107' : '#f44336';
+
+            const dpr = window.devicePixelRatio || 1;
+            const canvasCssWidth = mapCanvas.width / dpr;
+            const canvasCssHeight = mapCanvas.height / dpr;
+
+            mapCtx.save();
+            mapCtx.textAlign = 'left';
+            mapCtx.textBaseline = 'middle';
+            mapCtx.font = '700 12px Inter, Arial, sans-serif';
+            const titleWidth = mapCtx.measureText(robotTitle).width;
+            mapCtx.font = '600 11px Inter, Arial, sans-serif';
+            const detailWidth = mapCtx.measureText(robotDetail).width;
+            mapCtx.font = '700 10px monospace';
+            const confWidth = mapCtx.measureText(confText).width + 10;
+
+            const labelWidth = Math.max(120, Math.ceil(Math.max(titleWidth, detailWidth) + 20));
+            const labelHeight = 36;
+            let labelX = p.x - labelWidth / 2;
+            labelX = Math.max(6, Math.min(labelX, canvasCssWidth - labelWidth - confWidth - 14));
+            let labelY = p.y + robotRadius + 14;
+            labelY = Math.min(labelY, canvasCssHeight - labelHeight - 44);
+
+            mapCtx.fillStyle = 'rgba(10, 14, 20, 0.88)';
+            mapCtx.strokeStyle = 'rgba(125, 211, 252, 0.90)';
+            mapCtx.lineWidth = 1.2;
+            mapCtx.fillRect(labelX, labelY, labelWidth, labelHeight);
+            mapCtx.strokeRect(labelX, labelY, labelWidth, labelHeight);
+
+            mapCtx.fillStyle = '#e2e8f0';
+            mapCtx.font = '700 12px Inter, Arial, sans-serif';
+            mapCtx.fillText(robotTitle, labelX + 8, labelY + 11);
+
+            mapCtx.fillStyle = '#7dd3fc';
+            mapCtx.font = '600 11px Inter, Arial, sans-serif';
+            mapCtx.fillText(robotDetail, labelX + 8, labelY + 25);
+
+            const confX = labelX + labelWidth + 6;
+            const confY = labelY + 3;
+            mapCtx.fillStyle = 'rgba(10, 14, 20, 0.88)';
+            mapCtx.strokeStyle = confColor;
+            mapCtx.lineWidth = 1.0;
+            mapCtx.fillRect(confX, confY, confWidth, 16);
+            mapCtx.strokeRect(confX, confY, confWidth, 16);
+            mapCtx.fillStyle = confColor;
+            mapCtx.font = '700 10px monospace';
+            mapCtx.fillText(confText, confX + 5, confY + 8);
+            mapCtx.restore();
+
+            if (safetyStopActive || overrideActive) {
+                const warningText = safetyStopActive ? 'SAFETY STOP' : 'OVERRIDE ACTIVE';
+                const warningColor = safetyStopActive ? 'rgba(244, 67, 54, 0.95)' : 'rgba(255, 193, 7, 0.95)';
+                mapCtx.save();
+                mapCtx.font = '700 11px Inter, Arial, sans-serif';
+                const warningWidth = mapCtx.measureText(warningText).width + 14;
+                const warningY = Math.min(canvasCssHeight - 20, labelY + labelHeight + 10);
+                mapCtx.fillStyle = warningColor;
+                mapCtx.strokeStyle = '#ffffff';
+                mapCtx.lineWidth = 2;
+                mapCtx.fillRect(p.x - warningWidth / 2, warningY, warningWidth, 18);
+                mapCtx.strokeRect(p.x - warningWidth / 2, warningY, warningWidth, 18);
+                mapCtx.fillStyle = '#ffffff';
+                mapCtx.textAlign = 'center';
+                mapCtx.textBaseline = 'middle';
+                mapCtx.fillText(warningText, p.x, warningY + 9);
+                mapCtx.restore();
+            }
+        }
+
+        function drawMapPlaceholder(message) {
+            const dpr = window.devicePixelRatio || 1;
+            const width = mapCanvas.width / dpr;
+            const height = mapCanvas.height / dpr;
+            mapCtx.fillStyle = '#0a1324';
+            mapCtx.fillRect(0, 0, width, height);
+            mapCtx.fillStyle = '#9eb0d7';
+            mapCtx.font = '14px Inter, Arial, sans-serif';
+            mapCtx.textAlign = 'center';
+            mapCtx.textBaseline = 'middle';
+            mapCtx.fillText(String(message || 'Map unavailable'), width / 2, height / 2);
+        }
+
+        function drawMap() {
+            const dpr = window.devicePixelRatio || 1;
+            const width = mapCanvas.width / dpr;
+            const height = mapCanvas.height / dpr;
+            mapCtx.clearRect(0, 0, width, height);
+
+            if (!mapData || !mapImage) {
+                drawMapPlaceholder('Loading map...');
+                return;
+            }
+
+            mapCtx.fillStyle = '#0a1324';
+            mapCtx.fillRect(0, 0, width, height);
+            mapCtx.drawImage(
+                mapImage,
+                mapTransform.offsetX,
+                mapTransform.offsetY,
+                mapImage.width * mapTransform.scale,
+                mapImage.height * mapTransform.scale
+            );
+
+            mapCtx.save();
+            mapCtx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+            mapCtx.lineWidth = 1;
+            mapCtx.strokeRect(
+                mapTransform.offsetX,
+                mapTransform.offsetY,
+                mapImage.width * mapTransform.scale,
+                mapImage.height * mapTransform.scale
+            );
+            mapCtx.restore();
+            drawLidarScanOverlay();
+            drawPathOverlays();
+            drawZoneOverlays();
+            drawRobotMarker();
+        }
+
+        async function refreshMap() {
+            const preserveView = Boolean(mapUserAdjustedView && !mapFollowRobotEnabled && mapData && mapImage);
+            const canvasSize = preserveView ? getMapCanvasCssSize() : null;
+            const anchorCanvas = canvasSize ? { x: canvasSize.width * 0.5, y: canvasSize.height * 0.5 } : null;
+            const anchorWorld = anchorCanvas ? canvasToWorld(anchorCanvas.x, anchorCanvas.y) : null;
+            const result = await apiCall('/api/map');
+            if (!result.ok || !result.data || !result.data.image) {
+                mapData = null;
+                mapImage = null;
+                drawMapPlaceholder('Map unavailable');
+                updateOverviewCard();
+                return;
+            }
+
+            const img = new Image();
+            await new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+                img.src = `data:image/png;base64,${result.data.image}`;
+            });
+
+            if (!img.width || !img.height) {
+                mapData = null;
+                mapImage = null;
+                drawMapPlaceholder('Map unavailable');
+                updateOverviewCard();
+                return;
+            }
+
+            mapData = {
+                resolution: result.data.resolution,
+                origin: result.data.origin || [0, 0, 0],
+                width: result.data.width || img.width,
+                height: result.data.height || img.height,
+                source: String(result.data.source || ''),
+            };
+            mapImage = img;
+            const fit = getFitMapTransform();
+            mapFitScale = fit ? fit.scale : 1;
+            if (anchorWorld && anchorCanvas) {
+                const imagePoint = worldToMapImagePoint(anchorWorld.x, anchorWorld.y);
+                const scale = Number(mapTransform.scale || mapFitScale || 1);
+                if (imagePoint && Number.isFinite(scale) && scale > 0) {
+                    mapTransform.scale = scale;
+                    mapTransform.offsetX = anchorCanvas.x - imagePoint.x * scale;
+                    mapTransform.offsetY = anchorCanvas.y - imagePoint.y * scale;
+                    mapUserAdjustedView = true;
+                    clampMapTransform();
+                    updateMapViewNote();
+                } else {
+                    applyFitMapTransform(false);
+                }
+            } else {
+                applyFitMapTransform(false);
+            }
+            if (mapFollowRobotEnabled) {
+                centerViewOnRobot(true);
+            } else {
+                requestMapDraw();
+            }
+            updateOverviewCard();
+        }
+
+        async function refreshRobotPose() {
+            const result = await apiCall('/api/robot/pose');
+            if (!result.ok) return;
+            robotPose = (result.data && result.data.pose && typeof result.data.pose === 'object')
+                ? result.data.pose
+                : null;
+            localizationConfidence = Number(result.data?.confidence || 0.0);
+            if (!Number.isFinite(localizationConfidence)) {
+                localizationConfidence = 0.0;
+            }
+            const nowMs = performance.now();
+            if (robotPose && Number.isFinite(Number(robotPose.x)) && Number.isFinite(Number(robotPose.y))) {
+                if (lastRobotPoseSample && Number.isFinite(lastRobotPoseSample.t)) {
+                    const dt = Math.max(0, (nowMs - lastRobotPoseSample.t) / 1000);
+                    if (dt > 0.02 && dt < 1.5) {
+                        const dist = Math.hypot(
+                            Number(robotPose.x) - Number(lastRobotPoseSample.x),
+                            Number(robotPose.y) - Number(lastRobotPoseSample.y),
+                        );
+                        const rawSpeed = dist / dt;
+                        estimatedSpeedMps = (estimatedSpeedMps * 0.7) + (rawSpeed * 0.3);
+                    }
+                }
+                lastRobotPoseSample = {
+                    x: Number(robotPose.x),
+                    y: Number(robotPose.y),
+                    t: nowMs,
+                };
+            } else {
+                estimatedSpeedMps *= 0.75;
+                lastRobotPoseSample = null;
+            }
+            if (estimatedSpeedMps < 0.005) {
+                estimatedSpeedMps = 0.0;
+            }
+            safetyStopActive = !!result.data?.safety_stop;
+            updateStopBtnState();
+            overrideActive = !!result.data?.override_active;
+            currentControlMode = String(result.data?.control_mode || result.data?.mode || currentControlMode || 'unknown')
+                .trim()
+                .toLowerCase() || 'unknown';
+            if (mapFollowRobotEnabled) {
+                centerViewOnRobot(false);
+            } else {
+                requestMapDraw();
+            }
+            updateOverviewCard();
+        }
+
+        async function refreshLidarScan() {
+            if (scanRequestInFlight || document.hidden) return;
+            scanRequestInFlight = true;
+            try {
+                const result = await apiCall('/api/scan');
+                const scan = (result.ok && Array.isArray(result.data?.scan)) ? result.data.scan : [];
+                lidarScanPoints = scan;
+                requestMapDraw();
+            } finally {
+                scanRequestInFlight = false;
+            }
+        }
+
+        function renderDestinationList(listEl, entries, emptyText) {
+            if (!listEl) return;
+            listEl.innerHTML = '';
+
+            if (!entries.length) {
+                const empty = document.createElement('div');
+                empty.className = 'empty';
+                empty.textContent = emptyText;
+                listEl.appendChild(empty);
+                return;
+            }
+
+            entries.forEach((destination) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'destination-btn';
+                const nameLine = document.createElement('span');
+                nameLine.className = 'destination-name';
+                nameLine.textContent = destination.name;
+                btn.appendChild(nameLine);
+
+                if (destination.kind === 'path' && destination.pathTypeSummary) {
+                    const metaLine = document.createElement('span');
+                    metaLine.className = 'destination-meta';
+                    metaLine.textContent = destination.pathTypeSummary;
+                    btn.appendChild(metaLine);
+                }
+                btn.onclick = () => openConfirm(destination);
+                listEl.appendChild(btn);
+            });
+        }
+
+        function renderDestinations() {
+            const zonesEl = document.getElementById('zone-destination-list');
+            const pathsEl = document.getElementById('path-destination-list');
+            const zoneCountEl = document.getElementById('zone-destination-count');
+            const pathCountEl = document.getElementById('path-destination-count');
+
+            if (zoneCountEl) zoneCountEl.textContent = String(zoneDestinations.length);
+            if (pathCountEl) pathCountEl.textContent = String(pathDestinations.length);
+
+            renderDestinationList(zonesEl, zoneDestinations, 'No zones available yet.');
+            renderDestinationList(pathsEl, pathDestinations, 'No paths available yet.');
+            updateOverviewCard();
+        }
+
+        async function refreshDestinations() {
+            const [zonesResult, pathsResult] = await Promise.all([
+                apiCall('/api/zones'),
+                apiCall('/api/paths'),
+            ]);
+
+            const zonePayload = (zonesResult.data && zonesResult.data.zones && typeof zonesResult.data.zones === 'object')
+                ? zonesResult.data.zones
+                : null;
+            const pathPayload = (pathsResult.data && pathsResult.data.paths && typeof pathsResult.data.paths === 'object')
+                ? pathsResult.data.paths
+                : null;
+            const pathSettingsPayload = (pathsResult.data && pathsResult.data.path_settings && typeof pathsResult.data.path_settings === 'object')
+                ? pathsResult.data.path_settings
+                : {};
+            const pathMetricsPayload = (pathsResult.data && pathsResult.data.path_metrics && typeof pathsResult.data.path_metrics === 'object')
+                ? pathsResult.data.path_metrics
+                : {};
+
+            if (zonesResult.ok && zonePayload) {
+                zonesOverlay = zonePayload;
+            } else if (zonesResult.ok) {
+                zonesOverlay = {};
+            }
+            if (pathsResult.ok && pathPayload) {
+                pathsOverlay = pathPayload;
+            } else if (pathsResult.ok) {
+                pathsOverlay = {};
+            }
+            drawMap();
+
+            const zoneNames = zonePayload
+                ? Object.keys(zonePayload)
+                : [];
+            const pathNames = pathPayload
+                ? Object.keys(pathPayload)
+                : [];
+
+            zoneDestinations = zoneNames
+                .map((name) => String(name || '').trim())
+                .filter((name) => !!name)
+                .sort((a, b) => a.localeCompare(b))
+                .map((name) => ({ name, kind: 'zone' }));
+
+            pathDestinations = pathNames
+                .map((name) => String(name || '').trim())
+                .filter((name) => !!name)
+                .sort((a, b) => a.localeCompare(b))
+                .map((name) => {
+                    const points = Array.isArray(pathPayload?.[name])
+                        ? pathPayload[name]
+                        : (Array.isArray(pathPayload?.[name]?.points) ? pathPayload[name].points : []);
+                    const settings = normalizePathSettings(pathSettingsPayload?.[name], points.length);
+                    const metricLength = Number(pathMetricsPayload?.[name]?.length_m);
+                    const lengthMeters = Number.isFinite(metricLength)
+                        ? metricLength
+                        : calculateSimplePathLengthMeters(points, settings);
+                    return {
+                        name,
+                        kind: 'path',
+                        settings,
+                        lengthMeters,
+                        pathTypeSummary: getPathTypeSummary(settings, lengthMeters),
+                    };
+                });
+
+            renderDestinations();
+        }
+
+        async function runPathDestination(destination) {
+            const pathName = String(destination?.name || '').trim();
+            if (!pathName) {
+                return { ok: false, message: 'Invalid path destination' };
+            }
+            const loadResult = await apiCall(`/api/path/load/${encodeURIComponent(pathName)}`);
+            if (!loadResult.ok || !Array.isArray(loadResult.data.path)) {
+                return {
+                    ok: false,
+                    message: loadResult.data.message || `Could not load destination "${pathName}"`,
+                };
+            }
+
+            const hasLoadedSettings = !!(loadResult.data.settings && typeof loadResult.data.settings === 'object');
+            const effectiveSettings = hasLoadedSettings
+                ? normalizePathSettings(loadResult.data.settings, loadResult.data.path.length)
+                : normalizePathSettings(destination?.settings, loadResult.data.path.length);
+            const effectiveLoopType = normalizeLoopType(effectiveSettings.loop_type, effectiveSettings.loop_mode ? 'ping_pong' : 'none');
+
+            const followResult = await apiCall('/api/path/follow', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: loadResult.data.path,
+                    loop_type: effectiveLoopType,
+                    loop_mode: effectiveLoopType !== 'none',
+                }),
+            });
+            if (!followResult.ok) {
+                return {
+                    ok: false,
+                    message: followResult.data.message || `Could not start destination "${pathName}"`,
+                };
+            }
+            const pathTypeLabel = getLoopTypeLabel(effectiveLoopType);
+            return { ok: true, message: followResult.data.message || `Going to ${pathName} (${pathTypeLabel})` };
+        }
+
+        async function runZoneDestination(zoneName) {
+            const gotoResult = await apiCall('/api/zones/goto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: zoneName }),
+            });
+            if (!gotoResult.ok) {
+                return {
+                    ok: false,
+                    message: gotoResult.data.message || `Could not start destination "${zoneName}"`,
+                };
+            }
+            return { ok: true, message: gotoResult.data.message || `Going to ${zoneName}` };
+        }
+
+        async function startDestination(destination) {
+            if (!destination) return;
+            closeConfirm();
+
+            const stopBtn = document.getElementById('stop-btn');
+            if (stopBtn) stopBtn.disabled = true;
+
+            let result;
+            if (destination.kind === 'path') {
+                result = await runPathDestination(destination);
+                previousPathActive = false;
+            } else {
+                result = await runZoneDestination(destination.name);
+            }
+
+            if (stopBtn) stopBtn.disabled = false;
+
+            if (!result.ok) {
+                setUiMessage(result.message || 'Could not start destination', 'error');
+                return;
+            }
+
+            activeTrip = {
+                name: destination.name,
+                kind: destination.kind,
+                startedAt: Date.now(),
+            };
+            setTripMoving(destination.name, 'On the way');
+            setUiMessage(result.message || `Going to ${destination.name}`, 'ok');
+        }
+
+        async function stopRobotNow() {
+            const stopBtn = document.getElementById('stop-btn');
+            if (stopBtn) stopBtn.disabled = true;
+            const estopResult = await apiCall('/api/estop/activate', { method: 'POST' });
+
+            if (estopResult.ok) {
+                activeTrip = null;
+                previousPathActive = false;
+                safetyStopActive = true;
+                updateStopBtnState();
+                setTripIdle('Emergency stop active');
+                setUiMessage(estopResult.data.message || 'Emergency stop engaged', 'warn');
+                drawMap();
+                await refreshMissionStatus(false);
+            } else {
+                setUiMessage(estopResult.data.message || 'Failed to engage emergency stop', 'error');
+            }
+
+            if (stopBtn) stopBtn.disabled = false;
+        }
+
+        function updateStopBtnState() {
+            const btn = document.getElementById('stop-btn');
+            if (!btn) return;
+            const label = document.getElementById('stop-btn-label');
+            const state = document.getElementById('global-estop-state');
+            if (safetyStopActive) {
+                btn.classList.add('resume-state');
+                if (label) label.textContent = 'Clear E-Stop';
+                if (state) state.textContent = 'Active';
+            } else {
+                btn.classList.remove('resume-state');
+                if (label) label.textContent = 'Emergency Stop';
+                if (state) state.textContent = 'Inactive';
+            }
+            updateOverviewCard();
+        }
+
+        async function resumeRobotNow() {
+            const btn = document.getElementById('stop-btn');
+            if (btn) btn.disabled = true;
+            const result = await apiCall('/api/estop/reset', { method: 'POST' });
+            if (result.ok) {
+                safetyStopActive = false;
+                updateStopBtnState();
+                setUiMessage(result.data?.message || 'Emergency stop cleared', 'ok');
+                drawMap();
+            } else {
+                setUiMessage(result.data?.message || 'Failed to clear emergency stop', 'error');
+            }
+            if (btn) btn.disabled = false;
+        }
+
+        async function pollTripStatus() {
+            if (!activeTrip) return;
+            if (activeTrip.kind !== 'path') {
+                const elapsedSec = Math.max(0, Math.floor((Date.now() - activeTrip.startedAt) / 1000));
+                const detail = elapsedSec > 0 ? `On the way (${elapsedSec}s)` : 'On the way';
+                setTripMoving(activeTrip.name, detail);
+                return;
+            }
+
+            const statusResult = await apiCall('/api/path/status');
+            if (!statusResult.ok) {
+                setTripMoving(activeTrip.name, 'On the way');
+                return;
+            }
+
+            const status = statusResult.data || {};
+            const isActive = !!status.active;
+            if (isActive) {
+                previousPathActive = true;
+                const total = Math.max(0, Number(status.total_waypoints || 0));
+                const current = Math.max(0, Number(status.current_index || 0));
+                const progressText = (total > 0)
+                    ? `On the way (step ${Math.min(current + 1, total)} of ${total})`
+                    : 'On the way';
+                setTripMoving(activeTrip.name, progressText);
+                return;
+            }
+
+            if (previousPathActive) {
+                const finishedMessage = String(status.message || '').trim();
+                setUiMessage(finishedMessage || `Arrived at ${activeTrip.name}`, 'ok');
+                activeTrip = null;
+                previousPathActive = false;
+                setTripIdle('Ready for next destination');
+                return;
+            }
+
+            setTripMoving(activeTrip.name, 'On the way');
+        }
+
+        function bindEvents() {
+            window.addEventListener('resize', resizeMapCanvas);
+            setMapCanvasDragging(false);
+
+            Object.entries(floatingPanelToggles).forEach(([toggleId, panelId]) => {
+                const toggle = document.getElementById(toggleId);
+                const panel = document.getElementById(panelId);
+                toggle?.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    toggleFloatingPanel(panelId, toggleId);
+                });
+                panel?.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                });
+            });
+
+            document.addEventListener('click', () => {
+                closeFloatingPanels();
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeFloatingPanels();
+                    closeConfirm();
+                }
+            });
+
+            mapCanvas.addEventListener('wheel', (event) => {
+                if (!mapData || !mapImage) return;
+                event.preventDefault();
+                const rect = mapCanvas.getBoundingClientRect();
+                const px = event.clientX - rect.left;
+                const py = event.clientY - rect.top;
+                const factor = event.deltaY < 0 ? 1.12 : (1.0 / 1.12);
+                zoomMapAt(factor, px, py);
+            }, { passive: false });
+
+            mapCanvas.addEventListener('mousedown', (event) => {
+                if (event.button !== 0 || !mapData || !mapImage) return;
+                mapDragActive = true;
+                mapDragStartX = event.clientX;
+                mapDragStartY = event.clientY;
+                mapDragStartOffsetX = Number(mapTransform.offsetX || 0);
+                mapDragStartOffsetY = Number(mapTransform.offsetY || 0);
+                mapUserAdjustedView = true;
+                mapFollowRobotEnabled = false;
+                setMapCanvasDragging(true);
+                updateMapViewNote();
+                event.preventDefault();
+            });
+
+            mapCanvas.addEventListener('touchstart', (event) => {
+                if (!mapData || !mapImage) return;
+                if (event.touches.length === 1) {
+                    const touch = event.touches[0];
+                    mapTouchPanActive = true;
+                    mapPinchActive = false;
+                    mapPinchLastDistance = 0;
+                    mapTouchStartX = Number(touch.clientX);
+                    mapTouchStartY = Number(touch.clientY);
+                    mapTouchStartOffsetX = Number(mapTransform.offsetX || 0);
+                    mapTouchStartOffsetY = Number(mapTransform.offsetY || 0);
+                    mapUserAdjustedView = true;
+                    mapFollowRobotEnabled = false;
+                    setMapCanvasDragging(true);
+                    updateMapViewNote();
+                    event.preventDefault();
+                    return;
+                }
+
+                if (event.touches.length === 2) {
+                    const rect = mapCanvas.getBoundingClientRect();
+                    const p1 = touchPointOnCanvas(event.touches[0], rect);
+                    const p2 = touchPointOnCanvas(event.touches[1], rect);
+                    mapPinchActive = true;
+                    mapTouchPanActive = false;
+                    mapPinchLastDistance = touchDistance(p1, p2);
+                    mapUserAdjustedView = true;
+                    mapFollowRobotEnabled = false;
+                    setMapCanvasDragging(false);
+                    updateMapViewNote();
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            mapCanvas.addEventListener('touchmove', (event) => {
+                if (!mapData || !mapImage) return;
+
+                if (event.touches.length === 2) {
+                    const rect = mapCanvas.getBoundingClientRect();
+                    const p1 = touchPointOnCanvas(event.touches[0], rect);
+                    const p2 = touchPointOnCanvas(event.touches[1], rect);
+                    const midX = (Number(p1.x) + Number(p2.x)) / 2;
+                    const midY = (Number(p1.y) + Number(p2.y)) / 2;
+                    const dist = touchDistance(p1, p2);
+
+                    if (!mapPinchActive) {
+                        mapPinchActive = true;
+                        mapPinchLastDistance = dist;
+                    } else if (dist > 0 && mapPinchLastDistance > 0) {
+                        const factor = dist / mapPinchLastDistance;
+                        if (Number.isFinite(factor) && factor > 0) {
+                            zoomMapAt(factor, midX, midY);
+                        }
+                        mapPinchLastDistance = dist;
+                    }
+                    mapTouchPanActive = false;
+                    setMapCanvasDragging(false);
+                    event.preventDefault();
+                    return;
+                }
+
+                if (event.touches.length === 1 && mapTouchPanActive) {
+                    const touch = event.touches[0];
+                    const dx = Number(touch.clientX) - mapTouchStartX;
+                    const dy = Number(touch.clientY) - mapTouchStartY;
+                    mapTransform.offsetX = mapTouchStartOffsetX + dx;
+                    mapTransform.offsetY = mapTouchStartOffsetY + dy;
+                    clampMapTransform();
+                    requestMapDraw();
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            mapCanvas.addEventListener('touchend', (event) => {
+                if (event.touches.length === 0) {
+                    mapTouchPanActive = false;
+                    mapPinchActive = false;
+                    mapPinchLastDistance = 0;
+                    setMapCanvasDragging(false);
+                    return;
+                }
+
+                if (event.touches.length === 1) {
+                    const touch = event.touches[0];
+                    mapPinchActive = false;
+                    mapPinchLastDistance = 0;
+                    mapTouchPanActive = true;
+                    mapTouchStartX = Number(touch.clientX);
+                    mapTouchStartY = Number(touch.clientY);
+                    mapTouchStartOffsetX = Number(mapTransform.offsetX || 0);
+                    mapTouchStartOffsetY = Number(mapTransform.offsetY || 0);
+                    setMapCanvasDragging(true);
+                }
+            });
+
+            mapCanvas.addEventListener('touchcancel', () => {
+                mapTouchPanActive = false;
+                mapPinchActive = false;
+                mapPinchLastDistance = 0;
+                setMapCanvasDragging(false);
+            });
+
+            window.addEventListener('mousemove', (event) => {
+                if (!mapDragActive) return;
+                const dx = event.clientX - mapDragStartX;
+                const dy = event.clientY - mapDragStartY;
+                mapTransform.offsetX = mapDragStartOffsetX + dx;
+                mapTransform.offsetY = mapDragStartOffsetY + dy;
+                clampMapTransform();
+                requestMapDraw();
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (!mapDragActive) return;
+                mapDragActive = false;
+                setMapCanvasDragging(false);
+            });
+
+            mapCanvas.addEventListener('dblclick', (event) => {
+                event.preventDefault();
+                mapFollowRobotEnabled = false;
+                mapUserAdjustedView = false;
+                applyFitMapTransform(true);
+                requestMapDraw();
+            });
+
+            document.getElementById('map-fit-btn')?.addEventListener('click', () => {
+                mapFollowRobotEnabled = false;
+                mapUserAdjustedView = false;
+                applyFitMapTransform(true);
+                requestMapDraw();
+            });
+
+            document.getElementById('map-zoom-in-btn')?.addEventListener('click', () => {
+                const canvasSize = getMapCanvasCssSize();
+                zoomMapAt(1.15, canvasSize.width / 2, canvasSize.height / 2);
+            });
+
+            document.getElementById('map-zoom-out-btn')?.addEventListener('click', () => {
+                const canvasSize = getMapCanvasCssSize();
+                zoomMapAt(1.0 / 1.15, canvasSize.width / 2, canvasSize.height / 2);
+            });
+
+            document.getElementById('map-follow-btn')?.addEventListener('click', () => {
+                mapFollowRobotEnabled = !mapFollowRobotEnabled;
+                if (mapFollowRobotEnabled) {
+                    mapUserAdjustedView = true;
+                    centerViewOnRobot(true);
+                } else {
+                    updateMapViewNote();
+                }
+            });
+
+            document.getElementById('refresh-destinations-btn')?.addEventListener('click', async () => {
+                await refreshDestinations();
+                setUiMessage('Destination list refreshed', 'ok');
+            });
+            document.getElementById('mission-refresh-btn')?.addEventListener('click', async () => {
+                const ok = await refreshMissionStatus(true);
+                if (ok) {
+                    setUiMessage('Mission queue refreshed', 'ok');
+                }
+            });
+            document.getElementById('mission-resume-btn')?.addEventListener('click', resumeMissionQueue);
+            document.getElementById('mission-clear-btn')?.addEventListener('click', clearMissionQueueState);
+
+            document.getElementById('stop-btn')?.addEventListener('click', () => {
+                if (safetyStopActive) {
+                    resumeRobotNow();
+                } else {
+                    stopRobotNow();
+                }
+            });
+
+            const lockBtn = document.getElementById('lock-btn');
+            if (lockBtn && !OPERATOR_LOCK_ENABLED) {
+                lockBtn.style.display = 'none';
+            }
+            if (OPERATOR_LOCK_ENABLED) {
+                lockBtn?.addEventListener('click', () => {
+                    setUnlocked(false);
+                    showAuthOverlay(true);
+                    const authInput = document.getElementById('auth-password');
+                    if (authInput) {
+                        authInput.value = '';
+                        authInput.focus();
+                    }
+                });
+            }
+
+            document.getElementById('confirm-cancel-btn')?.addEventListener('click', closeConfirm);
+            document.getElementById('confirm-go-btn')?.addEventListener('click', () => startDestination(selectedDestination));
+            document.getElementById('confirm-backdrop')?.addEventListener('click', (event) => {
+                if (event.target && event.target.id === 'confirm-backdrop') {
+                    closeConfirm();
+                }
+            });
+
+            const authInput = document.getElementById('auth-password');
+            const authBtn = document.getElementById('auth-unlock');
+            const tryUnlock = () => {
+                const messageEl = document.getElementById('auth-message');
+                const value = String(authInput?.value || '');
+                if (!value) {
+                    if (messageEl) messageEl.textContent = 'Enter password';
+                    return;
+                }
+                if (value === expectedPassword) {
+                    if (messageEl) messageEl.textContent = '';
+                    if (authInput) authInput.value = '';
+                    setUnlocked(true);
+                    showAuthOverlay(false);
+                    initApp();
+                    return;
+                }
+                if (messageEl) messageEl.textContent = 'Incorrect password';
+            };
+
+            authBtn?.addEventListener('click', tryUnlock);
+            authInput?.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    tryUnlock();
+                }
+            });
+
+            updateMapViewNote();
+        }
+
+        async function initApp() {
+            if (appInitialized) return;
+            appInitialized = true;
+
+            resizeMapCanvas();
+            await Promise.all([
+                refreshOperatorProfile(),
+                refreshMap(),
+                refreshDestinations(),
+                refreshRobotPose(),
+                refreshLidarScan(),
+                refreshMissionStatus(false),
+            ]);
+            setTripIdle('Ready for next destination');
+
+            pollingFastTimer = setInterval(async () => {
+                if (fastUiRequestInFlight || document.hidden) return;
+                fastUiRequestInFlight = true;
+                try {
+                    await refreshRobotPose();
+                    await pollTripStatus();
+                } finally {
+                    fastUiRequestInFlight = false;
+                }
+            }, 50);
+
+            pollingTimer = setInterval(() => {
+                refreshMap();
+            }, 12000);
+
+            scanRefreshTimer = setInterval(() => {
+                refreshLidarScan();
+            }, 250);
+
+            destinationRefreshTimer = setInterval(() => {
+                refreshDestinations();
+            }, 15000);
+
+            missionRefreshTimer = setInterval(() => {
+                if (document.hidden) return;
+                refreshMissionStatus(false);
+            }, 3000);
+        }
+
+        async function boot() {
+            bindEvents();
+
+            if (!OPERATOR_LOCK_ENABLED) {
+                setUnlocked(true);
+                showAuthOverlay(false);
+                initApp();
+                return;
+            }
+
+            await loadOperatorPassword();
+
+            if (isUnlocked()) {
+                showAuthOverlay(false);
+                initApp();
+                return;
+            }
+
+            showAuthOverlay(true);
+            const authInput = document.getElementById('auth-password');
+            if (authInput) authInput.focus();
+        }
+
+        boot();
+    </script>
+</body>
+
+</html>

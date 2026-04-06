@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engineer Panel Locked</title>
+    <style>
+        :root {
+            --bg: #0a0f1c;
+            --panel: #141f34;
+            --border: #35507f;
+            --text: #e6efff;
+            --muted: #9eb4de;
+            --accent: #2f67f6;
+            --danger: #f87171;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top, #1a2c4f 0%, var(--bg) 58%);
+            color: var(--text);
+            padding: 16px;
+        }
+
+        .card {
+            width: min(420px, 100%);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: linear-gradient(180deg, #172645 0%, var(--panel) 100%);
+            padding: 20px;
+        }
+
+        .logo-wrap {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 14px;
+        }
+
+        .logo-wrap img {
+            width: min(320px, 92%);
+            height: auto;
+            display: block;
+            filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.35));
+        }
+
+        h1 {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+
+        p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
+            margin-bottom: 14px;
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+        }
+
+        input[type="password"] {
+            flex: 1;
+            border: 1px solid #3b5f96;
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #0f1b33;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #5a89e8;
+        }
+
+        button {
+            border: 1px solid #6f92e8;
+            border-radius: 10px;
+            padding: 10px 14px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .err {
+            margin-top: 10px;
+            min-height: 18px;
+            color: var(--danger);
+            font-size: 12px;
+        }
+
+        .hint {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+
+        .hint a {
+            color: #8ec5ff;
+            text-decoration: underline;
+            font-weight: 800;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo-wrap">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="NEXT logo">
+        </div>
+        <h1>Engineer Panel Locked</h1>
+        <p>Enter the developer password to open <code>/dev</code>.</p>
+        <form method="post" action="/dev/unlock">
+            <div class="row">
+                <input
+                    type="password"
+                    name="password"
+                    autocomplete="off"
+                    placeholder="Password"
+                    required
+                    autofocus
+                >
+                <button type="submit">Unlock</button>
+            </div>
+        </form>
+        <div class="err">{{ error }}</div>
+        <div class="hint">Operator view remains available at <a href="/user">/user</a>.</div>
+    </div>
+</body>
+</html>
