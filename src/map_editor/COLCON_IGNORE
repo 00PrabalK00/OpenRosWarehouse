@@ -1,0 +1,4 @@
+# Legacy package archived.
+# Active map editor runtime is:
+# - next_ros2ws_core.map_editor_manager
+# - next_ros2ws_web /editor + /api/editor/*
