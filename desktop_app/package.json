@@ -1,0 +1,15 @@
+{
+  "name": "next-robot-ui-desktop",
+  "version": "0.1.0",
+  "description": "Desktop shell for the NEXT robot web UI",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check renderer/connect.js"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}
+

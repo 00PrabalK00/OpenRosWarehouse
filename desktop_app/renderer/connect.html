@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NEXT Robot UI Desktop</title>
+    <link rel="stylesheet" href="./connect.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="brand-row">
+          <div class="brand-mark">N</div>
+          <div>
+            <p class="eyebrow">NEXT ROBOT UI</p>
+            <h1>Connect to a robot</h1>
+          </div>
+        </div>
+        <p class="hero-copy">
+          This desktop app keeps the existing web UI exactly as it is and opens it from the robot.
+          Use <code>localhost</code> on the robot PC, or the robot IP from your laptop.
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="field-grid">
+          <label class="field">
+            <span>Protocol</span>
+            <select id="protocol">
+              <option value="http">http</option>
+              <option value="https">https</option>
+            </select>
+          </label>
+
+          <label class="field field-grow">
+            <span>Robot host</span>
+            <input id="host" type="text" placeholder="localhost or 192.168.1.42" />
+          </label>
+
+          <label class="field">
+            <span>Port</span>
+            <input id="port" type="number" min="1" max="65535" step="1" placeholder="5000" />
+          </label>
+        </div>
+
+        <div class="field-grid compact">
+          <label class="field field-grow">
+            <span>Open page</span>
+            <select id="page">
+              <option value="/dev">/dev</option>
+              <option value="/user">/user</option>
+              <option value="/editor">/editor</option>
+            </select>
+          </label>
+
+          <label class="checkbox">
+            <input id="auto-connect" type="checkbox" />
+            <span>Auto-connect next time</span>
+          </label>
+        </div>
+
+        <div class="preset-row">
+          <button class="preset" type="button" data-host="localhost" data-port="5000" data-page="/dev">
+            Use robot PC local
+          </button>
+          <button class="preset" type="button" data-host="192.168.1.42" data-port="5000" data-page="/dev">
+            Example LAN target
+          </button>
+          <button class="preset" type="button" data-host="localhost" data-port="5000" data-page="/user">
+            Operator view
+          </button>
+        </div>
+
+        <div class="status-card" id="status-card" data-state="idle">
+          <p class="status-label">Status</p>
+          <p class="status-text" id="status-text">Ready to test and connect.</p>
+          <p class="status-detail" id="status-detail">Expected robot UI endpoint: <code>/api/stack/health</code></p>
+        </div>
+
+        <div class="actions">
+          <button class="secondary" id="test-button" type="button">Test connection</button>
+          <button class="primary" id="connect-button" type="button">Connect</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="./connect.js"></script>
+  </body>
+</html>
+
