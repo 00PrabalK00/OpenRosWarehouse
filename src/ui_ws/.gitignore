@@ -1,0 +1,55 @@
+# ─── colcon build artifacts ──────────────────────────────────────────────────
+build/
+install/
+log/
+
+# ─── Python bytecode ─────────────────────────────────────────────────────────
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+
+# ─── Runtime state files written by ROS nodes (never commit these) ───────────
+active_map_config.yaml
+zones.yaml
+mission_state.yaml
+
+# ─── Bag files ───────────────────────────────────────────────────────────────
+*.db3
+*.mcap
+*.bag
+
+# ─── Map files (generated; commit only your canonical baseline maps) ─────────
+# To track a specific map: git add -f maps/my_map.yaml
+maps/*.pgm
+maps/*.yaml
+# Whitelist canonical maps by uncommenting below:
+# !maps/smr_map.pgm
+# !maps/smr_map.yaml
+
+# ─── Config backups ──────────────────────────────────────────────────────────
+config/*.backup*
+*.backup
+
+# ─── OS / editor junk ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# ─── Pre-commit / test cache ─────────────────────────────────────────────────
+.pre-commit-cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ─── Zip archives + lift subsystem (dead code from separate robot project) ───
+# The lift/ directory in next_ros2ws_web contains zip archives and extracted
+# ROS packages (next_jacking_driver, next_msgs, next_jacking_ac_server) that
+# are not used by this codebase. If you need them, move to a separate repo.
+src/next_ros2ws_web/next_ros2ws_web/lift/

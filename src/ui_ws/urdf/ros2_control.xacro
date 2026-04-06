@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="left_motor_id" default="2"/>
+  <xacro:arg name="right_motor_id" default="1"/>
+
+  <!-- Custom Kinco Hardware Interface for ros2_control -->
+  <ros2_control name="KincoMotorSystem" type="system">
+    <hardware>
+      <plugin>next_motor_interface/KincoHardwareInterface</plugin>
+      <param name="can_interface_name">can0</param>
+    </hardware>
+
+    <joint name="left_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <param name="motor_id">$(arg left_motor_id)</param>
+    </joint>
+
+    <joint name="right_wheel_joint">
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <param name="motor_id">$(arg right_motor_id)</param>
+    </joint>
+
+  </ros2_control>
+
+</robot>

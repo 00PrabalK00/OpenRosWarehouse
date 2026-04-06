@@ -1,0 +1,34 @@
+twist_mux:
+  ros__parameters:
+    topics:
+      joystick:
+        topic   : cmd_vel_joy
+        timeout : 0.5
+        priority: 90  # Manual control
+      tracker:
+        topic   : cmd_vel_tracker
+        timeout : 0.5
+        priority: 20  # Sequence following
+      navigation:
+        topic   : cmd_vel
+        timeout : 0.5
+        priority: 10  # Autonomous navigation
+    # Lock topics correspond to mode_switcher.py activate_mode() publishers.
+    # Safety gating is downstream of twist_mux in safety_controller, so no
+    # separate safety command topic is configured here.
+    # Each lock priority is set one step ABOVE its matching topic priority so
+    # it only gates that one source and nothing higher (e.g. navigation lock at
+    # priority 11 blocks cmd_vel at 10 but leaves cmd_vel_joy at 90 untouched).
+    locks:
+      navigation:
+        topic   : /twist_mux/locks/navigation
+        timeout : 0.0
+        priority: 11
+      tracker:
+        topic   : /twist_mux/locks/tracker
+        timeout : 0.0
+        priority: 21
+      joystick:
+        topic   : /twist_mux/locks/joystick
+        timeout : 0.0
+        priority: 91

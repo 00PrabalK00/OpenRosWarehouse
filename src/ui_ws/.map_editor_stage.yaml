@@ -1,0 +1,7 @@
+map_yaml_path: /home/next/testBuild/src/ui_ws/maps/NextFactory.yaml
+origin:
+- -19.5
+- -13.800000190734863
+- 0.0
+resolution: 0.05
+saved_at: 1775469200.9163303

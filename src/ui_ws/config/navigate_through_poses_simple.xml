@@ -1,0 +1,20 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <!-- Path is computed once through all waypoints. Passed goals are pruned
+         from the list as the robot moves. If an obstacle blocks, the robot
+         stops in place. If the progress checker times out, Wait 2 s then
+         retry the same path — no replanning around the obstacle. -->
+    <Sequence name="NavigateWaitForClear">
+      <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="GridBased"/>
+      <RecoveryNode number_of_retries="999999" name="FollowOrWait">
+        <ReactiveSequence>
+          <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.12"/>
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+        </ReactiveSequence>
+        <Wait wait_duration="2.0"/>
+      </RecoveryNode>
+    </Sequence>
+  </BehaviorTree>
+</root>
+
+

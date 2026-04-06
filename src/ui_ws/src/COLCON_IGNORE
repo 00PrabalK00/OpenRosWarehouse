@@ -1,0 +1,2 @@
+# Auto-managed by scripts/sync_workspace_mirror.py
+# Prevent duplicate package discovery when building from top-level workspace.

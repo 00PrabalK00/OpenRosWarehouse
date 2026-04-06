@@ -1,0 +1,317 @@
+# ================================================================
+# MASTER ROBOT CONFIGURATION — robot.yaml
+# ================================================================
+# Single operator-facing file for all tunable robot parameters.
+# Edit here; no other config file needs to be touched for normal
+# day-to-day tuning.
+#
+# Each top-level key is the ROS2 node name (matched at load-time).
+# Nodes ignore sections that don't belong to them, so every launch
+# file safely loads this entire file.
+#
+# Navigation controller (RPP) parameters live in:
+#   config/nav2_params.yaml  →  controller_server.ros__parameters
+# Those are kept there because Nav2 has many interdependent params.
+# ================================================================
+
+
+# ---------------------------------------------------------------
+# SAFETY CONTROLLER — obstacle detection and emergency stop
+# ---------------------------------------------------------------
+scan_merger:
+  ros__parameters:
+    # Keep merged scans in the same 2D base frame used by EKF and SLAM.
+    output_frame: base_footprint
+    # Publish a true-union PointCloud2 alongside the compatibility LaserScan.
+    output_cloud_topic: scan_combined_cloud
+    # Treat the merged scan as a synthetic near-now scan.
+    output_stamp_mode: now
+    # Publish immediately on fresh lidar input, but cap merge frequency so
+    # dual-lidar pairing does not pin the robot CPU.
+    publish_on_input: true
+    publish_min_interval_sec: 0.06
+    watchdog_period_sec: 0.25
+    # Preserve full coverage from both lidars in the merged scan.
+    ownership_split_enabled: false
+    # Only used if ownership_split_enabled is turned back on.
+    side_overlap_angle_rad: 0.35
+    # Light downsampling: reduce density without losing wall boundaries.
+    angular_downsample_factor: 1
+    # After each lidar is projected into base_footprint, nearby bins can get
+    # skipped just from resampling. Fill only very small angular gaps where the
+    # neighboring ranges still agree, so merged walls stay dense without
+    # bridging real openings.
+    angular_gap_fill_enabled: true
+    angular_gap_fill_max_bins: 3
+    angular_gap_fill_max_range_delta_m: 0.22
+    # Each raw beam covers a small angular footprint once shifted from the
+    # lidar origin into base_footprint. Stamp that tiny footprint into a couple
+    # neighboring bins so the merged scan does not look artificially sparse.
+    beam_footprint_fill_enabled: true
+    beam_footprint_fill_max_bins: 2
+    # Drop only isolated bins that do not have nearby range support.
+    isolated_point_filter_enabled: false
+    isolated_point_filter_window_bins: 2
+    isolated_point_filter_range_delta_m: 0.18
+    isolated_point_filter_min_support: 1
+    # Prefer timestamp-matched front/rear pairs before merging.
+    approximate_sync_enabled: true
+    max_pair_stamp_diff_sec: 0.04
+    unmatched_scan_timeout_sec: 0.14
+    allow_partial_fallback: true
+    sync_queue_size: 8
+
+# ---------------------------------------------------------------
+# SAFETY CONTROLLER — obstacle detection and emergency stop
+# ---------------------------------------------------------------
+safety_controller:
+  ros__parameters:
+    # Upstream cmd_vel (output of twist_mux)
+    cmd_vel_input_topic: /cmd_vel_mux_out
+    # Downstream cmd_vel going to wheel driver (overridden in sim launch).
+    cmd_vel_output_topic: /wheel_controller/cmd_vel_unstamped
+
+    # Master switch for distance-based obstacle safety in both manual and autonomous modes.
+    # This is the single on/off authority for obstacle distance/TTC stop and slowdown.
+    distance_safety_enabled: true
+
+    # Safety-only path: prefer the merged dual-lidar union cloud.
+    # If that goes stale, fall back directly to raw /scan + /scan2.
+    obstacle_cloud_topic: /scan_combined_cloud
+    obstacle_prefer_cloud_timeout_sec: 0.35
+    obstacle_scan_topic: ''
+    obstacle_prefer_combined_timeout_sec: 0.35
+
+    # Direction-aware obstacle checks.
+    obstacle_use_directional_blocking: true
+    # Use the same obstacle gate behavior in manual and autonomous driving.
+    manual_mode_same_obstacle_gate: true
+    # In manual mode, once a gate closes in the direction you were pushing,
+    # keep the opposite direction available as an escape path.
+    manual_directional_escape_enabled: true
+    # Run the safety controller as a hard gate, not an advisory slowdown layer:
+    # commands either pass through or are fully blocked.
+    obstacle_gate_strict_stop_only: true
+    # Absolute close-range stop distance for the hard gate.
+    obstacle_hard_stop_distance_m: 0.30
+    obstacle_forward_half_angle_deg: 70.0
+    obstacle_rear_half_angle_deg: 70.0
+    obstacle_min_points: 4
+    obstacle_stop_confirm_frames: 2
+    obstacle_clear_confirm_frames: 3
+    obstacle_clear_margin_m: 0.15
+
+    # Time-to-collision gating for the hard gate.
+    ttc_stop_sec: 1.10                  # was 0.90 — stops further away in autonomous
+    ttc_warn_sec: 1.80                  # was 1.60
+    ttc_min_speed_mps: 0.05
+    obstacle_ttc_min_distance_m: 0.30   # keep TTC gate aligned with the hard-stop distance
+
+    # No advisory slowdown layer: the gate either passes commands or blocks them.
+    obstacle_slowdown_enabled: false
+    obstacle_slowdown_min_scale: 0.0    # was 0.25 — now fully stops instead of creeping
+    obstacle_slowdown_distance_buffer_m: 0.25
+    obstacle_slowdown_ttc_buffer_sec: 0.70
+
+    # Keep the legacy manual-only threshold aligned with the hard gate distance.
+    manual_critical_zone_m: 0.30
+    autonomous_critical_zone_m: 0.30
+    robot_base_frame: base_footprint
+
+    # Robot body echo filtering.
+    obstacle_valid_min_range: 0.14
+    obstacle_median_window: 5
+    # Match the physical body envelope closely enough to suppress self-echoes
+    # from the chassis, wheels, and casters without changing Nav2/costmaps.
+    robot_body_length_m: 0.80
+    robot_body_width_m: 0.72
+    obstacle_body_padding_m: 0.06
+    obstacle_body_exclusion_radius_m: 0.22
+
+
+# ---------------------------------------------------------------
+# NAV2 COSTMAP FILTER BRIDGE — static zones + live safety overlays
+# ---------------------------------------------------------------
+keepout_zone_publisher:
+  ros__parameters:
+    enable_speed_filter: true
+    max_speed_mps: 0.30
+    publish_rate_hz: 5.0
+    dynamic_safety_filters_enabled: true
+    robot_base_frame: base_footprint
+    dynamic_keepout_radius_m: 0.35
+    dynamic_keepout_front_offset_m: 0.55
+    dynamic_keepout_rear_offset_m: 0.55
+    dynamic_speed_filter_radius_m: 0.45
+    dynamic_pose_yaw_bin_deg: 8.0
+
+
+# ---------------------------------------------------------------
+# JOYSTICK — hardware and teleop axis/button mapping
+# ---------------------------------------------------------------
+joy_node:
+  ros__parameters:
+    device_id       : 0      # /dev/input/js<N>
+    deadzone        : 0.05   # ignore stick noise below this fraction
+    autorepeat_rate : 0.0    # 0 = publish only on change
+
+teleop_node:
+  ros__parameters:
+    # Linear (forward / back)
+    axis_linear.x        : 1       # stick axis index
+    scale_linear.x       : 0.5     # normal mode max speed (m/s)
+    scale_linear_turbo.x : 1.0     # turbo mode max speed (m/s)
+    # Angular (yaw / turn)
+    axis_angular.yaw        : 0    # stick axis index
+    scale_angular.yaw       : 0.5  # normal mode max turn rate (rad/s)
+    scale_angular_turbo.yaw : 1.0  # turbo mode max turn rate (rad/s)
+    # Buttons (0-indexed per controller layout)
+    enable_button        : 6       # deadman — must hold to drive
+    enable_turbo_button  : 7       # hold for turbo speed
+
+
+# ---------------------------------------------------------------
+# ZONE MANAGER — autonomous navigation behaviour
+# ---------------------------------------------------------------
+zone_manager:
+  ros__parameters:
+    # ---- Nav2 runtime speed cap ----
+    # This is pushed to controller_server/desired_linear_vel at runtime by the UI's
+    # /set_max_speed service. Must match (or be <= ) desired_linear_vel in nav2_params.yaml.
+    default_max_speed                  : 0.55   # m/s
+
+    # ---- Zone arrival tolerances ----
+    # How close the robot must be to call a GoToZone 'arrived'.
+    zone_position_tolerance            : 0.10   # m  matched to Nav2 xy_goal_tolerance; diagnostic only
+    zone_heading_tolerance             : 0.12   # rad  final bearing tolerance
+    zone_two_stage_arrival             : false  # legacy: ZoneManager no longer overrides Nav2 success
+    zone_two_stage_heading_min_error   : 0.05   # rad  legacy/no-op with Nav2-authoritative success
+    # Accept Nav2 SUCCEEDED even if base_link overshot by up to this.
+    zone_nav2_success_max_mismatch_distance : 0.10  # m  legacy diagnostic only; Nav2 success is authoritative
+    goal_pose_handoff_standoff_distance : 0.55  # m  first stage for shelf/current-goal handoff before final center entry
+    goal_pose_handoff_approach_arrival_tolerance : 0.20  # m  acceptable miss distance at the ghost approach point before shelf insert starts
+    goal_pose_handoff_local_insert_enabled : true
+    goal_pose_handoff_local_insert_safety_override_enabled : false  # keep shelf insertion independent from safety override
+    goal_pose_handoff_local_insert_speed : 0.05              # m/s  minimum speed (final few cm)
+    goal_pose_handoff_local_insert_max_speed : 0.20          # m/s  cruise speed cap (user request)
+    goal_pose_handoff_local_insert_max_turn : 0.55           # rad/s  keep insertion steering controlled
+    goal_pose_handoff_local_insert_bearing_gain : 2.2        # steer toward shelf centerline
+    goal_pose_handoff_local_insert_final_heading_gain : 0.60 # keep body aligned to shelf heading
+    goal_pose_handoff_local_insert_heading_tolerance : 0.08  # rad  final heading acceptance
+    goal_pose_handoff_local_insert_prealign_heading_tolerance : 0.06  # rad before forward creep begins
+    goal_pose_handoff_local_insert_realign_heading_tolerance : 0.35   # rad  only fall back to re-align if error gets clearly worse
+    goal_pose_handoff_local_insert_align_deadband : 0.04              # rad  stop micro-correcting when nearly aligned
+    goal_pose_handoff_local_insert_align_hold_samples : 3             # samples  require stable heading before straight-in
+    goal_pose_handoff_local_insert_align_stable_delta : 0.04          # rad  consecutive aligned samples must stay this close
+    goal_pose_handoff_local_insert_align_max_turn : 0.22             # rad/s softer align turn to avoid no-no jitter
+    goal_pose_handoff_local_insert_position_tolerance : 0.05 # m  center arrival tolerance
+    goal_pose_handoff_local_insert_distance : 0.50           # m  distance from inner shelf target back to the shelf opening centerline
+    goal_pose_handoff_local_insert_centerline_tolerance : 0.05         # m  acceptable lateral offset at center
+    goal_pose_handoff_local_insert_centerline_slowdown_tolerance : 0.10 # m  slow/rotate if wider than this
+    goal_pose_handoff_local_insert_timeout_sec : 0.0             # 0 disables timeout; prioritize convergence over speed
+    goal_pose_handoff_local_insert_no_progress_timeout_sec : 0.0 # 0 disables no-progress abort during careful shelf insertion
+    goal_pose_handoff_local_insert_progress_epsilon_m : 0.005
+    goal_pose_handoff_local_insert_loop_hz : 15.0
+    goal_pose_handoff_retry_attempts : 3
+    goal_pose_handoff_retry_delay_sec : 0.75
+    goal_pose_handoff_min_hotspot_count : 2        # allow consistent 2/3-reflector solves to drive handoff
+    goal_pose_handoff_live_geometry_enabled : true
+    goal_pose_handoff_live_trim_enabled : true
+    goal_pose_handoff_live_trim_gain : 0.8
+    goal_pose_handoff_live_trim_max_turn : 0.12
+    goal_pose_handoff_local_insert_max_live_yaw_jump : 0.25          # rad (~14 deg) — reject live yaw flips beyond this from initial heading
+    goal_pose_handoff_local_insert_max_final_heading_correction : 0.30  # rad (~17 deg) — if larger, skip final spin and accept
+    goal_pose_handoff_intensity_balance_enabled : true
+    goal_pose_handoff_intensity_balance_tolerance : 0.22      # ratio 0=equal, larger = more forgiving midpoint stop
+    goal_pose_handoff_intensity_balance_min_pair_sum : 35.0   # minimum summed reflector intensity per front/back pair
+    goal_pose_handoff_intensity_balance_required_samples : 3  # consecutive fresh shelf samples before stopping
+    goal_pose_handoff_intensity_balance_freshness_sec : 0.60  # stale status ignored for midpoint stop
+    goal_pose_handoff_intensity_balance_min_travel_m : 0.12   # avoid stopping immediately at the shelf opening
+    shelf_detector_enable_service : /shelf/set_enabled
+    follow_path_shelf_check_timeout_sec : 3.0
+    follow_path_shelf_check_enable_settle_sec : 0.20
+    follow_path_shelf_check_poll_sec : 0.10
+    follow_path_shelf_docking_speed_cap : 0.10     # m/s cap for post-arrival shelf docking
+    goal_pose_handoff_verify_enabled : true
+    goal_pose_handoff_verify_wait_timeout_sec : 1.20
+    goal_pose_handoff_verify_poll_sec : 0.05
+    goal_pose_handoff_verify_max_corrections : 2
+    goal_pose_handoff_verify_correction_timeout_sec : 0.0        # 0 disables timeout; let pre-insert centering finish accurately
+    goal_pose_handoff_verify_no_progress_timeout_sec : 0.0       # 0 disables no-progress abort for slow centering moves
+    # Robot footprint used for arrival check (robot frame polygon, metres).
+    zone_arrival_footprint_polygon     : '[[0.40, 0.37], [0.40, -0.37], [-0.40, -0.37], [-0.40, 0.37]]'
+    zone_arrival_footprint_padding     : 0.02   # m  extra margin beyond polygon
+    # Maximum time for on-zone actions (e.g. lift up/down).
+    zone_action_timeout_s              : 45.0   # s
+
+    # ---- Path-follow retry policy ----
+    path_max_retries                   : 20     # attempts before FollowPath fails
+    path_retry_on_aborted              : true   # retry ABORTED phases too; keep path/heading convergence persistent
+    nav_goal_accept_attempts           : 20     # attempts to resend a rejected Nav2 goal before failing
+
+    # ---- No-progress watchdog ----
+    # If the robot doesn't move for this long, the path is aborted.
+    path_no_progress_timeout_sec           : 8.0   # s
+    path_no_progress_min_speed_mps         : 0.02  # m/s  "moving" threshold
+    path_no_progress_min_distance_delta_m  : 0.03  # m    position delta threshold
+
+    # ---- Waypoint tolerances ----
+    path_waypoint_tolerance            : 0.10   # m  matched to Nav2 xy_goal_tolerance; diagnostic/helper only
+    path_nav2_success_max_mismatch_distance : 0.10   # m  legacy diagnostic only; Nav2 success is authoritative
+    path_final_tolerance               : 0.10   # m  matched to Nav2 xy_goal_tolerance; diagnostic/helper only
+    path_heading_tolerance             : 0.20   # rad
+    # How long to wait (seconds) after Nav2 reports SUCCEEDED before reading the
+    # robot heading / position for alignment checks.  Nav2 declares success while
+    # the robot is still decelerating; evaluating heading during this coast phase
+    # produces inconsistent results and may skip alignment prematurely.
+    # Increase if the robot is still visibly moving when alignment starts.
+    # Set to 0.0 to disable (not recommended on real hardware).
+    path_arrival_settle_sec            : 0.35   # s
+    # Legacy/no-op: ALIGN_AT_POINT now reuses the Nav2 controller instead of /spin.
+    path_align_spin_time_allowance_sec : 12.0   # s
+    # Stable-heading gate: number of consecutive heading samples required to ALL
+    # be within zone_heading_tolerance before alignment is accepted.
+    # Prevents a transient mid-spin pass-through from falsely clearing the check.
+    path_align_stable_samples          : 3      # readings (spaced by interval below)
+    # Time between consecutive stable-heading samples (seconds).
+    # Total validation window = samples * interval (e.g. 3 * 0.10s = 0.30s window).
+    path_align_stable_interval_sec     : 0.10   # s
+    path_enforce_waypoint_orientation  : false  # do not force heading at every waypoint
+    path_align_intermediate_waypoints  : false  # keep rolling through intermediate anchors
+    path_require_final_heading         : false  # final heading comes only from POI semantics
+    path_follow_segment_spacing        : 0.15   # m
+
+    # ---- Corridor enforcement ----
+    # When enabled, aborts navigation if robot strays outside the corridor.
+    path_enforce_corridor                  : false
+    path_corridor_width                    : 0.30   # m  half-width each side of path
+    path_corridor_arm_tolerance            : 0.45   # m  soft warning before abort
+    path_corridor_violation_confirm_cycles : 4      # timer ticks to confirm breach
+
+    # ---- Curve leniency ----
+    # On curved segments the corridor and orientation checks are relaxed.
+    path_curve_motion_leniency_enabled    : true
+    path_curve_segment_spacing            : 0.12   # m  keep curved segments close to drawn path
+    path_curve_relax_waypoint_orientation : false
+    path_curve_turn_threshold_deg         : 12.0   # deg  angle change = "curve"
+
+    # ---- Entry / start behaviour ----
+    path_force_first_waypoint_entry       : true   # must pass through first point
+    path_nearest_start_enabled            : false  # start from nearest point on path
+    path_require_pose_in_path_frame       : true
+    path_require_close_start              : false
+    path_require_close_start_distance     : 0.30   # m
+
+
+# ---------------------------------------------------------------
+# STACK MANAGER — navigation / SLAM process lifecycle
+# ---------------------------------------------------------------
+stack_manager:
+  ros__parameters:
+    # What to do at boot:
+    #   nav   = start navigation immediately (requires a loaded map)
+    #   slam  = start SLAM mapping
+    #   stop  = do nothing, wait for UI command
+    #   empty = bring up empty costmap only
+    startup_mode : stop
+
