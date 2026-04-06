@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<library path="next_nav2_controller">
+  <class
+    type="next_nav2_controller::NextNav2Controller"
+    base_class_type="nav2_core::Controller">
+    <description>
+      Continuous segment-following Nav2 Controller plugin with local-costmap rollout obstacle avoidance.
+    </description>
+  </class>
+</library>
