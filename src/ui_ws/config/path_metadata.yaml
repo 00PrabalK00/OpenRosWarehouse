@@ -1,1 +1,20 @@
-{}
+Main:
+  points:
+  - x: 4.86
+    y: 10.28
+    zone_name: A1
+  - x: 6.1
+    y: 11.44
+    zone_name: A2
+  - x: 11.09
+    y: 6.66
+    zone_name: A3
+  - x: 10.08
+    y: 5.53
+    zone_name: A4
+  settings:
+    loop_type: closed
+    loop_mode: true
+    curved_segments: []
+    curved_segment_controls: {}
+    has_curves: false

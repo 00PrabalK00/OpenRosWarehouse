@@ -29,8 +29,27 @@ from .db_manager import DatabaseManager
 class MissionManager(Node):
     """Owns mission sequencing state and resume/clear persistence."""
 
+    @staticmethod
+    def _normalize_robot_namespace(raw_value) -> str:
+        ns = str(raw_value or '').strip()
+        return ns.strip('/')
+
+    def _endpoint(self, base_name: str) -> str:
+        name = str(base_name or '').strip()
+        if not name:
+            return name
+        if not name.startswith('/'):
+            name = '/' + name
+        if not self.robot_namespace:
+            return name
+        return f'/{self.robot_namespace}{name}'
+
     def __init__(self):
         super().__init__('mission_manager')
+
+        self.robot_namespace = self._normalize_robot_namespace(
+            self.declare_parameter('robot_namespace', '').value
+        )
 
         # Initialize database manager
         db_path = os.path.expanduser(
@@ -69,9 +88,13 @@ class MissionManager(Node):
             self.declare_parameter('zone_action_lift_status_topic', '/lift/status').value
             or '/lift/status'
         ).strip() or '/lift/status'
+        self.zone_action_lift_status_topic = self._endpoint(self.zone_action_lift_status_topic)
+        self.go_to_zone_action_name = self._endpoint('/go_to_zone')
+        self.estop_topic = self._endpoint('/set_estop')
 
-        self.go_to_zone_client = ActionClient(self, GoToZone, '/go_to_zone')
-        self.estop_sub = self.create_subscription(Bool, '/set_estop', self._estop_callback, 10)
+        # Route mission navigation through NavigationArbitrator's public ingress.
+        self.go_to_zone_client = ActionClient(self, GoToZone, self.go_to_zone_action_name)
+        self.estop_sub = self.create_subscription(Bool, self.estop_topic, self._estop_callback, 10)
         self.lift_status_sub = self.create_subscription(
             Int32,
             self.zone_action_lift_status_topic,
@@ -80,16 +103,36 @@ class MissionManager(Node):
         )
         self._action_publish_timer = self.create_timer(0.02, self._drain_action_publish_queue)
 
-        self.start_sequence_srv = self.create_service(StartSequence, '/mission/start_sequence', self.start_sequence_callback)
-        self.stop_sequence_srv = self.create_service(StopSequence, '/mission/stop_sequence', self.stop_sequence_callback)
+        self.start_sequence_srv = self.create_service(
+            StartSequence,
+            self._endpoint('/mission/start_sequence'),
+            self.start_sequence_callback,
+        )
+        self.stop_sequence_srv = self.create_service(
+            StopSequence,
+            self._endpoint('/mission/stop_sequence'),
+            self.stop_sequence_callback,
+        )
         self.sequence_status_srv = self.create_service(
             GetSequenceStatus,
-            '/mission/sequence_status',
+            self._endpoint('/mission/sequence_status'),
             self.sequence_status_callback,
         )
-        self.mission_status_srv = self.create_service(GetMissionStatus, '/mission/status', self.mission_status_callback)
-        self.resume_srv = self.create_service(ResumeMission, '/mission/resume', self.resume_callback)
-        self.clear_srv = self.create_service(ClearMissionState, '/mission/clear', self.clear_callback)
+        self.mission_status_srv = self.create_service(
+            GetMissionStatus,
+            self._endpoint('/mission/status'),
+            self.mission_status_callback,
+        )
+        self.resume_srv = self.create_service(
+            ResumeMission,
+            self._endpoint('/mission/resume'),
+            self.resume_callback,
+        )
+        self.clear_srv = self.create_service(
+            ClearMissionState,
+            self._endpoint('/mission/clear'),
+            self.clear_callback,
+        )
 
         self._reset_state_locked(message='Idle')
         self._load_state_from_database()
@@ -97,6 +140,14 @@ class MissionManager(Node):
         self.get_logger().info('MissionManager started')
         self.get_logger().info(f'Database: {db_path}')
         self.get_logger().info(f'Legacy state file: {self.state_file}')
+        if self.robot_namespace:
+            self.get_logger().info(f'Robot namespace prefix: /{self.robot_namespace}')
+        else:
+            self.get_logger().info('Robot namespace prefix: <none> (global endpoints)')
+        self.get_logger().info(
+            f'Navigation ingress: {self.go_to_zone_action_name} '
+            '(expected public action owned by NavigationArbitrator)'
+        )
         self.get_logger().info(
             'Zone post-arrival: '
             f'stop_default={self.zone_stop_timer_default_s:.2f}s '
@@ -131,12 +182,12 @@ class MissionManager(Node):
     def _mission_state_locked(self) -> str:
         if self.running:
             return 'RUNNING'
+        if self.interrupted_by:
+            return 'INTERRUPTED'
         if self.pending_resume:
             return 'PAUSED'
         if self.mission_type and self.progress >= len(self.mission_data) and not self.pending_resume:
             return 'COMPLETED'
-        if self.interrupted_by:
-            return 'INTERRUPTED'
         return 'IDLE'
 
     def _persist_locked(self):

@@ -309,136 +309,155 @@ class DatabaseManager:
                 zones[row['name']] = zone_data
             
             return zones
-    
+
+    @staticmethod
+    def _safe_int(value, default: int) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return int(default)
+
+    def _save_zone_with_cursor(self, cursor, name: str, zone_data: Dict[str, Any]):
+        zone_id = zone_data.get('id', name)
+        position = zone_data.get('position', {})
+        orientation = zone_data.get('orientation', {})
+
+        cursor.execute('SELECT zone_order FROM zones WHERE name = ?', (name,))
+        existing_by_name = cursor.fetchone()
+
+        existing_by_id = None
+        if existing_by_name is None and zone_id:
+            cursor.execute('SELECT name, zone_order FROM zones WHERE id = ?', (zone_id,))
+            existing_by_id = cursor.fetchone()
+
+        cursor.execute('SELECT COALESCE(MAX(zone_order), -1) + 1 AS next_order FROM zones')
+        next_row = cursor.fetchone()
+        next_zone_order = self._safe_int(next_row['next_order'] if next_row else 0, 0)
+
+        if existing_by_name is not None:
+            zone_order = self._safe_int(existing_by_name['zone_order'], next_zone_order)
+            cursor.execute('''
+                UPDATE zones
+                SET
+                    id = ?,
+                    position_x = ?,
+                    position_y = ?,
+                    position_z = ?,
+                    orientation_x = ?,
+                    orientation_y = ?,
+                    orientation_z = ?,
+                    orientation_w = ?,
+                    frame_id = ?,
+                    type = ?,
+                    speed = ?,
+                    action = ?,
+                    charge_duration = ?,
+                    zone_order = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE name = ?
+            ''', (
+                zone_id,
+                position.get('x', 0.0),
+                position.get('y', 0.0),
+                position.get('z', 0.0),
+                orientation.get('x', 0.0),
+                orientation.get('y', 0.0),
+                orientation.get('z', 0.0),
+                orientation.get('w', 1.0),
+                zone_data.get('frame_id', 'map'),
+                zone_data.get('type', 'normal'),
+                zone_data.get('speed', 0.5),
+                zone_data.get('action'),
+                zone_data.get('charge_duration'),
+                zone_order,
+                name,
+            ))
+            return
+
+        if existing_by_id is not None:
+            zone_order = self._safe_int(existing_by_id['zone_order'], next_zone_order)
+            cursor.execute('''
+                UPDATE zones
+                SET
+                    name = ?,
+                    position_x = ?,
+                    position_y = ?,
+                    position_z = ?,
+                    orientation_x = ?,
+                    orientation_y = ?,
+                    orientation_z = ?,
+                    orientation_w = ?,
+                    frame_id = ?,
+                    type = ?,
+                    speed = ?,
+                    action = ?,
+                    charge_duration = ?,
+                    zone_order = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (
+                name,
+                position.get('x', 0.0),
+                position.get('y', 0.0),
+                position.get('z', 0.0),
+                orientation.get('x', 0.0),
+                orientation.get('y', 0.0),
+                orientation.get('z', 0.0),
+                orientation.get('w', 1.0),
+                zone_data.get('frame_id', 'map'),
+                zone_data.get('type', 'normal'),
+                zone_data.get('speed', 0.5),
+                zone_data.get('action'),
+                zone_data.get('charge_duration'),
+                zone_order,
+                zone_id,
+            ))
+            return
+
+        zone_order = next_zone_order
+        cursor.execute('''
+            INSERT INTO zones (
+                id, name, position_x, position_y, position_z,
+                orientation_x, orientation_y, orientation_z, orientation_w,
+                frame_id, type, speed, action, charge_duration, zone_order, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            zone_id,
+            name,
+            position.get('x', 0.0),
+            position.get('y', 0.0),
+            position.get('z', 0.0),
+            orientation.get('x', 0.0),
+            orientation.get('y', 0.0),
+            orientation.get('z', 0.0),
+            orientation.get('w', 1.0),
+            zone_data.get('frame_id', 'map'),
+            zone_data.get('type', 'normal'),
+            zone_data.get('speed', 0.5),
+            zone_data.get('action'),
+            zone_data.get('charge_duration'),
+            zone_order,
+        ))
+
+    def _save_path_with_cursor(self, cursor, name: str, path_data: Dict[str, Any]):
+        path_id = path_data.get('id', name)
+        points = path_data.get('points', [])
+        cursor.execute('''
+            INSERT OR REPLACE INTO paths (
+                id, name, frame_id, points, updated_at
+            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            path_id,
+            name,
+            path_data.get('frame_id', 'map'),
+            json.dumps(points)
+        ))
+
     def save_zone(self, name: str, zone_data: Dict[str, Any]) -> bool:
         """Save or update a zone."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
-            zone_id = zone_data.get('id', name)
-            position = zone_data.get('position', {})
-            orientation = zone_data.get('orientation', {})
-
-            def _safe_int(value, default):
-                try:
-                    return int(value)
-                except Exception:
-                    return int(default)
-
-            cursor.execute('SELECT zone_order FROM zones WHERE name = ?', (name,))
-            existing_by_name = cursor.fetchone()
-
-            existing_by_id = None
-            if existing_by_name is None and zone_id:
-                cursor.execute('SELECT name, zone_order FROM zones WHERE id = ?', (zone_id,))
-                existing_by_id = cursor.fetchone()
-
-            cursor.execute('SELECT COALESCE(MAX(zone_order), -1) + 1 AS next_order FROM zones')
-            next_row = cursor.fetchone()
-            next_zone_order = _safe_int(next_row['next_order'] if next_row else 0, 0)
-
-            if existing_by_name is not None:
-                zone_order = _safe_int(existing_by_name['zone_order'], next_zone_order)
-                cursor.execute('''
-                    UPDATE zones
-                    SET
-                        id = ?,
-                        position_x = ?,
-                        position_y = ?,
-                        position_z = ?,
-                        orientation_x = ?,
-                        orientation_y = ?,
-                        orientation_z = ?,
-                        orientation_w = ?,
-                        frame_id = ?,
-                        type = ?,
-                        speed = ?,
-                        action = ?,
-                        charge_duration = ?,
-                        zone_order = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE name = ?
-                ''', (
-                    zone_id,
-                    position.get('x', 0.0),
-                    position.get('y', 0.0),
-                    position.get('z', 0.0),
-                    orientation.get('x', 0.0),
-                    orientation.get('y', 0.0),
-                    orientation.get('z', 0.0),
-                    orientation.get('w', 1.0),
-                    zone_data.get('frame_id', 'map'),
-                    zone_data.get('type', 'normal'),
-                    zone_data.get('speed', 0.5),
-                    zone_data.get('action'),
-                    zone_data.get('charge_duration'),
-                    zone_order,
-                    name,
-                ))
-            elif existing_by_id is not None:
-                zone_order = _safe_int(existing_by_id['zone_order'], next_zone_order)
-                cursor.execute('''
-                    UPDATE zones
-                    SET
-                        name = ?,
-                        position_x = ?,
-                        position_y = ?,
-                        position_z = ?,
-                        orientation_x = ?,
-                        orientation_y = ?,
-                        orientation_z = ?,
-                        orientation_w = ?,
-                        frame_id = ?,
-                        type = ?,
-                        speed = ?,
-                        action = ?,
-                        charge_duration = ?,
-                        zone_order = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (
-                    name,
-                    position.get('x', 0.0),
-                    position.get('y', 0.0),
-                    position.get('z', 0.0),
-                    orientation.get('x', 0.0),
-                    orientation.get('y', 0.0),
-                    orientation.get('z', 0.0),
-                    orientation.get('w', 1.0),
-                    zone_data.get('frame_id', 'map'),
-                    zone_data.get('type', 'normal'),
-                    zone_data.get('speed', 0.5),
-                    zone_data.get('action'),
-                    zone_data.get('charge_duration'),
-                    zone_order,
-                    zone_id,
-                ))
-            else:
-                zone_order = next_zone_order
-                cursor.execute('''
-                    INSERT INTO zones (
-                        id, name, position_x, position_y, position_z,
-                        orientation_x, orientation_y, orientation_z, orientation_w,
-                        frame_id, type, speed, action, charge_duration, zone_order, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (
-                    zone_id,
-                    name,
-                    position.get('x', 0.0),
-                    position.get('y', 0.0),
-                    position.get('z', 0.0),
-                    orientation.get('x', 0.0),
-                    orientation.get('y', 0.0),
-                    orientation.get('z', 0.0),
-                    orientation.get('w', 1.0),
-                    zone_data.get('frame_id', 'map'),
-                    zone_data.get('type', 'normal'),
-                    zone_data.get('speed', 0.5),
-                    zone_data.get('action'),
-                    zone_data.get('charge_duration'),
-                    zone_order,
-                ))
-            
+            self._save_zone_with_cursor(cursor, name, zone_data)
             conn.commit()
             return True
     
@@ -513,21 +532,7 @@ class DatabaseManager:
         """Save or update a path."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
-            path_id = path_data.get('id', name)
-            points = path_data.get('points', [])
-            
-            cursor.execute('''
-                INSERT OR REPLACE INTO paths (
-                    id, name, frame_id, points, updated_at
-                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ''', (
-                path_id,
-                name,
-                path_data.get('frame_id', 'map'),
-                json.dumps(points)
-            ))
-            
+            self._save_path_with_cursor(cursor, name, path_data)
             conn.commit()
             return True
     
@@ -538,6 +543,34 @@ class DatabaseManager:
             cursor.execute('DELETE FROM paths WHERE name = ?', (name,))
             conn.commit()
             return cursor.rowcount > 0
+
+    def replace_zones_and_paths(
+        self,
+        zones: Dict[str, Dict[str, Any]],
+        paths: Dict[str, Dict[str, Any]],
+    ) -> bool:
+        """Atomically replace the working zone/path set."""
+        zones_payload = zones if isinstance(zones, dict) else {}
+        paths_payload = paths if isinstance(paths, dict) else {}
+
+        with self._lock:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM zones')
+                cursor.execute('DELETE FROM paths')
+
+                for zone_name, zone_data in zones_payload.items():
+                    if not isinstance(zone_data, dict):
+                        continue
+                    self._save_zone_with_cursor(cursor, str(zone_name), zone_data)
+
+                for path_name, path_data in paths_payload.items():
+                    if not isinstance(path_data, dict):
+                        continue
+                    self._save_path_with_cursor(cursor, str(path_name), path_data)
+
+                conn.commit()
+        return True
     
     # ==================== Layout Operations ====================
     

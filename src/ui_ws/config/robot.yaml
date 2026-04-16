@@ -214,7 +214,7 @@ zone_manager:
     goal_pose_handoff_local_insert_loop_hz : 15.0
     goal_pose_handoff_retry_attempts : 3
     goal_pose_handoff_retry_delay_sec : 0.75
-    goal_pose_handoff_min_hotspot_count : 2        # allow consistent 2/3-reflector solves to drive handoff
+    goal_pose_handoff_min_hotspot_count : 3        # do not use raw 2-reflector solves for final shelf handoff/insertion
     goal_pose_handoff_live_geometry_enabled : true
     goal_pose_handoff_live_trim_enabled : true
     goal_pose_handoff_live_trim_gain : 0.8
@@ -314,4 +314,3 @@ stack_manager:
     #   stop  = do nothing, wait for UI command
     #   empty = bring up empty costmap only
     startup_mode : stop
-

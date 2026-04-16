@@ -58,6 +58,16 @@ class Hotspot:
 
 
 @dataclass
+class BrightPoint:
+    index: int
+    angle: float
+    range_value: float
+    x: float
+    y: float
+    intensity: float
+
+
+@dataclass
 class ShelfPose:
     x: float
     y: float
@@ -70,6 +80,102 @@ class ShelfPose:
     front_intensity_sum: float
     back_intensity_sum: float
     intensity_balance_ratio: float
+
+
+def evaluate_commit_gate(
+    *,
+    detector_enabled: bool,
+    candidate_present: bool,
+    candidate_fresh: bool,
+    solver_ok: bool,
+    candidate_consistent: bool,
+    candidate_hotspot_count: int,
+    min_hotspot_count: int,
+    candidate_confidence: float,
+    min_confidence: float,
+    candidate_sigma_x: float,
+    max_sigma_x_m: float,
+    candidate_sigma_y: float,
+    max_sigma_y_m: float,
+    candidate_sigma_yaw: float,
+    max_sigma_yaw_rad: float,
+) -> Tuple[bool, str]:
+    if not bool(detector_enabled):
+        return False, 'detector_disabled'
+    if not bool(candidate_present):
+        return False, 'candidate_pose_missing'
+    if not bool(candidate_fresh):
+        return False, 'stale_candidate'
+    if not bool(solver_ok):
+        return False, 'solver_not_ready'
+    if not bool(candidate_consistent):
+        return False, 'candidate_not_consistent'
+    if int(candidate_hotspot_count) < max(1, int(min_hotspot_count)):
+        return False, 'insufficient_hotspots_for_commit'
+    if float(candidate_confidence) < float(min_confidence):
+        return False, 'candidate_confidence_below_threshold'
+    if float(max_sigma_x_m) > 0.0:
+        if not math.isfinite(float(candidate_sigma_x)) or float(candidate_sigma_x) < 0.0:
+            return False, 'candidate_sigma_x_unavailable'
+        if float(candidate_sigma_x) > float(max_sigma_x_m):
+            return False, 'candidate_sigma_x_too_high'
+    if float(max_sigma_y_m) > 0.0:
+        if not math.isfinite(float(candidate_sigma_y)) or float(candidate_sigma_y) < 0.0:
+            return False, 'candidate_sigma_y_unavailable'
+        if float(candidate_sigma_y) > float(max_sigma_y_m):
+            return False, 'candidate_sigma_y_too_high'
+    if float(max_sigma_yaw_rad) > 0.0:
+        if not math.isfinite(float(candidate_sigma_yaw)) or float(candidate_sigma_yaw) < 0.0:
+            return False, 'candidate_sigma_yaw_unavailable'
+        if float(candidate_sigma_yaw) > float(max_sigma_yaw_rad):
+            return False, 'candidate_sigma_yaw_too_high'
+    return True, ''
+
+
+def compute_adaptive_intensity_threshold(
+    intensities: Sequence[float],
+    *,
+    base_threshold: float,
+    percentile: float,
+    scale: float,
+) -> float:
+    valid = sorted(
+        float(value)
+        for value in intensities
+        if math.isfinite(float(value)) and float(value) > 0.0
+    )
+    if not valid:
+        return float(base_threshold)
+
+    percentile = max(0.0, min(100.0, float(percentile)))
+    scale = max(0.0, float(scale))
+    if len(valid) == 1:
+        percentile_value = valid[0]
+    else:
+        position = (percentile / 100.0) * float(len(valid) - 1)
+        lower_idx = int(math.floor(position))
+        upper_idx = int(math.ceil(position))
+        blend = position - float(lower_idx)
+        percentile_value = (
+            (1.0 - blend) * valid[lower_idx]
+            + (blend * valid[upper_idx])
+        )
+    return max(float(base_threshold), float(percentile_value) * scale)
+
+
+def compute_range_aware_dbscan_eps(
+    *,
+    base_eps_m: float,
+    eps_min_m: float,
+    angular_scale: float,
+    angle_increment: float,
+    range_a: float,
+    range_b: float,
+) -> float:
+    clamped_base_eps = max(float(eps_min_m), float(base_eps_m))
+    dominant_range = max(0.0, float(range_a), float(range_b))
+    angular_eps = float(angular_scale) * dominant_range * abs(float(angle_increment))
+    return max(float(eps_min_m), min(clamped_base_eps, angular_eps))
 
 
 class ShelfDetectorNode(Node):
@@ -144,6 +250,7 @@ class ShelfDetectorNode(Node):
         self.active_scan_frame = str(self.laser_frame or 'laser')
         self.frame_mismatch_warning = ''
         self.max_intensity = 0.0
+        self.last_effective_intensity_threshold = float(self.intensity_threshold)
         self.hotspot_count = 0
         self.latest_hotspots: List[Hotspot] = []
         self.solver_ok = False
@@ -201,6 +308,9 @@ class ShelfDetectorNode(Node):
                 ('y_min', -1.5),
                 ('y_max', 1.5),
                 ('intensity_threshold', 35),
+                ('adaptive_intensity_threshold_enabled', True),
+                ('adaptive_intensity_percentile', 97.0),
+                ('adaptive_intensity_scale', 0.90),
                 ('marker_lifetime', 0.25),
                 ('detection_timeout', 0.50),
                 ('candidate_dropout_tolerance_sec', 0.35),
@@ -210,6 +320,11 @@ class ShelfDetectorNode(Node):
                 ('candidate_center_tolerance_m', 0.015),
                 ('candidate_yaw_tolerance_deg', 3.0),
                 ('candidate_corner_tolerance_m', 0.03),
+                ('commit_min_hotspot_count', 3),
+                ('commit_min_confidence', 0.70),
+                ('commit_max_sigma_x_m', 0.03),
+                ('commit_max_sigma_y_m', 0.03),
+                ('commit_max_sigma_yaw_deg', 3.0),
                 ('pose_smoothing_alpha', 0.45),
                 ('pose_uncertainty_window', 8),
                 ('dip_bridge_threshold_margin', 5.0),
@@ -239,6 +354,8 @@ class ShelfDetectorNode(Node):
                 ('jacking_operation', default_jacking_operation),
                 # Deprecated geometry-trigger compatibility params: retained as no-ops.
                 ('eps', 0.25),
+                ('dbscan_eps_min_m', 0.02),
+                ('dbscan_eps_angular_scale', 2.5),
                 ('proximity_threshold', 0.25),
                 ('min_samples', 10),
                 ('min_sample', 10),
@@ -283,6 +400,15 @@ class ShelfDetectorNode(Node):
         self.y_min = float(self.get_parameter('y_min').value)
         self.y_max = float(self.get_parameter('y_max').value)
         self.intensity_threshold = float(self.get_parameter('intensity_threshold').value)
+        self.adaptive_intensity_threshold_enabled = bool(
+            self.get_parameter('adaptive_intensity_threshold_enabled').value
+        )
+        self.adaptive_intensity_percentile = float(
+            self.get_parameter('adaptive_intensity_percentile').value
+        )
+        self.adaptive_intensity_scale = float(
+            self.get_parameter('adaptive_intensity_scale').value
+        )
         self.marker_lifetime = float(self.get_parameter('marker_lifetime').value)
         self.detection_timeout = float(self.get_parameter('detection_timeout').value)
         self.candidate_dropout_tolerance_sec = max(
@@ -306,6 +432,22 @@ class ShelfDetectorNode(Node):
         )
         self.candidate_corner_tolerance_m = float(
             self.get_parameter('candidate_corner_tolerance_m').value
+        )
+        self.commit_min_hotspot_count = max(
+            1,
+            int(self.get_parameter('commit_min_hotspot_count').value),
+        )
+        self.commit_min_confidence = float(
+            self.get_parameter('commit_min_confidence').value
+        )
+        self.commit_max_sigma_x_m = float(
+            self.get_parameter('commit_max_sigma_x_m').value
+        )
+        self.commit_max_sigma_y_m = float(
+            self.get_parameter('commit_max_sigma_y_m').value
+        )
+        self.commit_max_sigma_yaw_deg = float(
+            self.get_parameter('commit_max_sigma_yaw_deg').value
         )
         self.pose_smoothing_alpha = float(
             self.get_parameter('pose_smoothing_alpha').value
@@ -361,6 +503,8 @@ class ShelfDetectorNode(Node):
         self.jacking_operation = int(self.get_parameter('jacking_operation').value)
 
         self.eps = float(self.get_parameter('eps').value)
+        self.dbscan_eps_min_m = float(self.get_parameter('dbscan_eps_min_m').value)
+        self.dbscan_eps_angular_scale = float(self.get_parameter('dbscan_eps_angular_scale').value)
         self.proximity_threshold = float(self.get_parameter('proximity_threshold').value)
         self.min_samples = int(self.get_parameter('min_samples').value)
         self.min_sample = int(self.get_parameter('min_sample').value)
@@ -373,11 +517,10 @@ class ShelfDetectorNode(Node):
         self.require_pair_distance_gate = bool(self.get_parameter('require_pair_distance_gate').value)
 
         if initial_load:
-            self.get_logger().warn(
-                'Legacy DBSCAN trigger parameters (eps, proximity_threshold, '
-                'min_samples, min_sample, dist_threshold) are deprecated. '
-                'Intensity hotspots drive detection, while offset_length, '
-                'min_distance/max_distance, and '
+            self.get_logger().info(
+                'Shelf reflector clustering uses DBSCAN over bright LiDAR returns. '
+                'Legacy eps/min_samples parameters are reused with safety clamps, '
+                'while offset_length, min_distance/max_distance, and '
                 'require_pair_distance_gate still tune the optional 2-leg fallback.'
             )
             if self.goal_frame:
@@ -428,6 +571,9 @@ class ShelfDetectorNode(Node):
                 'candidate_center_tolerance_m',
                 'candidate_yaw_tolerance_deg',
                 'candidate_corner_tolerance_m',
+                'commit_min_confidence',
+                'adaptive_intensity_percentile',
+                'adaptive_intensity_scale',
                 'pose_smoothing_alpha',
                 'hotspot_merge_max_distance_m',
                 'hotspot_merge_max_range_delta_m',
@@ -435,6 +581,8 @@ class ShelfDetectorNode(Node):
                 'front_back_min_separation_m',
                 'left_right_min_separation_m',
                 'degenerate_area_threshold_m2',
+                'dbscan_eps_min_m',
+                'dbscan_eps_angular_scale',
             } and float(param.value) <= 0.0:
                 return SetParametersResult(successful=False, reason=f'{param.name} must be > 0.')
             if param.name == 'pose_smoothing_alpha' and float(param.value) > 1.0:
@@ -449,12 +597,33 @@ class ShelfDetectorNode(Node):
                 )
             if param.name == 'candidate_consistency_frames' and int(param.value) < 1:
                 return SetParametersResult(successful=False, reason='candidate_consistency_frames must be >= 1.')
+            if param.name == 'commit_min_hotspot_count' and int(param.value) < 1:
+                return SetParametersResult(successful=False, reason='commit_min_hotspot_count must be >= 1.')
             if param.name == 'pose_uncertainty_window' and int(param.value) < 1:
                 return SetParametersResult(successful=False, reason='pose_uncertainty_window must be >= 1.')
             if param.name == 'nav_goal_accept_attempts' and int(param.value) < 1:
                 return SetParametersResult(successful=False, reason='nav_goal_accept_attempts must be >= 1.')
             if param.name == 'marker_lifetime' and float(param.value) < 0.0:
                 return SetParametersResult(successful=False, reason='marker_lifetime must be >= 0.')
+            if param.name == 'commit_min_confidence' and not (0.0 <= float(param.value) <= 1.0):
+                return SetParametersResult(
+                    successful=False,
+                    reason='commit_min_confidence must be between 0.0 and 1.0.',
+                )
+            if param.name == 'adaptive_intensity_percentile' and not (0.0 <= float(param.value) <= 100.0):
+                return SetParametersResult(
+                    successful=False,
+                    reason='adaptive_intensity_percentile must be between 0.0 and 100.0.',
+                )
+            if param.name in {
+                'commit_max_sigma_x_m',
+                'commit_max_sigma_y_m',
+                'commit_max_sigma_yaw_deg',
+            } and float(param.value) < 0.0:
+                return SetParametersResult(
+                    successful=False,
+                    reason=f'{param.name} must be >= 0.',
+                )
 
         for param in params:
             name = str(param.name)
@@ -499,6 +668,12 @@ class ShelfDetectorNode(Node):
                 self.y_max = float(value)
             elif name == 'intensity_threshold':
                 self.intensity_threshold = float(value)
+            elif name == 'adaptive_intensity_threshold_enabled':
+                self.adaptive_intensity_threshold_enabled = bool(value)
+            elif name == 'adaptive_intensity_percentile':
+                self.adaptive_intensity_percentile = float(value)
+            elif name == 'adaptive_intensity_scale':
+                self.adaptive_intensity_scale = float(value)
             elif name == 'marker_lifetime':
                 self.marker_lifetime = float(value)
             elif name == 'detection_timeout':
@@ -517,6 +692,16 @@ class ShelfDetectorNode(Node):
                 self.candidate_yaw_tolerance_deg = float(value)
             elif name == 'candidate_corner_tolerance_m':
                 self.candidate_corner_tolerance_m = float(value)
+            elif name == 'commit_min_hotspot_count':
+                self.commit_min_hotspot_count = max(1, int(value))
+            elif name == 'commit_min_confidence':
+                self.commit_min_confidence = float(value)
+            elif name == 'commit_max_sigma_x_m':
+                self.commit_max_sigma_x_m = float(value)
+            elif name == 'commit_max_sigma_y_m':
+                self.commit_max_sigma_y_m = float(value)
+            elif name == 'commit_max_sigma_yaw_deg':
+                self.commit_max_sigma_yaw_deg = float(value)
             elif name == 'pose_smoothing_alpha':
                 self.pose_smoothing_alpha = float(value)
             elif name == 'pose_uncertainty_window':
@@ -574,6 +759,10 @@ class ShelfDetectorNode(Node):
                 self.jacking_operation = int(value)
             elif name == 'eps':
                 self.eps = float(value)
+            elif name == 'dbscan_eps_min_m':
+                self.dbscan_eps_min_m = float(value)
+            elif name == 'dbscan_eps_angular_scale':
+                self.dbscan_eps_angular_scale = float(value)
             elif name == 'proximity_threshold':
                 self.proximity_threshold = float(value)
             elif name == 'min_samples':
@@ -716,8 +905,8 @@ class ShelfDetectorNode(Node):
             self._update_smoothed_candidate(solve)
         else:
             self._clear_smoothed_candidate_state()
-        self.candidate_valid = self._is_manual_commit_ready()
-        self.last_reason = '' if self.candidate_valid else 'inconsistent_solve'
+        self.candidate_valid, commit_reason = self._manual_commit_gate_status()
+        self.last_reason = '' if self.candidate_valid else str(commit_reason or 'commit_gate_rejected')
 
         self.get_logger().debug(
             f'Shelf scan frame={frame_id} hotspots={self.hotspot_count} '
@@ -804,6 +993,8 @@ class ShelfDetectorNode(Node):
             self.last_reason = 'waiting_for_scan'
             self.get_logger().info(f'Shelf detector enabled via {source}.')
         else:
+            self.committed_target_pose = None
+            self.committed_target_time = None
             self.last_reason = 'detector_disabled'
             self.get_logger().info(f'Shelf detector disabled via {source}.')
 
@@ -821,18 +1012,12 @@ class ShelfDetectorNode(Node):
             return False, 'Shelf navigation already in progress. Wait for the current request to finish.'
 
         now = self.get_clock().now()
-        self.candidate_valid = self._is_manual_commit_ready(now)
+        self.candidate_valid, commit_reason = self._manual_commit_gate_status(now)
         if not self.candidate_valid or self.candidate_pose is None:
-            reason = self.last_reason or 'stale_candidate'
+            reason = str(commit_reason or self.last_reason or 'stale_candidate')
             self.get_logger().warn(f'Shelf /tick rejected from {source}: {reason}')
             self._publish_status()
             return False, f'Shelf commit rejected: {reason}'
-
-        if not self.candidate_consistent:
-            self.get_logger().warn(
-                f'Shelf /tick accepted from {source} using a fresh shelf solve '
-                '(consistency latch not stable yet).'
-            )
 
         preferred_pose = self._preferred_candidate_pose()
         if preferred_pose is None:
@@ -957,50 +1142,22 @@ class ShelfDetectorNode(Node):
             )
             return [], 'intensity_length_mismatch', max_intensity
 
-        bright_runs: List[List[int]] = []
-        current_run: List[int] = []
-        for index, distance in enumerate(msg.ranges):
-            if self._bin_is_bright(msg, index):
-                if current_run and index == current_run[-1] + 1:
-                    current_run.append(index)
-                else:
-                    if current_run:
-                        bright_runs.append(current_run)
-                    current_run = [index]
-            else:
-                if current_run:
-                    bright_runs.append(current_run)
-                    current_run = []
-        if current_run:
-            bright_runs.append(current_run)
+        effective_threshold = self._effective_intensity_threshold(msg)
+        self.last_effective_intensity_threshold = float(effective_threshold)
+        bright_points = self._collect_bright_points(
+            msg,
+            intensity_threshold=effective_threshold,
+        )
+        if not bright_points:
+            return [], 'too_few_hotspots', max_intensity
 
-        merged_runs: List[List[int]] = []
-        idx = 0
-        while idx < len(bright_runs):
-            current = list(bright_runs[idx])
-            bridge_used = False
-            if idx + 1 < len(bright_runs):
-                next_run = bright_runs[idx + 1]
-                gap = next_run[0] - current[-1]
-                dip_idx = current[-1] + 1
-                if (
-                    gap == 2
-                    and not bridge_used
-                    and self._run_is_valid_candidate(msg, current)
-                    and self._run_is_valid_candidate(msg, next_run)
-                    and self._dip_can_bridge(msg, dip_idx)
-                ):
-                    current.extend(next_run)
-                    bridge_used = True
-                    idx += 1
-            merged_runs.append(current)
-            idx += 1
+        clustered_points = self._cluster_bright_points_dbscan(msg, bright_points)
+        if not clustered_points:
+            return [], 'too_few_hotspots', max_intensity
 
         hotspots: List[Hotspot] = []
-        for run in merged_runs:
-            if not self._run_is_valid_candidate(msg, run):
-                continue
-            hotspot = self._hotspot_from_run(msg, run)
+        for cluster in clustered_points:
+            hotspot = self._bright_points_to_hotspot(cluster)
             if hotspot is None:
                 continue
             hotspots.append(hotspot)
@@ -1008,14 +1165,250 @@ class ShelfDetectorNode(Node):
         hotspots = self._merge_nearby_hotspots(hotspots)
         return hotspots, None, max_intensity
 
-    def _bin_is_bright(self, msg: LaserScan, index: int) -> bool:
+    def _effective_intensity_threshold(self, msg: LaserScan) -> float:
+        base_threshold = float(self.intensity_threshold)
+        if not bool(self.adaptive_intensity_threshold_enabled):
+            return base_threshold
+
+        valid_intensities: List[float] = []
+        for index, distance in enumerate(msg.ranges):
+            if index >= len(msg.intensities):
+                break
+            distance = float(distance)
+            intensity = float(msg.intensities[index])
+            if not math.isfinite(distance) or distance <= 0.0:
+                continue
+            if not math.isfinite(intensity) or intensity <= 0.0:
+                continue
+            angle = msg.angle_min + index * msg.angle_increment
+            x = distance * math.cos(angle)
+            y = distance * math.sin(angle)
+            if self.use_roi and not self._point_in_roi(x, y):
+                continue
+            valid_intensities.append(intensity)
+
+        return compute_adaptive_intensity_threshold(
+            valid_intensities,
+            base_threshold=base_threshold,
+            percentile=float(self.adaptive_intensity_percentile),
+            scale=float(self.adaptive_intensity_scale),
+        )
+
+    def _collect_bright_points(
+        self,
+        msg: LaserScan,
+        *,
+        intensity_threshold: float,
+    ) -> List[BrightPoint]:
+        points: List[BrightPoint] = []
+        for index, distance in enumerate(msg.ranges):
+            if not self._bin_is_bright(msg, index, intensity_threshold=intensity_threshold):
+                continue
+            distance = float(distance)
+            angle = float(msg.angle_min + (index * msg.angle_increment))
+            points.append(
+                BrightPoint(
+                    index=int(index),
+                    angle=angle,
+                    range_value=distance,
+                    x=float(distance * math.cos(angle)),
+                    y=float(distance * math.sin(angle)),
+                    intensity=float(msg.intensities[index]),
+                )
+            )
+        return points
+
+    def _dbscan_cluster_eps_m(self) -> float:
+        try:
+            legacy_eps = float(self.eps)
+        except Exception:
+            legacy_eps = float(self.hotspot_merge_max_distance_m)
+        if not math.isfinite(legacy_eps) or legacy_eps <= 0.0:
+            legacy_eps = float(self.hotspot_merge_max_distance_m)
+        return max(
+            max(0.005, float(self.dbscan_eps_min_m)),
+            min(float(self.hotspot_merge_max_distance_m), float(legacy_eps)),
+        )
+
+    def _dbscan_core_min_samples(self) -> int:
+        requested_values = []
+        for raw_value in (getattr(self, 'min_samples', None), getattr(self, 'min_sample', None)):
+            try:
+                requested_values.append(int(raw_value))
+            except Exception:
+                continue
+        if requested_values and min(requested_values) <= 1:
+            return 1
+        # Shelf reflectors often occupy only a couple of adjacent bins. Keep DBSCAN
+        # meaningful, but do not require the old large legacy values.
+        return 2
+
+    def _cluster_bright_points_dbscan(
+        self,
+        msg: LaserScan,
+        bright_points: Sequence[BrightPoint],
+    ) -> List[List[BrightPoint]]:
+        if not bright_points:
+            return []
+
+        cluster_eps = self._dbscan_cluster_eps_m()
+        core_min_samples = self._dbscan_core_min_samples()
+        visited = [False] * len(bright_points)
+        clustered = [False] * len(bright_points)
+        neighbor_cache: Dict[int, List[int]] = {}
+        clusters: List[List[BrightPoint]] = []
+
+        for seed_idx in range(len(bright_points)):
+            if visited[seed_idx]:
+                continue
+            visited[seed_idx] = True
+            seed_neighbors = self._dbscan_neighbor_indices(
+                msg,
+                bright_points,
+                seed_idx,
+                cluster_eps,
+                neighbor_cache,
+            )
+            if len(seed_neighbors) < core_min_samples:
+                continue
+
+            cluster_members = [seed_idx]
+            clustered[seed_idx] = True
+            pending = list(seed_neighbors)
+            pending_set = set(int(v) for v in pending)
+
+            while pending:
+                candidate_idx = int(pending.pop())
+                pending_set.discard(candidate_idx)
+
+                if not visited[candidate_idx]:
+                    visited[candidate_idx] = True
+                    candidate_neighbors = self._dbscan_neighbor_indices(
+                        msg,
+                        bright_points,
+                        candidate_idx,
+                        cluster_eps,
+                        neighbor_cache,
+                    )
+                    if len(candidate_neighbors) >= core_min_samples:
+                        for neighbor_idx in candidate_neighbors:
+                            if neighbor_idx not in pending_set:
+                                pending.append(neighbor_idx)
+                                pending_set.add(int(neighbor_idx))
+
+                if not clustered[candidate_idx]:
+                    clustered[candidate_idx] = True
+                    cluster_members.append(candidate_idx)
+
+            clusters.append(
+                [bright_points[idx] for idx in sorted(set(cluster_members))]
+            )
+
+        # Rescue isolated single-beam reflectors when their intensity clearly stands out.
+        for point_idx, point in enumerate(bright_points):
+            if clustered[point_idx]:
+                continue
+            if not self._run_is_valid_candidate(
+                msg,
+                [int(point.index)],
+                intensity_threshold=float(self.last_effective_intensity_threshold),
+            ):
+                continue
+            clusters.append([point])
+
+        return clusters
+
+    def _dbscan_neighbor_indices(
+        self,
+        msg: LaserScan,
+        bright_points: Sequence[BrightPoint],
+        seed_idx: int,
+        cluster_eps: float,
+        cache: Dict[int, List[int]],
+    ) -> List[int]:
+        cached = cache.get(int(seed_idx))
+        if cached is not None:
+            return list(cached)
+
+        seed_point = bright_points[seed_idx]
+        neighbors: List[int] = []
+        for candidate_idx, candidate in enumerate(bright_points):
+            pair_eps = compute_range_aware_dbscan_eps(
+                base_eps_m=float(cluster_eps),
+                eps_min_m=float(self.dbscan_eps_min_m),
+                angular_scale=float(self.dbscan_eps_angular_scale),
+                angle_increment=float(msg.angle_increment),
+                range_a=float(seed_point.range_value),
+                range_b=float(candidate.range_value),
+            )
+            if self._distance((seed_point.x, seed_point.y), (candidate.x, candidate.y)) <= pair_eps:
+                neighbors.append(int(candidate_idx))
+
+        cache[int(seed_idx)] = list(neighbors)
+        return neighbors
+
+    def _bright_points_to_hotspot(
+        self,
+        cluster: Sequence[BrightPoint],
+    ) -> Optional[Hotspot]:
+        if not cluster:
+            return None
+
+        total_weight = 0.0
+        weighted_angle_x = 0.0
+        weighted_angle_y = 0.0
+        weighted_x = 0.0
+        weighted_y = 0.0
+        weighted_range = 0.0
+        peak_intensity = -math.inf
+        bright_indices: List[int] = []
+
+        for point in cluster:
+            weight = max(float(point.intensity), 1.0)
+            total_weight += weight
+            weighted_angle_x += math.cos(point.angle) * weight
+            weighted_angle_y += math.sin(point.angle) * weight
+            weighted_x += float(point.x) * weight
+            weighted_y += float(point.y) * weight
+            weighted_range += float(point.range_value) * weight
+            peak_intensity = max(peak_intensity, float(point.intensity))
+            bright_indices.append(int(point.index))
+
+        if total_weight <= 0.0:
+            return None
+
+        angle = math.atan2(weighted_angle_y, weighted_angle_x)
+        return Hotspot(
+            start_idx=int(min(bright_indices)),
+            end_idx=int(max(bright_indices)),
+            bright_indices=tuple(sorted(set(bright_indices))),
+            angle=float(angle),
+            range_value=float(weighted_range / total_weight),
+            x=float(weighted_x / total_weight),
+            y=float(weighted_y / total_weight),
+            peak_intensity=float(peak_intensity),
+            synthetic=False,
+        )
+
+    def _bin_is_bright(
+        self,
+        msg: LaserScan,
+        index: int,
+        *,
+        intensity_threshold: Optional[float] = None,
+    ) -> bool:
         if index < 0 or index >= len(msg.ranges) or index >= len(msg.intensities):
             return False
         distance = float(msg.ranges[index])
         intensity = float(msg.intensities[index])
         if not math.isfinite(distance) or distance <= 0.0:
             return False
-        if not math.isfinite(intensity) or intensity < self.intensity_threshold:
+        effective_threshold = (
+            float(self.intensity_threshold)
+            if intensity_threshold is None
+            else float(intensity_threshold)
+        )
+        if not math.isfinite(intensity) or intensity < effective_threshold:
             return False
         angle = msg.angle_min + index * msg.angle_increment
         x = distance * math.cos(angle)
@@ -1042,7 +1435,13 @@ class ShelfDetectorNode(Node):
             return False
         return True
 
-    def _run_is_valid_candidate(self, msg: LaserScan, run: Sequence[int]) -> bool:
+    def _run_is_valid_candidate(
+        self,
+        msg: LaserScan,
+        run: Sequence[int],
+        *,
+        intensity_threshold: Optional[float] = None,
+    ) -> bool:
         if len(run) >= 2:
             return True
         if len(run) != 1:
@@ -1055,13 +1454,18 @@ class ShelfDetectorNode(Node):
         center = float(msg.intensities[index])
         left = float(msg.intensities[index - 1])
         right = float(msg.intensities[index + 1])
+        effective_threshold = (
+            float(self.intensity_threshold)
+            if intensity_threshold is None
+            else float(intensity_threshold)
+        )
         return (
-            center >= (self.intensity_threshold + self.single_bin_hotspot_boost)
-            and left < self.intensity_threshold
-            and right < self.intensity_threshold
+            center >= (effective_threshold + self.single_bin_hotspot_boost)
+            and left < effective_threshold
+            and right < effective_threshold
             and center > left
             and center > right
-            and self._bin_is_bright(msg, index)
+            and self._bin_is_bright(msg, index, intensity_threshold=effective_threshold)
         )
 
     def _hotspot_from_run(self, msg: LaserScan, run: Sequence[int]) -> Optional[Hotspot]:
@@ -1273,6 +1677,10 @@ class ShelfDetectorNode(Node):
             back_right_point,
         )
 
+        center = self._quadrilateral_center_from_diagonals(
+            ordered_points,
+            fallback_center=center,
+        )
         yaw = math.atan2(axis_y, axis_x)
         front_intensity_sum = float(front_left.peak_intensity + front_right.peak_intensity)
         back_intensity_sum = 0.0
@@ -1439,8 +1847,8 @@ class ShelfDetectorNode(Node):
             return None, 'ambiguous_ordering'
 
         center = (
-            sum(point[0] for point in points) / 4.0,
-            sum(point[1] for point in points) / 4.0,
+            (float(front_mid[0]) + float(back_mid[0])) * 0.5,
+            (float(front_mid[1]) + float(back_mid[1])) * 0.5,
         )
         left_normal = (-axis_y / axis_norm, axis_x / axis_norm)
 
@@ -1488,6 +1896,10 @@ class ShelfDetectorNode(Node):
         if self._polygon_area(ordered_polygon) < self.degenerate_area_threshold_m2:
             return None, 'degenerate_geometry'
 
+        center = self._quadrilateral_center_from_diagonals(
+            ordered_points,
+            fallback_center=center,
+        )
         yaw = math.atan2(back_mid[1] - front_mid[1], back_mid[0] - front_mid[0])
         front_intensity_sum = float(front_left.peak_intensity + front_right.peak_intensity)
         back_intensity_sum = float(back_left.peak_intensity + back_right.peak_intensity)
@@ -1582,12 +1994,6 @@ class ShelfDetectorNode(Node):
                 / max(front_intensity_sum, back_intensity_sum, 1.0)
             )
             has_synthetic = any(bool(item.synthetic) for item in (*front_pair, *back_pair))
-            if (
-                self.pairing_require_front_brighter
-                and not has_synthetic
-                and intensity_gap_ratio < float(self.pairing_front_back_intensity_margin)
-            ):
-                continue
 
             avg_width = 0.5 * (width_a + width_b)
             key = (
@@ -1863,16 +2269,32 @@ class ShelfDetectorNode(Node):
         }
         return float(self._clamp01(confidence)), components
 
-    def _is_manual_commit_ready(self, now: Optional[Time] = None) -> bool:
+    def _manual_commit_gate_status(self, now: Optional[Time] = None) -> Tuple[bool, str]:
         current_time = now or self.get_clock().now()
         self.candidate_fresh = self._is_candidate_fresh(current_time)
-        return bool(
-            self.detector_enabled
-            and
-            self.candidate_pose
-            and self.candidate_fresh
-            and self.solver_ok
+        max_sigma_yaw_rad = math.radians(max(0.0, float(self.commit_max_sigma_yaw_deg)))
+        ready, reason = evaluate_commit_gate(
+            detector_enabled=bool(self.detector_enabled),
+            candidate_present=self.candidate_pose is not None,
+            candidate_fresh=bool(self.candidate_fresh),
+            solver_ok=bool(self.solver_ok),
+            candidate_consistent=bool(self.candidate_consistent),
+            candidate_hotspot_count=int(self.candidate_hotspot_count),
+            min_hotspot_count=int(self.commit_min_hotspot_count),
+            candidate_confidence=float(self.candidate_confidence),
+            min_confidence=float(self.commit_min_confidence),
+            candidate_sigma_x=float(self.candidate_sigma_x),
+            max_sigma_x_m=float(self.commit_max_sigma_x_m),
+            candidate_sigma_y=float(self.candidate_sigma_y),
+            max_sigma_y_m=float(self.commit_max_sigma_y_m),
+            candidate_sigma_yaw=float(self.candidate_sigma_yaw),
+            max_sigma_yaw_rad=max_sigma_yaw_rad,
         )
+        return bool(ready), str(reason)
+
+    def _is_manual_commit_ready(self, now: Optional[Time] = None) -> bool:
+        ready, _reason = self._manual_commit_gate_status(now)
+        return bool(ready)
 
     def _set_invalid_candidate(
         self,
@@ -2791,10 +3213,20 @@ class ShelfDetectorNode(Node):
         payload: Dict[str, Any] = {
             'shelf_detected': bool(self.candidate_valid),
             'detector_enabled': bool(self.detector_enabled),
+            'clustering_method': 'dbscan',
+            'cluster_eps_m': float(self._dbscan_cluster_eps_m()),
+            'cluster_core_min_samples': int(self._dbscan_core_min_samples()),
+            'dbscan_eps_min_m': float(self.dbscan_eps_min_m),
+            'dbscan_eps_angular_scale': float(self.dbscan_eps_angular_scale),
             'candidate_valid': bool(self.candidate_valid),
             'candidate_fresh': bool(self.candidate_fresh),
             'candidate_consistent': bool(self.candidate_consistent),
             'candidate_age_sec': self._age_seconds(now, self.candidate_scan_time),
+            'base_intensity_threshold': float(self.intensity_threshold),
+            'effective_intensity_threshold': float(self.last_effective_intensity_threshold),
+            'adaptive_intensity_threshold_enabled': bool(self.adaptive_intensity_threshold_enabled),
+            'adaptive_intensity_percentile': float(self.adaptive_intensity_percentile),
+            'adaptive_intensity_scale': float(self.adaptive_intensity_scale),
             'hotspot_count': int(self.hotspot_count),
             'candidate_hotspot_count': int(self.candidate_hotspot_count),
             'solver_ok': bool(self.solver_ok),
@@ -2813,6 +3245,11 @@ class ShelfDetectorNode(Node):
             'candidate_sigma_x': float(self.candidate_sigma_x),
             'candidate_sigma_y': float(self.candidate_sigma_y),
             'candidate_sigma_yaw': float(self.candidate_sigma_yaw),
+            'commit_min_hotspot_count': int(self.commit_min_hotspot_count),
+            'commit_min_confidence': float(self.commit_min_confidence),
+            'commit_max_sigma_x_m': float(self.commit_max_sigma_x_m),
+            'commit_max_sigma_y_m': float(self.commit_max_sigma_y_m),
+            'commit_max_sigma_yaw_deg': float(self.commit_max_sigma_yaw_deg),
             'candidate_uncertainty_samples': int(self.candidate_uncertainty_samples),
             'hotspot_points': self._hotspots_to_dicts(self.latest_hotspots),
             'candidate_front_width_m': self._pair_width(self.candidate_pose, 0, 1),
@@ -2961,6 +3398,57 @@ class ShelfDetectorNode(Node):
     @staticmethod
     def _midpoint(point_a: Tuple[float, float], point_b: Tuple[float, float]) -> Tuple[float, float]:
         return ((point_a[0] + point_b[0]) / 2.0, (point_a[1] + point_b[1]) / 2.0)
+
+    @staticmethod
+    def _line_intersection(
+        point_a: Tuple[float, float],
+        point_b: Tuple[float, float],
+        point_c: Tuple[float, float],
+        point_d: Tuple[float, float],
+    ) -> Optional[Tuple[float, float]]:
+        x1, y1 = float(point_a[0]), float(point_a[1])
+        x2, y2 = float(point_b[0]), float(point_b[1])
+        x3, y3 = float(point_c[0]), float(point_c[1])
+        x4, y4 = float(point_d[0]), float(point_d[1])
+
+        denom = ((x1 - x2) * (y3 - y4)) - ((y1 - y2) * (x3 - x4))
+        if abs(denom) <= 1e-9:
+            return None
+
+        det_ab = (x1 * y2) - (y1 * x2)
+        det_cd = (x3 * y4) - (y3 * x4)
+        px = ((det_ab * (x3 - x4)) - ((x1 - x2) * det_cd)) / denom
+        py = ((det_ab * (y3 - y4)) - ((y1 - y2) * det_cd)) / denom
+        return (float(px), float(py))
+
+    def _quadrilateral_center_from_diagonals(
+        self,
+        ordered_points: Sequence[Tuple[float, float]],
+        *,
+        fallback_center: Optional[Tuple[float, float]] = None,
+    ) -> Tuple[float, float]:
+        if len(ordered_points) != 4:
+            if fallback_center is not None:
+                return (float(fallback_center[0]), float(fallback_center[1]))
+            return (0.0, 0.0)
+
+        # ordered_points = (front_left, front_right, back_left, back_right)
+        intersection = self._line_intersection(
+            ordered_points[0],
+            ordered_points[3],
+            ordered_points[1],
+            ordered_points[2],
+        )
+        if intersection is not None:
+            return (float(intersection[0]), float(intersection[1]))
+
+        if fallback_center is not None:
+            return (float(fallback_center[0]), float(fallback_center[1]))
+
+        return (
+            sum(float(point[0]) for point in ordered_points) / 4.0,
+            sum(float(point[1]) for point in ordered_points) / 4.0,
+        )
 
     @staticmethod
     def _median(values: Sequence[float]) -> float:
