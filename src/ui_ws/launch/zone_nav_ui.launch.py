@@ -164,11 +164,11 @@ def generate_launch_description():
         ),
 
         Node(
-            package='next2_shelf',
-            executable='shelf_docking_sm',
-            name='shelf_docking_sm',
+            package='next2_shelf_simple',
+            executable='shelf_inserter',
+            name='shelf_inserter',
             output='screen',
-            parameters=[robot_yaml, {'use_sim_time': use_sim_time}]
+            parameters=[robot_yaml, {'use_sim_time': use_sim_time}],
         ),
 
         Node(

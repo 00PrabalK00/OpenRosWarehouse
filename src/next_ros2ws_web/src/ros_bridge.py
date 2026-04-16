@@ -4595,6 +4595,11 @@ class RosBridge(Node):
             '/shelf/set_enabled',
             callback_group=self.cb_group,
         )
+        self.shelf_simple_start_client = self.create_client(
+            Trigger,
+            '/shelf_simple/start',
+            callback_group=self.cb_group,
+        )
 
         self.get_map_layers_client = self.create_client(
             GetMapLayers,
@@ -11280,6 +11285,19 @@ class RosBridge(Node):
 
         success = bool(response.success)
         message = str(response.message or ('Shelf commit accepted' if success else 'Shelf commit failed'))
+
+        # After successful commit, trigger the simple shelf inserter
+        if success:
+            try:
+                self._call_service(
+                    self.shelf_simple_start_client,
+                    Trigger.Request(),
+                    wait_timeout=0.8,
+                    response_timeout=2.5,
+                )
+            except Exception:
+                pass  # inserter may not be running; commit still succeeded
+
         return self._ok(success, message, commit_transport='service', **status_payload)
 
     def set_shelf_detector_enabled(self, enabled: bool):
