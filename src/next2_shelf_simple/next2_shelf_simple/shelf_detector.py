@@ -403,7 +403,7 @@ class ShelfDetector(Node):
             yaw_offset, w_min, w_max)
 
     def _solve_2(self, centroids, intensities, yaw_offset, w_min, w_max):
-        """2 centroids: treat as width pair, compute midpoint + bearing as yaw."""
+        """2 centroids: treat as width pair, compute midpoint + perpendicular yaw."""
         w = _dist(centroids[0], centroids[1])
         if not (w_min <= w <= w_max):
             return None
@@ -411,10 +411,19 @@ class ShelfDetector(Node):
         mx = (centroids[0][0] + centroids[1][0]) / 2
         my = (centroids[0][1] + centroids[1][1]) / 2
 
-        # Yaw = bearing from robot (origin) to midpoint
-        # In base_link frame: positive x = forward, so atan2(my, mx) gives
-        # the angle the robot needs to face to point at the shelf
-        yaw = _normalize(math.atan2(my, mx))
+        # The pair line connects the two reflectors (the shelf opening edge).
+        # We need the yaw PERPENDICULAR to this line, pointing from robot into shelf.
+        dx = centroids[1][0] - centroids[0][0]
+        dy = centroids[1][1] - centroids[0][1]
+        # Perpendicular direction: rotate pair vector 90° — two options (±90°)
+        perp_a = _normalize(math.atan2(dx, -dy))   # +90° rotation
+        perp_b = _normalize(math.atan2(-dx, dy))    # -90° rotation
+        # Pick the one that points from robot (origin) toward the midpoint
+        bearing = math.atan2(my, mx)
+        if abs(_normalize(perp_a - bearing)) < abs(_normalize(perp_b - bearing)):
+            yaw = perp_a
+        else:
+            yaw = perp_b
 
         self.front_intensity_sum = sum(intensities)
         self.back_intensity_sum = 0.0
