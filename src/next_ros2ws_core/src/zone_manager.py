@@ -431,6 +431,9 @@ class ZoneManager(Node):
             0.0,
             float(self.declare_parameter('goal_pose_handoff_opening_width_margin', 0.04).value),
         )
+        self.goal_pose_handoff_footprint_half_width = float(
+            self.declare_parameter('goal_pose_handoff_footprint_half_width', -1.0).value
+        )
         self.goal_pose_handoff_local_insert_centerline_tolerance = max(
             0.01,
             float(self.declare_parameter('goal_pose_handoff_local_insert_centerline_tolerance', 0.05).value),
@@ -2329,6 +2332,16 @@ class ZoneManager(Node):
             return 0.0, 0.0, 0.0
 
         padding = max(0.0, float(getattr(self, 'zone_arrival_footprint_padding', 0.0)))
+        # Shelf-specific half_width override sourced from URDF (physical truth).
+        # The zone_arrival_footprint_polygon is visual-only; when this override
+        # is set (> 0) it replaces the polygon lateral extent with no extra padding.
+        shelf_hw_override = float(getattr(self, 'goal_pose_handoff_footprint_half_width', -1.0))
+        if shelf_hw_override > 0.0:
+            return (
+                max(0.0, forward_extent + padding),
+                max(0.0, rear_extent + padding),
+                float(shelf_hw_override),
+            )
         return (
             max(0.0, forward_extent + padding),
             max(0.0, rear_extent + padding),
@@ -2793,12 +2806,24 @@ class ZoneManager(Node):
                 if refined_plan is None:
                     self._clear_active_goal_marker()
                     return False, refined_plan_err
-                plan = refined_plan
-                self.get_logger().info(
-                    f'Frozen shelf insert: refined live geometry target to '
-                    f'({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
-                    f'heading={math.degrees(plan.final_pose.yaw):.1f}deg for "{target_label}"'
+                # Guard against yaw flip: reject refinement if yaw changed >90°
+                # from committed plan (indicates front/back reflector swap).
+                yaw_jump = self._abs_angle_delta(
+                    refined_plan.final_pose.yaw, plan.final_pose.yaw
                 )
+                if yaw_jump > math.pi / 2.0:
+                    self.get_logger().warn(
+                        f'Frozen shelf insert: rejected live refinement — yaw jumped '
+                        f'{math.degrees(yaw_jump):.0f}deg (likely front/back flip). '
+                        f'Keeping committed plan for "{target_label}".'
+                    )
+                else:
+                    plan = refined_plan
+                    self.get_logger().info(
+                        f'Frozen shelf insert: refined live geometry target to '
+                        f'({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
+                        f'heading={math.degrees(plan.final_pose.yaw):.1f}deg for "{target_label}"'
+                    )
             elif refine_err:
                 self.get_logger().debug(
                     f'Frozen shelf insert kept precomputed target for "{target_label}": {refine_err}'
@@ -3223,7 +3248,15 @@ class ZoneManager(Node):
                             ) / denom,
                         )
                         linear_x *= max(0.10, 1.0 - (0.90 * lat_ratio))
-                    angular_z = 0.0
+                    # Gentle steering correction: steer toward shelf centerline
+                    # and correct heading drift during straight insertion.
+                    bearing_gain = max(0.80, float(self.goal_pose_handoff_local_insert_bearing_gain))
+                    drive_steer = (
+                        (-lateral_error * bearing_gain)
+                        + (heading_error * min(heading_gain, 0.40))
+                    )
+                    max_drive_turn = 0.15  # rad/s — keep gentle during insertion
+                    angular_z = self._clamp(drive_steer, -max_drive_turn, max_drive_turn)
 
                 if insertion_state != last_logged_state:
                     self.get_logger().info(

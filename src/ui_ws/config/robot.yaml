@@ -193,7 +193,7 @@ zone_manager:
     goal_pose_handoff_local_insert_enabled : true
     goal_pose_handoff_local_insert_safety_override_enabled : false  # keep shelf insertion independent from safety override
     goal_pose_handoff_local_insert_speed : 0.05              # m/s  minimum speed (final few cm)
-    goal_pose_handoff_local_insert_max_speed : 0.20          # m/s  cruise speed cap (user request)
+    goal_pose_handoff_local_insert_max_speed : 0.10          # m/s  cruise speed cap — slow entry for accuracy
     goal_pose_handoff_local_insert_max_turn : 0.55           # rad/s  keep insertion steering controlled
     goal_pose_handoff_local_insert_bearing_gain : 2.2        # steer toward shelf centerline
     goal_pose_handoff_local_insert_final_heading_gain : 0.60 # keep body aligned to shelf heading
@@ -208,8 +208,8 @@ zone_manager:
     goal_pose_handoff_local_insert_distance : 0.50           # m  distance from inner shelf target back to the shelf opening centerline
     goal_pose_handoff_local_insert_centerline_tolerance : 0.05         # m  acceptable lateral offset at center
     goal_pose_handoff_local_insert_centerline_slowdown_tolerance : 0.10 # m  slow/rotate if wider than this
-    goal_pose_handoff_local_insert_timeout_sec : 0.0             # 0 disables timeout; prioritize convergence over speed
-    goal_pose_handoff_local_insert_no_progress_timeout_sec : 0.0 # 0 disables no-progress abort during careful shelf insertion
+    goal_pose_handoff_local_insert_timeout_sec : 15.0             # hard cap: abort if insertion takes longer than this
+    goal_pose_handoff_local_insert_no_progress_timeout_sec : 5.0  # abort if no forward/heading progress for this long
     goal_pose_handoff_local_insert_progress_epsilon_m : 0.005
     goal_pose_handoff_local_insert_loop_hz : 15.0
     goal_pose_handoff_retry_attempts : 3
@@ -232,15 +232,23 @@ zone_manager:
     follow_path_shelf_check_enable_settle_sec : 0.20
     follow_path_shelf_check_poll_sec : 0.10
     follow_path_shelf_docking_speed_cap : 0.10     # m/s cap for post-arrival shelf docking
-    goal_pose_handoff_verify_enabled : true
+    # Verify disabled: live LiDAR detection inside the shelf flips yaw 180°
+    # (robot now closer to back wall → near/far swap → reversed heading).
+    # That causes the correction loop to spin 180° × 2 corrections = 360°.
+    # Insertion already lands within tight tolerances (0.05m pos, 0.05m lat).
+    goal_pose_handoff_verify_enabled : false
     goal_pose_handoff_verify_wait_timeout_sec : 1.20
     goal_pose_handoff_verify_poll_sec : 0.05
     goal_pose_handoff_verify_max_corrections : 2
     goal_pose_handoff_verify_correction_timeout_sec : 0.0        # 0 disables timeout; let pre-insert centering finish accurately
     goal_pose_handoff_verify_no_progress_timeout_sec : 0.0       # 0 disables no-progress abort for slow centering moves
-    # Robot footprint used for arrival check (robot frame polygon, metres).
+    # Robot footprint polygon -- VISUAL display only, not used for physical clearance.
     zone_arrival_footprint_polygon     : '[[0.40, 0.37], [0.40, -0.37], [-0.40, -0.37], [-0.40, 0.37]]'
-    zone_arrival_footprint_padding     : 0.02   # m  extra margin beyond polygon
+    zone_arrival_footprint_padding     : 0.02   # m  extra margin beyond polygon (visual)
+    # Shelf entry clearance -- sourced from URDF (physical truth).
+    # chassis_width=0.58m → half=0.29m.  Margin adds safety buffer each side.
+    goal_pose_handoff_footprint_half_width  : 0.29   # m  URDF chassis half-width
+    goal_pose_handoff_opening_width_margin  : 0.02   # m  per-side clearance buffer → required = 0.62m
     # Maximum time for on-zone actions (e.g. lift up/down).
     zone_action_timeout_s              : 45.0   # s
 
