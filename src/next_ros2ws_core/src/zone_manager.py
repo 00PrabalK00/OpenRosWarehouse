@@ -21,7 +21,7 @@ from next_ros2ws_interfaces.srv import (
     GetZones, GetPaths, GetLayouts, RequestNavigation
 )
 from next_ros2ws_interfaces.action import GoToZone as GoToZoneAction, FollowPath as FollowPathAction
-from nav2_msgs.action import NavigateToPose, FollowPath as Nav2FollowPath
+from nav2_msgs.action import NavigateToPose, FollowPath as Nav2FollowPath, Spin as Nav2Spin
 from action_msgs.msg import GoalStatus
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
@@ -690,7 +690,6 @@ class ZoneManager(Node):
             1.0,
             float(self.declare_parameter('path_align_spin_time_allowance_sec', 12.0).value),
         )
-        # Legacy compatibility only: ALIGN_AT_POINT no longer dispatches Nav2Spin.
         # Stable-heading gate: the heading check only passes when N consecutive
         # readings are ALL within tolerance AND the spread between them is small.
         # This prevents a transient pass-through mid-spin from falsely clearing
@@ -718,6 +717,7 @@ class ZoneManager(Node):
         # Action clients for Nav2
         self.nav_client = ActionClient(self, NavigateToPose, self._endpoint('/navigate_to_pose'))
         self.nav_follow_path_client = ActionClient(self, Nav2FollowPath, self._endpoint('/follow_path'))
+        self.nav_spin_client = ActionClient(self, Nav2Spin, self._endpoint('/spin'))
         self.arbitrator_request_client = self.create_client(
             RequestNavigation,
             self._endpoint('/arbitrator/request_goal'),
@@ -4788,26 +4788,53 @@ class ZoneManager(Node):
                 if is_terminal_segment
                 else self.path_waypoint_tolerance
             )
+            max_nav2_success_mismatch = max(
+                strict_pos_tol,
+                float(getattr(self, 'path_nav2_success_max_mismatch_distance', strict_pos_tol)),
+            )
             center_dist = self._distance_to_goal(target_pose)
 
             if not math.isfinite(center_dist):
                 self.get_logger().warn(
                     f'Nav2 reported success for phase "{phase_label}" at waypoint '
-                    f'{waypoint_index + 1}/{total}; accepting Nav2 result without TF validation'
+                    f'{waypoint_index + 1}/{total}, but robot center could not be validated'
                 )
-                return ''
+                return (
+                    f'Phase "{phase_label}" finished but robot center could not be validated '
+                    f'at waypoint {waypoint_index + 1}/{total}'
+                )
 
             if center_dist <= strict_pos_tol:
                 return ''
 
             tol_label = 'final' if is_terminal_segment else 'waypoint'
+            if center_dist > max_nav2_success_mismatch:
+                self.get_logger().warn(
+                    f'Nav2 reported success for phase "{phase_label}" at waypoint '
+                    f'{waypoint_index + 1}/{total}, but robot center mismatch was '
+                    f'{center_dist:.3f}m > max allowed {max_nav2_success_mismatch:.3f}m '
+                    f'(strict {tol_label} tol {strict_pos_tol:.3f}m)'
+                )
+                return (
+                    f'Phase "{phase_label}" finished but robot center mismatch '
+                    f'{center_dist:.2f}m exceeds max allowed '
+                    f'{max_nav2_success_mismatch:.2f}m at waypoint '
+                    f'{waypoint_index + 1}/{total} (strict {tol_label} tol '
+                    f'{strict_pos_tol:.2f}m)'
+                )
+
             self.get_logger().warn(
                 f'Nav2 reported success for phase "{phase_label}" at waypoint '
-                f'{waypoint_index + 1}/{total}; accepting Nav2 result with '
-                f'diagnostic center mismatch {center_dist:.3f}m '
-                f'(configured {tol_label} tol {strict_pos_tol:.3f}m)'
+                f'{waypoint_index + 1}/{total}, but robot center is still '
+                f'{center_dist:.3f}m from target (strict {tol_label} tol '
+                f'{strict_pos_tol:.3f}m); retrying'
             )
-            return ''
+            return (
+                f'Phase "{phase_label}" finished with robot center still '
+                f'{center_dist:.2f}m from target at waypoint '
+                f'{waypoint_index + 1}/{total} (strict {tol_label} tol '
+                f'{strict_pos_tol:.2f}m)'
+            )
 
         def _semantic_align_target_at(index: int) -> Tuple[Optional[PoseStamped], float, str]:
             zone_name = _zone_name_at(index)
