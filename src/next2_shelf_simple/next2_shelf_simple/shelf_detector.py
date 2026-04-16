@@ -10,10 +10,12 @@ Pipeline (per scan):
   3. Compute centroid of each cluster
   4. If 4 clusters: pair into front/back by distance → shelf center + yaw
      If 2 clusters: use as one pair (width) → midpoint + yaw estimate
-  5. Publish /shelf/status_json, provide /shelf/commit and /shelf/set_enabled
+  5. Transform pose from laser frame → base_link so inserter gets robot-relative coords
+  6. Publish /shelf/status_json, provide /shelf/commit and /shelf/set_enabled
 
 The UI shelf popup reads status_json and calls commit/enable.
 The shelf_inserter reads status_json for live center_pose and committed_target_pose.
+All poses are published in base_link frame (x+ = robot forward).
 """
 
 import json
@@ -23,8 +25,11 @@ import time
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String
 from std_srvs.srv import Trigger, SetBool
+import tf2_ros
+from geometry_msgs.msg import PointStamped
+from tf2_geometry_msgs import do_transform_point
 
 
 def _normalize(a: float) -> float:
@@ -46,15 +51,16 @@ class ShelfDetector(Node):
 
         # --- Parameters ---
         self.declare_parameter('scan_topic', '/scan')
+        self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('intensity_threshold', 35.0)
         self.declare_parameter('proximity_threshold', 0.15)
         self.declare_parameter('min_cluster_points', 2)
-        self.declare_parameter('max_cluster_spread', 0.12)  # reject clusters wider than this
-        self.declare_parameter('expected_width_min', 0.55)   # shelf pair width range
+        self.declare_parameter('max_cluster_spread', 0.12)
+        self.declare_parameter('expected_width_min', 0.55)
         self.declare_parameter('expected_width_max', 0.85)
-        self.declare_parameter('expected_depth_min', 0.50)   # shelf depth range (front-back)
+        self.declare_parameter('expected_depth_min', 0.50)
         self.declare_parameter('expected_depth_max', 1.40)
-        self.declare_parameter('max_range', 2.5)             # ignore points beyond this
+        self.declare_parameter('max_range', 2.5)
         self.declare_parameter('status_topic', '/shelf/status_json')
         self.declare_parameter('publish_rate', 10.0)
 
@@ -62,12 +68,16 @@ class ShelfDetector(Node):
         for p in self._parameters:
             self._p[p] = self.get_parameter(p).value
 
+        # --- TF ---
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
         # --- State ---
         self.enabled = False
-        self.committed_pose = None   # frozen pose dict {x, y, yaw, frame_id}
-        self.live_pose = None        # latest per-scan pose dict
+        self.committed_pose = None
+        self.live_pose = None
         self.hotspot_count = 0
-        self.hotspot_points = []     # list of [x, y] for UI preview
+        self.hotspot_points = []
         self.max_intensity = 0.0
         self.last_reason = 'detector_disabled'
         self.last_solve_time = 0.0
@@ -87,13 +97,47 @@ class ShelfDetector(Node):
         self.enable_srv = self.create_service(
             SetBool, '/shelf/set_enabled', self._enable_cb)
 
-        # Publish status at fixed rate
         dt = 1.0 / self._p['publish_rate']
         self.status_timer = self.create_timer(dt, self._publish_status)
 
         self.get_logger().info(
             f'shelf_detector ready — scan={self._p["scan_topic"]} '
             f'intensity_thr={self._p["intensity_threshold"]}')
+
+    # ---- TF helper ----
+    def _transform_point(self, x, y, source_frame):
+        """Transform a point from source_frame to base_link. Returns (x, y) or None."""
+        base = self._p['base_frame']
+        if source_frame == base:
+            return (x, y)
+        try:
+            tf = self.tf_buffer.lookup_transform(base, source_frame, rclpy.time.Time())
+            pt = PointStamped()
+            pt.header.frame_id = source_frame
+            pt.point.x = x
+            pt.point.y = y
+            pt.point.z = 0.0
+            pt_out = do_transform_point(pt, tf)
+            return (pt_out.point.x, pt_out.point.y)
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            return None
+
+    def _get_yaw_offset(self, source_frame):
+        """Get the yaw rotation from source_frame to base_link."""
+        base = self._p['base_frame']
+        if source_frame == base:
+            return 0.0
+        try:
+            tf = self.tf_buffer.lookup_transform(base, source_frame, rclpy.time.Time())
+            q = tf.transform.rotation
+            # Extract yaw from quaternion
+            siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+            cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+            return math.atan2(siny_cosp, cosy_cosp)
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            return None
 
     # ---- Services ----
     def _commit_cb(self, req, resp):
@@ -140,20 +184,23 @@ class ShelfDetector(Node):
         if not self.enabled:
             return
 
-        # Step 1: intensity filter → Cartesian points with intensities
+        frame_id = msg.header.frame_id
+
+        # Step 1: intensity filter → Cartesian points in laser frame
         points, intensities = self._filter_points(msg)
-        self.hotspot_count = len(points)
         self.max_intensity = max(intensities) if intensities else 0.0
 
         if len(points) < 2:
             self.candidate_valid = False
             self.live_pose = None
+            self.hotspot_count = 0
             self.hotspot_points = []
             self.last_reason = f'too_few_points ({len(points)})'
             return
 
-        # Step 2: proximity grouping
+        # Step 2: proximity grouping (in laser frame)
         clusters, cluster_intensities = self._group_points(points, intensities)
+        self.hotspot_count = len(clusters)
 
         if len(clusters) < 2:
             self.candidate_valid = False
@@ -162,19 +209,34 @@ class ShelfDetector(Node):
             self.last_reason = f'too_few_clusters ({len(clusters)})'
             return
 
-        # Compute centroids
-        centroids = []
+        # Compute centroids in laser frame
+        centroids_laser = []
         centroid_intensities = []
         for cl, cl_int in zip(clusters, cluster_intensities):
             cx = sum(p[0] for p in cl) / len(cl)
             cy = sum(p[1] for p in cl) / len(cl)
-            centroids.append((cx, cy))
+            centroids_laser.append((cx, cy))
             centroid_intensities.append(sum(cl_int))
+
+        # Transform centroids to base_link
+        centroids = []
+        for c in centroids_laser:
+            transformed = self._transform_point(c[0], c[1], frame_id)
+            if transformed is None:
+                # TF not available yet — use laser frame as-is
+                centroids = centroids_laser
+                break
+            centroids.append(transformed)
 
         self.hotspot_points = [[c[0], c[1]] for c in centroids]
 
-        # Step 3: solve shelf geometry
-        pose = self._solve_shelf(centroids, centroid_intensities, msg.header.frame_id)
+        # Get yaw offset for transforming angles
+        yaw_offset = self._get_yaw_offset(frame_id)
+        if yaw_offset is None:
+            yaw_offset = 0.0
+
+        # Step 3: solve shelf geometry (in base_link frame)
+        pose = self._solve_shelf(centroids, centroid_intensities, yaw_offset)
 
         if pose is None:
             self.candidate_valid = False
@@ -227,7 +289,6 @@ class ShelfDetector(Node):
                 changed = False
                 still_remaining = []
                 for pt, inten in remaining:
-                    # Check distance to any point in the group
                     if any(_dist(pt, gp) < threshold for gp in group):
                         group.append(pt)
                         group_int.append(inten)
@@ -236,7 +297,6 @@ class ShelfDetector(Node):
                         still_remaining.append((pt, inten))
                 remaining = still_remaining
 
-            # Reject clusters that are too small or too spread out
             if len(group) < min_pts:
                 continue
             if len(group) >= 2:
@@ -251,13 +311,10 @@ class ShelfDetector(Node):
 
         return clusters, cluster_intensities
 
-    def _solve_shelf(self, centroids, centroid_intensities, frame_id):
+    def _solve_shelf(self, centroids, centroid_intensities, yaw_offset):
         """
-        Given 2-4 cluster centroids, compute shelf center + yaw.
-
-        4 clusters: find the two pairs that form width lines, compute center.
-        2 clusters: use as a single width pair, estimate center at midpoint.
-        3 clusters: try all 3 combinations of 2, pick best width pair.
+        Given 2-4 cluster centroids (already in base_link frame),
+        compute shelf center + yaw.
         """
         n = len(centroids)
         w_min = self._p['expected_width_min']
@@ -266,35 +323,30 @@ class ShelfDetector(Node):
         d_max = self._p['expected_depth_max']
 
         if n == 4:
-            return self._solve_4(centroids, centroid_intensities, frame_id,
+            return self._solve_4(centroids, centroid_intensities, yaw_offset,
                                  w_min, w_max, d_min, d_max)
         elif n == 3:
-            return self._solve_3(centroids, centroid_intensities, frame_id,
+            return self._solve_3(centroids, centroid_intensities, yaw_offset,
                                  w_min, w_max)
         elif n == 2:
-            return self._solve_2(centroids, centroid_intensities, frame_id,
+            return self._solve_2(centroids, centroid_intensities, yaw_offset,
                                  w_min, w_max)
         else:
             return None
 
-    def _solve_4(self, centroids, intensities, frame_id, w_min, w_max, d_min, d_max):
-        """4 centroids: try all pairings to find front/back width pairs."""
-        # Sort by distance from origin (closest = front)
+    def _solve_4(self, centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max):
+        """4 centroids: pair into front/back by distance from robot."""
         indexed = sorted(range(4), key=lambda i: math.hypot(*centroids[i]))
 
-        # Try the natural pairing: two closest = front pair, two farthest = back pair
         front_pair = [indexed[0], indexed[1]]
         back_pair = [indexed[2], indexed[3]]
 
         fw = _dist(centroids[front_pair[0]], centroids[front_pair[1]])
         bw = _dist(centroids[back_pair[0]], centroids[back_pair[1]])
 
-        # Validate widths
         if not (w_min <= fw <= w_max and w_min <= bw <= w_max):
-            # Try alternative pairings
-            return self._solve_2_best_pair(centroids, intensities, frame_id, w_min, w_max)
+            return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
 
-        # Validate depth (distance between front and back midpoints)
         fm = ((centroids[front_pair[0]][0] + centroids[front_pair[1]][0]) / 2,
               (centroids[front_pair[0]][1] + centroids[front_pair[1]][1]) / 2)
         bm = ((centroids[back_pair[0]][0] + centroids[back_pair[1]][0]) / 2,
@@ -302,16 +354,14 @@ class ShelfDetector(Node):
         depth = _dist(fm, bm)
 
         if not (d_min <= depth <= d_max):
-            return self._solve_2_best_pair(centroids, intensities, frame_id, w_min, w_max)
+            return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
 
-        # Shelf center = midpoint of front and back midpoints
         cx = (fm[0] + bm[0]) / 2
         cy = (fm[1] + bm[1]) / 2
 
-        # Yaw = direction from front midpoint to back midpoint (into the shelf)
-        yaw = math.atan2(bm[1] - fm[1], bm[0] - fm[0])
+        # Yaw = direction from front to back (into the shelf)
+        yaw = _normalize(math.atan2(bm[1] - fm[1], bm[0] - fm[0]))
 
-        # Intensity sums for front/back
         self.front_intensity_sum = sum(intensities[i] for i in front_pair)
         self.back_intensity_sum = sum(intensities[i] for i in back_pair)
 
@@ -321,17 +371,15 @@ class ShelfDetector(Node):
 
         return {
             'x': cx, 'y': cy, 'yaw': yaw,
-            'frame_id': frame_id,
+            'frame_id': self._p['base_frame'],
             'front_width': fw, 'back_width': bw,
             'depth': depth,
         }
 
-    def _solve_3(self, centroids, intensities, frame_id, w_min, w_max):
-        """3 centroids: find the best width pair out of 3 combinations."""
-        return self._solve_2_best_pair(centroids, intensities, frame_id, w_min, w_max)
+    def _solve_3(self, centroids, intensities, yaw_offset, w_min, w_max):
+        return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
 
-    def _solve_2_best_pair(self, centroids, intensities, frame_id, w_min, w_max):
-        """Find the best pair that matches expected width, use as front opening."""
+    def _solve_2_best_pair(self, centroids, intensities, yaw_offset, w_min, w_max):
         best = None
         best_err = float('inf')
         n = len(centroids)
@@ -352,21 +400,21 @@ class ShelfDetector(Node):
         return self._solve_2(
             [centroids[best[0]], centroids[best[1]]],
             [intensities[best[0]], intensities[best[1]]],
-            frame_id, w_min, w_max)
+            yaw_offset, w_min, w_max)
 
-    def _solve_2(self, centroids, intensities, frame_id, w_min, w_max):
-        """2 centroids: treat as width pair (front opening), compute midpoint + yaw."""
+    def _solve_2(self, centroids, intensities, yaw_offset, w_min, w_max):
+        """2 centroids: treat as width pair, compute midpoint + bearing as yaw."""
         w = _dist(centroids[0], centroids[1])
         if not (w_min <= w <= w_max):
             return None
 
-        # Midpoint = shelf opening center
         mx = (centroids[0][0] + centroids[1][0]) / 2
         my = (centroids[0][1] + centroids[1][1]) / 2
 
-        # Yaw = direction from robot to midpoint (into the shelf opening)
-        # This is the bearing to the center — points "into" the shelf from robot's viewpoint
-        yaw = math.atan2(my, mx)
+        # Yaw = bearing from robot (origin) to midpoint
+        # In base_link frame: positive x = forward, so atan2(my, mx) gives
+        # the angle the robot needs to face to point at the shelf
+        yaw = _normalize(math.atan2(my, mx))
 
         self.front_intensity_sum = sum(intensities)
         self.back_intensity_sum = 0.0
@@ -377,7 +425,7 @@ class ShelfDetector(Node):
 
         return {
             'x': mx, 'y': my, 'yaw': yaw,
-            'frame_id': frame_id,
+            'frame_id': self._p['base_frame'],
             'front_width': w, 'back_width': -1.0,
             'depth': -1.0,
         }

@@ -11339,6 +11339,7 @@ class RosBridge(Node):
         if isinstance(self.shelf_status, dict):
             status_payload.update(self.shelf_status)
         status_payload['shelf_detected'] = bool(status_payload.get('candidate_valid', False))
+        status_payload.pop('ok', None)
 
         return self._ok(
             True,
