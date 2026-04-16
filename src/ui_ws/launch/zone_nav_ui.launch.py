@@ -164,6 +164,14 @@ def generate_launch_description():
         ),
 
         Node(
+            package='next2_shelf',
+            executable='shelf_docking_sm',
+            name='shelf_docking_sm',
+            output='screen',
+            parameters=[robot_yaml, {'use_sim_time': use_sim_time}]
+        ),
+
+        Node(
             package='next_ros2ws_core',
             executable='navigation_arbitrator',
             name='navigation_arbitrator',

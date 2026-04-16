@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import rclpy
 from action_msgs.msg import GoalStatus
+from action_msgs.srv import CancelGoal
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -277,6 +278,35 @@ class NavigationArbitrator(Node):
             return None
 
     @staticmethod
+    def _classify_cancel_response(cancel_response) -> Tuple[str, str]:
+        if cancel_response is None:
+            return 'timeout', 'cancel request timed out'
+
+        try:
+            code = int(
+                getattr(
+                    cancel_response,
+                    'return_code',
+                    CancelGoal.Response.ERROR_REJECTED,
+                )
+            )
+        except Exception:
+            code = int(CancelGoal.Response.ERROR_REJECTED)
+
+        if code == int(CancelGoal.Response.ERROR_NONE):
+            goals_canceling = list(getattr(cancel_response, 'goals_canceling', []) or [])
+            if goals_canceling:
+                return 'accepted', f'cancel accepted ({len(goals_canceling)} goal(s) canceling)'
+            return 'accepted', 'cancel accepted'
+        if code == int(CancelGoal.Response.ERROR_GOAL_TERMINATED):
+            return 'terminal', 'goal already terminal'
+        if code == int(CancelGoal.Response.ERROR_UNKNOWN_GOAL_ID):
+            return 'unknown', 'goal no longer known by downstream action server'
+        if code == int(CancelGoal.Response.ERROR_REJECTED):
+            return 'rejected', 'downstream action server rejected cancel request'
+        return 'error', f'downstream cancel failed with code {code}'
+
+    @staticmethod
     def _follow_summary(goal_request) -> str:
         count = len(list(getattr(goal_request, 'waypoints', []) or []))
         return f'{count} waypoints'
@@ -455,14 +485,17 @@ class NavigationArbitrator(Node):
 
         cancel_future = downstream_goal_handle.cancel_goal_async()
         cancel_response = self._wait_future_blocking(cancel_future, 2.0)
-        if cancel_response is None:
+        outcome, detail = self._classify_cancel_response(cancel_response)
+        if outcome not in ('accepted', 'terminal'):
             response.ok = False
-            response.message = f'Timeout cancelling active {active_kind} request'
+            response.message = (
+                f'Cancel failed for active {active_kind}: {detail}'
+            )
             return response
 
         response.ok = True
         response.message = (
-            f'Cancel forwarded by {requester}: {active_kind} ({reason})'
+            f'Cancel forwarded by {requester}: {active_kind} ({reason}) - {detail}'
         )
         return response
 
@@ -520,13 +553,35 @@ class NavigationArbitrator(Node):
                 goal_handle.abort()
                 return result
 
-            self._set_downstream_goal_handle(token, downstream_goal_handle)
+            if not self._set_downstream_goal_handle(token, downstream_goal_handle):
+                try:
+                    cancel_future = downstream_goal_handle.cancel_goal_async()
+                    cancel_response = await self._wait_future_with_timeout(cancel_future, 2.0)
+                    outcome, detail = self._classify_cancel_response(cancel_response)
+                    if outcome not in ('accepted', 'terminal'):
+                        self.get_logger().warn(
+                            f'GoToZone downstream orphan cleanup failed for "{summary}": {detail}'
+                        )
+                except Exception:
+                    pass
+                result.success = False
+                result.message = 'Arbitrator request state changed during GoToZone dispatch'
+                goal_handle.abort()
+                return result
+
             result_future = downstream_goal_handle.get_result_async()
+            cancel_sent = False
 
             while not result_future.done():
-                if goal_handle.is_cancel_requested:
+                if goal_handle.is_cancel_requested and not cancel_sent:
+                    cancel_sent = True
                     cancel_future = downstream_goal_handle.cancel_goal_async()
-                    await self._wait_future_with_timeout(cancel_future, 2.0)
+                    cancel_response = await self._wait_future_with_timeout(cancel_future, 2.0)
+                    outcome, detail = self._classify_cancel_response(cancel_response)
+                    if outcome not in ('accepted', 'terminal'):
+                        self.get_logger().warn(
+                            f'GoToZone cancel forwarding failed for "{summary}": {detail}'
+                        )
                 await self._non_blocking_wait(0.05)
 
             wrapped = result_future.result()
@@ -536,7 +591,7 @@ class NavigationArbitrator(Node):
             result.success = bool(getattr(downstream_result, 'success', False))
             result.message = str(getattr(downstream_result, 'message', '') or '').strip()
 
-            if goal_handle.is_cancel_requested or status == GoalStatus.STATUS_CANCELED:
+            if status == GoalStatus.STATUS_CANCELED:
                 if not result.message:
                     result.message = 'GoToZone canceled by arbitrator'
                 goal_handle.canceled()
@@ -616,13 +671,36 @@ class NavigationArbitrator(Node):
                 goal_handle.abort()
                 return result
 
-            self._set_downstream_goal_handle(token, downstream_goal_handle)
+            if not self._set_downstream_goal_handle(token, downstream_goal_handle):
+                try:
+                    cancel_future = downstream_goal_handle.cancel_goal_async()
+                    cancel_response = await self._wait_future_with_timeout(cancel_future, 2.0)
+                    outcome, detail = self._classify_cancel_response(cancel_response)
+                    if outcome not in ('accepted', 'terminal'):
+                        self.get_logger().warn(
+                            f'FollowPath downstream orphan cleanup failed for {summary}: {detail}'
+                        )
+                except Exception:
+                    pass
+                result.success = False
+                result.completed = 0
+                result.message = 'Arbitrator request state changed during FollowPath dispatch'
+                goal_handle.abort()
+                return result
+
             result_future = downstream_goal_handle.get_result_async()
+            cancel_sent = False
 
             while not result_future.done():
-                if goal_handle.is_cancel_requested:
+                if goal_handle.is_cancel_requested and not cancel_sent:
+                    cancel_sent = True
                     cancel_future = downstream_goal_handle.cancel_goal_async()
-                    await self._wait_future_with_timeout(cancel_future, 2.0)
+                    cancel_response = await self._wait_future_with_timeout(cancel_future, 2.0)
+                    outcome, detail = self._classify_cancel_response(cancel_response)
+                    if outcome not in ('accepted', 'terminal'):
+                        self.get_logger().warn(
+                            f'FollowPath cancel forwarding failed for {summary}: {detail}'
+                        )
                 await self._non_blocking_wait(0.05)
 
             wrapped = result_future.result()
@@ -633,7 +711,7 @@ class NavigationArbitrator(Node):
             result.message = str(getattr(downstream_result, 'message', '') or '').strip()
             result.completed = int(getattr(downstream_result, 'completed', 0) or 0)
 
-            if goal_handle.is_cancel_requested or status == GoalStatus.STATUS_CANCELED:
+            if status == GoalStatus.STATUS_CANCELED:
                 if not result.message:
                     result.message = 'FollowPath canceled by arbitrator'
                 goal_handle.canceled()

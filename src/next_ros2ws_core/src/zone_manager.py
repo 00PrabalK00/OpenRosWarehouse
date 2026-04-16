@@ -21,7 +21,7 @@ from next_ros2ws_interfaces.srv import (
     GetZones, GetPaths, GetLayouts, RequestNavigation
 )
 from next_ros2ws_interfaces.action import GoToZone as GoToZoneAction, FollowPath as FollowPathAction
-from nav2_msgs.action import NavigateToPose, FollowPath as Nav2FollowPath
+from nav2_msgs.action import NavigateToPose, FollowPath as Nav2FollowPath, Spin as Nav2Spin
 from action_msgs.msg import GoalStatus
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
@@ -41,6 +41,18 @@ import os
 from tf2_ros import Buffer, TransformListener
 from .db_manager import DatabaseManager
 from .action_registry import ACTION_MAPPING_PREFIX, merge_action_mappings, normalize_action_id
+from next2_shelf.shelf_docking import (
+    Pose2D as ShelfPose2D,
+    RobotFootprint as ShelfRobotFootprint,
+    ShelfGeometry,
+    ShelfDockingParameters,
+    ShelfDockingPlan,
+    ShelfDockingPlanError,
+    assess_shelf_docking,
+    build_shelf_navigation_targets,
+    build_shelf_docking_plan,
+    pose_error_in_target_frame as shelf_pose_error_in_target_frame,
+)
 from .topic_catalog import (
     default_topics as catalog_default_topics,
     merge_topic_overrides,
@@ -102,6 +114,7 @@ class ZoneManager(Node):
 
     def __init__(self):
         super().__init__('zone_manager')
+        self._state_lock = threading.RLock()
 
         self.robot_namespace = self._normalize_robot_namespace(
             self.declare_parameter('robot_namespace', '').value
@@ -410,6 +423,14 @@ class ZoneManager(Node):
             0.0,
             float(self.declare_parameter('goal_pose_handoff_local_insert_distance', 0.35).value),
         )
+        self.goal_pose_handoff_entry_clearance_margin = max(
+            0.0,
+            float(self.declare_parameter('goal_pose_handoff_entry_clearance_margin', 0.04).value),
+        )
+        self.goal_pose_handoff_opening_width_margin = max(
+            0.0,
+            float(self.declare_parameter('goal_pose_handoff_opening_width_margin', 0.04).value),
+        )
         self.goal_pose_handoff_local_insert_centerline_tolerance = max(
             0.01,
             float(self.declare_parameter('goal_pose_handoff_local_insert_centerline_tolerance', 0.05).value),
@@ -443,8 +464,8 @@ class ZoneManager(Node):
             float(self.declare_parameter('goal_pose_handoff_retry_delay_sec', 0.75).value),
         )
         self.goal_pose_handoff_min_hotspot_count = max(
-            2,
-            int(self.declare_parameter('goal_pose_handoff_min_hotspot_count', 2).value),
+            3,
+            int(self.declare_parameter('goal_pose_handoff_min_hotspot_count', 3).value),
         )
         self.goal_pose_handoff_live_geometry_enabled = bool(
             self.declare_parameter('goal_pose_handoff_live_geometry_enabled', True).value
@@ -467,6 +488,36 @@ class ZoneManager(Node):
         self.goal_pose_handoff_local_insert_max_final_heading_correction = max(
             0.05,
             float(self.declare_parameter('goal_pose_handoff_local_insert_max_final_heading_correction', 0.30).value),
+        )
+        self.goal_pose_handoff_local_insert_yaw_gate = max(
+            0.02,
+            float(self.declare_parameter('goal_pose_handoff_local_insert_yaw_gate', math.radians(6.0)).value),
+        )
+        self.goal_pose_handoff_local_insert_hard_yaw_abort = max(
+            self.goal_pose_handoff_local_insert_yaw_gate,
+            float(
+                self.declare_parameter(
+                    'goal_pose_handoff_local_insert_hard_yaw_abort',
+                    math.radians(10.0),
+                ).value
+            ),
+        )
+        self.goal_pose_handoff_local_insert_lateral_gain = max(
+            0.10,
+            float(self.declare_parameter('goal_pose_handoff_local_insert_lateral_gain', 1.0).value),
+        )
+        self.goal_pose_handoff_local_insert_lookahead = max(
+            0.05,
+            float(self.declare_parameter('goal_pose_handoff_local_insert_lookahead', 0.35).value),
+        )
+        self.goal_pose_handoff_local_insert_inside_speed_scale = self._clamp(
+            float(self.declare_parameter('goal_pose_handoff_local_insert_inside_speed_scale', 0.60).value),
+            0.10,
+            1.0,
+        )
+        self.goal_pose_handoff_local_insert_entry_slow_speed = max(
+            0.02,
+            float(self.declare_parameter('goal_pose_handoff_local_insert_entry_slow_speed', 0.05).value),
         )
         self.follow_path_shelf_check_timeout_sec = max(
             0.5,
@@ -690,7 +741,6 @@ class ZoneManager(Node):
             1.0,
             float(self.declare_parameter('path_align_spin_time_allowance_sec', 12.0).value),
         )
-        # Legacy compatibility only: ALIGN_AT_POINT no longer dispatches Nav2Spin.
         # Stable-heading gate: the heading check only passes when N consecutive
         # readings are ALL within tolerance AND the spread between them is small.
         # This prevents a transient pass-through mid-spin from falsely clearing
@@ -718,6 +768,7 @@ class ZoneManager(Node):
         # Action clients for Nav2
         self.nav_client = ActionClient(self, NavigateToPose, self._endpoint('/navigate_to_pose'))
         self.nav_follow_path_client = ActionClient(self, Nav2FollowPath, self._endpoint('/follow_path'))
+        self.nav_spin_client = ActionClient(self, Nav2Spin, self._endpoint('/spin'))
         self.arbitrator_request_client = self.create_client(
             RequestNavigation,
             self._endpoint('/arbitrator/request_goal'),
@@ -798,8 +849,6 @@ class ZoneManager(Node):
         self.lift_status_sub = self.create_subscription(
             Int32, _lift_topic, self._lift_status_callback, 10)
         
-        self.registry_schema_version = '2'
-
         # In-memory caches (Single Source of Truth for reads)
         self.zones = {'zones': {}}
         self.paths = {}
@@ -1139,7 +1188,77 @@ class ZoneManager(Node):
 
     def _set_estop_state_callback(self, msg: BoolMsg):
         """Mirror SafetyController E-STOP state for action-goal gating."""
-        self.estop_active = bool(msg.data)
+        new_state = bool(msg.data)
+        if new_state == self.estop_active:
+            return
+
+        self.estop_active = new_state
+        if new_state:
+            self.get_logger().warn(
+                'E-STOP activated: canceling active navigation and clearing shelf runtime state.'
+            )
+            self._clear_shelf_runtime_state(reason='E-STOP activated')
+        else:
+            self.get_logger().info('E-STOP cleared.')
+
+    def _disable_shelf_detector_async(self, reason: str) -> None:
+        service_name = str(self.shelf_detector_enable_service or '/shelf/set_enabled')
+        if not self.shelf_enable_client.wait_for_service(timeout_sec=0.0):
+            self.get_logger().warn(
+                f'{service_name} unavailable while clearing shelf state ({reason}).'
+            )
+            return
+
+        req = SetBool.Request()
+        req.data = False
+        future = self.shelf_enable_client.call_async(req)
+
+        def _done(fut):
+            try:
+                response = fut.result()
+            except Exception as exc:
+                self.get_logger().warn(
+                    f'{service_name} disable failed during {reason}: {exc}'
+                )
+                return
+
+            if response is None:
+                self.get_logger().warn(
+                    f'{service_name} disable returned no response during {reason}'
+                )
+                return
+
+            if bool(response.success):
+                self.get_logger().info(
+                    f'{service_name} disabled during {reason}: {response.message}'
+                )
+            else:
+                self.get_logger().warn(
+                    f'{service_name} rejected disable during {reason}: {response.message}'
+                )
+
+        future.add_done_callback(_done)
+
+    def _clear_shelf_runtime_state(self, *, reason: str) -> None:
+        self._publish_local_insert_twist(0.0, 0.0)
+        self._clear_active_goal_marker()
+        self._clear_active_follow_path()
+        self.latest_shelf_status = {}
+        self.latest_shelf_status_receipt_monotonic = 0.0
+
+        if self.go_to_next_ros2ws_goal is not None:
+            self._request_cancel_with_terminal_log(
+                self.go_to_next_ros2ws_goal,
+                f'{reason}: cancel active NavigateToPose goal',
+            )
+
+        if self.follow_path_nav_goal is not None:
+            self._request_cancel_with_terminal_log(
+                self.follow_path_nav_goal,
+                f'{reason}: cancel active FollowPath goal',
+            )
+
+        self._disable_shelf_detector_async(reason)
 
     def _obstacle_hold_state_callback(self, msg: BoolMsg):
         """Mirror effective obstacle distance hold state from SafetyController."""
@@ -1150,6 +1269,9 @@ class ZoneManager(Node):
         self.safety_override_owner_state = bool(msg.data)
 
     def _shelf_status_callback(self, msg: StringMsg):
+        if self.estop_active:
+            return
+
         try:
             payload = json.loads(str(msg.data or '{}'))
         except Exception as exc:
@@ -1216,9 +1338,22 @@ class ZoneManager(Node):
         if not isinstance(self.latest_shelf_status, dict) or not self.latest_shelf_status:
             return None
 
-        pose_dict = self.latest_shelf_status.get('committed_target_pose')
+        pose_dict = None
+        if self._shelf_candidate_ready():
+            live_pose_dict = self.latest_shelf_status.get('center_pose')
+            if isinstance(live_pose_dict, dict) and live_pose_dict:
+                pose_dict = live_pose_dict
+
         if not isinstance(pose_dict, dict) or not pose_dict:
-            pose_dict = self.latest_shelf_status.get('center_pose')
+            committed_pose_dict = self.latest_shelf_status.get('committed_target_pose')
+            if isinstance(committed_pose_dict, dict) and committed_pose_dict:
+                pose_dict = committed_pose_dict
+
+        if not isinstance(pose_dict, dict) or not pose_dict:
+            live_pose_dict = self.latest_shelf_status.get('center_pose')
+            if isinstance(live_pose_dict, dict) and live_pose_dict:
+                pose_dict = live_pose_dict
+
         if not isinstance(pose_dict, dict) or not pose_dict:
             return None
 
@@ -1262,8 +1397,8 @@ class ZoneManager(Node):
             transform = self.tf_buffer.lookup_transform(
                 target_frame,
                 source_frame,
-                Time(),
-                timeout=Duration(seconds=0.30),
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.30),
             )
         except Exception as exc:
             self.get_logger().warn(
@@ -1489,40 +1624,49 @@ class ZoneManager(Node):
         self,
         goal_pose: PoseStamped,
     ) -> Tuple[Optional[Dict[str, float]], str]:
-        frame_id = str(goal_pose.header.frame_id or 'map') or 'map'
-        robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.15)
+        return self._pose_error_in_target_frame(goal_pose)
+
+    def _pose_error_in_target_frame(
+        self,
+        target_pose: PoseStamped,
+        *,
+        robot_pose: Optional[PoseStamped] = None,
+        robot_timeout_sec: float = 0.15,
+    ) -> Tuple[Optional[Dict[str, float]], str]:
+        """Return robot error expressed in the target pose frame.
+
+        This is equivalent to transforming the robot pose from the global frame
+        into the shelf insertion frame whose origin is at ``target_pose`` and
+        whose +X axis follows the target yaw.
+        """
+        frame_id = str(target_pose.header.frame_id or 'map') or 'map'
+        if robot_pose is None:
+            robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=robot_timeout_sec)
         if robot_pose is None:
             return None, f'Unable to resolve robot pose in {frame_id}'
-
-        goal_yaw = self._yaw_from_quaternion(
-            float(goal_pose.pose.orientation.x),
-            float(goal_pose.pose.orientation.y),
-            float(goal_pose.pose.orientation.z),
-            float(goal_pose.pose.orientation.w),
-        )
-        robot_yaw = self._yaw_from_quaternion(
-            float(robot_pose.pose.orientation.x),
-            float(robot_pose.pose.orientation.y),
-            float(robot_pose.pose.orientation.z),
-            float(robot_pose.pose.orientation.w),
-        )
-
-        dx = float(goal_pose.pose.position.x) - float(robot_pose.pose.position.x)
-        dy = float(goal_pose.pose.position.y) - float(robot_pose.pose.position.y)
-        goal_forward_x = math.cos(goal_yaw)
-        goal_forward_y = math.sin(goal_yaw)
-        goal_left_x = -goal_forward_y
-        goal_left_y = goal_forward_x
+        target_pose2d = self._pose_stamped_to_shelf_pose2d(target_pose)
+        robot_pose2d = self._pose_stamped_to_shelf_pose2d(robot_pose)
+        try:
+            target_error = shelf_pose_error_in_target_frame(
+                robot_pose2d,
+                target_pose2d,
+            )
+        except ShelfDockingPlanError as exc:
+            return None, str(exc)
 
         return {
-            'distance': float(math.hypot(dx, dy)),
-            'longitudinal_error': float((dx * goal_forward_x) + (dy * goal_forward_y)),
-            'lateral_error': float((dx * goal_left_x) + (dy * goal_left_y)),
-            'heading_error': float(self._signed_angle_delta(robot_yaw, goal_yaw)),
-            'goal_yaw': float(goal_yaw),
-            'robot_yaw': float(robot_yaw),
-            'dx': float(dx),
-            'dy': float(dy),
+            'distance': float(target_error.distance),
+            'longitudinal_error': float(target_error.forward_error),
+            'lateral_error': float(target_error.left_error),
+            'forward_error': float(target_error.forward_error),
+            'left_error': float(target_error.left_error),
+            'heading_error': float(target_error.heading_error),
+            'goal_yaw': float(target_pose2d.yaw),
+            'target_yaw': float(target_pose2d.yaw),
+            'robot_yaw': float(robot_pose2d.yaw),
+            'dx': float(target_error.dx),
+            'dy': float(target_error.dy),
+            'target_frame_id': frame_id,
         }, ''
 
     @staticmethod
@@ -2172,6 +2316,40 @@ class ZoneManager(Node):
             )
             return float('inf')
 
+    def _robot_footprint_extents(self) -> Tuple[float, float, float]:
+        footprint_local = list(getattr(self, 'zone_arrival_footprint', []) or [])
+        if len(footprint_local) < 3:
+            return 0.0, 0.0, 0.0
+
+        try:
+            forward_extent = max(float(point[0]) for point in footprint_local)
+            rear_extent = max(-float(point[0]) for point in footprint_local)
+            half_width = max(abs(float(point[1])) for point in footprint_local)
+        except Exception:
+            return 0.0, 0.0, 0.0
+
+        padding = max(0.0, float(getattr(self, 'zone_arrival_footprint_padding', 0.0)))
+        return (
+            max(0.0, forward_extent + padding),
+            max(0.0, rear_extent + padding),
+            max(0.0, half_width + padding),
+        )
+
+    def _current_shelf_opening_width(self) -> Optional[float]:
+        payload = self.latest_shelf_status
+        if not isinstance(payload, dict) or not payload:
+            return None
+
+        for key in ('preferred_front_width_m', 'candidate_front_width_m', 'front_width_m'):
+            try:
+                value = float(payload.get(key, float('nan')))
+            except Exception:
+                continue
+            if math.isfinite(value) and value > 0.0:
+                return float(value)
+
+        return None
+
     @staticmethod
     def _yaw_from_quaternion(x: float, y: float, z: float, w: float) -> float:
         siny_cosp = 2.0 * ((w * z) + (x * y))
@@ -2290,6 +2468,95 @@ class ZoneManager(Node):
         copied.pose.orientation.w = float(pose.pose.orientation.w)
         return copied
 
+    def _pose_stamped_to_shelf_pose2d(self, pose: PoseStamped) -> ShelfPose2D:
+        return ShelfPose2D(
+            x=float(pose.pose.position.x),
+            y=float(pose.pose.position.y),
+            yaw=self._yaw_from_quaternion(
+                float(pose.pose.orientation.x),
+                float(pose.pose.orientation.y),
+                float(pose.pose.orientation.z),
+                float(pose.pose.orientation.w),
+            ),
+            frame_id=str(pose.header.frame_id or 'map') or 'map',
+        )
+
+    def _shelf_pose2d_to_pose_stamped(self, pose: ShelfPose2D) -> PoseStamped:
+        stamped = PoseStamped()
+        stamped.header.frame_id = str(pose.frame_id or 'map') or 'map'
+        stamped.header.stamp = self.get_clock().now().to_msg()
+        stamped.pose.position.x = float(pose.x)
+        stamped.pose.position.y = float(pose.y)
+        stamped.pose.position.z = 0.0
+        stamped.pose.orientation.z = math.sin(float(pose.yaw) * 0.5)
+        stamped.pose.orientation.w = math.cos(float(pose.yaw) * 0.5)
+        self._ensure_pose_orientation(stamped.pose)
+        return stamped
+
+    def _build_shelf_docking_plan(
+        self,
+        final_pose: PoseStamped,
+    ) -> Tuple[Optional[ShelfDockingPlan], str, str]:
+        frame_id = str(final_pose.header.frame_id or 'map') or 'map'
+        goal_yaw = self._yaw_from_quaternion(
+            float(final_pose.pose.orientation.x),
+            float(final_pose.pose.orientation.y),
+            float(final_pose.pose.orientation.z),
+            float(final_pose.pose.orientation.w),
+        )
+
+        opening_line_pose = self._current_shelf_opening_pose(frame_id, goal_yaw)
+        opening_source = 'front_midpoint'
+        if opening_line_pose is None:
+            opening_line_pose = self._copy_pose_stamped(final_pose)
+            opening_line_pose.header.stamp = self.get_clock().now().to_msg()
+            insert_distance = max(0.0, float(self.goal_pose_handoff_local_insert_distance))
+            if insert_distance > 1e-6:
+                opening_line_pose.pose.position.x = (
+                    float(final_pose.pose.position.x)
+                    - (math.cos(goal_yaw) * insert_distance)
+                )
+                opening_line_pose.pose.position.y = (
+                    float(final_pose.pose.position.y)
+                    - (math.sin(goal_yaw) * insert_distance)
+                )
+            opening_source = 'offset_fallback'
+
+        footprint_forward_extent, footprint_rear_extent, footprint_half_width = (
+            self._robot_footprint_extents()
+        )
+        geometry = ShelfGeometry(
+            final_pose=self._pose_stamped_to_shelf_pose2d(final_pose),
+            opening_line_pose=self._pose_stamped_to_shelf_pose2d(opening_line_pose),
+            opening_width=self._current_shelf_opening_width(),
+        )
+        footprint = ShelfRobotFootprint(
+            forward_extent=float(footprint_forward_extent),
+            rear_extent=float(footprint_rear_extent),
+            half_width=float(footprint_half_width),
+        )
+        params = ShelfDockingParameters(
+            standoff_distance=float(self.goal_pose_handoff_standoff_distance),
+            insertion_extra_standoff=float(self.goal_pose_handoff_insertion_extra_standoff),
+            local_insert_distance=float(self.goal_pose_handoff_local_insert_distance),
+            approach_arrival_tolerance=float(self.goal_pose_handoff_approach_arrival_tolerance),
+            entry_clearance_margin=float(self.goal_pose_handoff_entry_clearance_margin),
+            opening_width_margin=float(self.goal_pose_handoff_opening_width_margin),
+            position_tolerance=max(
+                float(self.zone_position_tolerance),
+                float(self.goal_pose_handoff_local_insert_position_tolerance),
+            ),
+            centerline_tolerance=float(self.goal_pose_handoff_local_insert_centerline_tolerance),
+            centerline_slowdown_tolerance=float(
+                self.goal_pose_handoff_local_insert_centerline_slowdown_tolerance
+            ),
+            heading_tolerance=float(self.goal_pose_handoff_local_insert_heading_tolerance),
+        )
+        try:
+            return build_shelf_docking_plan(geometry, footprint, params), opening_source, ''
+        except ShelfDockingPlanError as exc:
+            return None, opening_source, str(exc)
+
     async def _execute_goal_pose_handoff_follow_path(
         self,
         goal_pose: PoseStamped,
@@ -2302,58 +2569,57 @@ class ZoneManager(Node):
         robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.30)
         if robot_pose is None:
             return False, f'Unable to resolve robot pose in {frame_id} for shelf handoff.'
-
-        goal_yaw = self._yaw_from_quaternion(
-            float(goal_pose.pose.orientation.x),
-            float(goal_pose.pose.orientation.y),
-            float(goal_pose.pose.orientation.z),
-            float(goal_pose.pose.orientation.w),
-        )
-
         final_pose = self._copy_pose_stamped(goal_pose)
         final_pose.header.stamp = self.get_clock().now().to_msg()
-
-        opening_pose = self._current_shelf_opening_pose(frame_id, goal_yaw)
-        if opening_pose is None:
-            opening_pose = self._copy_pose_stamped(goal_pose)
-            opening_pose.header.stamp = self.get_clock().now().to_msg()
-            insert_distance = max(0.0, float(self.goal_pose_handoff_local_insert_distance))
-            if insert_distance > 1e-6:
-                opening_pose.pose.position.x = float(goal_pose.pose.position.x) - (math.cos(goal_yaw) * insert_distance)
-                opening_pose.pose.position.y = float(goal_pose.pose.position.y) - (math.sin(goal_yaw) * insert_distance)
-            opening_source = 'offset_fallback'
-        else:
-            opening_source = 'front_midpoint'
-
-        approach_pose = self._copy_pose_stamped(opening_pose)
-        approach_pose.header.stamp = self.get_clock().now().to_msg()
-        standoff = max(0.0, float(self.goal_pose_handoff_standoff_distance))
-        extra_standoff = max(0.0, float(self.goal_pose_handoff_insertion_extra_standoff))
-        total_standoff = standoff + extra_standoff
-        if total_standoff > 1e-6:
-            approach_pose.pose.position.x = float(opening_pose.pose.position.x) - (math.cos(goal_yaw) * total_standoff)
-            approach_pose.pose.position.y = float(opening_pose.pose.position.y) - (math.sin(goal_yaw) * total_standoff)
+        plan, opening_source, plan_error = self._build_shelf_docking_plan(final_pose)
+        if plan is None:
+            self._clear_active_goal_marker()
+            return False, plan_error
+        robot_pose2d = self._pose_stamped_to_shelf_pose2d(robot_pose)
+        assessment = assess_shelf_docking(
+            robot_pose2d,
+            plan,
+            local_insert_distance=float(self.goal_pose_handoff_local_insert_distance),
+            approach_arrival_tolerance=float(self.goal_pose_handoff_approach_arrival_tolerance),
+        )
 
         self.get_logger().info(
-            f'Goal-pose handoff frozen FollowPath: center=({final_pose.pose.position.x:.2f}, '
-            f'{final_pose.pose.position.y:.2f}) opening=({opening_pose.pose.position.x:.2f}, '
-            f'{opening_pose.pose.position.y:.2f}) approach=({approach_pose.pose.position.x:.2f}, '
-            f'{approach_pose.pose.position.y:.2f}) heading={math.degrees(goal_yaw):.1f}deg '
-            f'standoff={total_standoff:.2f}m(base={standoff:.2f}+extra={extra_standoff:.2f}) '
+            f'Goal-pose handoff plan: center=({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
+            f'opening_line=({plan.opening_line_pose.x:.2f}, {plan.opening_line_pose.y:.2f}) '
+            f'entry=({plan.entry_pose.x:.2f}, {plan.entry_pose.y:.2f}) '
+            f'approach=({plan.approach_pose.x:.2f}, {plan.approach_pose.y:.2f}) '
+            f'heading={math.degrees(plan.final_pose.yaw):.1f}deg '
+            f'approach_offset={plan.approach_offset:.2f}m '
+            f'entry_guard={plan.entry_guard_distance:.2f}m '
+            f'entry_lat_tol={plan.entry_lateral_tolerance:.3f}m '
+            f'insert_lat_tol={plan.insert_lateral_tolerance:.3f}m '
             f'opening_source={opening_source}'
         )
+        if plan.opening_width is not None:
+            self.get_logger().info(
+                f'Shelf opening width={plan.opening_width:.2f}m '
+                f'required>={plan.required_opening_width:.2f}m '
+                f'usable_lateral_clearance={float(plan.usable_lateral_clearance or 0.0):.3f}m'
+            )
+        navigation_targets = build_shelf_navigation_targets(robot_pose2d, plan)
+        if navigation_targets:
+            self.get_logger().info(
+                'Shelf navigation targets: '
+                + ' -> '.join(
+                    f'{target.label}({target.pose.x:.2f},{target.pose.y:.2f})'
+                    for target in navigation_targets
+                )
+            )
+        else:
+            self.get_logger().info('Shelf navigation targets: robot already staged at guarded entry.')
 
         self._publish_active_goal_marker(target_label, final_pose)
         feedback = GoToZoneAction.Feedback()
 
-        def _dedupe_waypoints(sequence):
-            cleaned = []
-            for pose in sequence:
-                if not cleaned or self._distance_to_waypoint_pair(cleaned[-1], pose) > 0.03:
-                    cleaned.append(pose)
-            return cleaned
-
         async def _run_follow_path_phase(nav_path: NavPath, phase_label: str, progress_range: Tuple[float, float]):
+            if not self.nav_follow_path_client.wait_for_server(timeout_sec=self.follow_path_server_wait_sec):
+                return False, f'{phase_label} unavailable: Nav2 FollowPath action server not available.'
+
             follow_goal = Nav2FollowPath.Goal()
             follow_goal.path = nav_path
             if hasattr(follow_goal, 'controller_id'):
@@ -2452,14 +2718,60 @@ class ZoneManager(Node):
                     f'({self._goal_status_name(status)})'
                 )
             return True, ''
+        navigation_progress_start = 0.20
+        navigation_progress_end = 0.84
+        if navigation_targets:
+            progress_step = (
+                (navigation_progress_end - navigation_progress_start)
+                / float(max(1, len(navigation_targets)))
+            )
+            current_nav_start = navigation_progress_start
+            current_nav_pose = robot_pose
+            for index, navigation_target in enumerate(navigation_targets, start=1):
+                target_pose = self._shelf_pose2d_to_pose_stamped(navigation_target.pose)
+                target_distance = self._distance_to_waypoint_pair(current_nav_pose, target_pose)
+                self.get_logger().info(
+                    f'Shelf handoff phase {index}/{len(navigation_targets)}: '
+                    f'{navigation_target.label} -> '
+                    f'({navigation_target.pose.x:.2f}, {navigation_target.pose.y:.2f}) '
+                    f'heading={math.degrees(navigation_target.pose.yaw):.1f}deg '
+                    f'distance={target_distance:.2f}m'
+                )
+                nav_path = self._build_segment_follow_path(
+                    current_nav_pose,
+                    target_pose,
+                    segment_spacing=float(self.goal_pose_handoff_insertion_path_spacing),
+                    enforce_end_orientation=True,
+                )
+                nav_ok, nav_msg = await _run_follow_path_phase(
+                    nav_path,
+                    navigation_target.label,
+                    (
+                        current_nav_start,
+                        min(
+                            navigation_progress_end,
+                            current_nav_start + progress_step,
+                        ),
+                    ),
+                )
+                self._clear_active_follow_path()
+                if not nav_ok:
+                    self._clear_active_goal_marker()
+                    if goal_handle.is_cancel_requested:
+                        return None, nav_msg
+                    return False, nav_msg
+                current_nav_start = min(
+                    navigation_progress_end,
+                    current_nav_start + progress_step,
+                )
+                current_nav_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.30)
+                if current_nav_pose is None:
+                    self._clear_active_goal_marker()
+                    return False, (
+                        f'Unable to resolve robot pose in {frame_id} after '
+                        f'{navigation_target.label.lower()}.'
+                    )
 
-        # The robot is already in the right area — it found the shelf and auto-relocated
-        # near it.  The approach_pose often falls inside the costmap inflation of the
-        # shelf legs, so any Nav2 approach (FollowPath or NavigateToPose) either aborts
-        # immediately or spins/oscillates through recovery behaviours before giving up.
-        # Skip the ghost-approach navigation entirely: just settle in place, refresh the
-        # live shelf geometry, then drive the straight insertion beam from wherever the
-        # robot currently is.
         settle_sec = max(0.20, float(self.path_arrival_settle_sec))
         if settle_sec > 1e-6:
             await self._non_blocking_wait(settle_sec)
@@ -2469,43 +2781,63 @@ class ZoneManager(Node):
             if self.estop_active:
                 self._clear_active_goal_marker()
                 return False, f'Frozen shelf insert aborted during settle for "{target_label}": E-STOP active.'
-        # Refresh live shelf geometry now that the robot has settled, so the insertion
-        # beam targets the most accurate shelf centre position available.
+
         if bool(self.goal_pose_handoff_live_geometry_enabled):
             refined_goal_pose, refine_err = self._build_shelf_goal_pose_from_status(frame_id)
             if refined_goal_pose is not None:
                 final_pose = self._copy_pose_stamped(refined_goal_pose)
                 final_pose.header.stamp = self.get_clock().now().to_msg()
-                goal_yaw = self._yaw_from_quaternion(
-                    float(final_pose.pose.orientation.x),
-                    float(final_pose.pose.orientation.y),
-                    float(final_pose.pose.orientation.z),
-                    float(final_pose.pose.orientation.w),
+                refined_plan, _refined_source, refined_plan_err = self._build_shelf_docking_plan(
+                    final_pose,
                 )
+                if refined_plan is None:
+                    self._clear_active_goal_marker()
+                    return False, refined_plan_err
+                plan = refined_plan
                 self.get_logger().info(
                     f'Frozen shelf insert: refined live geometry target to '
-                    f'({final_pose.pose.position.x:.2f}, {final_pose.pose.position.y:.2f}) '
-                    f'heading={math.degrees(goal_yaw):.1f}deg for "{target_label}"'
+                    f'({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
+                    f'heading={math.degrees(plan.final_pose.yaw):.1f}deg for "{target_label}"'
                 )
             elif refine_err:
                 self.get_logger().debug(
                     f'Frozen shelf insert kept precomputed target for "{target_label}": {refine_err}'
                 )
 
-        # Drive the robot into the shelf using the custom low-speed insertion loop.
-        # goal_yaw from the shelf detector IS the entry travel direction — the robot
-        # approaches from the goal_yaw + 180° side and drives in the goal_yaw direction
-        # to reach the shelf centre.  Pass final_pose directly; do NOT flip by π.
-        feedback.progress = 0.70
-        feedback.status = f'Shelf insertion: aligning and driving in for "{target_label}"'
+        robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
+        if robot_pose is None:
+            self._clear_active_goal_marker()
+            return False, f'Unable to resolve robot pose in {frame_id} before straight insertion.'
+
+        assessment = assess_shelf_docking(
+            self._pose_stamped_to_shelf_pose2d(robot_pose),
+            plan,
+            local_insert_distance=float(self.goal_pose_handoff_local_insert_distance),
+            approach_arrival_tolerance=float(self.goal_pose_handoff_approach_arrival_tolerance),
+        )
+        remaining_navigation_targets = build_shelf_navigation_targets(
+            self._pose_stamped_to_shelf_pose2d(robot_pose),
+            plan,
+        )
+        if remaining_navigation_targets:
+            self._clear_active_goal_marker()
+            return False, (
+                'Shelf entry alignment still outside insertion guard after staged approach: '
+                + ' -> '.join(target.label for target in remaining_navigation_targets)
+                + f' (d_entry={assessment.robot_to_entry:.2f}m, '
+                f'entry_left={assessment.entry_error.left_error:.2f}m, '
+                f'heading_err={math.degrees(assessment.entry_error.heading_error):.1f}deg).'
+            )
+
+        feedback.progress = 0.84
+        feedback.status = f'Shelf insertion: driving straight into shelf center for "{target_label}"'
         goal_handle.publish_feedback(feedback)
-        insert_ok, insert_msg = await self._execute_goal_pose_local_insertion(
-            final_pose,
+        insert_ok, insert_msg = await self._execute_shelf_straight_insertion(
+            plan,
             goal_handle,
             target_label,
             feedback,
             max_speed_cap=local_insert_speed_cap,
-            use_live_shelf_geometry=bool(self.goal_pose_handoff_live_geometry_enabled),
         )
         if insert_ok is None:
             self._clear_active_goal_marker()
@@ -2514,14 +2846,30 @@ class ZoneManager(Node):
             self._clear_active_goal_marker()
             return False, insert_msg
 
+        verify_ok, verify_msg = await self._verify_goal_pose_handoff_alignment(
+            final_pose,
+            goal_handle,
+            target_label,
+            feedback,
+            max_speed_cap=local_insert_speed_cap,
+        )
+        if not verify_ok:
+            self._clear_active_goal_marker()
+            if goal_handle.is_cancel_requested:
+                return None, verify_msg
+            return False, verify_msg
+
         feedback.progress = 1.0
         feedback.status = f'Shelf insertion completed for "{target_label}"'
         goal_handle.publish_feedback(feedback)
         self._clear_active_goal_marker()
-        return True, (
+        completion_message = (
             f'Shelf insertion completed to ({final_pose.pose.position.x:.2f}, '
             f'{final_pose.pose.position.y:.2f})'
         )
+        if verify_msg and not str(verify_msg).lower().startswith('verification skipped'):
+            completion_message = f'{completion_message}; {verify_msg}'
+        return True, completion_message
 
     async def _execute_goal_pose_handoff_with_retries(
         self,
@@ -2617,61 +2965,26 @@ class ZoneManager(Node):
             float(a.pose.position.y) - float(b.pose.position.y),
         )
 
-    async def _execute_goal_pose_local_insertion(
+    async def _execute_shelf_straight_insertion(
         self,
-        goal_pose: PoseStamped,
+        plan: ShelfDockingPlan,
         goal_handle,
         target_label: str,
         feedback,
         *,
-        lock_heading_after_drive_start: bool = False,
         max_speed_cap: Optional[float] = None,
-        use_live_shelf_geometry: bool = False,
     ) -> Tuple[Optional[bool], str]:
-        frame_id = str(goal_pose.header.frame_id or 'map') or 'map'
-        goal_x = float(goal_pose.pose.position.x)
-        goal_y = float(goal_pose.pose.position.y)
-        goal_q = goal_pose.pose.orientation
-        goal_yaw = self._yaw_from_quaternion(
-            float(goal_q.x),
-            float(goal_q.y),
-            float(goal_q.z),
-            float(goal_q.w),
-        )
-        initial_goal_yaw = goal_yaw
-        max_live_yaw_jump = max(0.05, float(self.goal_pose_handoff_local_insert_max_live_yaw_jump))
-        max_final_heading_correction = max(0.05, float(self.goal_pose_handoff_local_insert_max_final_heading_correction))
-        position_tol = max(
-            float(self.zone_position_tolerance),
-            float(self.goal_pose_handoff_local_insert_position_tolerance),
-        )
-        heading_tol = max(
-            0.02,
-            float(self.goal_pose_handoff_local_insert_heading_tolerance),
-        )
-        prealign_heading_tol = max(
-            heading_tol,
-            float(self.goal_pose_handoff_local_insert_prealign_heading_tolerance),
-        )
+        frame_id = str(plan.final_pose.frame_id or 'map') or 'map'
+        final_pose = self._shelf_pose2d_to_pose_stamped(plan.final_pose)
+        entry_pose = self._shelf_pose2d_to_pose_stamped(plan.entry_pose)
+        heading_tol = max(0.02, float(plan.heading_tolerance))
         realign_heading_tol = max(
-            prealign_heading_tol,
+            heading_tol,
             float(self.goal_pose_handoff_local_insert_realign_heading_tolerance),
         )
-        align_deadband = max(
-            0.0,
-            float(self.goal_pose_handoff_local_insert_align_deadband),
-        )
-        align_hold_samples = max(
-            1,
-            int(self.goal_pose_handoff_local_insert_align_hold_samples),
-        )
-        centerline_tol = max(
-            0.01,
-            float(self.goal_pose_handoff_local_insert_centerline_tolerance),
-        )
-        centerline_slowdown_tol = max(
-            centerline_tol,
-            float(self.goal_pose_handoff_local_insert_centerline_slowdown_tolerance),
+        max_final_heading_correction = max(
+            0.05,
+            float(self.goal_pose_handoff_local_insert_max_final_heading_correction),
         )
         loop_dt = 1.0 / max(5.0, float(self.goal_pose_handoff_local_insert_loop_hz))
         timeout_sec = self._optional_timeout_parameter(
@@ -2681,11 +2994,6 @@ class ZoneManager(Node):
         no_progress_timeout_sec = self._optional_timeout_parameter(
             self.goal_pose_handoff_local_insert_no_progress_timeout_sec,
             minimum=0.5,
-        )
-        max_turn = max(0.10, float(self.goal_pose_handoff_local_insert_max_turn))
-        align_max_turn = min(
-            max_turn,
-            max(0.05, float(self.goal_pose_handoff_local_insert_align_max_turn)),
         )
         min_speed = max(0.02, float(self.goal_pose_handoff_local_insert_speed))
         max_speed = max(min_speed, float(self.goal_pose_handoff_local_insert_max_speed))
@@ -2697,24 +3005,13 @@ class ZoneManager(Node):
                 max_speed = max(min_speed, max_speed)
             except Exception:
                 pass
-        bearing_gain = max(0.10, float(self.goal_pose_handoff_local_insert_bearing_gain))
-        final_heading_gain = max(
-            0.0,
-            float(self.goal_pose_handoff_local_insert_final_heading_gain),
+        align_max_turn = min(
+            max(0.10, float(self.goal_pose_handoff_local_insert_max_turn)),
+            max(0.05, float(self.goal_pose_handoff_local_insert_align_max_turn)),
         )
-        live_trim_enabled = bool(
-            use_live_shelf_geometry
-            and self.goal_pose_handoff_live_trim_enabled
-            and not lock_heading_after_drive_start
-        )
-        live_trim_gain = max(0.10, float(self.goal_pose_handoff_live_trim_gain))
-        live_trim_max_turn = min(
-            align_max_turn,
-            max(0.02, float(self.goal_pose_handoff_live_trim_max_turn)),
-        )
-        predrive_centerline_tol = min(
-            centerline_slowdown_tol,
-            max(centerline_tol, centerline_tol + 0.01),
+        heading_gain = max(
+            0.20,
+            float(self.goal_pose_handoff_local_insert_final_heading_gain or 0.60),
         )
         progress_epsilon = max(
             0.002,
@@ -2723,151 +3020,90 @@ class ZoneManager(Node):
 
         start_monotonic = time.monotonic()
         last_progress_time = start_monotonic
-        best_distance = float('inf')
-        best_progress_score = float('inf')
-        best_steering_error = float('inf')
-        best_final_heading_error = float('inf')
         initial_distance = None
         initial_longitudinal_error = None
-        insertion_state = 'ALIGN_TO_SHELF'
-        last_logged_state = None
+        best_progress_score = float('inf')
+        best_heading_error = float('inf')
         balance_ready_count = 0
         last_balance_sample_receipt = 0.0
-        aligned_sample_count = 0
-        last_aligned_heading_error = None
-        drive_started = False
-        last_live_target_log = 0.0
-        final_heading_stable_count = 0
-        final_heading_entered_monotonic = None
+        insertion_state = 'ALIGN_AT_ENTRY'
+        last_logged_state = None
+
         self.get_logger().info(
-            f'Starting local shelf insertion toward ({goal_x:.2f}, {goal_y:.2f}) '
-            f'in {frame_id} with heading {math.degrees(goal_yaw):.1f}deg'
+            f'Starting straight shelf insertion toward ({plan.final_pose.x:.2f}, '
+            f'{plan.final_pose.y:.2f}) in {frame_id} with heading '
+            f'{math.degrees(plan.final_pose.yaw):.1f}deg '
+            f'(entry_lat_tol={plan.entry_lateral_tolerance:.3f}m, '
+            f'insert_lat_tol={plan.insert_lateral_tolerance:.3f}m)'
         )
 
         try:
             while True:
                 if self.estop_active:
-                    return False, 'Local shelf insertion aborted: E-STOP active.'
-
+                    return False, 'Shelf insertion aborted: E-STOP active.'
                 if goal_handle.is_cancel_requested:
-                    return None, 'Goal-pose handoff canceled during local shelf insertion.'
+                    return None, 'Goal-pose handoff canceled during straight shelf insertion.'
 
                 robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.12)
                 if robot_pose is None:
-                    return False, 'Local shelf insertion lost robot pose.'
+                    return False, 'Straight shelf insertion lost robot pose.'
 
-                if use_live_shelf_geometry:
-                    live_goal_pose, live_goal_err = self._build_shelf_goal_pose_from_status(frame_id)
-                    if live_goal_pose is not None:
-                        live_goal_yaw = self._yaw_from_quaternion(
-                            float(live_goal_pose.pose.orientation.x),
-                            float(live_goal_pose.pose.orientation.y),
-                            float(live_goal_pose.pose.orientation.z),
-                            float(live_goal_pose.pose.orientation.w),
-                        )
-                        live_goal_shift = math.hypot(
-                            float(live_goal_pose.pose.position.x) - goal_x,
-                            float(live_goal_pose.pose.position.y) - goal_y,
-                        )
-                        live_yaw_shift = self._abs_angle_delta(live_goal_yaw, goal_yaw)
-                        # Reject any live yaw that deviates too far from the original
-                        # goal heading — prevents 180° flips from LiDAR ambiguity inside
-                        # the shelf structure from corrupting the heading reference.
-                        live_yaw_from_initial = self._abs_angle_delta(live_goal_yaw, initial_goal_yaw)
-                        if live_yaw_from_initial <= max_live_yaw_jump:
-                            goal_x = float(live_goal_pose.pose.position.x)
-                            goal_y = float(live_goal_pose.pose.position.y)
-                            goal_yaw = float(live_goal_yaw)
-                        else:
-                            self.get_logger().warn(
-                                f'Local shelf insertion rejected live yaw update: '
-                                f'{math.degrees(live_goal_yaw):.1f}deg vs initial '
-                                f'{math.degrees(initial_goal_yaw):.1f}deg '
-                                f'(jump={math.degrees(live_yaw_from_initial):.1f}deg > '
-                                f'max={math.degrees(max_live_yaw_jump):.1f}deg)'
-                            )
-                            # Still allow position update if it's a small shift
-                            if live_goal_shift <= 0.08:
-                                goal_x = float(live_goal_pose.pose.position.x)
-                                goal_y = float(live_goal_pose.pose.position.y)
-                        if live_goal_shift > 0.01 or live_yaw_shift > math.radians(1.0):
-                            last_progress_time = time.monotonic()
-                            now_mono = time.monotonic()
-                            if (now_mono - last_live_target_log) > 0.40:
-                                self.get_logger().info(
-                                    f'Local shelf insertion live target update for "{target_label}": '
-                                    f'goal=({goal_x:.2f}, {goal_y:.2f}) '
-                                    f'yaw={math.degrees(goal_yaw):.1f}deg '
-                                    f'shift={live_goal_shift:.03f}m'
-                                )
-                                last_live_target_log = now_mono
-                    elif live_goal_err:
-                        self.get_logger().debug(
-                            f'Local shelf insertion live geometry unavailable for "{target_label}": '
-                            f'{live_goal_err}'
-                        )
-
-                rx = float(robot_pose.pose.position.x)
-                ry = float(robot_pose.pose.position.y)
-                rq = robot_pose.pose.orientation
-                robot_yaw = self._yaw_from_quaternion(
-                    float(rq.x),
-                    float(rq.y),
-                    float(rq.z),
-                    float(rq.w),
+                entry_error, entry_error_msg = self._pose_error_in_target_frame(
+                    entry_pose,
+                    robot_pose=robot_pose,
                 )
+                if entry_error is None:
+                    return False, (
+                        f'Straight shelf insertion lost entry-frame error: '
+                        f'{entry_error_msg}'
+                    )
+                final_error, final_error_msg = self._pose_error_in_target_frame(
+                    final_pose,
+                    robot_pose=robot_pose,
+                )
+                if final_error is None:
+                    return False, (
+                        f'Straight shelf insertion lost final-frame error: '
+                        f'{final_error_msg}'
+                    )
 
-                dx = goal_x - rx
-                dy = goal_y - ry
-                distance = math.hypot(dx, dy)
-                final_heading_error = self._signed_angle_delta(robot_yaw, goal_yaw)
-                goal_forward_x = math.cos(goal_yaw)
-                goal_forward_y = math.sin(goal_yaw)
-                goal_left_x = -goal_forward_y
-                goal_left_y = goal_forward_x
-                longitudinal_error = (dx * goal_forward_x) + (dy * goal_forward_y)
-                lateral_error = (dx * goal_left_x) + (dy * goal_left_y)
+                distance = float(final_error['distance'])
+                longitudinal_error = float(final_error['forward_error'])
+                lateral_error = float(final_error['left_error'])
+                heading_error = float(final_error['heading_error'])
+                entry_distance = float(entry_error['distance'])
+                entry_forward_error = float(entry_error['forward_error'])
+                entry_lateral_error = float(entry_error['left_error'])
 
                 if initial_distance is None and math.isfinite(distance):
                     initial_distance = max(distance, 1e-3)
                 if initial_longitudinal_error is None and math.isfinite(longitudinal_error):
                     initial_longitudinal_error = max(0.0, longitudinal_error)
 
-                progress_score = max(0.0, longitudinal_error) + (1.5 * abs(lateral_error))
-                if distance + progress_epsilon < best_distance:
-                    best_distance = distance
-                    last_progress_time = time.monotonic()
+                progress_score = max(0.0, longitudinal_error) + (2.0 * abs(lateral_error))
                 if progress_score + progress_epsilon < best_progress_score:
                     best_progress_score = progress_score
                     last_progress_time = time.monotonic()
-                if abs(final_heading_error) + 0.02 < best_final_heading_error:
-                    best_final_heading_error = abs(final_heading_error)
+                if abs(heading_error) + 0.02 < best_heading_error:
+                    best_heading_error = abs(heading_error)
                     last_progress_time = time.monotonic()
 
                 if timeout_sec > 0.0 and (time.monotonic() - start_monotonic) > timeout_sec:
                     return False, (
-                        f'Local shelf insertion timed out at {distance:.2f}m from target.'
+                        f'Straight shelf insertion timed out at {distance:.2f}m from target.'
                     )
-
                 if (
                     no_progress_timeout_sec > 0.0
                     and (time.monotonic() - last_progress_time) > no_progress_timeout_sec
                 ):
                     return False, (
-                        f'Local shelf insertion made no progress for {no_progress_timeout_sec:.1f}s.'
+                        f'Straight shelf insertion made no progress for '
+                        f'{no_progress_timeout_sec:.1f}s.'
                     )
 
-                within_center_box = (
-                    abs(longitudinal_error) <= position_tol
-                    and abs(lateral_error) <= centerline_slowdown_tol
-                )
-
                 balance_sample = self._current_shelf_balance_sample()
-                balance_ready = False
                 if (
-                    not lock_heading_after_drive_start
-                    and
-                    insertion_state == 'DRIVE_STRAIGHT_IN'
+                    insertion_state == 'DRIVE_STRAIGHT'
                     and balance_sample is not None
                     and initial_longitudinal_error is not None
                 ):
@@ -2876,7 +3112,7 @@ class ZoneManager(Node):
                         last_balance_sample_receipt = sample_receipt
                         moved_distance = max(
                             0.0,
-                            float(initial_longitudinal_error) - max(0.0, float(longitudinal_error)),
+                            float(initial_longitudinal_error) - max(0.0, longitudinal_error),
                         )
                         if moved_distance >= float(self.goal_pose_handoff_intensity_balance_min_travel_m):
                             if balance_sample['ratio'] <= float(self.goal_pose_handoff_intensity_balance_tolerance):
@@ -2888,181 +3124,112 @@ class ZoneManager(Node):
                                 balance_ready_count = 0
                         else:
                             balance_ready_count = 0
-                    balance_ready = (
+                    if (
                         balance_ready_count
                         >= int(self.goal_pose_handoff_intensity_balance_required_samples)
-                    )
+                    ):
+                        return True, (
+                            'Inserted to shelf midpoint using reflector intensity balance '
+                            f'(front={balance_sample["front_sum"]:.1f}, '
+                            f'back={balance_sample["back_sum"]:.1f}, '
+                            f'ratio={balance_sample["ratio"]:.2f}).'
+                        )
 
-                if balance_ready:
-                    return True, (
-                        'Inserted to shelf midpoint using reflector intensity balance '
-                        f'(front={balance_sample["front_sum"]:.1f}, '
-                        f'back={balance_sample["back_sum"]:.1f}, '
-                        f'ratio={balance_sample["ratio"]:.2f}).'
-                    )
-
-                if longitudinal_error < (-position_tol):
+                if longitudinal_error < (-float(plan.position_tolerance)):
                     return False, (
-                        f'Local shelf insertion overshot the centerline target '
+                        f'Straight shelf insertion overshot the center target '
                         f'by {-longitudinal_error:.2f}m.'
                     )
 
-                align_heading_error = final_heading_error
-
-                if within_center_box:
-                    if lock_heading_after_drive_start:
+                if (
+                    abs(longitudinal_error) <= float(plan.position_tolerance)
+                    and abs(lateral_error) <= float(plan.insert_lateral_tolerance)
+                ):
+                    if abs(heading_error) > max_final_heading_correction:
                         return True, (
-                            f'Inserted to shelf center at ({goal_x:.2f}, {goal_y:.2f}) '
-                            f'without in-shelf turning; heading err {final_heading_error:.2f}rad.'
+                            f'Inserted to shelf center at ({plan.final_pose.x:.2f}, '
+                            f'{plan.final_pose.y:.2f}); heading err '
+                            f'{math.degrees(heading_error):.1f}deg exceeds max correction '
+                            f'{math.degrees(max_final_heading_correction):.1f}deg and was accepted.'
                         )
-                    insertion_state = 'FINAL_HEADING'
-                    # If the heading error is already too large to safely correct inside
-                    # the shelf, accept immediately — spinning inside a narrow shelf risks
-                    # hitting the legs and most lift mechanisms don't need precise heading.
-                    if abs(final_heading_error) > max_final_heading_correction:
-                        return True, (
-                            f'Inserted to shelf center at ({goal_x:.2f}, {goal_y:.2f}); '
-                            f'heading err {math.degrees(final_heading_error):.1f}deg '
-                            f'exceeds max correction {math.degrees(max_final_heading_correction):.1f}deg — accepted.'
-                        )
-                    if final_heading_entered_monotonic is None:
-                        final_heading_entered_monotonic = time.monotonic()
-                    time_in_final = time.monotonic() - final_heading_entered_monotonic
-                    # Accept on stable heading or hard 3 s timeout — spinning inside
-                    # an industrial shelf is more dangerous than residual heading error.
-                    if abs(final_heading_error) <= heading_tol:
-                        final_heading_stable_count = min(final_heading_stable_count + 1, align_hold_samples)
-                    else:
-                        final_heading_stable_count = 0
-                    if final_heading_stable_count >= align_hold_samples or time_in_final > 3.0:
-                        return True, (
-                            f'Inserted to shelf center at ({goal_x:.2f}, {goal_y:.2f}) '
-                            f'with heading err {final_heading_error:.2f}rad.'
-                        )
-                    linear_x = 0.0
-                    heading_gain = final_heading_gain if final_heading_gain > 0.0 else bearing_gain
-                    angular_z = self._clamp(
-                        final_heading_error * heading_gain,
-                        -max_turn,
-                        max_turn,
+                    return True, (
+                        f'Inserted to shelf center at ({plan.final_pose.x:.2f}, '
+                        f'{plan.final_pose.y:.2f}) with heading err '
+                        f'{math.degrees(heading_error):.1f}deg.'
                     )
-                else:
-                    # If we were in FINAL_HEADING but drifted out of the box (AMCL noise),
-                    # hold position — never re-enter the forward-drive block from inside the shelf.
-                    if insertion_state == 'FINAL_HEADING':
+
+                if insertion_state == 'ALIGN_AT_ENTRY':
+                    if abs(entry_lateral_error) > float(plan.entry_lateral_tolerance):
+                        return False, (
+                            f'Robot is not centered at shelf entry: lateral='
+                            f'{entry_lateral_error:.3f}m guard='
+                            f'{float(plan.entry_lateral_tolerance):.3f}m.'
+                        )
+                    if abs(entry_forward_error) > float(plan.position_tolerance):
+                        return False, (
+                            f'Robot is not staged at shelf entry: forward='
+                            f'{entry_forward_error:.3f}m tol='
+                            f'{float(plan.position_tolerance):.3f}m.'
+                        )
+                    if abs(heading_error) <= heading_tol:
+                        insertion_state = 'DRIVE_STRAIGHT'
                         linear_x = 0.0
                         angular_z = 0.0
-                        if abs(final_heading_error) > realign_heading_tol:
-                            if lock_heading_after_drive_start and drive_started:
-                                return False, (
-                                    f'Local shelf insertion heading drifted to '
-                                    f'{final_heading_error:.2f}rad after straight-in started.'
-                                )
-                            insertion_state = 'ALIGN_TO_SHELF'
-                            aligned_sample_count = 0
-
-                    if insertion_state == 'ALIGN_TO_SHELF':
+                    else:
                         linear_x = 0.0
-                        if abs(align_heading_error) <= align_deadband:
-                            angular_z = 0.0
-                        else:
-                            angular_z = self._clamp(
-                                align_heading_error * bearing_gain,
-                                -align_max_turn,
-                                align_max_turn,
-                            )
-                        if (
-                            abs(align_heading_error) <= prealign_heading_tol
-                            and abs(lateral_error) <= predrive_centerline_tol
-                        ):
-                            if (
-                                last_aligned_heading_error is not None
-                                and abs(align_heading_error - last_aligned_heading_error)
-                                > float(self.goal_pose_handoff_local_insert_align_stable_delta)
-                            ):
-                                aligned_sample_count = 1
-                            else:
-                                aligned_sample_count = min(aligned_sample_count + 1, align_hold_samples)
-                            last_aligned_heading_error = float(align_heading_error)
-                            if aligned_sample_count >= align_hold_samples:
-                                insertion_state = 'DRIVE_STRAIGHT_IN'
-                                drive_started = True
-                                linear_x = 0.0
-                                angular_z = 0.0
-                        else:
-                            aligned_sample_count = 0
-                            last_aligned_heading_error = None
-                    elif insertion_state == 'DRIVE_STRAIGHT_IN':
-                        forward_distance = max(0.0, longitudinal_error)
-                        if abs(final_heading_error) > realign_heading_tol:
-                            insertion_state = 'ALIGN_TO_SHELF'
-                            aligned_sample_count = 0
-                            last_aligned_heading_error = None
-                            linear_x = 0.0
-                            if abs(align_heading_error) <= align_deadband:
-                                angular_z = 0.0
-                            else:
-                                angular_z = self._clamp(
-                                    align_heading_error * bearing_gain,
-                                    -align_max_turn,
-                                    align_max_turn,
-                                )
-                        else:
-                            # Stop driving forward once the longitudinal target is reached
-                            # so live_trim steering cannot arc the robot out of the shelf.
-                            if forward_distance < 0.02:
-                                linear_x = 0.0
-                            else:
-                                linear_x = self._clamp(forward_distance * 0.55, min_speed, max_speed)
-                            if forward_distance < 0.20:
-                                linear_x = min(linear_x, max_speed * 0.60)
-                            if abs(lateral_error) > centerline_tol:
-                                denom = max(1e-6, centerline_slowdown_tol - centerline_tol)
-                                lat_ratio = min(1.0, (abs(lateral_error) - centerline_tol) / denom)
-                                linear_x *= max(0.10, 1.0 - (0.90 * lat_ratio))
-                            if (
-                                lock_heading_after_drive_start
-                                and abs(lateral_error) > centerline_slowdown_tol
-                                and not live_trim_enabled
-                            ):
-                                return False, (
-                                    f'Local shelf insertion left the opening centerline by '
-                                    f'{lateral_error:.2f}m after straight-in started.'
-                                )
-                            if (
-                                lock_heading_after_drive_start
-                                and live_trim_enabled
-                                and abs(lateral_error) > (centerline_slowdown_tol * 2.5)
-                            ):
-                                return False, (
-                                    f'Local shelf insertion drifted too far from live shelf centerline '
-                                    f'({lateral_error:.2f}m) after straight-in started.'
-                                )
-                            if live_trim_enabled and abs(lateral_error) > centerline_tol:
-                                trim_heading_error = math.atan2(
-                                    lateral_error,
-                                    max(0.30, forward_distance),
-                                )
-                                angular_z = self._clamp(
-                                    trim_heading_error * live_trim_gain,
-                                    -live_trim_max_turn,
-                                    live_trim_max_turn,
-                                )
-                                linear_x *= max(
-                                    0.20,
-                                    1.0 - min(
-                                        0.70,
-                                        abs(lateral_error) / max(centerline_slowdown_tol * 2.0, 1e-3),
-                                    ),
-                                )
-                            else:
-                                angular_z = 0.0
+                        angular_z = self._clamp(
+                            heading_error * heading_gain,
+                            -align_max_turn,
+                            align_max_turn,
+                        )
+                else:
+                    if abs(lateral_error) > float(plan.insert_lateral_tolerance):
+                        return False, (
+                            f'Straight shelf insertion drifted off the shelf centerline by '
+                            f'{lateral_error:.3f}m (guard {float(plan.insert_lateral_tolerance):.3f}m).'
+                        )
+                    if abs(heading_error) > realign_heading_tol:
+                        return False, (
+                            f'Straight shelf insertion heading drifted to '
+                            f'{math.degrees(heading_error):.1f}deg '
+                            f'(guard {math.degrees(realign_heading_tol):.1f}deg).'
+                        )
+
+                    forward_distance = max(0.0, longitudinal_error)
+                    if forward_distance < 0.02:
+                        linear_x = 0.0
+                    else:
+                        linear_x = self._clamp(
+                            forward_distance * 0.55,
+                            min_speed,
+                            max_speed,
+                        )
+                    if forward_distance < 0.20:
+                        linear_x = min(linear_x, max_speed * 0.60)
+                    slowdown_guard = max(
+                        float(plan.insert_lateral_tolerance),
+                        float(plan.centerline_slowdown_tolerance),
+                    )
+                    if abs(lateral_error) > float(plan.insert_lateral_tolerance):
+                        denom = max(
+                            1e-6,
+                            slowdown_guard - float(plan.insert_lateral_tolerance),
+                        )
+                        lat_ratio = min(
+                            1.0,
+                            (
+                                abs(lateral_error)
+                                - float(plan.insert_lateral_tolerance)
+                            ) / denom,
+                        )
+                        linear_x *= max(0.10, 1.0 - (0.90 * lat_ratio))
+                    angular_z = 0.0
+
                 if insertion_state != last_logged_state:
                     self.get_logger().info(
                         f'Shelf insertion state -> {insertion_state} '
-                        f'(dist={distance:.2f}m, lat={lateral_error:.2f}m, '
-                        f'heading_err={final_heading_error:.2f}rad, '
-                        f'align_hold={aligned_sample_count}/{align_hold_samples})'
+                        f'(dist={distance:.2f}m, entry={entry_distance:.2f}m, '
+                        f'lat={lateral_error:.3f}m, heading_err={heading_error:.2f}rad)'
                     )
                     last_logged_state = insertion_state
 
@@ -3074,8 +3241,8 @@ class ZoneManager(Node):
                 feedback.progress = float(self._clamp(progress, 0.96, 0.99))
                 feedback.status = (
                     f'{insertion_state}: "{target_label}" '
-                    f'({distance:.2f}m remaining, lat {lateral_error:.2f}m, '
-                    f'heading err {final_heading_error:.2f}rad, '
+                    f'(final {distance:.2f}m, entry {entry_distance:.2f}m, '
+                    f'lat {lateral_error:.3f}m, heading {math.degrees(heading_error):.1f}deg, '
                     f'intensity lock {balance_ready_count}/'
                     f'{int(self.goal_pose_handoff_intensity_balance_required_samples)})'
                 )
@@ -4788,26 +4955,53 @@ class ZoneManager(Node):
                 if is_terminal_segment
                 else self.path_waypoint_tolerance
             )
+            max_nav2_success_mismatch = max(
+                strict_pos_tol,
+                float(getattr(self, 'path_nav2_success_max_mismatch_distance', strict_pos_tol)),
+            )
             center_dist = self._distance_to_goal(target_pose)
 
             if not math.isfinite(center_dist):
                 self.get_logger().warn(
                     f'Nav2 reported success for phase "{phase_label}" at waypoint '
-                    f'{waypoint_index + 1}/{total}; accepting Nav2 result without TF validation'
+                    f'{waypoint_index + 1}/{total}, but robot center could not be validated'
                 )
-                return ''
+                return (
+                    f'Phase "{phase_label}" finished but robot center could not be validated '
+                    f'at waypoint {waypoint_index + 1}/{total}'
+                )
 
             if center_dist <= strict_pos_tol:
                 return ''
 
             tol_label = 'final' if is_terminal_segment else 'waypoint'
+            if center_dist > max_nav2_success_mismatch:
+                self.get_logger().warn(
+                    f'Nav2 reported success for phase "{phase_label}" at waypoint '
+                    f'{waypoint_index + 1}/{total}, but robot center mismatch was '
+                    f'{center_dist:.3f}m > max allowed {max_nav2_success_mismatch:.3f}m '
+                    f'(strict {tol_label} tol {strict_pos_tol:.3f}m)'
+                )
+                return (
+                    f'Phase "{phase_label}" finished but robot center mismatch '
+                    f'{center_dist:.2f}m exceeds max allowed '
+                    f'{max_nav2_success_mismatch:.2f}m at waypoint '
+                    f'{waypoint_index + 1}/{total} (strict {tol_label} tol '
+                    f'{strict_pos_tol:.2f}m)'
+                )
+
             self.get_logger().warn(
                 f'Nav2 reported success for phase "{phase_label}" at waypoint '
-                f'{waypoint_index + 1}/{total}; accepting Nav2 result with '
-                f'diagnostic center mismatch {center_dist:.3f}m '
-                f'(configured {tol_label} tol {strict_pos_tol:.3f}m)'
+                f'{waypoint_index + 1}/{total}, but robot center is still '
+                f'{center_dist:.3f}m from target (strict {tol_label} tol '
+                f'{strict_pos_tol:.3f}m); retrying'
             )
-            return ''
+            return (
+                f'Phase "{phase_label}" finished with robot center still '
+                f'{center_dist:.2f}m from target at waypoint '
+                f'{waypoint_index + 1}/{total} (strict {tol_label} tol '
+                f'{strict_pos_tol:.2f}m)'
+            )
 
         def _semantic_align_target_at(index: int) -> Tuple[Optional[PoseStamped], float, str]:
             zone_name = _zone_name_at(index)
@@ -4864,86 +5058,114 @@ class ZoneManager(Node):
                 return False, last_err
             return True, last_err
 
-        async def _run_align_controller_phase(
+        async def _run_align_spin_phase(
             waypoint_index: int,
             align_pose_arg: PoseStamped,
             heading_tol_arg: float,
             poi_name_arg: str,
         ) -> str:
+            spin_timeout = max(
+                1.0,
+                float(getattr(self, 'path_align_spin_time_allowance_sec', 12.0)),
+            )
+            if not self.nav_spin_client.wait_for_server(timeout_sec=self.follow_path_server_wait_sec):
+                return (
+                    'ALIGN_AT_POINT spin server not available '
+                    f'({self._endpoint("/spin")})'
+                )
+
             heading_delta = self._heading_delta_to_goal(align_pose_arg)
             if not math.isfinite(heading_delta):
-                self.get_logger().warn(
+                return (
                     f'ALIGN_AT_POINT could not compute heading delta for waypoint '
-                    f'{waypoint_index + 1}/{total}; skipping alignment'
+                    f'{waypoint_index + 1}/{total}'
                 )
-                return ''
             if abs(heading_delta) <= heading_tol_arg:
                 return ''
 
-            _publish_feedback(
-                waypoint_index,
-                f'ALIGN_AT_POINT: spinning in place to POI "{poi_name_arg}"',
+            spin_feedback = {'turned': 0.0}
+
+            def _spin_feedback(feedback_msg):
+                try:
+                    nav_fb = getattr(feedback_msg, 'feedback', feedback_msg)
+                    turned = getattr(nav_fb, 'angular_distance_traveled', None)
+                    if turned is not None:
+                        spin_feedback['turned'] = float(turned)
+                except Exception:
+                    pass
+
+            spin_goal = Nav2Spin.Goal()
+            spin_goal.target_yaw = float(heading_delta)
+            spin_goal.time_allowance = RosDuration(
+                sec=int(spin_timeout),
+                nanosec=int((spin_timeout - int(spin_timeout)) * 1e9),
             )
 
-            # --- Direct cmd_vel spin-in-place -------------------------------
-            # Do NOT use Nav2 FollowPath here.  A path-tracking controller
-            # applies lateral-error corrections during rotation which physically
-            # moves the robot away from the waypoint center.  Instead command
-            # pure angular velocity with zero linear velocity so the robot
-            # pivots exactly on the spot.
-            align_k_p          = 1.6    # proportional gain
-            align_max_w        = float(self.goal_pose_handoff_local_insert_align_max_turn)
-            align_min_w        = 0.06   # minimum speed once spinning (break static friction)
-            align_deadband     = float(self.goal_pose_handoff_local_insert_align_deadband)
-            align_hold_samples = int(self.goal_pose_handoff_local_insert_align_hold_samples)
-            align_timeout      = 8.0
-            loop_dt            = 0.05
+            send_future = self.nav_spin_client.send_goal_async(
+                spin_goal,
+                feedback_callback=_spin_feedback,
+            )
+            nav_goal_handle = await send_future
+            if nav_goal_handle is None or (not nav_goal_handle.accepted):
+                return (
+                    f'ALIGN_AT_POINT spin goal rejected at waypoint '
+                    f'{waypoint_index + 1}/{total}'
+                )
 
-            deadline   = time.monotonic() + align_timeout
-            hold_count = 0
+            self.follow_path_nav_goal = nav_goal_handle
+            nav_result_future = nav_goal_handle.get_result_async()
+            last_feedback_ns = 0
+            feedback_period_ns = int(0.15 * 1e9)
 
+            while not nav_result_future.done():
+                if goal_handle.is_cancel_requested:
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    self.follow_path_nav_goal = None
+                    goal_handle.canceled()
+                    result.success = False
+                    result.completed = int(max(0, completed_count))
+                    result.message = 'FollowPath canceled during ALIGN_AT_POINT spin'
+                    return terminal_error
+
+                if self.estop_active:
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    self.follow_path_nav_goal = None
+                    goal_handle.abort()
+                    result.success = False
+                    result.completed = int(max(0, completed_count))
+                    result.message = 'E-STOP active during ALIGN_AT_POINT spin'
+                    return terminal_error
+
+                now_ns = self.get_clock().now().nanoseconds
+                if (now_ns - last_feedback_ns) >= feedback_period_ns:
+                    remaining = max(0.0, abs(heading_delta) - abs(spin_feedback['turned']))
+                    _publish_feedback(
+                        waypoint_index,
+                        f'ALIGN_AT_POINT: spinning for POI "{poi_name_arg}" | '
+                        f'rem={remaining:.2f}rad',
+                    )
+                    last_feedback_ns = now_ns
+
+                await self._non_blocking_wait(0.05)
+
+            self.follow_path_nav_goal = None
             try:
-                while time.monotonic() < deadline:
-                    if goal_handle.is_cancel_requested:
-                        self._publish_local_insert_twist(0.0, 0.0)
-                        goal_handle.canceled()
-                        result.success = False
-                        result.completed = int(max(0, completed_count))
-                        result.message = 'FollowPath canceled during ALIGN_AT_POINT'
-                        return terminal_error
+                wrapped = nav_result_future.result()
+            except Exception as exc:
+                return f'ALIGN_AT_POINT spin result failed: {exc}'
 
-                    if self.estop_active:
-                        self._publish_local_insert_twist(0.0, 0.0)
-                        goal_handle.abort()
-                        result.success = False
-                        result.completed = int(max(0, completed_count))
-                        result.message = 'E-STOP active during ALIGN_AT_POINT'
-                        return terminal_error
-
-                    err = self._heading_delta_to_goal(align_pose_arg)
-                    if not math.isfinite(err):
-                        await self._non_blocking_wait(loop_dt)
-                        continue
-
-                    abs_err = abs(err)
-                    if abs_err <= align_deadband:
-                        hold_count += 1
-                        self._publish_local_insert_twist(0.0, 0.0)
-                        if hold_count >= align_hold_samples:
-                            break
-                        await self._non_blocking_wait(loop_dt)
-                        continue
-
-                    hold_count = 0
-                    raw_w = align_k_p * err
-                    # Ensure minimum speed once we need to move
-                    if abs(raw_w) < align_min_w:
-                        raw_w = math.copysign(align_min_w, raw_w)
-                    w = self._clamp(raw_w, -align_max_w, align_max_w)
-                    self._publish_local_insert_twist(0.0, w)
-                    await self._non_blocking_wait(loop_dt)
-            finally:
-                self._publish_local_insert_twist(0.0, 0.0)
+            status = int(getattr(wrapped, 'status', GoalStatus.STATUS_UNKNOWN))
+            if status != GoalStatus.STATUS_SUCCEEDED:
+                return (
+                    f'ALIGN_AT_POINT spin failed with status {status} '
+                    f'({self._goal_status_name(status)})'
+                )
 
             return ''
 
@@ -5047,7 +5269,7 @@ class ZoneManager(Node):
                     if settle_sec > 0.0:
                         await self._non_blocking_wait(settle_sec * 0.5)
                 else:
-                    phase_err = await _run_align_controller_phase(
+                    phase_err = await _run_align_spin_phase(
                         waypoint_index,
                         align_pose,
                         heading_tol,
@@ -5659,8 +5881,9 @@ class ZoneManager(Node):
                     goal_handle.abort()
                     return result
 
-                # Phase 2: semantic POI heading alignment uses the same Nav2
-                # controller authority as the move phase. No external Nav2Spin.
+                # Phase 2: semantic POI heading alignment only if the reached anchor
+                # has an explicit POI heading and the current robot heading is outside
+                # tolerance.
                 phase_err = await _run_semantic_align_phase_with_retries(target_idx)
                 if phase_err:
                     if phase_err == terminal_error:
@@ -5912,7 +6135,7 @@ class ZoneManager(Node):
     def load_layout_callback(self, request, response):
         """Load a layout: restore its zones and paths into the database."""
         try:
-            layouts = self.db_manager.get_all_layouts()
+            layouts = self._normalize_layouts_map(self.db_manager.get_all_layouts())
             if request.name not in layouts:
                 response.ok = False
                 response.message = f'Layout "{request.name}" not found'
@@ -5922,16 +6145,7 @@ class ZoneManager(Node):
             zones = self._normalize_zones_map(layout.get('zones', {}))
             paths = self._normalize_paths_map(layout.get('paths', {}))
 
-            # Replace all zones and paths in the database with layout contents
-            for existing_zone in list(self.db_manager.get_all_zones().keys()):
-                self.db_manager.delete_zone(existing_zone)
-            for zone_name, zone_data in zones.items():
-                self.db_manager.save_zone(zone_name, zone_data)
-
-            for existing_path in list(self.db_manager.get_all_paths().keys()):
-                self.db_manager.delete_path(existing_path)
-            for path_name, path_data in paths.items():
-                self.db_manager.save_path(path_name, path_data)
+            self.db_manager.replace_zones_and_paths(zones, paths)
 
             # Update caches
             self.zones = {'zones': zones}
