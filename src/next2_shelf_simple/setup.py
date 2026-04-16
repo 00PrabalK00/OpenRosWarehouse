@@ -20,6 +20,7 @@ setup(
     entry_points={
         'console_scripts': [
             'shelf_inserter = next2_shelf_simple.shelf_inserter:main',
+            'shelf_detector = next2_shelf_simple.shelf_detector:main',
         ],
     },
 )
