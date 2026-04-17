@@ -425,7 +425,19 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   }
 
   const auto & goal_pose = global_plan_.poses.back();
-  const bool goal_reached =
+  // Follow-up fix #1: in insertion / alignment / precision modes, the caller's
+  // motion_intent tolerances (xy_tolerance, yaw_tolerance) are authoritative.
+  // The generic Nav2 goal_checker uses its own tolerances and can declare the
+  // goal reached before the controller's terminal phase (arrived_xy → YAW
+  // settle) has run, which caused the "zero out early, skip yaw cleanup"
+  // symptom. Bypass the generic checker in these modes — the terminal FSM
+  // below enforces the intent's tolerances.
+  const bool bypass_goal_checker =
+    active_motion_intent.active &&
+    (active_motion_intent.mode == "insertion" ||
+     active_motion_intent.mode == "alignment" ||
+     active_motion_intent.mode == "precision");
+  const bool goal_reached = !bypass_goal_checker &&
     goal_checker != nullptr && goal_checker->isGoalReached(robot_pose.pose, goal_pose.pose, velocity);
 
   if (goal_reached) {
@@ -608,7 +620,13 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
         0.0,
         1.0);
       const double speed_scale = 1.0 - (1.0 - strict_line_min_speed_scale_) * lateral_ratio;
-      runtime_max_v = std::max(min_tracking_speed_, runtime_max_v * speed_scale);
+      // Follow-up fix #2: phase-aware floor. During final_approach we must let
+      // runtime_max_v decay all the way to zero — reapplying min_tracking_speed_
+      // here would partially reopen the "keep doing something near stop"
+      // failure mode that Issue 9 removed from the main final-approach path.
+      runtime_max_v = final_approach
+        ? (runtime_max_v * speed_scale)
+        : std::max(min_tracking_speed_, runtime_max_v * speed_scale);
     }
   }
 
