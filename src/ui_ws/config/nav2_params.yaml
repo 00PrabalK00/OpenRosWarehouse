@@ -117,6 +117,10 @@ bt_navigator_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: false
+    # Controller feedback must come from the EKF odom stream, not Nav2's
+    # default /odom placeholder, otherwise acceleration limiting uses stale
+    # or missing velocity feedback.
+    odom_topic: "/odometry/filtered"
     controller_frequency: 20.0  # Increased from 10.0 for faster emergency response
     min_x_velocity_threshold: 0.001
     # Differential-drive base: suppress lateral (y) velocity noise.

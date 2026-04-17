@@ -10627,6 +10627,12 @@
             border-color: rgba(71, 85, 105, 0.68) !important;
         }
 
+        #device-config-sidebar {
+            width: clamp(340px, 27vw, 392px) !important;
+            min-width: clamp(340px, 27vw, 392px) !important;
+            max-width: clamp(340px, 27vw, 392px) !important;
+        }
+
         .dc-insp-hdr,
         .dc-insp-tabs {
             background: rgba(18, 24, 38, 0.94) !important;
@@ -10763,6 +10769,9 @@
         }
 
         #device-config-sidebar .robot-editor-unified-toolbar {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
             min-height: 0 !important;
             padding: 8px !important;
             gap: 5px !important;
@@ -10775,14 +10784,20 @@
             letter-spacing: 0.12em !important;
         }
 
-        #device-config-sidebar .re-tb-group {
-            gap: 4px !important;
+        #device-config-sidebar .re-tb-spacer,
+        #device-config-sidebar .re-tb-sep {
+            display: none !important;
         }
 
-        #device-config-sidebar .re-tb-sep {
-            height: 18px !important;
-            margin: 0 2px !important;
-            background: rgba(71, 85, 105, 0.46) !important;
+        #device-config-sidebar .re-tb-group {
+            width: 100% !important;
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 6px !important;
+        }
+
+        #device-config-sidebar .robot-editor-unified-toolbar > .re-tb-group:last-of-type {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
         }
 
         #device-config-sidebar .re-tb-btn,
@@ -10799,11 +10814,18 @@
             letter-spacing: 0.06em !important;
         }
 
+        #device-config-sidebar .re-tb-btn,
+        #device-config-sidebar .re-tb-panel-btn {
+            width: 100% !important;
+            justify-content: center !important;
+        }
+
         #device-config-sidebar .re-tb-panel-btn {
             border-radius: 999px !important;
         }
 
         #device-config-sidebar .re-tb-select {
+            width: 100% !important;
             min-width: 94px !important;
             padding-right: 24px !important;
         }
@@ -10829,9 +10851,26 @@
         }
 
         #device-config-sidebar .robot-editor-panel-header {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 8px !important;
             min-height: 48px !important;
             padding: 10px 10px 8px !important;
             background: linear-gradient(180deg, rgba(51, 65, 85, 0.12) 0%, rgba(51, 65, 85, 0) 100%) !important;
+        }
+
+        #device-config-sidebar .robot-editor-panel-header-meta {
+            min-width: 0 !important;
+        }
+
+        #device-config-sidebar .robot-editor-panel-header-search {
+            max-width: none !important;
+            width: 100% !important;
+        }
+
+        #device-config-sidebar .robot-editor-panel-header-search .settings-input {
+            width: 100% !important;
         }
 
         #device-config-sidebar .robot-editor-panel-header h3 {
@@ -10901,37 +10940,37 @@
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(1),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(1) {
-            width: 18% !important;
+            width: 28% !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(2),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(2) {
-            width: 18% !important;
+            width: 26% !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(3),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(3) {
-            width: 16% !important;
+            width: 24% !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(4),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(4) {
-            width: 10% !important;
+            display: none !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(5),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(5) {
-            width: 10% !important;
+            display: none !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(6),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(6) {
-            width: 12% !important;
+            display: none !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(7),
         #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(7) {
-            width: 16% !important;
+            width: 22% !important;
         }
 
         #device-config-sidebar .robot-editor-frame-table td .settings-input {
@@ -17650,6 +17689,16 @@
                             liftCmdTopic = null;
                             actionNodePublishers = {};
                             clearSpeedSubscriptions();
+                            // Stop any active joystick hold stream and reset manual state so
+                            // stale backward commands are not replayed when rosbridge reconnects.
+                            stopJoystickHoldStream();
+                            joystickLinearCmd = 0;
+                            joystickAngularCmd = 0;
+                            manualModeActive = false;
+                            [document.getElementById('manual-mode-btn'), document.getElementById('manual-mode-btn-sidebar')]
+                                .forEach(b => b && b.classList.remove('active'));
+                            const _pip = document.getElementById('manual-control-pip');
+                            if (_pip) _pip.classList.remove('active');
                             cmdVelTopic = null;
                             ros = null;
                             showStatus('Rosbridge disconnected', 'error');
@@ -18228,8 +18277,13 @@
                                 cmdVelTopic = new ROSLIB.Topic({
                                     ros: ros,
                                     name: manualCmdVelTopic,
-                                    messageType: 'geometry_msgs/msg/Twist'
+                                    messageType: 'geometry_msgs/msg/Twist',
+                                    latch: false
                                 });
+                                cmdVelTopic.publish(new ROSLIB.Message({
+                                    linear: { x: 0, y: 0, z: 0 },
+                                    angular: { x: 0, y: 0, z: 0 }
+                                }));
                                 console.log(`[DEBUG] Rebound cmd_vel publisher to ${manualCmdVelTopic}`);
                             }
 
@@ -18291,8 +18345,16 @@
                         cmdVelTopic = new ROSLIB.Topic({
                             ros: ros,
                             name: manualCmdVelTopic,
-                            messageType: 'geometry_msgs/msg/Twist'
+                            messageType: 'geometry_msgs/msg/Twist',
+                            latch: false
                         });
+
+                        // Immediately publish zero velocity to overwrite any stale latched
+                        // backward command that rosbridge may replay on advertisement.
+                        cmdVelTopic.publish(new ROSLIB.Message({
+                            linear: { x: 0, y: 0, z: 0 },
+                            angular: { x: 0, y: 0, z: 0 }
+                        }));
 
                         console.log(`[DEBUG] Created cmd_vel publisher on ${manualCmdVelTopic}`);
                     }

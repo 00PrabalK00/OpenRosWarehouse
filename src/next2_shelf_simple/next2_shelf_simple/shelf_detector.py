@@ -104,6 +104,14 @@ class ShelfDetector(Node):
             f'shelf_detector ready — scan={self._p["scan_topic"]} '
             f'intensity_thr={self._p["intensity_threshold"]}')
 
+    @staticmethod
+    def _safe_status_float(value):
+        try:
+            parsed = float(value)
+        except Exception:
+            return None
+        return parsed if math.isfinite(parsed) else None
+
     # ---- TF helper ----
     def _transform_point(self, x, y, source_frame):
         """Transform a point from source_frame to base_link. Returns (x, y) or None."""
@@ -365,13 +373,11 @@ class ShelfDetector(Node):
         self.front_intensity_sum = sum(intensities[i] for i in front_pair)
         self.back_intensity_sum = sum(intensities[i] for i in back_pair)
 
-        self.get_logger().info(
-            f'Solve 4-hotspot: center=({cx:.3f},{cy:.3f}) '
-            f'yaw={math.degrees(yaw):.1f}° fw={fw:.3f} bw={bw:.3f} depth={depth:.3f}')
-
         return {
             'x': cx, 'y': cy, 'yaw': yaw,
             'frame_id': self._p['base_frame'],
+            'front_midpoint': [float(fm[0]), float(fm[1])],
+            'back_midpoint': [float(bm[0]), float(bm[1])],
             'front_width': fw, 'back_width': bw,
             'depth': depth,
         }
@@ -428,13 +434,10 @@ class ShelfDetector(Node):
         self.front_intensity_sum = sum(intensities)
         self.back_intensity_sum = 0.0
 
-        self.get_logger().info(
-            f'Solve 2-hotspot: center=({mx:.3f},{my:.3f}) '
-            f'yaw={math.degrees(yaw):.1f}° width={w:.3f}')
-
         return {
             'x': mx, 'y': my, 'yaw': yaw,
             'frame_id': self._p['base_frame'],
+            'front_midpoint': [float(mx), float(my)],
             'front_width': w, 'back_width': -1.0,
             'depth': -1.0,
         }
@@ -447,22 +450,35 @@ class ShelfDetector(Node):
         else:
             balance = 1.0
 
+        live_pose = self.live_pose if isinstance(self.live_pose, dict) else {}
+        front_width = self._safe_status_float(live_pose.get('front_width', float('nan')))
+        back_width = self._safe_status_float(live_pose.get('back_width', float('nan')))
+
         status = {
             'ok': True,
             'detector_enabled': self.enabled,
             'candidate_valid': self.enabled and self.candidate_valid,
             'candidate_consistent': self.enabled and self.candidate_valid,
+            'solver_ok': self.enabled and self.candidate_valid,
             'committed_target_valid': self.committed_pose is not None,
             'committed_target_pose': self.committed_pose,
             'center_pose': self.live_pose,
+            'candidate_hotspot_count': int(self.hotspot_count),
             'hotspot_count': self.hotspot_count,
             'hotspot_points': self.hotspot_points,
             'max_intensity': self.max_intensity,
             'last_reason': self.last_reason,
+            'candidate_front_intensity_sum': self.front_intensity_sum,
+            'candidate_back_intensity_sum': self.back_intensity_sum,
             'candidate_intensity_balance_ratio': balance,
             'intensity_balance_ratio': balance,
             'front_intensity_sum': self.front_intensity_sum,
             'back_intensity_sum': self.back_intensity_sum,
+            'candidate_front_width_m': front_width,
+            'preferred_front_width_m': front_width,
+            'front_width_m': front_width,
+            'candidate_back_width_m': back_width,
+            'back_width_m': back_width,
         }
 
         msg = String()

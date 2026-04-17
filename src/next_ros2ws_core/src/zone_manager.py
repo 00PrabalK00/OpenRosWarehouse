@@ -2599,7 +2599,48 @@ class ZoneManager(Node):
         self._publish_active_goal_marker(target_label, final_pose)
         feedback = GoToZoneAction.Feedback()
 
-        async def _run_follow_path_phase(nav_path: NavPath, phase_label: str, progress_range: Tuple[float, float]):
+        def _phase_acceptance_limits(phase_label: str) -> Tuple[float, float, float]:
+            label = str(phase_label or '').strip().lower()
+            pos_tol = max(float(plan.position_tolerance), 0.07)
+            lat_tol = max(float(plan.entry_lateral_tolerance), 0.05)
+            heading_tol = max(float(plan.heading_tolerance), math.radians(10.0))
+            if 'retreat' in label:
+                pos_tol = max(pos_tol, 0.10)
+                heading_tol = max(heading_tol, math.radians(15.0))
+            elif 'lineup' in label:
+                heading_tol = max(heading_tol, math.radians(12.0))
+            elif 'entry alignment' in label:
+                pos_tol = max(float(plan.position_tolerance), 0.06)
+                lat_tol = max(float(plan.entry_lateral_tolerance), 0.04)
+                heading_tol = max(float(plan.heading_tolerance), math.radians(10.0))
+            return pos_tol, lat_tol, heading_tol
+
+        def _phase_pose_satisfied(
+            target_pose: PoseStamped,
+            phase_label: str,
+        ) -> Tuple[bool, Optional[Dict[str, float]], str]:
+            phase_error, phase_error_msg = self._pose_error_in_target_frame(
+                target_pose,
+                robot_timeout_sec=0.20,
+            )
+            if phase_error is None:
+                return False, None, phase_error_msg
+
+            pos_tol, lat_tol, heading_tol = _phase_acceptance_limits(phase_label)
+            satisfied = (
+                float(phase_error['distance']) <= pos_tol
+                and abs(float(phase_error['left_error'])) <= lat_tol
+                and abs(float(phase_error['heading_error'])) <= heading_tol
+            )
+            return satisfied, phase_error, ''
+
+        async def _run_follow_path_phase(
+            nav_path: NavPath,
+            phase_label: str,
+            progress_range: Tuple[float, float],
+            *,
+            target_pose_for_acceptance: Optional[PoseStamped] = None,
+        ):
             if not self.nav_follow_path_client.wait_for_server(timeout_sec=self.follow_path_server_wait_sec):
                 return False, f'{phase_label} unavailable: Nav2 FollowPath action server not available.'
 
@@ -2696,64 +2737,115 @@ class ZoneManager(Node):
 
             status = int(getattr(wrapped, 'status', GoalStatus.STATUS_UNKNOWN))
             if status != GoalStatus.STATUS_SUCCEEDED:
+                if target_pose_for_acceptance is not None:
+                    phase_ok, phase_error, _ = _phase_pose_satisfied(
+                        target_pose_for_acceptance,
+                        phase_label,
+                    )
+                    if phase_ok and phase_error is not None:
+                        self.get_logger().info(
+                            f'{phase_label}: accepting Nav2 {self._goal_status_name(status)} '
+                            f'because robot is already within short-phase tolerance '
+                            f'(dist={float(phase_error["distance"]):.2f}m, '
+                            f'left={float(phase_error["left_error"]):.2f}m, '
+                            f'heading={math.degrees(float(phase_error["heading_error"])):.1f}deg)'
+                        )
+                        return True, ''
                 return False, (
                     f'{phase_label} failed with status {status} '
                     f'({self._goal_status_name(status)})'
                 )
             return True, ''
-        navigation_progress_start = 0.20
-        navigation_progress_end = 0.84
-        if navigation_targets:
+
+        async def _execute_navigation_targets_sequence(
+            navigation_targets_arg,
+            start_pose: PoseStamped,
+            *,
+            progress_start: float,
+            progress_end: float,
+            log_prefix: str = 'Shelf handoff',
+        ) -> Tuple[Optional[bool], str, Optional[PoseStamped]]:
+            if not navigation_targets_arg:
+                return True, '', start_pose
+
             progress_step = (
-                (navigation_progress_end - navigation_progress_start)
-                / float(max(1, len(navigation_targets)))
+                (progress_end - progress_start)
+                / float(max(1, len(navigation_targets_arg)))
             )
-            current_nav_start = navigation_progress_start
-            current_nav_pose = robot_pose
-            for index, navigation_target in enumerate(navigation_targets, start=1):
+            current_nav_start = progress_start
+            current_nav_pose = start_pose
+
+            for index, navigation_target in enumerate(navigation_targets_arg, start=1):
                 target_pose = self._shelf_pose2d_to_pose_stamped(navigation_target.pose)
                 target_distance = self._distance_to_waypoint_pair(current_nav_pose, target_pose)
                 self.get_logger().info(
-                    f'Shelf handoff phase {index}/{len(navigation_targets)}: '
+                    f'{log_prefix} phase {index}/{len(navigation_targets_arg)}: '
                     f'{navigation_target.label} -> '
                     f'({navigation_target.pose.x:.2f}, {navigation_target.pose.y:.2f}) '
                     f'heading={math.degrees(navigation_target.pose.yaw):.1f}deg '
                     f'distance={target_distance:.2f}m'
                 )
-                nav_path = self._build_segment_follow_path(
-                    current_nav_pose,
+
+                phase_ready, phase_error, _ = _phase_pose_satisfied(
                     target_pose,
-                    segment_spacing=float(self.goal_pose_handoff_insertion_path_spacing),
-                    enforce_end_orientation=True,
-                )
-                nav_ok, nav_msg = await _run_follow_path_phase(
-                    nav_path,
                     navigation_target.label,
-                    (
-                        current_nav_start,
-                        min(
-                            navigation_progress_end,
-                            current_nav_start + progress_step,
+                )
+                if phase_ready and phase_error is not None:
+                    self.get_logger().info(
+                        f'{navigation_target.label}: already satisfied before dispatch '
+                        f'(dist={float(phase_error["distance"]):.2f}m, '
+                        f'left={float(phase_error["left_error"]):.2f}m, '
+                        f'heading={math.degrees(float(phase_error["heading_error"])):.1f}deg)'
+                    )
+                else:
+                    nav_path = self._build_segment_follow_path(
+                        current_nav_pose,
+                        target_pose,
+                        segment_spacing=float(self.goal_pose_handoff_insertion_path_spacing),
+                        enforce_end_orientation=True,
+                    )
+                    nav_ok, nav_msg = await _run_follow_path_phase(
+                        nav_path,
+                        navigation_target.label,
+                        (
+                            current_nav_start,
+                            min(
+                                progress_end,
+                                current_nav_start + progress_step,
+                            ),
                         ),
-                    ),
-                )
-                self._clear_active_follow_path()
-                if not nav_ok:
-                    self._clear_active_goal_marker()
-                    if goal_handle.is_cancel_requested:
-                        return None, nav_msg
-                    return False, nav_msg
-                current_nav_start = min(
-                    navigation_progress_end,
-                    current_nav_start + progress_step,
-                )
+                        target_pose_for_acceptance=target_pose,
+                    )
+                    self._clear_active_follow_path()
+                    if not nav_ok:
+                        if goal_handle.is_cancel_requested:
+                            return None, nav_msg, None
+                        return False, nav_msg, None
+
+                current_nav_start = min(progress_end, current_nav_start + progress_step)
                 current_nav_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.30)
                 if current_nav_pose is None:
-                    self._clear_active_goal_marker()
                     return False, (
                         f'Unable to resolve robot pose in {frame_id} after '
                         f'{navigation_target.label.lower()}.'
-                    )
+                    ), None
+
+            return True, '', current_nav_pose
+
+        navigation_progress_start = 0.20
+        navigation_progress_end = 0.84
+        if navigation_targets:
+            nav_ok, nav_msg, current_nav_pose = await _execute_navigation_targets_sequence(
+                navigation_targets,
+                robot_pose,
+                progress_start=navigation_progress_start,
+                progress_end=navigation_progress_end,
+            )
+            if not nav_ok:
+                self._clear_active_goal_marker()
+                return nav_ok, nav_msg
+            if current_nav_pose is not None:
+                robot_pose = current_nav_pose
 
         settle_sec = max(0.20, float(self.path_arrival_settle_sec))
         if settle_sec > 1e-6:
@@ -2765,6 +2857,7 @@ class ZoneManager(Node):
                 self._clear_active_goal_marker()
                 return False, f'Frozen shelf insert aborted during settle for "{target_label}": E-STOP active.'
 
+        refined_plan_applied = False
         if bool(self.goal_pose_handoff_live_geometry_enabled):
             refined_goal_pose, refine_err = self._build_shelf_goal_pose_from_status(frame_id)
             if refined_goal_pose is not None:
@@ -2789,6 +2882,7 @@ class ZoneManager(Node):
                     )
                 else:
                     plan = refined_plan
+                    refined_plan_applied = True
                     self.get_logger().info(
                         f'Frozen shelf insert: refined live geometry target to '
                         f'({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
@@ -2814,6 +2908,36 @@ class ZoneManager(Node):
             self._pose_stamped_to_shelf_pose2d(robot_pose),
             plan,
         )
+        if refined_plan_applied and remaining_navigation_targets:
+            self.get_logger().info(
+                'Shelf refined-plan correction targets: '
+                + ' -> '.join(
+                    f'{target.label}({target.pose.x:.2f},{target.pose.y:.2f})'
+                    for target in remaining_navigation_targets
+                )
+            )
+            correction_ok, correction_msg, corrected_pose = await _execute_navigation_targets_sequence(
+                remaining_navigation_targets,
+                robot_pose,
+                progress_start=0.84,
+                progress_end=0.93,
+                log_prefix='Shelf refined-plan correction',
+            )
+            if not correction_ok:
+                self._clear_active_goal_marker()
+                return correction_ok, correction_msg
+            if corrected_pose is not None:
+                robot_pose = corrected_pose
+            assessment = assess_shelf_docking(
+                self._pose_stamped_to_shelf_pose2d(robot_pose),
+                plan,
+                local_insert_distance=float(self.goal_pose_handoff_local_insert_distance),
+                approach_arrival_tolerance=float(self.goal_pose_handoff_approach_arrival_tolerance),
+            )
+            remaining_navigation_targets = build_shelf_navigation_targets(
+                self._pose_stamped_to_shelf_pose2d(robot_pose),
+                plan,
+            )
         if remaining_navigation_targets:
             self._clear_active_goal_marker()
             return False, (
@@ -2969,9 +3093,13 @@ class ZoneManager(Node):
         on_feedback: Optional[Callable[[float, float], None]] = None,
         max_runtime_sec: float = 0.0,
         allow_partial_completion_on_timeout: bool = False,
+        clear_motion_intent_before_start: bool = False,
     ) -> Tuple[bool, str]:
         if not self.nav_follow_path_client.wait_for_server(timeout_sec=self.follow_path_server_wait_sec):
             return False, f'{phase_label} unavailable: Nav2 FollowPath action server not available.'
+
+        if clear_motion_intent_before_start:
+            await self._clear_motion_intent(source=f'zone_manager:pre_{phase_label}')
 
         follow_goal = Nav2FollowPath.Goal()
         follow_goal.path = nav_path
@@ -3766,6 +3894,8 @@ class ZoneManager(Node):
         nav_goal.pose = target_pose
         nav_goal.pose.header.stamp = self.get_clock().now().to_msg()
 
+        await self._clear_motion_intent(source='zone_manager:pre_navigate_to_pose')
+
         send_future = self.nav_client.send_goal_async(
             nav_goal,
             feedback_callback=_nav_feedback_cb,
@@ -3952,6 +4082,8 @@ class ZoneManager(Node):
             follow_goal.controller_id = str(self.follow_path_controller_id or 'FollowPath')
         if hasattr(follow_goal, 'goal_checker_id'):
             follow_goal.goal_checker_id = str(self.follow_path_goal_checker_id or '')
+
+        await self._clear_motion_intent(source='zone_manager:pre_follow_path')
 
         send_future = self.nav_follow_path_client.send_goal_async(
             follow_goal,
@@ -5105,14 +5237,13 @@ class ZoneManager(Node):
                     f'{waypoint_index + 1}/{total}'
                 )
 
-            align_speed_cap = min(
-                0.05,
-                max(0.02, float(self.goal_pose_handoff_local_insert_speed)),
-            )
             intent_ok, intent_msg = await self._set_motion_intent(
                 'alignment',
                 align_pose_arg,
-                max_linear_speed=align_speed_cap,
+                # Heading cleanup should not leave the controller stuck in a
+                # crawl-speed envelope. Use the intent only for mode/tolerance,
+                # not as a translational speed cap.
+                max_linear_speed=0.0,
                 # Do not reuse the slow shelf-insertion yaw cap here.
                 # ALIGN_AT_POINT may need a near in-place 90-180deg correction,
                 # and clamping angular speed too low causes Nav2 progress aborts
@@ -5769,6 +5900,10 @@ class ZoneManager(Node):
                     follow_goal.controller_id = str(self.follow_path_controller_id or 'FollowPath')
                 if hasattr(follow_goal, 'goal_checker_id'):
                     follow_goal.goal_checker_id = str(self.follow_path_goal_checker_id or '')
+
+                await self._clear_motion_intent(
+                    source=f'zone_manager:pre_segment:{phase_label}'
+                )
 
                 send_future = self.nav_follow_path_client.send_goal_async(
                     follow_goal,
