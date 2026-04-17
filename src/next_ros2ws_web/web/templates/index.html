@@ -10618,6 +10618,461 @@
             max-height: 240px;
         }
 
+        /* Device Config compact pass: match home-page card density and remove sidebar horizontal scroll. */
+        #device-config-main-stage,
+        #device-config-sidebar {
+            background:
+                radial-gradient(circle at top left, rgba(71, 85, 105, 0.08), transparent 34%),
+                linear-gradient(180deg, rgba(8, 12, 20, 0.99) 0%, rgba(12, 17, 28, 0.98) 100%) !important;
+            border-color: rgba(71, 85, 105, 0.68) !important;
+        }
+
+        .dc-insp-hdr,
+        .dc-insp-tabs {
+            background: rgba(18, 24, 38, 0.94) !important;
+        }
+
+        .dc-insp-hdr {
+            padding: 8px 12px 6px !important;
+        }
+
+        .dc-insp-title {
+            font-size: 10px !important;
+            letter-spacing: 0.1em !important;
+        }
+
+        .dc-insp-badge {
+            background: rgba(30, 41, 59, 0.9) !important;
+            border-color: rgba(100, 116, 139, 0.34) !important;
+            color: rgba(226, 232, 240, 0.78) !important;
+        }
+
+        .dc-insp-tab-btn {
+            font-size: 8px !important;
+            letter-spacing: 0.12em !important;
+            color: rgba(148, 163, 184, 0.76) !important;
+        }
+
+        .dc-insp-tab-btn.active {
+            color: rgba(226, 232, 240, 0.94) !important;
+            border-bottom-color: rgba(148, 163, 184, 0.46) !important;
+            background: linear-gradient(180deg, rgba(51, 65, 85, 0.16), rgba(51, 65, 85, 0)) !important;
+        }
+
+        #device-config-main-scroll,
+        .dc-insp-pane,
+        #device-config-sidebar .robot-editor-table-wrap,
+        #device-config-sidebar .robot-editor-frame-table-wrap,
+        #device-config-sidebar .robot-editor-link-hierarchy,
+        #device-config-sidebar .robot-editor-bottom-panel,
+        #device-config-sidebar .robot-editor-component-tree,
+        #device-config-sidebar .robot-editor-link-tree-mirror {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(148, 163, 184, 0.16) transparent;
+        }
+
+        #device-config-main-scroll::-webkit-scrollbar,
+        .dc-insp-pane::-webkit-scrollbar,
+        #device-config-sidebar .robot-editor-table-wrap::-webkit-scrollbar,
+        #device-config-sidebar .robot-editor-frame-table-wrap::-webkit-scrollbar,
+        #device-config-sidebar .robot-editor-link-hierarchy::-webkit-scrollbar,
+        #device-config-sidebar .robot-editor-bottom-panel::-webkit-scrollbar,
+        #device-config-sidebar .robot-editor-component-tree::-webkit-scrollbar,
+        #device-config-sidebar .robot-editor-link-tree-mirror::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        #device-config-main-scroll::-webkit-scrollbar-track,
+        .dc-insp-pane::-webkit-scrollbar-track,
+        #device-config-sidebar .robot-editor-table-wrap::-webkit-scrollbar-track,
+        #device-config-sidebar .robot-editor-frame-table-wrap::-webkit-scrollbar-track,
+        #device-config-sidebar .robot-editor-link-hierarchy::-webkit-scrollbar-track,
+        #device-config-sidebar .robot-editor-bottom-panel::-webkit-scrollbar-track,
+        #device-config-sidebar .robot-editor-component-tree::-webkit-scrollbar-track,
+        #device-config-sidebar .robot-editor-link-tree-mirror::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #device-config-main-scroll::-webkit-scrollbar-thumb,
+        .dc-insp-pane::-webkit-scrollbar-thumb,
+        #device-config-sidebar .robot-editor-table-wrap::-webkit-scrollbar-thumb,
+        #device-config-sidebar .robot-editor-frame-table-wrap::-webkit-scrollbar-thumb,
+        #device-config-sidebar .robot-editor-link-hierarchy::-webkit-scrollbar-thumb,
+        #device-config-sidebar .robot-editor-bottom-panel::-webkit-scrollbar-thumb,
+        #device-config-sidebar .robot-editor-component-tree::-webkit-scrollbar-thumb,
+        #device-config-sidebar .robot-editor-link-tree-mirror::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.16);
+            border-radius: 999px;
+        }
+
+        #device-config-main-scroll::-webkit-scrollbar-thumb:hover,
+        .dc-insp-pane::-webkit-scrollbar-thumb:hover,
+        #device-config-sidebar .robot-editor-table-wrap::-webkit-scrollbar-thumb:hover,
+        #device-config-sidebar .robot-editor-frame-table-wrap::-webkit-scrollbar-thumb:hover,
+        #device-config-sidebar .robot-editor-link-hierarchy::-webkit-scrollbar-thumb:hover,
+        #device-config-sidebar .robot-editor-bottom-panel::-webkit-scrollbar-thumb:hover,
+        #device-config-sidebar .robot-editor-component-tree::-webkit-scrollbar-thumb:hover,
+        #device-config-sidebar .robot-editor-link-tree-mirror::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.28);
+        }
+
+        #device-config-config-stack,
+        #device-config-tools-stack {
+            padding: 8px 8px 10px !important;
+            gap: 8px !important;
+        }
+
+        #device-config-sidebar .settings-card,
+        #device-config-sidebar .robot-editor-main-panel,
+        #device-config-sidebar .robot-editor-bottom-panel,
+        #device-config-sidebar .robot-editor-frame-table-wrap,
+        #device-config-sidebar .robot-editor-table-wrap,
+        #device-config-sidebar .robot-editor-link-hierarchy,
+        #device-config-sidebar .robot-editor-link-properties-card,
+        #device-config-sidebar .robot-editor-canvas-shell,
+        #device-config-sidebar .robot-editor-geometry-warnings,
+        #device-config-sidebar .robot-editor-tree-panel,
+        #device-config-sidebar .robot-editor-unified-toolbar {
+            border-radius: 10px !important;
+            border-color: rgba(71, 85, 105, 0.44) !important;
+            background:
+                linear-gradient(180deg, rgba(16, 22, 35, 0.96) 0%, rgba(10, 14, 24, 0.98) 100%) !important;
+            box-shadow: 0 10px 22px rgba(2, 6, 23, 0.16) !important;
+        }
+
+        #device-config-sidebar .re-viz-strip {
+            padding: 8px !important;
+            border-radius: 10px !important;
+            border-color: rgba(71, 85, 105, 0.44) !important;
+            background: linear-gradient(180deg, rgba(16, 22, 35, 0.96) 0%, rgba(10, 14, 24, 0.98) 100%) !important;
+        }
+
+        #device-config-sidebar .re-viz-strip .toggle-grid {
+            gap: 4px !important;
+        }
+
+        #device-config-sidebar .re-viz-strip .toggle-item {
+            min-height: 26px !important;
+            padding: 4px 8px !important;
+            border-radius: 999px !important;
+            font-size: 9px !important;
+            letter-spacing: 0.06em !important;
+            background: rgba(30, 41, 59, 0.58) !important;
+            border: 1px solid rgba(71, 85, 105, 0.38) !important;
+        }
+
+        #device-config-sidebar .robot-editor-unified-toolbar {
+            min-height: 0 !important;
+            padding: 8px !important;
+            gap: 5px !important;
+            border-radius: 10px !important;
+            border-top: 1px solid rgba(71, 85, 105, 0.44) !important;
+        }
+
+        #device-config-sidebar .robot-editor-title {
+            font-size: 11px !important;
+            letter-spacing: 0.12em !important;
+        }
+
+        #device-config-sidebar .re-tb-group {
+            gap: 4px !important;
+        }
+
+        #device-config-sidebar .re-tb-sep {
+            height: 18px !important;
+            margin: 0 2px !important;
+            background: rgba(71, 85, 105, 0.46) !important;
+        }
+
+        #device-config-sidebar .re-tb-btn,
+        #device-config-sidebar .re-tb-panel-btn,
+        #device-config-sidebar .re-tb-select,
+        #device-config-sidebar .robot-editor-mode-btn,
+        #device-config-sidebar .robot-editor-icon-btn,
+        #device-config-sidebar .robot-editor-workspace .btn {
+            height: 28px !important;
+            min-height: 28px !important;
+            padding: 0 8px !important;
+            border-radius: 6px !important;
+            font-size: 9px !important;
+            letter-spacing: 0.06em !important;
+        }
+
+        #device-config-sidebar .re-tb-panel-btn {
+            border-radius: 999px !important;
+        }
+
+        #device-config-sidebar .re-tb-select {
+            min-width: 94px !important;
+            padding-right: 24px !important;
+        }
+
+        #device-config-sidebar .re-tb-btn i,
+        #device-config-sidebar .re-tb-panel-btn i {
+            font-size: 9px !important;
+        }
+
+        #device-config-sidebar .re-tb-btn-primary,
+        #device-config-sidebar .robot-editor-btn-primary,
+        #device-config-sidebar .robot-editor-mode-btn.active,
+        #device-config-sidebar .re-tb-panel-btn.active {
+            background: rgba(51, 65, 85, 0.88) !important;
+            border-color: rgba(100, 116, 139, 0.44) !important;
+            color: rgba(241, 245, 249, 0.96) !important;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+        }
+
+        #device-config-sidebar .re-tb-btn-add {
+            background: rgba(22, 101, 52, 0.16) !important;
+            border-color: rgba(74, 222, 128, 0.16) !important;
+        }
+
+        #device-config-sidebar .robot-editor-panel-header {
+            min-height: 48px !important;
+            padding: 10px 10px 8px !important;
+            background: linear-gradient(180deg, rgba(51, 65, 85, 0.12) 0%, rgba(51, 65, 85, 0) 100%) !important;
+        }
+
+        #device-config-sidebar .robot-editor-panel-header h3 {
+            font-size: 10px !important;
+            letter-spacing: 0.1em !important;
+        }
+
+        #device-config-sidebar .robot-editor-panel-subtitle,
+        #device-config-sidebar .robot-editor-focus-summary,
+        #device-config-sidebar .robot-editor-link-selection-meta,
+        #device-config-sidebar .robot-editor-link-properties-card label,
+        #device-config-sidebar .robot-editor-tree-header,
+        #device-config-sidebar .robot-editor-tree-count,
+        #device-config-sidebar .robot-editor-shape-grid label {
+            font-size: 9px !important;
+            line-height: 1.35 !important;
+        }
+
+        #device-config-sidebar .robot-editor-workspace .settings-input,
+        #device-config-sidebar .robot-editor-workspace select.settings-input,
+        #device-config-sidebar .robot-editor-workspace input.settings-input {
+            height: 28px !important;
+            min-width: 0 !important;
+            padding: 0 7px !important;
+            font-size: 10px !important;
+            border-radius: 6px !important;
+        }
+
+        #device-config-sidebar .robot-editor-table-wrap,
+        #device-config-sidebar .robot-editor-frame-table-wrap {
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            max-height: 440px !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table {
+            width: 100% !important;
+            min-width: 100% !important;
+            table-layout: fixed !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table thead th {
+            height: 30px !important;
+            padding: 0 6px !important;
+            font-size: 8px !important;
+            letter-spacing: 0.08em !important;
+            color: rgba(148, 163, 184, 0.82) !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table th,
+        #device-config-sidebar .robot-editor-frame-table td {
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table td {
+            padding: 6px !important;
+            font-size: 9px !important;
+            line-height: 1.25 !important;
+            color: rgba(226, 232, 240, 0.9) !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table tbody tr {
+            height: 34px !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(1),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(1) {
+            width: 18% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(2),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(2) {
+            width: 18% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(3),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(3) {
+            width: 16% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(4),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(4) {
+            width: 10% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(5),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(5) {
+            width: 10% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(6),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(6) {
+            width: 12% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(7),
+        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(7) {
+            width: 16% !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table td .settings-input {
+            min-width: 0 !important;
+            width: 100% !important;
+            font-size: 9px !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table td:last-child {
+            white-space: normal !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table td:last-child .btn {
+            width: 100% !important;
+            height: 22px !important;
+            min-height: 22px !important;
+            padding: 0 4px !important;
+            font-size: 8px !important;
+            margin: 1px 0 !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-search-wrap {
+            margin: 0 8px 8px !important;
+        }
+
+        #device-config-sidebar .robot-editor-tree-search {
+            height: 28px !important;
+            padding-left: 30px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-hierarchy,
+        #device-config-sidebar .robot-editor-link-properties-card,
+        #device-config-sidebar .robot-editor-tree-panel {
+            padding: 8px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-hierarchy {
+            max-height: 154px !important;
+            margin-bottom: 8px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-node {
+            min-height: 26px !important;
+            padding: 4px 8px !important;
+            font-size: 10px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-properties-card {
+            margin-top: 8px !important;
+            gap: 6px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-properties-card h4 {
+            font-size: 11px !important;
+            margin-bottom: 2px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-properties-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 6px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-properties-grid > div {
+            gap: 3px !important;
+        }
+
+        #device-config-sidebar .robot-editor-link-apply-btn {
+            margin-top: 2px !important;
+        }
+
+        #device-config-sidebar .robot-editor-bottom-panel {
+            min-height: 250px !important;
+            padding: 0 !important;
+        }
+
+        #device-config-sidebar .robot-editor-tab-nav {
+            min-height: 34px !important;
+            height: 34px !important;
+            padding: 0 8px !important;
+            gap: 1px !important;
+        }
+
+        #device-config-sidebar .robot-editor-tab-btn {
+            height: 34px !important;
+            padding: 0 8px !important;
+            font-size: 9px !important;
+            letter-spacing: 0.06em !important;
+        }
+
+        #device-config-sidebar .robot-editor-tab-nav-actions .btn {
+            height: 24px !important;
+            min-height: 24px !important;
+            padding: 0 8px !important;
+            font-size: 8px !important;
+        }
+
+        #device-config-sidebar .robot-editor-tab-content {
+            padding: 10px !important;
+        }
+
+        #device-config-sidebar .robot-editor-shape-palette {
+            gap: 4px !important;
+            margin-bottom: 8px !important;
+        }
+
+        #device-config-sidebar .robot-shape-palette-item {
+            height: 26px !important;
+            padding: 0 8px !important;
+            font-size: 9px !important;
+            border-radius: 999px !important;
+        }
+
+        #device-config-sidebar .robot-editor-canvas-toolbar {
+            gap: 6px !important;
+            margin-bottom: 8px !important;
+            flex-wrap: wrap !important;
+        }
+
+        #device-config-sidebar .robot-editor-toggle-pill {
+            min-height: 24px !important;
+            padding: 0 8px !important;
+            font-size: 9px !important;
+            border-radius: 999px !important;
+        }
+
+        #device-config-sidebar .robot-editor-shapes-table-wrap {
+            max-height: 136px !important;
+            margin-bottom: 8px !important;
+        }
+
+        #device-config-sidebar .robot-editor-shape-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 6px !important;
+            margin: 8px 0 !important;
+        }
+
+        #device-config-sidebar .robot-editor-component-tree,
+        #device-config-sidebar .robot-editor-link-tree-mirror {
+            max-height: 186px !important;
+        }
+
         @media (max-width: 1200px) {
             #device-config-shell {
                 flex-direction: column;
