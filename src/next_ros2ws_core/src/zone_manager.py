@@ -5148,38 +5148,42 @@ class ZoneManager(Node):
                 last_feedback_ns = now_ns
 
             try:
-                # Keep ALIGN_AT_POINT inside the controller pipeline, but execute it
-                # in short FollowPath slices. A near-in-place heading correction can
-                # visually converge while still failing Nav2's translational progress
-                # contract if we hold one long FollowPath goal open.
+                # Send a SINGLE FollowPath goal and let the controller's
+                # rotate-to-heading state machine handle the full rotation
+                # uninterrupted.  The controller bypasses its own progress-stall
+                # detection during rotate-to-heading (intentional_rotation_rpp)
+                # and bypasses the Nav2 goal_checker in alignment mode.
+                #
+                # However, Nav2's server-side SimpleProgressChecker will fire
+                # STATUS_ABORTED after movement_time_allowance (8 s) because the
+                # robot's XY position doesn't change during in-place rotation.
+                # We handle that gracefully: after any abort, re-check heading
+                # and retry if the error has improved or is within tolerance.
                 align_deadline = time.monotonic() + align_timeout
                 last_err = abs(heading_delta)
-                # Track the initial rotation sign so we can detect overshoot:
-                # if the signed delta flips sign, the robot has crossed the target
-                # heading and should stop + settle rather than chase a new path.
-                initial_sign = 1.0 if heading_delta >= 0 else -1.0
+                max_single_goal_sec = 7.5  # just under the 8 s progress checker
+
                 while time.monotonic() < align_deadline:
+                    # ── Check if already aligned ──
                     stable_ok, last_err = await _heading_stable_within_tol(
                         align_pose_arg, heading_tol_arg)
                     if stable_ok:
                         return ''
 
-                    # Overshoot detection: if the signed heading delta has flipped
-                    # from the initial direction, the robot crossed the target.
-                    # Let it decelerate and re-check stability instead of sending
-                    # another FollowPath slice that would reverse direction and
-                    # create oscillation.
-                    current_signed_delta = self._heading_delta_to_goal(align_pose_arg)
-                    if math.isfinite(current_signed_delta):
-                        current_sign = 1.0 if current_signed_delta >= 0 else -1.0
-                        if current_sign != initial_sign:
-                            # Crossed zero — robot overshot.  Short settle then
-                            # re-check; if still overshooting the stable gate
-                            # will catch small errors.  Update sign for next pass.
-                            initial_sign = current_sign
-                            await self._non_blocking_wait(0.30)
-                            continue
+                    if goal_handle.is_cancel_requested:
+                        goal_handle.canceled()
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = 'FollowPath canceled during ALIGN_AT_POINT align'
+                        return terminal_error
+                    if self.estop_active:
+                        goal_handle.abort()
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = 'E-STOP active during ALIGN_AT_POINT align'
+                        return terminal_error
 
+                    # ── Build path ──
                     robot_pose = self._robot_pose_in_frame(base_frame, timeout_sec=0.20)
                     if robot_pose is None:
                         return (
@@ -5187,53 +5191,32 @@ class ZoneManager(Node):
                             f'{waypoint_index + 1}/{total}'
                         )
 
-                    align_dx = (
-                        float(align_pose_arg.pose.position.x)
-                        - float(robot_pose.pose.position.x)
-                    )
-                    align_dy = (
-                        float(align_pose_arg.pose.position.y)
-                        - float(robot_pose.pose.position.y)
-                    )
-                    align_xy_error = math.hypot(align_dx, align_dy)
-                    heading_only_xy_threshold = 0.05  # 5 cm — production tolerance
+                    # Degenerate path — two copies of the goal pose.
+                    # The controller creates a synthetic 1 cm fallback segment in
+                    # the goal yaw direction, immediately enters arrived_xy, then
+                    # rotate-to-heading handles the rest.
+                    nav_path = NavPath()
+                    nav_path.header.frame_id = align_pose_arg.header.frame_id
+                    nav_path.header.stamp = self.get_clock().now().to_msg()
+                    nav_path.poses = [
+                        self._copy_pose_stamped(align_pose_arg),
+                        self._copy_pose_stamped(align_pose_arg),
+                    ]
 
-                    if align_xy_error <= heading_only_xy_threshold:
-                        # XY already precise.  Degenerate two-pose path lets the
-                        # controller do pure in-place yaw correction to goal heading.
-                        nav_path = NavPath()
-                        nav_path.header.frame_id = align_pose_arg.header.frame_id
-                        nav_path.header.stamp = self.get_clock().now().to_msg()
-                        nav_path.poses = [
-                            self._copy_pose_stamped(align_pose_arg),
-                            self._copy_pose_stamped(align_pose_arg),
-                        ]
-                    else:
-                        # Robot is >5 cm from waypoint XY — must drive there.
-                        # Build the path with ALL poses stamped to the GOAL
-                        # orientation, not the segment travel bearing.  This
-                        # prevents the controller from chasing the line-of-travel
-                        # heading which diverges from the desired yaw and causes
-                        # overshoot / oscillation on arrival.
-                        nav_path = self._build_alignment_approach_path(
-                            robot_pose,
-                            align_pose_arg,
-                            segment_spacing=float(self.path_follow_segment_spacing),
-                        )
-
-                    remaining_align_time = max(0.0, align_deadline - time.monotonic())
-                    if remaining_align_time <= 0.0:
+                    remaining = max(0.0, align_deadline - time.monotonic())
+                    if remaining <= 0.0:
                         break
+                    goal_runtime = min(max_single_goal_sec, remaining)
 
-                    slice_runtime_sec = min(1.5, remaining_align_time)
                     align_ok, align_msg = await self._run_nav_follow_path_phase(
                         nav_path,
                         goal_handle,
                         f'ALIGN_AT_POINT "{poi_name_arg}"',
                         on_feedback=_align_feedback,
-                        max_runtime_sec=slice_runtime_sec,
+                        max_runtime_sec=goal_runtime,
                         allow_partial_completion_on_timeout=True,
                     )
+
                     if not align_ok:
                         if goal_handle.is_cancel_requested:
                             goal_handle.canceled()
@@ -5248,10 +5231,6 @@ class ZoneManager(Node):
                             result.message = 'E-STOP active during ALIGN_AT_POINT align'
                             return terminal_error
                         if 'obstacle hold active' in align_msg:
-                            # Transient obstacle during an alignment slice: wait for it to
-                            # clear (same logic as MOVE_TO_POINT) instead of immediately
-                            # aborting the whole action.  Extend the deadline so obstacle
-                            # wait time is not charged against the alignment budget.
                             obstacle_wait_started = time.monotonic()
                             wait_err = await _wait_for_obstacle_hold_clear(
                                 waypoint_index, f'ALIGN_AT_POINT "{poi_name_arg}"'
@@ -5260,10 +5239,44 @@ class ZoneManager(Node):
                                 return wait_err
                             align_deadline += time.monotonic() - obstacle_wait_started
                             continue
-                        return (
-                            f'ALIGN_AT_POINT controller align failed at waypoint '
-                            f'{waypoint_index + 1}/{total}: {align_msg}'
+                        # Nav2 progress checker abort (status 6) or other
+                        # non-fatal failure — check heading and retry if improved.
+                        current_err = self._heading_error_to_goal(align_pose_arg)
+                        if math.isfinite(current_err) and current_err <= heading_tol_arg:
+                            # Actually converged despite the abort status.
+                            self.get_logger().info(
+                                f'ALIGN_AT_POINT: Nav2 reported failure ({align_msg}) but '
+                                f'heading err {current_err:.2f}rad is within tol '
+                                f'{heading_tol_arg:.2f}rad — accepting'
+                            )
+                            # Verify with stable gate
+                            stable_ok2, _ = await _heading_stable_within_tol(
+                                align_pose_arg, heading_tol_arg)
+                            if stable_ok2:
+                                return ''
+                        if math.isfinite(current_err):
+                            last_err = current_err
+                        self.get_logger().warn(
+                            f'ALIGN_AT_POINT: Nav2 reported failure ({align_msg}), '
+                            f'heading err {last_err:.2f}rad — retrying'
                         )
+                        await self._non_blocking_wait(0.15)
+                        continue
+
+                    # Goal completed (controller declared success) — verify heading
+                    # is actually stable before accepting.
+                    stable_final, final_err = await _heading_stable_within_tol(
+                        align_pose_arg, heading_tol_arg)
+                    if math.isfinite(final_err):
+                        last_err = final_err
+                    if stable_final:
+                        return ''
+                    # Controller thought it was done but heading is unstable —
+                    # loop around for another goal.
+                    self.get_logger().info(
+                        f'ALIGN_AT_POINT: Nav2 succeeded but heading unstable '
+                        f'(err {last_err:.2f}rad) — issuing another goal'
+                    )
 
                 return (
                     f'ALIGN_AT_POINT could not converge within {align_timeout:.1f}s at waypoint '
