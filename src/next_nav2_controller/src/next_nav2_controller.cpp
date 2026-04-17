@@ -296,6 +296,11 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     }
     active_motion_intent = motion_intent_;
   }
+  // Derive insertion_mode early — the corridor-specific behaviours (path
+  // freeze, e_y+e_psi law, corridor breach abort) must only apply during
+  // insertion. Outside insertion mode we follow the drawn path via RPP.
+  const bool insertion_mode =
+    active_motion_intent.active && active_motion_intent.mode == "insertion";
   const auto current_motion_state = [&](bool rotating) {
       if (active_motion_intent.active) {
         if (active_motion_intent.mode == "insertion") {
@@ -337,15 +342,17 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // local costmap frame (e.g. odom), refresh transformed path periodically so
   // we do not chase stale transformed coordinates.
   const double refresh_period = std::max(0.0, plan_refresh_period_);
-  // Issue 12: once corridor is captured (strict-line locked), freeze the
-  // transformed path. This prevents the plan from shifting under the robot
-  // during insertion and eliminates TF inconsistency (Issue 11) by not
-  // re-sampling map->odom mid-corridor.
+  // Issue 12: during insertion, freeze the transformed path once the corridor
+  // is captured — this prevents the plan shifting under the robot and
+  // eliminates TF inconsistency (Issue 11) by not re-sampling map->odom
+  // mid-corridor. Outside insertion the normal refresh cadence is kept so
+  // the robot keeps tracking the drawn path through curves and corners.
+  const bool freeze_path = insertion_mode && strict_line_path_captured_;
   const bool needs_refresh =
     !raw_plan_.poses.empty() &&
     !raw_plan_.header.frame_id.empty() &&
     raw_plan_.header.frame_id != global_frame_ &&
-    !strict_line_path_captured_ &&
+    !freeze_path &&
     (last_plan_refresh_stamp_.nanoseconds() <= 0 ||
     (now - last_plan_refresh_stamp_).seconds() >= refresh_period);
   if (needs_refresh) {
@@ -549,8 +556,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // lateral limit stays fixed at strict_line_max_lateral_error_ regardless
   // of accumulated drift — the corridor is the hard safety boundary that
   // external interference cannot be allowed to loosen.
-  const bool insertion_mode =
-    active_motion_intent.active && active_motion_intent.mode == "insertion";
+  // insertion_mode is derived earlier (near active_motion_intent snapshot).
   const bool strict_line_tracking_effective =
     strict_line_tracking_ || insertion_mode;
   const bool strict_line_adaptive_lateral_limit_effective =
@@ -744,10 +750,12 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       return stop;
     };
 
-  // Issue 5: hard corridor breach abort. Once the corridor is captured, any
-  // excursion beyond lateral_error_limit is a real failure (e.g. shelf leg
-  // contact) — do NOT keep driving forward. Hand off to Nav2 blocked/recovery.
-  if (strict_line_locked &&
+  // Issue 5: hard corridor breach abort — only meaningful during insertion.
+  // Outside insertion a large lateral excursion just means the carrot-based
+  // RPP needs to curve back; aborting there would prevent normal path
+  // following. In insertion, any excursion beyond lateral_error_limit is a
+  // real failure (e.g. shelf leg contact) — hand off to Nav2 recovery.
+  if (insertion_mode && strict_line_locked &&
       std::isfinite(lateral_error_limit) &&
       abs_lateral_error > lateral_error_limit)
   {
@@ -1013,7 +1021,11 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     // RPP curvature with an explicit e_y + e_psi PD corridor law so the robot
     // tracks the frozen line (not the carrot geometry) during insertion.
     if (!in_rpp_rotate_mode_) {
-      if (strict_line_locked) {
+      // Issue 5: override RPP curvature with the e_y+e_psi corridor law ONLY
+      // during insertion. Outside insertion we must follow the drawn path via
+      // RPP carrot-based curvature — the corridor law is a straight-line
+      // tracker and would cut corners on any curved path.
+      if (insertion_mode && strict_line_locked) {
         const double e_y = projection.lateral_error;
         const double e_psi = angles::shortest_angular_distance(robot_yaw, segment.heading);
         command_w = (strict_line_k_heading_ * e_psi) - (strict_line_k_lateral_ * e_y);
