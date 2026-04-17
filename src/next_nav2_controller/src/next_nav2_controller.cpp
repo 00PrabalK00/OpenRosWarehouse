@@ -555,6 +555,12 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     strict_line_tracking_ || insertion_mode;
   const bool strict_line_adaptive_lateral_limit_effective =
     strict_line_adaptive_lateral_limit_ && !insertion_mode;
+  // Follow-up fix #5: force-disable reverse motion in insertion mode. The
+  // rotate-to-heading machinery only triggers on positive heading error, so
+  // allow_reverse_ + rpp_use_rotate_to_heading_ can produce a backwards nudge
+  // where an in-place yaw cleanup would be safer. During shelf insertion that
+  // backwards nudge is unacceptable; only forward motion is valid.
+  const bool allow_reverse_effective = allow_reverse_ && !insertion_mode;
 
   // Issue 7: keep the strict-line corridor state machine live through final
   // approach so lateral precision is preserved for the last centimeters.
@@ -630,7 +636,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     }
   }
 
-  const double runtime_min_v = allow_reverse_ ? -runtime_max_v : 0.0;
+  const double runtime_min_v = allow_reverse_effective ? -runtime_max_v : 0.0;
 
   const double target_progress = std::clamp(absolute_progress + lookahead, 0.0, total_path_length);
   std::size_t target_segment_index = current_segment_index_;
@@ -686,7 +692,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
 
   if (rotate_in_place_mode) {
     const double rotate_limit = std::max(0.0, std::min(v_max, rotate_in_place_max_v_));
-    v_min = allow_reverse_ ? -rotate_limit : 0.0;
+    v_min = allow_reverse_effective ? -rotate_limit : 0.0;
     v_max = rotate_limit;
     w_min = -max_w_;
     w_max = max_w_;
@@ -782,7 +788,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       angles::shortest_angular_distance(robot_yaw, target_heading_now);
     // If the carrot is behind the base and reverse is disallowed, rotate first
     // rather than driving "forward away" while distance can still decrease.
-    const bool target_behind = (!allow_reverse_) && (x_robot < -0.02);
+    const bool target_behind = (!allow_reverse_effective) && (x_robot < -0.02);
 
     // Issue 9: in final approach don't floor the desired speed at
     // min_tracking_speed_ — let it track final_scale all the way to zero so the
@@ -790,9 +796,9 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     double command_v = final_approach
       ? std::min(runtime_max_v, rpp_desired_linear_vel_ * final_scale)
       : std::min(runtime_max_v, std::max(min_tracking_speed_, rpp_desired_linear_vel_ * final_scale));
-    if (allow_reverse_ && x_robot < 0.0) {
+    if (allow_reverse_effective && x_robot < 0.0) {
       command_v = -command_v;
-    } else if (!allow_reverse_) {
+    } else if (!allow_reverse_effective) {
       command_v = std::max(0.0, command_v);
     }
     // Issue 4: once the robot has arrived at the goal xy, force v=0. Any
@@ -819,7 +825,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     if (!final_approach) {
       const double cruise_floor = std::max(min_tracking_speed_, min_cruise_speed_);
       if (std::abs(command_v) < cruise_floor) {
-        if (allow_reverse_ && command_v < 0.0) {
+        if (allow_reverse_effective && command_v < 0.0) {
           command_v = -cruise_floor;
         } else {
           command_v = cruise_floor;
@@ -852,7 +858,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
 
         const double wheel_limit = std::max(0.0, max_wheel_linear_speed_);
         v_cmd = std::clamp(v_cmd, -wheel_limit, wheel_limit);
-        if (!allow_reverse_) {
+        if (!allow_reverse_effective) {
           v_cmd = std::max(0.0, v_cmd);
         }
 
@@ -912,13 +918,13 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       // v_min/v_max clamp below cannot re-introduce forward motion while
       // the robot is supposed to be spinning in place.  This mirrors the
       // identical fix already applied to the non-RPP rotate_in_place_mode path.
-      v_min = allow_reverse_ ? -rotate_limit : 0.0;
+      v_min = allow_reverse_effective ? -rotate_limit : 0.0;
       v_max = rotate_limit;
       w_min = -max_w_;
       w_max = max_w_;
       command_v = final_approach
         ? 0.0
-        : (allow_reverse_ ? std::clamp(command_v, -rotate_limit, rotate_limit) : 0.0);
+        : (allow_reverse_effective ? std::clamp(command_v, -rotate_limit, rotate_limit) : 0.0);
       command_w = std::copysign(
         std::max(0.05, rpp_rotate_to_heading_angular_vel_),
         rotate_heading_error_signed);
@@ -991,7 +997,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     runtime_max_v = final_approach
       ? (runtime_max_v * obstacle_speed_scale)
       : std::max(min_tracking_speed_, runtime_max_v * obstacle_speed_scale);
-    const double runtime_min_v_cmd = allow_reverse_ ? -runtime_max_v : 0.0;
+    const double runtime_min_v_cmd = allow_reverse_effective ? -runtime_max_v : 0.0;
     command_v = std::clamp(command_v, runtime_min_v_cmd, runtime_max_v);
     command_v = std::clamp(command_v, v_min, v_max);
     if (arrived_xy) {
