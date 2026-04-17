@@ -659,6 +659,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       last_command_ = stop.twist;
       last_command_stamp_ = now;
       publishMotionIntentStatus(
+        active_motion_intent,
         current_motion_state(false),
         reason,
         intent_target_error,
@@ -953,6 +954,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     last_command_ = cmd.twist;
     last_command_stamp_ = now;
     publishMotionIntentStatus(
+      active_motion_intent,
       current_motion_state(intentional_rotation_rpp),
       obstacle_cost_avg > 0.0 ? "obstacle_cost" : "path_tracking",
       intent_target_error,
@@ -1120,8 +1122,6 @@ void NextNav2Controller::declareAndLoadParameters()
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".blocked_timeout", rclcpp::ParameterValue(blocked_timeout_));
   nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".rotate_to_heading_threshold", rclcpp::ParameterValue(rotate_to_heading_threshold_));
-  nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".rotate_in_place_max_v", rclcpp::ParameterValue(rotate_in_place_max_v_));
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".obstacle_speed_reduction_gain", rclcpp::ParameterValue(obstacle_speed_reduction_gain_));
@@ -1184,14 +1184,6 @@ void NextNav2Controller::declareAndLoadParameters()
     node,
     plugin_name_ + ".strict_line_min_speed_scale",
     rclcpp::ParameterValue(strict_line_min_speed_scale_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".strict_line_lateral_weight_scale",
-    rclcpp::ParameterValue(strict_line_lateral_weight_scale_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".strict_line_geometric_control",
-    rclcpp::ParameterValue(strict_line_geometric_control_));
   nav2_util::declare_parameter_if_not_declared(
     node,
     plugin_name_ + ".strict_line_k_heading",
@@ -1267,7 +1259,6 @@ void NextNav2Controller::declareAndLoadParameters()
   node->get_parameter(plugin_name_ + ".max_wheel_linear_speed", max_wheel_linear_speed_);
   node->get_parameter(plugin_name_ + ".final_approach_distance", final_approach_distance_);
   node->get_parameter(plugin_name_ + ".blocked_timeout", blocked_timeout_);
-  node->get_parameter(plugin_name_ + ".rotate_to_heading_threshold", rotate_to_heading_threshold_);
   node->get_parameter(plugin_name_ + ".rotate_in_place_max_v", rotate_in_place_max_v_);
   node->get_parameter(plugin_name_ + ".obstacle_speed_reduction_gain", obstacle_speed_reduction_gain_);
   node->get_parameter(plugin_name_ + ".min_obstacle_speed_scale", min_obstacle_speed_scale_);
@@ -1298,8 +1289,6 @@ void NextNav2Controller::declareAndLoadParameters()
     strict_line_release_lateral_error_);
   node->get_parameter(plugin_name_ + ".strict_line_speed_slowdown_error", strict_line_speed_slowdown_error_);
   node->get_parameter(plugin_name_ + ".strict_line_min_speed_scale", strict_line_min_speed_scale_);
-  node->get_parameter(plugin_name_ + ".strict_line_lateral_weight_scale", strict_line_lateral_weight_scale_);
-  node->get_parameter(plugin_name_ + ".strict_line_geometric_control", strict_line_geometric_control_);
   node->get_parameter(plugin_name_ + ".strict_line_k_heading", strict_line_k_heading_);
   node->get_parameter(plugin_name_ + ".strict_line_k_lateral", strict_line_k_lateral_);
   node->get_parameter(plugin_name_ + ".debug_publishers", debug_publishers_);
@@ -1374,7 +1363,6 @@ void NextNav2Controller::declareAndLoadParameters()
   lookahead_max_distance_ = std::max(lookahead_min_distance_, lookahead_max_distance_);
   wheel_separation_ = std::max(0.0, wheel_separation_);
   max_wheel_linear_speed_ = std::max(0.0, max_wheel_linear_speed_);
-  rotate_to_heading_threshold_ = std::clamp(std::abs(rotate_to_heading_threshold_), 0.1, 3.14);
   // rotate_in_place_max_v_ and base_rotate_in_place_max_v_ already set above
   obstacle_speed_reduction_gain_ = std::clamp(obstacle_speed_reduction_gain_, 0.0, 1.0);
   min_obstacle_speed_scale_ = std::clamp(min_obstacle_speed_scale_, 0.05, 1.0);
@@ -1401,7 +1389,6 @@ void NextNav2Controller::declareAndLoadParameters()
     0.0,
     strict_line_max_lateral_error_);
   strict_line_min_speed_scale_ = std::clamp(strict_line_min_speed_scale_, 0.05, 1.0);
-  strict_line_lateral_weight_scale_ = std::max(0.0, strict_line_lateral_weight_scale_);
   strict_line_k_heading_ = std::max(0.0, strict_line_k_heading_);
   strict_line_k_lateral_ = std::max(0.0, strict_line_k_lateral_);
   rpp_desired_linear_vel_ = std::max(0.0, rpp_desired_linear_vel_);
@@ -1459,12 +1446,6 @@ void NextNav2Controller::declareAndLoadParameters()
   strict_line_release_lateral_error_ = std::max(
     strict_line_release_lateral_error_,
     strict_line_adaptive_max_limit_);
-
-  // ── Issue 23: min capture speed ──────────────────────────────────────────
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".min_capture_speed", rclcpp::ParameterValue(min_capture_speed_));
-  node->get_parameter(plugin_name_ + ".min_capture_speed", min_capture_speed_);
-  min_capture_speed_ = std::clamp(min_capture_speed_, 0.0, max_v_);
 
   // ── Issue 14: degenerate segment fallback ────────────────────────────────
   nav2_util::declare_parameter_if_not_declared(

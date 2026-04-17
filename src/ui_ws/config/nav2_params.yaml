@@ -158,7 +158,6 @@ controller_server:
       max_wheel_linear_speed: 1.25
       min_tracking_speed: 0.05
       min_cruise_speed: 0.05
-      min_capture_speed: 0.0
       lookahead_distance: 0.70
       lookahead_speed_gain: 0.0
       lookahead_min_distance: 0.70

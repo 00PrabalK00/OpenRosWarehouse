@@ -101,6 +101,7 @@ private:
     const std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Request> request,
     std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Response> response);
   void publishMotionIntentStatus(
+    const MotionIntent & intent_snapshot,
     const std::string & state,
     const std::string & limiting_factor,
     double target_error,
@@ -216,7 +217,6 @@ private:
   double max_wheel_linear_speed_ {1.25};
   double final_approach_distance_ {0.8};
   double blocked_timeout_ {2.5};
-  double rotate_to_heading_threshold_ {0.90};
   double rotate_in_place_max_v_ {0.00};
   double base_rotate_in_place_max_v_ {0.00};  // stores configured value; never ratcheted down
   double obstacle_speed_reduction_gain_ {0.28};
@@ -242,8 +242,6 @@ private:
   double strict_line_release_lateral_error_ {0.37};
   double strict_line_speed_slowdown_error_ {0.03};
   double strict_line_min_speed_scale_ {0.20};
-  double strict_line_lateral_weight_scale_ {3.0};
-  bool strict_line_geometric_control_ {true};
   double strict_line_k_heading_ {2.8};
   double strict_line_k_lateral_ {1.8};
 
@@ -269,9 +267,6 @@ private:
 
   // Issue 22: hard ceiling for adaptive lateral limit widening
   double strict_line_adaptive_max_limit_ {0.20};  // param (m)
-
-  // Issue 23: speed floor near waypoint capture
-  double min_capture_speed_ {0.0};   // param (m/s) – allowed floor near waypoint
 
   // Issue 5/34: allow degenerate segment fallback for dev convenience (not production)
   bool allow_degenerate_segment_fallback_ {true};  // param
