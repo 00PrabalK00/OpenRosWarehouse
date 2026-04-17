@@ -57,6 +57,7 @@ DEFAULT_TOPICS: Dict[str, str] = {
     'service_settings_save_mappings': '/settings/save_mappings',
     'service_arbitrator_request_goal': '/arbitrator/request_goal',
     'service_arbitrator_cancel_goal': '/arbitrator/cancel_goal',
+    'service_navigate_to_goal_pose': '/navigate_to_goal_pose',
     # Publishers
     'publisher_goal_pose': '/goal_pose',
     'publisher_initial_pose': '/initialpose',

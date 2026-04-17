@@ -12,6 +12,8 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "next_ros2ws_interfaces/msg/motion_intent_status.hpp"
+#include "next_ros2ws_interfaces/srv/set_motion_intent.hpp"
 #include "nav2_core/controller.hpp"
 #include "nav2_costmap_2d/cost_values.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
@@ -58,13 +60,6 @@ public:
   void reset();
 
 private:
-  enum class ControlMode
-  {
-    Rollout,
-    Rpp,
-    Mpc
-  };
-
   struct Segment
   {
     geometry_msgs::msg::Point p0;
@@ -86,21 +81,32 @@ private:
     geometry_msgs::msg::Point point;
   };
 
-  struct CandidateResult
+  struct MotionIntent
   {
-    bool feasible {false};
-    double score {0.0};
-    double v {0.0};
-    double w {0.0};
-    double projected_progress {0.0};
-    double lateral_error_end {0.0};
-    double heading_error_end {0.0};
-    double target_distance_end {0.0};
-    double target_bearing_error_end {0.0};
-    double obstacle_cost_avg {0.0};
+    bool active {false};
+    std::uint64_t intent_id {0};
+    std::string source;
+    std::string mode {"normal"};
+    geometry_msgs::msg::PoseStamped target_pose;
+    double max_linear_speed {0.0};
+    double max_angular_speed {0.0};
+    double xy_tolerance {0.0};
+    double yaw_tolerance {0.0};
+    double timeout_sec {0.0};
+    rclcpp::Time received_at;
   };
 
   void declareAndLoadParameters();
+  void handleSetMotionIntent(
+    const std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Request> request,
+    std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Response> response);
+  void publishMotionIntentStatus(
+    const std::string & state,
+    const std::string & limiting_factor,
+    double target_error,
+    double cmd_v,
+    double cmd_w,
+    const rclcpp::Time & stamp) const;
 
   nav_msgs::msg::Path transformPathToGlobalFrame(const nav_msgs::msg::Path & path) const;
   void rebuildSegments();
@@ -131,18 +137,6 @@ private:
 
   void advanceSegmentIfReady(const geometry_msgs::msg::Point & robot_point, Projection & projection);
 
-  CandidateResult scoreCandidate(
-    double candidate_v,
-    double candidate_w,
-    const geometry_msgs::msg::PoseStamped & robot_pose,
-    const geometry_msgs::msg::Twist & current_velocity,
-    const Segment & segment,
-    const geometry_msgs::msg::Point & target_point,
-    double heading_reference,
-    bool final_approach,
-    bool goal_reached,
-    double lateral_error_limit) const;
-
   double poseCost(
     double x,
     double y,
@@ -172,14 +166,6 @@ private:
     bool in_rotate,
     const rclcpp::Time & stamp) const;
 
-  // Issue 2: check that the full angular sweep of a pivot is collision-free
-  bool isPivotCollisionFree(
-    double from_yaw,
-    double to_yaw,
-    double x,
-    double y,
-    const std::vector<geometry_msgs::msg::Point> & footprint) const;
-
   rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
   std::string plugin_name_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
@@ -195,6 +181,11 @@ private:
   std::string base_frame_;
 
   mutable std::mutex data_mutex_;
+  // Issue 17: separate fine-grained mutex for motion_intent so service
+  // callbacks don't contend with the (long-running) compute loop mutex.
+  mutable std::mutex motion_intent_mutex_;
+  MotionIntent motion_intent_;
+  std::uint64_t next_motion_intent_id_ {1};
 
   std::size_t current_segment_index_ {0};
   double t_along_segment_ {0.0};
@@ -219,19 +210,6 @@ private:
   double acc_lim_v_ {2.5};
   double decel_lim_v_ {2.5};  // separate deceleration limit for velocity profile braking pass
   double acc_lim_w_ {3.5};
-  double horizon_time_ {1.0};
-  int num_samples_ {84};
-  int sample_grid_v_ {7};
-  int sample_grid_w_ {13};
-  double w_lateral_ {8.0};
-  double w_heading_ {5.0};
-  double w_progress_ {8.5};
-  double w_smooth_ {0.6};
-  double w_obstacle_ {8.0};
-  double w_target_ {7.0};
-  double w_bearing_ {3.0};
-  double w_angular_rate_ {0.08};
-  double w_misaligned_forward_ {3.0};
   bool enforce_diff_drive_kinematics_ {true};
   bool allow_reverse_ {false};
   double wheel_separation_ {0.51};
@@ -251,7 +229,6 @@ private:
   bool abort_on_blocked_timeout_ {false};
   bool abort_on_progress_stall_ {false};
 
-  double rollout_dt_ {0.10};
   double transform_tolerance_ {0.2};
   double plan_refresh_period_ {0.25};
   double progress_backtrack_tolerance_ {0.08};
@@ -269,12 +246,8 @@ private:
   bool strict_line_geometric_control_ {true};
   double strict_line_k_heading_ {2.8};
   double strict_line_k_lateral_ {1.8};
-  double strict_line_rotate_only_error_ {0.35};
-  bool disallow_arcing_ {false};
-  double no_arc_heading_error_threshold_ {0.05};
 
-  ControlMode control_mode_ {ControlMode::Rollout};
-  std::string control_mode_name_ {"rollout"};
+  std::string control_mode_name_ {"rpp"};
 
   // RPP-style tracking parameters
   bool rpp_use_velocity_scaled_lookahead_ {true};
@@ -288,66 +261,17 @@ private:
   double rpp_max_allowed_time_to_collision_ {1.0};
   double rpp_collision_check_resolution_ {0.05};
   double rpp_segment_lookahead_turn_threshold_ {0.20};
-  bool rpp_use_obstacle_fallback_ {true};
-  double rpp_obstacle_fallback_cost_threshold_ {0.35};
-  int rpp_obstacle_fallback_v_samples_ {3};
-  int rpp_obstacle_fallback_w_samples_ {7};
 
-  // MPC-style random-shooting optimization
-  int mpc_steps_ {10};
-  int mpc_iterations_ {2};
-  int mpc_num_samples_ {24};
-  double mpc_noise_v_ {0.08};
-  double mpc_noise_w_ {0.20};
-  bool mpc_warm_start_ {true};
-  double mpc_terminal_heading_weight_ {5.0};
-  double mpc_terminal_lateral_weight_ {8.0};
-  double mpc_terminal_target_weight_ {7.0};
-  int mpc_seed_ {42};
-  std::mt19937 mpc_rng_ {42};
-  std::vector<double> mpc_v_sequence_;
-  std::vector<double> mpc_w_sequence_;
-
-  // ── Waypoint pivot: fast in-place turn at segment junctions ─────────────
-  bool waypoint_pivot_enabled_ {true};
-  double waypoint_pivot_threshold_ {0.45};          // rad  – heading change that triggers a pivot
-  double waypoint_pivot_approach_distance_ {0.40};  // m    – start braking this far from the junction
-  double waypoint_pivot_center_epsilon_ {0.14};     // m    – enter full pivot when this close
-  double waypoint_pivot_angular_vel_ {2.2};         // rad/s – fast pivot angular speed
-  double waypoint_pivot_done_threshold_ {0.08};     // rad  – pivot complete when error < this
-
-  // Pivot runtime state (reset on setPlan / cleanup)
-  bool in_waypoint_pivot_ {false};
-  double pivot_target_heading_ {0.0};
-
-  // Issue 4: pivot watchdog – abort if no progress or total time exceeded
-  rclcpp::Time pivot_start_stamp_;
-  double pivot_start_yaw_ {0.0};
-  double pivot_last_yaw_ {0.0};
-  rclcpp::Time pivot_last_yaw_progress_stamp_;
-  double pivot_timeout_ {10.0};           // param (s)
-  double pivot_progress_epsilon_ {0.05};  // param (rad) – min yaw step to count as progress
-  double pivot_progress_timeout_ {3.0};   // param (s)  – abort if no progress for this long
-
-  // Issue 20: junction consumed latch – prevent immediate re-pivot at same junction
-  double pivot_consumed_waypoint_progress_ {-1.0};  // -1 = none consumed
-  double pivot_departure_distance_ {0.30};           // param (m) – move this far before re-arming
-
-  // Issue 21: hysteresis state for multiple rotation authorities
-  bool in_no_arc_rotate_mode_ {false};
-  bool in_rotate_to_heading_mode_ {false};
+  // RPP rotate-to-heading hysteresis state
   bool in_rpp_rotate_mode_ {false};
   bool strict_line_path_captured_ {false};
-  double no_arc_heading_exit_threshold_ {0.03};        // param (rad)
-  double rotate_to_heading_exit_threshold_ {0.55};     // param (rad)
   double rpp_rotate_to_heading_exit_angle_ {0.45};     // param (rad)
 
   // Issue 22: hard ceiling for adaptive lateral limit widening
   double strict_line_adaptive_max_limit_ {0.20};  // param (m)
 
-  // Issue 23/25: separate speed floors for open tracking vs waypoint capture
+  // Issue 23: speed floor near waypoint capture
   double min_capture_speed_ {0.0};   // param (m/s) – allowed floor near waypoint
-  double pivot_entry_speed_ {0.03};  // param (m/s) – approach speed at exact junction
 
   // Issue 5/34: allow degenerate segment fallback for dev convenience (not production)
   bool allow_degenerate_segment_fallback_ {true};  // param
@@ -365,6 +289,9 @@ private:
   double speed_profile_min_speed_ {0.15};         // m/s  – floor for profile-computed limits
 
   bool debug_publishers_ {false};
+  std::string motion_intent_service_name_ {"/controller_server/set_motion_intent"};
+  std::string motion_intent_status_topic_ {"/controller_server/motion_intent_status"};
+  rclcpp::Service<next_ros2ws_interfaces::srv::SetMotionIntent>::SharedPtr motion_intent_service_;
   rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PointStamped>::SharedPtr projection_pub_;
   rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::PointStamped>::SharedPtr target_pub_;
   rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Int32>::SharedPtr segment_index_pub_;
@@ -375,6 +302,8 @@ private:
   rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr cmd_w_pub_;
   rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr final_approach_pub_;
   rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr rotate_mode_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<next_ros2ws_interfaces::msg::MotionIntentStatus>::SharedPtr
+    motion_intent_status_pub_;
 };
 
 }  // namespace next_nav2_controller

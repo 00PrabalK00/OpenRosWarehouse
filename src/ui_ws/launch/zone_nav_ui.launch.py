@@ -135,14 +135,6 @@ def generate_launch_description():
         ),
 
         Node(
-            package='next2_shelf_simple',
-            executable='shelf_inserter',
-            name='shelf_inserter',
-            output='screen',
-            parameters=[robot_yaml, {'use_sim_time': use_sim_time}],
-        ),
-
-        Node(
             package='next_ros2ws_core',
             executable='navigation_arbitrator',
             name='navigation_arbitrator',

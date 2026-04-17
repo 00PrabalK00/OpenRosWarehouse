@@ -134,9 +134,9 @@ safety_controller:
 # ---------------------------------------------------------------
 keepout_zone_publisher:
   ros__parameters:
-    enable_speed_filter: true
+    enable_speed_filter: false
     max_speed_mps: 0.30
-    publish_rate_hz: 5.0
+    publish_rate_hz: 10.0
     dynamic_safety_filters_enabled: true
     robot_base_frame: base_footprint
     dynamic_keepout_radius_m: 0.35

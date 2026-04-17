@@ -4600,6 +4600,11 @@ class RosBridge(Node):
             '/shelf_simple/start',
             callback_group=self.cb_group,
         )
+        self.navigate_to_goal_pose_client = self.create_client(
+            Trigger,
+            self._topic('service_navigate_to_goal_pose'),
+            callback_group=self.cb_group,
+        )
 
         self.get_map_layers_client = self.create_client(
             GetMapLayers,
@@ -11241,6 +11246,7 @@ class RosBridge(Node):
         if isinstance(self.shelf_status, dict):
             status_payload.update(self.shelf_status)
         status_payload['shelf_detected'] = bool(status_payload.get('candidate_valid', False))
+        status_payload.pop('ok', None)
 
         if not bool(status_payload.get('candidate_valid', False)):
             reason = str(status_payload.get('last_reason') or 'stale_candidate')
@@ -11286,17 +11292,27 @@ class RosBridge(Node):
         success = bool(response.success)
         message = str(response.message or ('Shelf commit accepted' if success else 'Shelf commit failed'))
 
-        # After successful commit, trigger the simple shelf inserter
+        # After successful commit, ask zone_manager to start docking via the
+        # NavigationArbitrator.  This replaces the old /shelf_simple/start call
+        # which pointed at the now-retired direct-drive shelf_inserter node.
         if success:
             try:
-                self._call_service(
-                    self.shelf_simple_start_client,
+                dock_resp, dock_err = self._call_service(
+                    self.navigate_to_goal_pose_client,
                     Trigger.Request(),
-                    wait_timeout=0.8,
-                    response_timeout=2.5,
+                    wait_timeout=1.0,
+                    response_timeout=3.0,
                 )
-            except Exception:
-                pass  # inserter may not be running; commit still succeeded
+                if dock_err:
+                    self.get_logger().warn(
+                        f'shelf trigger: navigate_to_goal_pose service error: {dock_err}'
+                    )
+                elif dock_resp is not None and not bool(dock_resp.success):
+                    self.get_logger().warn(
+                        f'shelf trigger: navigate_to_goal_pose rejected: {dock_resp.message}'
+                    )
+            except Exception as exc:
+                self.get_logger().warn(f'shelf trigger: navigate_to_goal_pose call failed: {exc}')
 
         return self._ok(success, message, commit_transport='service', **status_payload)
 

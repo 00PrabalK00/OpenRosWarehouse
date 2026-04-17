@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 import rclpy
 import tf2_ros
-from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
@@ -221,7 +221,6 @@ class ImprovedCorrelativeRelocalizer(Node):
         self.declare_parameter('startup_spin_speed', 0.25)
         self.declare_parameter('startup_spin_duration_sec', 2.0)
         self.declare_parameter('startup_spin_settle_sec', 0.25)
-        self.declare_parameter('cmd_vel_topic', '/cmd_vel')
 
         # Subscriptions and publishers
         self.map_sub = self.create_subscription(
@@ -262,11 +261,6 @@ class ImprovedCorrelativeRelocalizer(Node):
         )
 
         self.initpose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
-        self.cmd_vel_pub = self.create_publisher(
-            Twist,
-            str(self.get_parameter('cmd_vel_topic').value),
-            10,
-        )
         self.srv = self.create_service(Trigger, '/auto_relocate', self.handle_trigger)
 
         self.tf_buffer = tf2_ros.Buffer()
@@ -508,10 +502,6 @@ class ImprovedCorrelativeRelocalizer(Node):
         except Exception as exc:
             self.get_logger().error(f'Startup relocalization crashed: {exc}')
 
-    def _publish_zero_twist(self):
-        msg = Twist()
-        self.cmd_vel_pub.publish(msg)
-
     def _spin_robot_for_bundle(self):
         speed = float(self.get_parameter('startup_spin_speed').value)
         duration = float(self.get_parameter('startup_spin_duration_sec').value)
@@ -519,16 +509,10 @@ class ImprovedCorrelativeRelocalizer(Node):
         if duration <= 0.0 or abs(speed) <= 1e-4:
             return
 
-        self.get_logger().info(
-            f'Startup relocalization: spinning robot for {duration:.2f}s at {speed:.2f} rad/s'
+        self.get_logger().warn(
+            'Startup relocalization spin is disabled: auto_reloc no longer '
+            'publishes cmd_vel. Proceeding without pre-spin scan collection.'
         )
-        msg = Twist()
-        msg.angular.z = speed
-        end_t = time.time() + duration
-        while time.time() < end_t and rclpy.ok():
-            self.cmd_vel_pub.publish(msg)
-            time.sleep(0.05)
-        self._publish_zero_twist()
         if settle > 0.0:
             time.sleep(settle)
 

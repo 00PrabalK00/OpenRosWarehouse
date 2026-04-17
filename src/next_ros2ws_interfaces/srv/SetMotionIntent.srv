@@ -1,0 +1,12 @@
+string mode
+geometry_msgs/PoseStamped target_pose
+float32 max_linear_speed
+float32 max_angular_speed
+float32 xy_tolerance
+float32 yaw_tolerance
+float32 timeout_sec
+string source
+---
+bool accepted
+uint64 intent_id
+string message

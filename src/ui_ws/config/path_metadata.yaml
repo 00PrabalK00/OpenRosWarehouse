@@ -18,3 +18,17 @@ Main:
     curved_segments: []
     curved_segment_controls: {}
     has_curves: false
+back:
+  points:
+  - x: 1.26
+    y: -1.26
+    zone_name: a1
+  - x: 2.04
+    y: -0.17
+    zone_name: a2
+  settings:
+    loop_type: ping_pong
+    loop_mode: true
+    curved_segments: []
+    curved_segment_controls: {}
+    has_curves: false

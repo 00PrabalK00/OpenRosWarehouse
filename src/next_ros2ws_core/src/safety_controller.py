@@ -399,7 +399,7 @@ class SafetyController(Node):
                 self.robot_base_frame,
                 frame_id,
                 Time.from_msg(msg.header.stamp),
-                timeout=Duration(seconds=0.05),
+                timeout=Duration(seconds=0.2),
             )
         except TransformException:
             return None

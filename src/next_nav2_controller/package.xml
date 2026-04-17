@@ -16,6 +16,7 @@
   <depend>nav2_costmap_2d</depend>
   <depend>nav2_util</depend>
   <depend>nav_msgs</depend>
+  <depend>next_ros2ws_interfaces</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>

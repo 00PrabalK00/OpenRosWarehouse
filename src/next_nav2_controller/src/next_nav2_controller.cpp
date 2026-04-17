@@ -1,6 +1,7 @@
 #include "next_nav2_controller/next_nav2_controller.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <random>
@@ -59,6 +60,17 @@ void NextNav2Controller::configure(
   base_frame_ = costmap_ros_->getBaseFrameID();
 
   declareAndLoadParameters();
+  motion_intent_service_ = node_->create_service<next_ros2ws_interfaces::srv::SetMotionIntent>(
+    motion_intent_service_name_,
+    std::bind(
+      &NextNav2Controller::handleSetMotionIntent,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2));
+  motion_intent_status_pub_ =
+    node_->create_publisher<next_ros2ws_interfaces::msg::MotionIntentStatus>(
+    motion_intent_status_topic_,
+    rclcpp::SystemDefaultsQoS());
 
   if (debug_publishers_) {
     projection_pub_ = node_->create_publisher<geometry_msgs::msg::PointStamped>(
@@ -90,24 +102,14 @@ void NextNav2Controller::configure(
   current_segment_index_ = 0;
   t_along_segment_ = 0.0;
   stable_progress_m_ = 0.0;
-  mpc_v_sequence_.clear();
-  mpc_w_sequence_.clear();
   last_progress_checkpoint_m_ = 0.0;
   last_progress_checkpoint_stamp_ = node_->now();
   last_command_ = geometry_msgs::msg::Twist();
   last_command_stamp_ = node_->now();
   last_plan_refresh_stamp_ = rclcpp::Time();
-  in_waypoint_pivot_ = false;
-  pivot_target_heading_ = 0.0;
-  pivot_consumed_waypoint_progress_ = -1.0;
-  pivot_start_stamp_ = rclcpp::Time();
-  pivot_start_yaw_ = 0.0;
-  pivot_last_yaw_ = 0.0;
-  pivot_last_yaw_progress_stamp_ = rclcpp::Time();
-  in_no_arc_rotate_mode_ = false;
-  in_rotate_to_heading_mode_ = false;
   in_rpp_rotate_mode_ = false;
   strict_line_path_captured_ = false;
+  motion_intent_ = MotionIntent();
 
   RCLCPP_INFO(
     node_->get_logger(),
@@ -128,34 +130,29 @@ void NextNav2Controller::cleanup()
   cmd_w_pub_.reset();
   final_approach_pub_.reset();
   rotate_mode_pub_.reset();
+  motion_intent_status_pub_.reset();
+  motion_intent_service_.reset();
 
   global_plan_.poses.clear();
   raw_plan_.poses.clear();
   segments_.clear();
 
   blocked_ = false;
-  in_waypoint_pivot_ = false;
-  pivot_consumed_waypoint_progress_ = -1.0;
-  pivot_start_stamp_ = rclcpp::Time();
-  pivot_start_yaw_ = 0.0;
-  pivot_last_yaw_ = 0.0;
-  pivot_last_yaw_progress_stamp_ = rclcpp::Time();
-  in_no_arc_rotate_mode_ = false;
-  in_rotate_to_heading_mode_ = false;
   in_rpp_rotate_mode_ = false;
   strict_line_path_captured_ = false;
+  {
+    std::lock_guard<std::mutex> intent_lock(motion_intent_mutex_);
+    motion_intent_ = MotionIntent();
+  }
   current_segment_index_ = 0;
   t_along_segment_ = 0.0;
   stable_progress_m_ = 0.0;
-  mpc_v_sequence_.clear();
-  mpc_w_sequence_.clear();
   last_plan_refresh_stamp_ = rclcpp::Time();
   last_command_ = geometry_msgs::msg::Twist();
   last_command_stamp_ = rclcpp::Time();
   last_progress_checkpoint_m_ = 0.0;
   last_progress_checkpoint_stamp_ = rclcpp::Time();
   blocked_since_ = rclcpp::Time();
-  pivot_target_heading_ = 0.0;
 }
 
 void NextNav2Controller::activate()
@@ -190,6 +187,9 @@ void NextNav2Controller::activate()
   }
   if (rotate_mode_pub_) {
     rotate_mode_pub_->on_activate();
+  }
+  if (motion_intent_status_pub_) {
+    motion_intent_status_pub_->on_activate();
   }
 }
 
@@ -226,6 +226,9 @@ void NextNav2Controller::deactivate()
   if (rotate_mode_pub_) {
     rotate_mode_pub_->on_deactivate();
   }
+  if (motion_intent_status_pub_) {
+    motion_intent_status_pub_->on_deactivate();
+  }
 }
 
 void NextNav2Controller::setPlan(const nav_msgs::msg::Path & path)
@@ -256,18 +259,8 @@ void NextNav2Controller::setPlan(const nav_msgs::msg::Path & path)
   last_progress_checkpoint_m_ = 0.0;
   last_progress_checkpoint_stamp_ = node_->now();
   blocked_ = false;
-  in_waypoint_pivot_ = false;
-  pivot_consumed_waypoint_progress_ = -1.0;
-  pivot_start_stamp_ = rclcpp::Time();
-  pivot_start_yaw_ = 0.0;
-  pivot_last_yaw_ = 0.0;
-  pivot_last_yaw_progress_stamp_ = rclcpp::Time();
-  in_no_arc_rotate_mode_ = false;
-  in_rotate_to_heading_mode_ = false;
   in_rpp_rotate_mode_ = false;
   strict_line_path_captured_ = false;
-  mpc_v_sequence_.clear();
-  mpc_w_sequence_.clear();
   last_plan_refresh_stamp_ = node_->now();
 
   RCLCPP_DEBUG(
@@ -289,6 +282,37 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   }
 
   auto now = node_->now();
+  // Issue 17: snapshot motion_intent under its own lock briefly so a pending
+  // service update isn't blocked for the full compute cycle.
+  MotionIntent active_motion_intent;
+  {
+    std::lock_guard<std::mutex> intent_lock(motion_intent_mutex_);
+    if (
+      motion_intent_.active &&
+      motion_intent_.timeout_sec > 0.0 &&
+      (now - motion_intent_.received_at).seconds() > motion_intent_.timeout_sec)
+    {
+      motion_intent_ = MotionIntent();
+    }
+    active_motion_intent = motion_intent_;
+  }
+  const auto current_motion_state = [&](bool rotating) {
+      if (active_motion_intent.active) {
+        if (active_motion_intent.mode == "insertion") {
+          return std::string("INSERTION");
+        }
+        if (
+          active_motion_intent.mode == "alignment" ||
+          active_motion_intent.mode == "precision")
+        {
+          return std::string("ALIGNMENT");
+        }
+        if (active_motion_intent.mode == "recovery") {
+          return std::string("RECOVERY");
+        }
+      }
+      return std::string(rotating ? "ROTATE" : "FOLLOW_PATH");
+    };
 
   // Issue 31: validate incoming robot pose for NaN/Inf
   if (!std::isfinite(pose.pose.position.x) || !std::isfinite(pose.pose.position.y)) {
@@ -423,73 +447,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // index rather than a potentially stale one.
   reanchorToNearestSegment(robot_control_point, projection, robot_yaw, true);
 
-  // ── Waypoint pivot: detect junction BEFORE segment index may advance ─────
-  if (waypoint_pivot_enabled_ && !in_waypoint_pivot_
-    && current_segment_index_ + 1 < segments_.size())
-  {
-    // Issue 20: junction consumed latch – do not re-arm pivot at a junction the
-    // robot already pivoted at until it has departed far enough.
-    const bool junction_still_consumed =
-      (pivot_consumed_waypoint_progress_ >= 0.0) &&
-      (stable_progress_m_ - pivot_consumed_waypoint_progress_ < pivot_departure_distance_);
-
-    if (!junction_still_consumed) {
-      const Segment & pre_seg = segments_[current_segment_index_];
-      const double d_to_wp = std::hypot(
-        robot_control_point.x - pre_seg.p1.x,
-        robot_control_point.y - pre_seg.p1.y);
-      const double next_hdg = segments_[current_segment_index_ + 1].heading;
-      const double hdg_diff = std::abs(angles::shortest_angular_distance(pre_seg.heading, next_hdg));
-      if (hdg_diff > waypoint_pivot_threshold_ && d_to_wp < waypoint_pivot_center_epsilon_) {
-        in_waypoint_pivot_ = true;
-        pivot_target_heading_ = next_hdg;
-        pivot_consumed_waypoint_progress_ = -1.0;  // will be set on completion
-        pivot_start_stamp_ = now;
-        pivot_start_yaw_ = robot_yaw;
-        pivot_last_yaw_ = robot_yaw;
-        pivot_last_yaw_progress_stamp_ = now;
-        RCLCPP_DEBUG(node_->get_logger(),
-          "%s: waypoint pivot activated (Δθ=%.2f rad, dist=%.3f m)",
-          plugin_name_.c_str(), hdg_diff, d_to_wp);
-      }
-    }
-  }
-
   advanceSegmentIfReady(robot_control_point, projection);
-
-  // ── Waypoint pivot: also detect AFTER segment advance ────────────────────
-  if (waypoint_pivot_enabled_ && !in_waypoint_pivot_
-    && current_segment_index_ > 0
-    && current_segment_index_ < segments_.size())
-  {
-    const bool post_junction_consumed =
-      (pivot_consumed_waypoint_progress_ >= 0.0) &&
-      (stable_progress_m_ - pivot_consumed_waypoint_progress_ < pivot_departure_distance_);
-
-    if (!post_junction_consumed) {
-      const Segment & prev_seg = segments_[current_segment_index_ - 1];
-      const Segment & cur_seg  = segments_[current_segment_index_];
-      const double hdg_diff_post = std::abs(
-        angles::shortest_angular_distance(prev_seg.heading, cur_seg.heading));
-      const double d_to_junction = std::hypot(
-        robot_control_point.x - prev_seg.p1.x,
-        robot_control_point.y - prev_seg.p1.y);
-      if (hdg_diff_post > waypoint_pivot_threshold_ &&
-        d_to_junction < waypoint_pivot_center_epsilon_ * 2.0)
-      {
-        in_waypoint_pivot_ = true;
-        pivot_target_heading_ = cur_seg.heading;
-        pivot_consumed_waypoint_progress_ = -1.0;
-        pivot_start_stamp_ = now;
-        pivot_start_yaw_ = robot_yaw;
-        pivot_last_yaw_ = robot_yaw;
-        pivot_last_yaw_progress_stamp_ = now;
-        RCLCPP_DEBUG(node_->get_logger(),
-          "%s: waypoint pivot activated post-advance (Δθ=%.2f rad, dist=%.3f m)",
-          plugin_name_.c_str(), hdg_diff_post, d_to_junction);
-      }
-    }
-  }
 
   Segment & segment = segments_[current_segment_index_];
 
@@ -498,16 +456,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     stable_progress_m_ = absolute_progress;
   }
 
-  // Issue 11: do not apply monotonic clamp when very close to a waypoint
-  // junction – slight backward/lateral repositioning is intentional there.
-  const bool near_pivot_junction = waypoint_pivot_enabled_ &&
-    current_segment_index_ + 1 < segments_.size() &&
-    std::hypot(
-      robot_control_point.x - segment.p1.x,
-      robot_control_point.y - segment.p1.y) < waypoint_pivot_center_epsilon_ * 2.0;
-
-  if (!near_pivot_junction &&
-    absolute_progress + progress_backtrack_tolerance_ < stable_progress_m_)
+  if (absolute_progress + progress_backtrack_tolerance_ < stable_progress_m_)
   {
     const double clamped_t = std::clamp(
       stable_progress_m_ - segment.cumulative_start,
@@ -531,6 +480,23 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   const double goal_dx = goal_pose.pose.position.x - robot_pose.pose.position.x;
   const double goal_dy = goal_pose.pose.position.y - robot_pose.pose.position.y;
   const double goal_distance = std::hypot(goal_dx, goal_dy);
+  double intent_target_error = goal_distance;
+  if (active_motion_intent.active) {
+    geometry_msgs::msg::PoseStamped intent_target = active_motion_intent.target_pose;
+    if (intent_target.header.frame_id.empty()) {
+      intent_target = goal_pose;
+    } else if (intent_target.header.frame_id != global_frame_) {
+      geometry_msgs::msg::PoseStamped transformed_intent_target;
+      if (nav2_util::transformPoseInTargetFrame(
+          intent_target, transformed_intent_target, *tf_, global_frame_, transform_tolerance_))
+      {
+        intent_target = transformed_intent_target;
+      }
+    }
+    const double intent_dx = intent_target.pose.position.x - robot_pose.pose.position.x;
+    const double intent_dy = intent_target.pose.position.y - robot_pose.pose.position.y;
+    intent_target_error = std::hypot(intent_dx, intent_dy);
+  }
   const bool on_last_segment = (current_segment_index_ + 1) >= segments_.size();
   const bool final_approach = on_last_segment && goal_distance <= final_approach_distance_;
   const double total_path_length = segments_.back().cumulative_start + segments_.back().length;
@@ -566,6 +532,9 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     // the current segment's limit naturally enforces anticipatory deceleration.
     runtime_max_v = std::min(runtime_max_v, segment.speed_limit);
   }
+  if (active_motion_intent.active && active_motion_intent.max_linear_speed > kTiny) {
+    runtime_max_v = std::min(runtime_max_v, active_motion_intent.max_linear_speed);
+  }
   double lateral_error_limit = std::numeric_limits<double>::infinity();
   if (strict_line_locked) {
     if (strict_line_adaptive_lateral_limit_) {
@@ -589,29 +558,6 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
         1.0);
       const double speed_scale = 1.0 - (1.0 - strict_line_min_speed_scale_) * lateral_ratio;
       runtime_max_v = std::max(min_tracking_speed_, runtime_max_v * speed_scale);
-    }
-  }
-
-  // ── Waypoint approach braking: gentle taper before a pivot junction ──────
-  if (waypoint_pivot_enabled_ && !in_waypoint_pivot_ && !final_approach
-    && current_segment_index_ + 1 < segments_.size())
-  {
-    const Segment & app_seg = segments_[current_segment_index_];
-    const double d_app = std::hypot(
-      robot_control_point.x - app_seg.p1.x,
-      robot_control_point.y - app_seg.p1.y);
-    const double next_hdg_app = segments_[current_segment_index_ + 1].heading;
-    const double hdg_diff_app = std::abs(
-      angles::shortest_angular_distance(app_seg.heading, next_hdg_app));
-    if (hdg_diff_app > waypoint_pivot_threshold_ && d_app < waypoint_pivot_approach_distance_) {
-      const double brake_ratio = std::clamp(d_app / waypoint_pivot_approach_distance_, 0.0, 1.0);
-      // Issue 25: allow speed to decay below min_tracking_speed_ near the
-      // exact junction; use pivot_entry_speed_ as the floor there.
-      const double brake_floor = (d_app < waypoint_pivot_center_epsilon_)
-        ? pivot_entry_speed_
-        : min_tracking_speed_;
-      runtime_max_v = std::min(runtime_max_v,
-        std::max(brake_floor, runtime_max_v * brake_ratio));
     }
   }
 
@@ -639,38 +585,23 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   const double heading_error_for_rotation = final_approach
     ? heading_error_reference_now
     : target_heading_error_now;
-  // Issue 21: hysteresis for rotate-in-place mode (non-RPP).
-  // Enter when heading error exceeds rotate_to_heading_threshold_;
-  // exit only when it drops below rotate_to_heading_exit_threshold_.
-  if (!in_rotate_to_heading_mode_) {
-    if (!final_approach && heading_error_for_rotation > rotate_to_heading_threshold_) {
-      in_rotate_to_heading_mode_ = true;
-    }
-  } else {
-    if (final_approach || heading_error_for_rotation < rotate_to_heading_exit_threshold_) {
-      in_rotate_to_heading_mode_ = false;
-    }
-  }
-  bool rotate_in_place_mode = in_rotate_to_heading_mode_;
-  if (control_mode_ == ControlMode::Rpp) {
-    // RPP has its own rotate-to-heading behavior; avoid double-gating linear velocity.
-    rotate_in_place_mode = false;
-    in_rotate_to_heading_mode_ = false;
-  }
+  // RPP owns the rotate-to-heading authority (see rotation_active_ below).
+  const bool rotate_in_place_mode = false;
 
-  const double heading_weight = final_approach
-    ? (w_heading_ * (1.5 + (1.0 - final_scale)))
-    : w_heading_;
-
-  const double dt_cmd = std::max(0.02, (now - last_command_stamp_).seconds());
+  // Issue 15: clamp dt to a bounded control-period window so missed or delayed
+  // cycles don't open wide rate-limit windows that let command_v/w jump far.
+  // Upper bound (0.2 s) tolerates a few missed 20 Hz cycles without letting a
+  // stall-induced spike rewrite the rate envelope.
+  const double dt_cmd = std::clamp((now - last_command_stamp_).seconds(), 0.02, 0.2);
 
   const double v_window = std::max(0.05, std::abs(acc_lim_v_) * dt_cmd);
   const double w_window = std::max(0.05, std::abs(acc_lim_w_) * dt_cmd);
 
-  const double v_feedback =
-    std::abs(velocity.linear.x) > 0.01 ? velocity.linear.x : last_command_.linear.x;
-  const double w_feedback =
-    std::abs(velocity.angular.z) > 0.01 ? velocity.angular.z : last_command_.angular.z;
+  // Issue 16: always use measured state. Substituting last_command_ near zero
+  // kept stale rotation alive during the terminal settle phase, which fed the
+  // "slight pre-stop turn" symptom.
+  const double v_feedback = velocity.linear.x;
+  const double w_feedback = velocity.angular.z;
 
   double v_min = std::clamp(v_feedback - v_window, runtime_min_v, runtime_max_v);
   double v_max = std::clamp(v_feedback + v_window, runtime_min_v, runtime_max_v);
@@ -692,97 +623,6 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     w_max = max_w_;
   }
 
-  // ── Waypoint pivot: exit when robot is aligned to the next segment ────────
-  if (in_waypoint_pivot_) {
-    const double pivot_err = std::abs(
-      angles::shortest_angular_distance(robot_yaw, pivot_target_heading_));
-    if (pivot_err < waypoint_pivot_done_threshold_) {
-      in_waypoint_pivot_ = false;
-      // Issue 20: record consumed junction progress so the pivot gate cannot
-      // re-arm until the robot departs far enough.
-      pivot_consumed_waypoint_progress_ = stable_progress_m_;
-      RCLCPP_DEBUG(node_->get_logger(), "%s: waypoint pivot complete", plugin_name_.c_str());
-    }
-  }
-
-  // ── Active waypoint pivot: stop and spin fast toward the next segment ─────
-  if (waypoint_pivot_enabled_ && in_waypoint_pivot_) {
-    // Issue 4: pivot watchdog – abort if pivot takes too long or yaw stops moving
-    const double pivot_elapsed = (now - pivot_start_stamp_).seconds();
-    if (pivot_start_stamp_.nanoseconds() > 0 && pivot_elapsed > pivot_timeout_) {
-      in_waypoint_pivot_ = false;
-      pivot_consumed_waypoint_progress_ = stable_progress_m_;
-      RCLCPP_WARN(node_->get_logger(),
-        "%s: pivot watchdog: total timeout exceeded (%.1f s); aborting pivot",
-        plugin_name_.c_str(), pivot_elapsed);
-      throw nav2_core::PlannerException(
-              "next_nav2_controller: pivot timed out; requesting Nav2 recovery");
-    }
-    const double yaw_step = std::abs(
-      angles::shortest_angular_distance(pivot_last_yaw_, robot_yaw));
-    if (yaw_step >= pivot_progress_epsilon_) {
-      pivot_last_yaw_ = robot_yaw;
-      pivot_last_yaw_progress_stamp_ = now;
-    } else if (pivot_last_yaw_progress_stamp_.nanoseconds() > 0) {
-      const double no_progress_for = (now - pivot_last_yaw_progress_stamp_).seconds();
-      if (no_progress_for > pivot_progress_timeout_) {
-        in_waypoint_pivot_ = false;
-        pivot_consumed_waypoint_progress_ = stable_progress_m_;
-        RCLCPP_WARN(node_->get_logger(),
-          "%s: pivot stalled (no yaw progress for %.1f s); aborting pivot",
-          plugin_name_.c_str(), no_progress_for);
-        throw nav2_core::PlannerException(
-                "next_nav2_controller: pivot stalled; requesting Nav2 recovery");
-      }
-    }
-
-    // Issue 2: check that the full angular sweep of the pivot is collision-free
-    // before issuing any angular velocity command.
-    {
-      std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap_->getMutex()));
-      const auto footprint = costmap_ros_->getRobotFootprint();
-      if (!isPivotCollisionFree(
-          robot_yaw, pivot_target_heading_,
-          robot_pose.pose.position.x, robot_pose.pose.position.y,
-          footprint))
-      {
-        if (!blocked_) {
-          blocked_ = true;
-          blocked_since_ = now;
-        }
-        in_waypoint_pivot_ = false;
-        pivot_consumed_waypoint_progress_ = stable_progress_m_;
-        RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
-          "%s: pivot blocked by obstacle; aborting pivot",
-          plugin_name_.c_str());
-        auto stop = makeZeroCommand(now);
-        last_command_ = stop.twist;
-        last_command_stamp_ = now;
-        return stop;
-      }
-    }
-
-    const double pivot_err_signed =
-      angles::shortest_angular_distance(robot_yaw, pivot_target_heading_);
-
-    // Issue 3: apply angular acceleration window so pivot respects acc_lim_w_
-    const double pivot_w_desired = std::copysign(
-      std::min(waypoint_pivot_angular_vel_, max_w_), pivot_err_signed);
-    const double pivot_w = std::clamp(pivot_w_desired, w_feedback - w_window, w_feedback + w_window);
-
-    geometry_msgs::msg::TwistStamped pivot_cmd;
-    pivot_cmd.header.stamp = now;
-    pivot_cmd.header.frame_id = base_frame_;
-    pivot_cmd.twist.linear.x = 0.0;
-    pivot_cmd.twist.angular.z = pivot_w;
-    blocked_ = false;
-    last_command_ = pivot_cmd.twist;
-    last_command_stamp_ = now;
-    RCLCPP_DEBUG_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
-      "%s: pivot in-place (err=%.3f rad, w=%.2f rad/s)",
-      plugin_name_.c_str(), std::abs(pivot_err_signed), pivot_w);
-    return pivot_cmd;
-  }
 
   auto return_blocked_stop = [&](const char * reason) -> geometry_msgs::msg::TwistStamped {
       if (!blocked_) {
@@ -818,38 +658,17 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       auto stop = makeZeroCommand(now);
       last_command_ = stop.twist;
       last_command_stamp_ = now;
+      publishMotionIntentStatus(
+        current_motion_state(false),
+        reason,
+        intent_target_error,
+        stop.twist.linear.x,
+        stop.twist.angular.z,
+        now);
       return stop;
     };
 
-  auto enforce_no_arc_motion = [&](double & v_cmd, double & w_cmd) {
-      if (!disallow_arcing_) {
-        return;
-      }
-
-      if (std::abs(v_cmd) <= kTiny || std::abs(w_cmd) <= kTiny) {
-        return;
-      }
-
-      // Issue 21: hysteresis – update rotate/translate phase state before clamping
-      const double heading_error_abs = std::abs(heading_error_for_rotation);
-      if (!in_no_arc_rotate_mode_) {
-        if (heading_error_abs > no_arc_heading_error_threshold_) {
-          in_no_arc_rotate_mode_ = true;
-        }
-      } else {
-        if (heading_error_abs < no_arc_heading_exit_threshold_) {
-          in_no_arc_rotate_mode_ = false;
-        }
-      }
-
-      if (in_no_arc_rotate_mode_) {
-        v_cmd = 0.0;
-      } else {
-        w_cmd = 0.0;
-      }
-    };
-
-  if (control_mode_ == ControlMode::Rpp) {
+  {
     // Use long lookahead across collinear segments so dense straight paths do
     // not collapse into a tiny carrot and induce left-right chatter. Near a
     // real turn, fall back to the active-segment carrot to avoid corner-cutting.
@@ -1006,11 +825,6 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     }
     enforce_diff_drive_limits(command_v, command_w);
 
-    // Issue 1: apply no-arc constraint BEFORE the collision sim so the sim
-    // tests the actual command that will be issued, not a pre-clamp arc.
-    enforce_no_arc_motion(command_v, command_w);
-    enforce_diff_drive_limits(command_v, command_w);
-
     bool imminent_collision = false;
     double obstacle_integral = 0.0;
     int obstacle_samples = 0;
@@ -1067,137 +881,6 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       ? (obstacle_integral / static_cast<double>(obstacle_samples))
       : 0.0;
 
-    if (
-      rpp_use_obstacle_fallback_ && !final_approach &&
-      obstacle_cost_avg >= rpp_obstacle_fallback_cost_threshold_)
-    {
-      CandidateResult best_fallback;
-      best_fallback.score = std::numeric_limits<double>::infinity();
-
-      const int v_samples = std::max(2, rpp_obstacle_fallback_v_samples_);
-      const int w_samples = std::max(3, rpp_obstacle_fallback_w_samples_);
-      const double v_span = std::max(0.06, runtime_max_v * 0.45);
-      const double w_span = std::max(0.30, max_w_ * 0.65);
-      const double fallback_v_min = std::clamp(
-        command_v - v_span,
-        runtime_min_v,
-        runtime_max_v);
-      const double fallback_v_max = std::clamp(
-        command_v + v_span,
-        runtime_min_v,
-        runtime_max_v);
-      const double fallback_w_min = std::clamp(command_w - w_span, -max_w_, max_w_);
-      const double fallback_w_max = std::clamp(command_w + w_span, -max_w_, max_w_);
-
-      std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> fallback_lock(*(costmap_->getMutex()));
-
-      // Canonical samples: ensure the search always covers the full command envelope
-      // regardless of where the current command_v/w happens to be.
-      struct FallbackSample { double v; double w; };
-      const std::vector<FallbackSample> canonical_samples = {
-        {0.0, 0.0},                                     // stop
-        {0.0, max_w_},                                  // spin left
-        {0.0, -max_w_},                                 // spin right
-        {0.0, max_w_ * 0.5},                            // gentle left
-        {0.0, -max_w_ * 0.5},                           // gentle right
-        {min_tracking_speed_, 0.0},                     // slow straight
-        {runtime_max_v * 0.3, max_w_ * 0.5},            // slow left arc
-        {runtime_max_v * 0.3, -max_w_ * 0.5},           // slow right arc
-        {allow_reverse_ ? -min_tracking_speed_ : 0.0, 0.0},   // slow reverse (if enabled)
-        {allow_reverse_ ? -min_tracking_speed_ : 0.0, max_w_ * 0.4},  // reverse-left
-        {allow_reverse_ ? -min_tracking_speed_ : 0.0, -max_w_ * 0.4}, // reverse-right
-      };
-
-      auto eval_fallback_candidate = [&](double sv, double sw) {
-        if (!allow_reverse_) { sv = std::max(0.0, sv); }
-        // Issue 1: only generate no-arc candidates when disallow_arcing_ is set,
-        // so the scored command is always the command that will actually be executed.
-        if (disallow_arcing_ && std::abs(sv) > kTiny && std::abs(sw) > kTiny) { return; }
-        if (sv == 0.0 && !allow_reverse_) { sw = std::clamp(sw, -max_w_, max_w_); }
-        if (!diffDriveKinematicsFeasible(sv, sw)) { return; }
-        CandidateResult candidate = scoreCandidate(
-          sv, sw, robot_pose, velocity, segment, rpp_target_point,
-          heading_reference, final_approach, goal_reached, lateral_error_limit);
-        if (!candidate.feasible) { return; }
-        double total_score =
-          candidate.score +
-          (1.2 * std::pow(candidate.v - command_v, 2)) +
-          (0.35 * std::pow(candidate.w - command_w, 2));
-        if (!final_approach && std::abs(candidate.v) < min_tracking_speed_ && std::abs(candidate.w) > 0.25) {
-          total_score += (w_progress_ * 0.5);
-        }
-        if (!best_fallback.feasible || total_score < best_fallback.score) {
-          best_fallback = candidate;
-          best_fallback.score = total_score;
-        }
-      };
-
-      for (const auto & cs : canonical_samples) {
-        eval_fallback_candidate(cs.v, cs.w);
-      }
-
-      for (int vi = 0; vi < v_samples; ++vi) {
-        const double alpha_v = (v_samples == 1) ? 0.0 : static_cast<double>(vi) / static_cast<double>(v_samples - 1);
-        double sample_v = fallback_v_min + (fallback_v_max - fallback_v_min) * alpha_v;
-        if (!allow_reverse_) {
-          sample_v = std::max(0.0, sample_v);
-        }
-
-        for (int wi = 0; wi < w_samples; ++wi) {
-          const double alpha_w = (w_samples == 1) ? 0.0 : static_cast<double>(wi) / static_cast<double>(w_samples - 1);
-          const double sample_w = fallback_w_min + (fallback_w_max - fallback_w_min) * alpha_w;
-
-          if (!diffDriveKinematicsFeasible(sample_v, sample_w)) {
-            continue;
-          }
-
-          // Issue 1: skip arc candidates when no-arc mode is active
-          if (disallow_arcing_ && std::abs(sample_v) > kTiny && std::abs(sample_w) > kTiny) {
-            continue;
-          }
-
-          CandidateResult candidate = scoreCandidate(
-            sample_v,
-            sample_w,
-            robot_pose,
-            velocity,
-            segment,
-            rpp_target_point,
-            heading_reference,
-            final_approach,
-            goal_reached,
-            lateral_error_limit);
-          if (!candidate.feasible) {
-            continue;
-          }
-
-          // Stay close to nominal RPP command while allowing obstacle-driven deflection.
-          double total_score =
-            candidate.score +
-            (1.2 * std::pow(candidate.v - command_v, 2)) +
-            (0.35 * std::pow(candidate.w - command_w, 2));
-          if (
-            !final_approach &&
-            std::abs(candidate.v) < min_tracking_speed_ &&
-            std::abs(candidate.w) > 0.25)
-          {
-            total_score += (w_progress_ * 0.5);
-          }
-
-          if (!best_fallback.feasible || total_score < best_fallback.score) {
-            best_fallback = candidate;
-            best_fallback.score = total_score;
-          }
-        }
-      }
-      fallback_lock.unlock();
-
-      if (best_fallback.feasible) {
-        command_v = best_fallback.v;
-        command_w = best_fallback.w;
-        obstacle_cost_avg = std::min(obstacle_cost_avg, best_fallback.obstacle_cost_avg);
-      }
-    }
 
     const double obstacle_speed_scale = std::clamp(
       1.0 - (obstacle_speed_reduction_gain_ * obstacle_cost_avg),
@@ -1207,10 +890,29 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     const double runtime_min_v_cmd = allow_reverse_ ? -runtime_max_v : 0.0;
     command_v = std::clamp(command_v, runtime_min_v_cmd, runtime_max_v);
     command_v = std::clamp(command_v, v_min, v_max);
-    command_w = std::clamp(command_w, w_min, w_max);
-    // Note: enforce_no_arc_motion was already applied BEFORE the collision sim
-    // (Issue 1) so no post-hoc clamp needed here.
 
+    // Issue 3/18: preserve desired curvature after all forward-speed clamps.
+    // Earlier stages computed command_w from the original command_v; without
+    // this recompute, obstacle-cost slowdown / rate limiting produces a tighter
+    // arc than intended (sharper turn near inflated obstacles, and a residual
+    // "shove" near the goal when the speed floor is hit).
+    if (!in_rpp_rotate_mode_) {
+      command_w = curvature * command_v;
+      if (final_approach) {
+        command_w +=
+          strict_line_k_heading_ * heading_blend * heading_error_reference_signed;
+      } else {
+        const double tracking_w_limit = std::max(0.20, 2.0 * std::abs(command_v));
+        const double clamped_w_limit = std::min(max_w_, tracking_w_limit);
+        command_w = std::clamp(command_w, -clamped_w_limit, clamped_w_limit);
+      }
+      enforce_diff_drive_limits(command_v, command_w);
+    }
+    command_w = std::clamp(command_w, w_min, w_max);
+    if (active_motion_intent.active && active_motion_intent.max_angular_speed > kTiny) {
+      const double intent_max_w = std::clamp(active_motion_intent.max_angular_speed, 0.0, max_w_);
+      command_w = std::clamp(command_w, -intent_max_w, intent_max_w);
+    }
     geometry_msgs::msg::TwistStamped cmd;
     cmd.header.stamp = now;
     cmd.header.frame_id = base_frame_;
@@ -1224,8 +926,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     // Do not fire progress stall during intentional pivot or rotate-to-heading:
     // the robot is deliberately stationary (or nearly so) while turning.
     const bool intentional_rotation_rpp =
-      in_waypoint_pivot_ ||
-      (in_rpp_rotate_mode_ && rpp_use_rotate_to_heading_);
+      in_rpp_rotate_mode_ && rpp_use_rotate_to_heading_;
     if (!intentional_rotation_rpp &&
       std::abs(cmd.twist.linear.x) > progress_stall_cmd_v_threshold_) {
       const double stalled_for = (now - last_progress_checkpoint_stamp_).seconds();
@@ -1251,619 +952,19 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
 
     last_command_ = cmd.twist;
     last_command_stamp_ = now;
+    publishMotionIntentStatus(
+      current_motion_state(intentional_rotation_rpp),
+      obstacle_cost_avg > 0.0 ? "obstacle_cost" : "path_tracking",
+      intent_target_error,
+      cmd.twist.linear.x,
+      cmd.twist.angular.z,
+      now);
     publishDebug(projection.point, rpp_target_point, projection.lateral_error,
       goal_distance, heading_error_reference_signed,
       cmd.twist.linear.x, cmd.twist.angular.z,
       final_approach, in_rpp_rotate_mode_, now);
     return cmd;
   }
-
-  if (control_mode_ == ControlMode::Mpc) {
-    const int mpc_steps = std::max(2, mpc_steps_);
-    const int mpc_iterations = std::max(1, mpc_iterations_);
-    const int mpc_samples = std::max(1, mpc_num_samples_);
-    const double mpc_dt = horizon_time_ / static_cast<double>(mpc_steps);
-    const double dv_limit = std::max(0.02, std::abs(acc_lim_v_) * mpc_dt);
-    const double dw_limit = std::max(0.02, std::abs(acc_lim_w_) * mpc_dt);
-
-    if (
-      mpc_v_sequence_.size() != static_cast<std::size_t>(mpc_steps) ||
-      mpc_w_sequence_.size() != static_cast<std::size_t>(mpc_steps))
-    {
-      mpc_v_sequence_.assign(mpc_steps, std::clamp(v_feedback, runtime_min_v, runtime_max_v));
-      mpc_w_sequence_.assign(mpc_steps, std::clamp(w_feedback, -max_w_, max_w_));
-    } else if (mpc_warm_start_ && mpc_steps > 1) {
-      std::rotate(mpc_v_sequence_.begin(), mpc_v_sequence_.begin() + 1, mpc_v_sequence_.end());
-      std::rotate(mpc_w_sequence_.begin(), mpc_w_sequence_.begin() + 1, mpc_w_sequence_.end());
-      mpc_v_sequence_.back() = mpc_v_sequence_[mpc_steps - 2];
-      mpc_w_sequence_.back() = mpc_w_sequence_[mpc_steps - 2];
-    }
-
-    std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap_->getMutex()));
-    const auto footprint = costmap_ros_->getRobotFootprint();
-
-    auto evaluate_sequence = [&](const std::vector<double> & seq_v,
-      const std::vector<double> & seq_w,
-      CandidateResult & out) -> bool
-      {
-        out = CandidateResult();
-        if (seq_v.size() != seq_w.size() || seq_v.empty()) {
-          return false;
-        }
-
-        double x = robot_pose.pose.position.x;
-        double y = robot_pose.pose.position.y;
-        double theta = robot_yaw;
-        double prev_v = v_feedback;
-        double prev_w = w_feedback;
-        double obstacle_integral = 0.0;
-        double lateral_integral = 0.0;
-        double heading_integral = 0.0;
-        double target_distance_integral = 0.0;
-        double angular_integral = 0.0;
-        double smooth_integral = 0.0;
-        const double total_path_length_mpc = segments_.back().cumulative_start + segments_.back().length;
-        double mpc_sim_progress = segment.cumulative_start + projection.t;
-        std::size_t mpc_sim_seg_idx = current_segment_index_;
-        Projection end_projection = projection;
-
-        for (std::size_t i = 0; i < seq_v.size(); ++i) {
-          double v = std::clamp(seq_v[i], runtime_min_v, runtime_max_v);
-          if (!allow_reverse_) {
-            v = std::max(0.0, v);
-          }
-          const double w = std::clamp(seq_w[i], -max_w_, max_w_);
-
-          // Issue 1: enforce no-arc constraint at each MPC step so the entire
-          // scored sequence is collision-checked in its final executed form.
-          if (disallow_arcing_ && std::abs(v) > kTiny && std::abs(w) > kTiny) {
-            return false;
-          }
-
-          if (!diffDriveKinematicsFeasible(v, w)) {
-            return false;
-          }
-
-          x += v * std::cos(theta) * mpc_dt;
-          y += v * std::sin(theta) * mpc_dt;
-          theta = angles::normalize_angle(theta + w * mpc_dt);
-
-          const geometry_msgs::msg::Point simulated_control_point =
-            computeControlPoint(x, y, theta);
-
-          // Advance mpc_sim_seg_idx forward as the simulation progresses.
-          while (mpc_sim_seg_idx + 1 < segments_.size()) {
-            const Projection fwd = projectPointOntoSegment(
-              simulated_control_point, segments_[mpc_sim_seg_idx]);
-            if (segments_[mpc_sim_seg_idx].length - fwd.t > segment_finish_epsilon_) {
-              break;
-            }
-            ++mpc_sim_seg_idx;
-          }
-          const Projection simulated_projection = projectPointOntoSegment(
-            simulated_control_point, segments_[mpc_sim_seg_idx]);
-          end_projection = simulated_projection;
-          mpc_sim_progress = std::min(
-            total_path_length_mpc,
-            segments_[mpc_sim_seg_idx].cumulative_start + simulated_projection.t);
-
-          if (
-            strict_line_locked &&
-            std::abs(simulated_projection.lateral_error) > lateral_error_limit)
-          {
-            return false;
-          }
-
-          if (!allow_unknown_space_ && footprintTouchesUnknown(x, y, theta, footprint)) {
-            return false;
-          }
-
-          const double cost = poseCost(x, y, theta, footprint);
-          if (cost < 0.0 || cost >= static_cast<double>(nav2_costmap_2d::LETHAL_OBSTACLE)) {
-            return false;
-          }
-
-          const double normalized_cost = cost >= static_cast<double>(nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE)
-            ? 1.0
-            : std::clamp(
-            cost / static_cast<double>(nav2_costmap_2d::MAX_NON_OBSTACLE),
-            0.0,
-            1.0);
-          obstacle_integral += normalized_cost;
-          lateral_integral += std::abs(simulated_projection.lateral_error);
-          heading_integral += std::abs(angles::shortest_angular_distance(theta, heading_reference));
-          const double target_dx_step = target_point.x - simulated_control_point.x;
-          const double target_dy_step = target_point.y - simulated_control_point.y;
-          target_distance_integral += std::hypot(target_dx_step, target_dy_step);
-          angular_integral += std::abs(w);
-          smooth_integral += std::pow(v - prev_v, 2) + 0.4 * std::pow(w - prev_w, 2);
-          prev_v = v;
-          prev_w = w;
-        }
-
-        const double inv_steps = 1.0 / static_cast<double>(seq_v.size());
-        const geometry_msgs::msg::Point end_control_point =
-          computeControlPoint(x, y, theta);
-        const double target_dx_end = target_point.x - end_control_point.x;
-        const double target_dy_end = target_point.y - end_control_point.y;
-        const double target_distance_end = std::hypot(target_dx_end, target_dy_end);
-        const double target_heading_end = std::atan2(target_dy_end, target_dx_end);
-        const double target_bearing_error_end = target_distance_end > 0.02
-          ? std::abs(angles::shortest_angular_distance(theta, target_heading_end))
-          : 0.0;
-        const double heading_error_end =
-          std::abs(angles::shortest_angular_distance(theta, heading_reference));
-        const double terminal_lateral_error = std::abs(end_projection.lateral_error);
-        const double progress_gain = std::max(0.0, mpc_sim_progress - stable_progress_m_);
-
-        double score =
-          (w_obstacle_ * (obstacle_integral * inv_steps)) +
-          (w_lateral_ * std::pow(lateral_integral * inv_steps, 2)) +
-          (w_heading_ * std::pow(heading_integral * inv_steps, 2)) +
-          (w_target_ * std::pow(target_distance_integral * inv_steps, 2)) +
-          (w_smooth_ * smooth_integral) +
-          (w_angular_rate_ * angular_integral * inv_steps) -
-          (w_progress_ * progress_gain) +
-          (mpc_terminal_heading_weight_ * heading_error_end * heading_error_end) +
-          (mpc_terminal_lateral_weight_ * terminal_lateral_error * terminal_lateral_error) +
-          (mpc_terminal_target_weight_ * target_distance_end * target_distance_end);
-
-        if (strict_line_locked) {
-          score += strict_line_lateral_weight_scale_ * w_lateral_ *
-            std::pow(lateral_integral * inv_steps, 2);
-        }
-
-        out.feasible = true;
-        out.score = score;
-        out.v = std::clamp(seq_v.front(), runtime_min_v, runtime_max_v);
-        if (!allow_reverse_) {
-          out.v = std::max(0.0, out.v);
-        }
-        out.w = std::clamp(seq_w.front(), -max_w_, max_w_);
-        out.projected_progress = mpc_sim_progress;
-        out.lateral_error_end = terminal_lateral_error;
-        out.heading_error_end = heading_error_end;
-        out.target_distance_end = target_distance_end;
-        out.target_bearing_error_end = target_bearing_error_end;
-        out.obstacle_cost_avg = obstacle_integral * inv_steps;
-        return true;
-      };
-
-    CandidateResult best;
-    best.score = std::numeric_limits<double>::infinity();
-    std::vector<double> best_v = mpc_v_sequence_;
-    std::vector<double> best_w = mpc_w_sequence_;
-    evaluate_sequence(best_v, best_w, best);
-
-    std::normal_distribution<double> noise_v(0.0, mpc_noise_v_);
-    std::normal_distribution<double> noise_w(0.0, mpc_noise_w_);
-
-    for (int iter = 0; iter < mpc_iterations; ++iter) {
-      for (int sample = 0; sample < mpc_samples; ++sample) {
-        std::vector<double> candidate_v = best_v;
-        std::vector<double> candidate_w = best_w;
-        double prev_v = v_feedback;
-        double prev_w = w_feedback;
-
-        for (int step = 0; step < mpc_steps; ++step) {
-          candidate_v[step] += noise_v(mpc_rng_);
-          candidate_w[step] += noise_w(mpc_rng_);
-          candidate_v[step] = std::clamp(candidate_v[step], runtime_min_v, runtime_max_v);
-          candidate_w[step] = std::clamp(candidate_w[step], -max_w_, max_w_);
-          candidate_v[step] = std::clamp(candidate_v[step], prev_v - dv_limit, prev_v + dv_limit);
-          candidate_w[step] = std::clamp(candidate_w[step], prev_w - dw_limit, prev_w + dw_limit);
-          if (!allow_reverse_) {
-            candidate_v[step] = std::max(0.0, candidate_v[step]);
-          }
-          prev_v = candidate_v[step];
-          prev_w = candidate_w[step];
-        }
-
-        CandidateResult candidate_result;
-        if (!evaluate_sequence(candidate_v, candidate_w, candidate_result)) {
-          continue;
-        }
-
-        if (!best.feasible || candidate_result.score < best.score) {
-          best = candidate_result;
-          best_v = std::move(candidate_v);
-          best_w = std::move(candidate_w);
-        }
-      }
-    }
-
-    costmap_lock.unlock();
-
-    if (!best.feasible) {
-      return return_blocked_stop("MPC trajectories blocked");
-    }
-
-    blocked_ = false;
-    mpc_v_sequence_ = best_v;
-    mpc_w_sequence_ = best_w;
-
-    const double obstacle_speed_scale = std::clamp(
-      1.0 - (obstacle_speed_reduction_gain_ * best.obstacle_cost_avg),
-      min_obstacle_speed_scale_,
-      1.0);
-    runtime_max_v = std::max(min_tracking_speed_, runtime_max_v * obstacle_speed_scale);
-    const double runtime_min_v_cmd = allow_reverse_ ? -runtime_max_v : 0.0;
-    const bool cruise_floor_enabled =
-      !final_approach &&
-      !rotate_in_place_mode &&
-      best.obstacle_cost_avg < 0.35 &&
-      heading_error_for_rotation < std::max(0.25, rotate_to_heading_threshold_ * 0.6);
-    double commanded_v = std::clamp(best.v, runtime_min_v_cmd, runtime_max_v);
-    if (cruise_floor_enabled && runtime_max_v >= min_cruise_speed_) {
-      if (allow_reverse_) {
-        const double sign = (commanded_v < 0.0) ? -1.0 : 1.0;
-        commanded_v = sign * std::max(std::abs(commanded_v), min_cruise_speed_);
-      } else {
-        commanded_v = std::max(commanded_v, min_cruise_speed_);
-      }
-    }
-    commanded_v = std::clamp(commanded_v, v_min, v_max);
-    double commanded_w = std::clamp(best.w, w_min, w_max);
-    // Note: MPC evaluate_sequence already rejects arc steps when disallow_arcing_
-    // (Issue 1), so no post-hoc enforce_no_arc_motion is needed here.
-
-    geometry_msgs::msg::TwistStamped cmd;
-    cmd.header.stamp = now;
-    cmd.header.frame_id = base_frame_;
-    cmd.twist.linear.x = commanded_v;
-    cmd.twist.linear.y = 0.0;
-    cmd.twist.linear.z = 0.0;
-    cmd.twist.angular.x = 0.0;
-    cmd.twist.angular.y = 0.0;
-    cmd.twist.angular.z = commanded_w;
-
-    // Do not fire progress stall during intentional pivot or rotate-to-heading.
-    const bool intentional_rotation_mpc =
-      in_waypoint_pivot_ || rotate_in_place_mode;
-    if (!intentional_rotation_mpc &&
-      std::abs(cmd.twist.linear.x) > progress_stall_cmd_v_threshold_) {
-      const double stalled_for = (now - last_progress_checkpoint_stamp_).seconds();
-      if (stalled_for > progress_stall_timeout_) {
-        if (abort_on_progress_stall_) {
-          blocked_ = true;
-          blocked_since_ = last_progress_checkpoint_stamp_;
-          RCLCPP_WARN_THROTTLE(
-            node_->get_logger(),
-            *node_->get_clock(),
-            2000,
-            "%s: progress stalled for %.2f s (cmd_v=%.3f m/s) -> triggering recovery",
-            plugin_name_.c_str(),
-            stalled_for,
-            cmd.twist.linear.x);
-          throw nav2_core::PlannerException(
-                  "next_nav2_controller: progress stalled; requesting Nav2 replan/recovery");
-        }
-        last_progress_checkpoint_stamp_ = now;
-        last_progress_checkpoint_m_ = stable_progress_m_;
-      }
-    }
-
-    last_command_ = cmd.twist;
-    last_command_stamp_ = now;
-    publishDebug(projection.point, target_point, projection.lateral_error,
-      goal_distance, heading_error_reference_signed,
-      cmd.twist.linear.x, cmd.twist.angular.z,
-      final_approach, rotate_in_place_mode, now);
-    return cmd;
-  }
-
-  const int total_samples = std::max(6, num_samples_);
-  const int default_v_samples = std::max(2, static_cast<int>(std::floor(std::sqrt(total_samples))));
-  const int default_w_samples = std::max(
-    3,
-    static_cast<int>(std::ceil(static_cast<double>(total_samples) / default_v_samples)));
-  const int v_samples = sample_grid_v_ > 1 ? sample_grid_v_ : default_v_samples;
-  const int w_samples = sample_grid_w_ > 1 ? sample_grid_w_ : default_w_samples;
-
-  CandidateResult best;
-  best.score = std::numeric_limits<double>::infinity();
-
-  std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap_->getMutex()));
-
-  bool used_geometric_candidate = false;
-  if (strict_line_locked && strict_line_geometric_control_ &&
-    !disallow_arcing_)  // Issue 1: skip geometric arc candidate when no-arc is active
-  {
-    const double lateral_abs = std::abs(projection.lateral_error);
-    const double lateral_scale = lateral_error_limit > kTiny
-      ? std::clamp(1.0 - (lateral_abs / lateral_error_limit), strict_line_min_speed_scale_, 1.0)
-      : strict_line_min_speed_scale_;
-    const double heading_scale = std::clamp(1.0 - (heading_error_reference_now / kPi), 0.0, 1.0);
-
-    double geo_v = runtime_max_v * lateral_scale * heading_scale;
-    if (heading_error_reference_now > strict_line_rotate_only_error_) {
-      geo_v = 0.0;
-    } else if (geo_v > 0.0 && geo_v < min_tracking_speed_) {
-      geo_v = min_tracking_speed_;
-    }
-    geo_v = std::clamp(geo_v, runtime_min_v, runtime_max_v);
-    geo_v = std::clamp(geo_v, v_min, v_max);
-
-    double geo_w = (strict_line_k_heading_ * heading_error_reference_signed) -
-      (strict_line_k_lateral_ * projection.lateral_error);
-    geo_w = std::clamp(geo_w, -max_w_, max_w_);
-    geo_w = std::clamp(geo_w, w_min, w_max);
-
-    if (diffDriveKinematicsFeasible(geo_v, geo_w)) {
-      CandidateResult candidate = scoreCandidate(
-        geo_v,
-        geo_w,
-        robot_pose,
-        velocity,
-        segment,
-        target_point,
-        heading_reference,
-        final_approach,
-        goal_reached,
-        lateral_error_limit);
-
-      // Issue 27: only use the geometric shortcut when conditions are clearly
-      // favourable. Near junctions, high-obstacle areas, or large heading errors
-      // the full search must run so we don't skip the best candidate.
-      const bool near_junction = (current_segment_index_ + 1 < segments_.size()) &&
-        (std::hypot(robot_control_point.x - segment.p1.x,
-                    robot_control_point.y - segment.p1.y) < waypoint_pivot_approach_distance_);
-      const bool heading_good = heading_error_reference_now < (strict_line_rotate_only_error_ * 0.5);
-      const bool lateral_good = lateral_abs < (strict_line_capture_lateral_error_ * 0.5);
-      const double center_cost_quick = poseCost(
-        robot_pose.pose.position.x, robot_pose.pose.position.y,
-        robot_yaw, costmap_ros_->getRobotFootprint());
-      const bool low_obstacle_quick =
-        center_cost_quick >= 0.0 &&
-        center_cost_quick < static_cast<double>(nav2_costmap_2d::MAX_NON_OBSTACLE) * 0.5;
-
-      if (candidate.feasible && heading_good && lateral_good &&
-        !near_junction && !final_approach && low_obstacle_quick)
-      {
-        best = candidate;
-        best.score = candidate.score;
-        used_geometric_candidate = true;
-      }
-    }
-  }
-
-  if (!used_geometric_candidate) {
-    if (disallow_arcing_) {
-      // Issue 1: generate-time no-arc constraint – only sample pure-translate
-      // (v, 0) and pure-rotate (0, w) families so scoring and collision-checking
-      // are always done on the exact command that will be executed.
-      auto score_and_update = [&](double sv, double sw) {
-        if (!diffDriveKinematicsFeasible(sv, sw)) { return; }
-        CandidateResult candidate = scoreCandidate(
-          sv, sw, robot_pose, velocity, segment, target_point,
-          heading_reference, final_approach, goal_reached, lateral_error_limit);
-        if (!candidate.feasible) { return; }
-        const double heading_end_penalty = heading_weight * candidate.heading_error_end *
-          candidate.heading_error_end;
-        const double lateral_end_penalty = w_lateral_ * candidate.lateral_error_end *
-          candidate.lateral_error_end;
-        const double target_distance_penalty = w_target_ * candidate.target_distance_end *
-          candidate.target_distance_end;
-        const double target_bearing_penalty = w_bearing_ * candidate.target_bearing_error_end *
-          candidate.target_bearing_error_end;
-        const double progress_gain =
-          std::max(0.0, candidate.projected_progress - stable_progress_m_);
-        double total_score =
-          candidate.score +
-          heading_end_penalty + lateral_end_penalty +
-          target_distance_penalty + target_bearing_penalty -
-          (w_progress_ * progress_gain);
-        if (!goal_reached && std::abs(sv) < min_tracking_speed_ && !final_approach &&
-          !rotate_in_place_mode)
-        {
-          total_score += w_progress_ * 0.5;
-        }
-        if (!best.feasible || total_score < best.score) {
-          best = candidate;
-          best.score = total_score;
-        }
-      };
-
-      // Translate-only: (v, 0)
-      for (int vi = 0; vi < v_samples; ++vi) {
-        const double alpha_v = (v_samples == 1) ? 0.5 :
-          static_cast<double>(vi) / static_cast<double>(v_samples - 1);
-        const double sv = v_min + (v_max - v_min) * alpha_v;
-        score_and_update(sv, 0.0);
-      }
-      // Rotate-only: (0, w)
-      for (int wi = 0; wi < w_samples; ++wi) {
-        const double alpha_w = (w_samples == 1) ? 0.5 :
-          static_cast<double>(wi) / static_cast<double>(w_samples - 1);
-        const double sw = w_min + (w_max - w_min) * alpha_w;
-        score_and_update(0.0, sw);
-      }
-    } else {
-    for (int vi = 0; vi < v_samples; ++vi) {
-      const double alpha_v = (v_samples == 1) ? 0.0 : static_cast<double>(vi) / (v_samples - 1);
-      const double sample_v = v_min + (v_max - v_min) * alpha_v;
-
-      for (int wi = 0; wi < w_samples; ++wi) {
-        const double alpha_w = (w_samples == 1) ? 0.0 : static_cast<double>(wi) / (w_samples - 1);
-        const double sample_w = w_min + (w_max - w_min) * alpha_w;
-
-        if (!diffDriveKinematicsFeasible(sample_v, sample_w)) {
-          continue;
-        }
-
-        CandidateResult candidate = scoreCandidate(
-          sample_v,
-          sample_w,
-          robot_pose,
-          velocity,
-          segment,
-          target_point,
-          heading_reference,
-          final_approach,
-          goal_reached,
-          lateral_error_limit);
-
-        if (!candidate.feasible) {
-          continue;
-        }
-
-        const double heading_end_penalty = heading_weight * candidate.heading_error_end *
-          candidate.heading_error_end;
-        const double lateral_end_penalty = w_lateral_ * candidate.lateral_error_end *
-          candidate.lateral_error_end;
-        const double target_distance_penalty = w_target_ * candidate.target_distance_end *
-          candidate.target_distance_end;
-        const double target_bearing_penalty = w_bearing_ * candidate.target_bearing_error_end *
-          candidate.target_bearing_error_end;
-        const double progress_gain = std::max(0.0, candidate.projected_progress - stable_progress_m_);
-        double total_score =
-          candidate.score +
-          heading_end_penalty +
-          lateral_end_penalty +
-          target_distance_penalty +
-          target_bearing_penalty -
-          (w_progress_ * progress_gain);
-
-        const double misalignment_ratio = rotate_to_heading_threshold_ > kTiny
-          ? clamp01(heading_error_for_rotation / rotate_to_heading_threshold_)
-          : 1.0;
-        total_score += w_misaligned_forward_ * misalignment_ratio * sample_v * sample_v;
-
-        if (
-          !goal_reached && std::abs(sample_v) < min_tracking_speed_ && !final_approach &&
-          !rotate_in_place_mode)
-        {
-          total_score += w_progress_ * 0.5;
-        }
-
-        if (!best.feasible || total_score < best.score) {
-          best = candidate;
-          best.score = total_score;
-        }
-      }
-    }
-    }  // end else (disallow_arcing_ == false)
-  }  // end if (!used_geometric_candidate)
-
-  costmap_lock.unlock();
-
-  if (!best.feasible) {
-    if (!blocked_) {
-      blocked_ = true;
-      blocked_since_ = now;
-    }
-
-    const double blocked_for = (now - blocked_since_).seconds();
-    RCLCPP_WARN_THROTTLE(
-      node_->get_logger(),
-      *node_->get_clock(),
-      2000,
-      "%s: all rollouts blocked for %.2f s (timeout %.2f s)",
-      plugin_name_.c_str(),
-      blocked_for,
-      blocked_timeout_);
-
-    if (blocked_for > blocked_timeout_) {
-      if (abort_on_blocked_timeout_) {
-        throw nav2_core::PlannerException(
-                "next_nav2_controller: blocked timeout exceeded; requesting Nav2 replan/recovery");
-      }
-      RCLCPP_WARN_THROTTLE(
-        node_->get_logger(),
-        *node_->get_clock(),
-        2000,
-        "%s: blocked timeout exceeded (%.2f s) but abort is disabled; continuing line tracking",
-        plugin_name_.c_str(),
-        blocked_for);
-    }
-
-    auto stop = makeZeroCommand(now);
-    last_command_ = stop.twist;
-    last_command_stamp_ = now;
-    return stop;
-  }
-
-  blocked_ = false;
-
-  const double obstacle_speed_scale = std::clamp(
-    1.0 - (obstacle_speed_reduction_gain_ * best.obstacle_cost_avg),
-    min_obstacle_speed_scale_,
-    1.0);
-  runtime_max_v = std::max(min_tracking_speed_, runtime_max_v * obstacle_speed_scale);
-  const double runtime_min_v_cmd = allow_reverse_ ? -runtime_max_v : 0.0;
-  const bool cruise_floor_enabled =
-    !final_approach &&
-    !rotate_in_place_mode &&
-    best.obstacle_cost_avg < 0.35 &&
-    heading_error_for_rotation < std::max(0.25, rotate_to_heading_threshold_ * 0.6);
-  // Issue 23: near a waypoint junction, allow speed to drop to min_capture_speed_
-  // instead of enforcing the full cruise floor. This enables precise centering.
-  const bool near_waypoint_capture = waypoint_pivot_enabled_ &&
-    current_segment_index_ + 1 < segments_.size() &&
-    std::hypot(robot_control_point.x - segment.p1.x,
-               robot_control_point.y - segment.p1.y) < waypoint_pivot_approach_distance_ * 0.6;
-  const double effective_cruise_floor = near_waypoint_capture
-    ? std::max(0.0, min_capture_speed_)
-    : min_cruise_speed_;
-  double commanded_v = best.v;
-  if (cruise_floor_enabled && runtime_max_v >= effective_cruise_floor && effective_cruise_floor > 0.0) {
-    if (allow_reverse_) {
-      const double sign = (commanded_v < 0.0) ? -1.0 : 1.0;
-      commanded_v = sign * std::max(std::abs(commanded_v), effective_cruise_floor);
-    } else {
-      commanded_v = std::max(commanded_v, effective_cruise_floor);
-    }
-  }
-
-  double commanded_v_out = std::clamp(commanded_v, runtime_min_v_cmd, runtime_max_v);
-  double commanded_w_out = std::clamp(best.w, -max_w_, max_w_);
-  // Note: rollout generates only feasible (no-arc) candidates when disallow_arcing_
-  // (Issue 1), so no post-hoc clamp needed here.
-
-  geometry_msgs::msg::TwistStamped cmd;
-  cmd.header.stamp = now;
-  cmd.header.frame_id = base_frame_;
-  cmd.twist.linear.x = commanded_v_out;
-  cmd.twist.linear.y = 0.0;
-  cmd.twist.linear.z = 0.0;
-  cmd.twist.angular.x = 0.0;
-  cmd.twist.angular.y = 0.0;
-  cmd.twist.angular.z = commanded_w_out;
-
-  // Do not fire progress stall during intentional pivot or rotate-to-heading.
-  if (!in_waypoint_pivot_ &&
-    std::abs(cmd.twist.linear.x) > progress_stall_cmd_v_threshold_) {
-    const double stalled_for = (now - last_progress_checkpoint_stamp_).seconds();
-    if (stalled_for > progress_stall_timeout_) {
-      if (abort_on_progress_stall_) {
-        blocked_ = true;
-        blocked_since_ = last_progress_checkpoint_stamp_;
-        RCLCPP_WARN_THROTTLE(
-          node_->get_logger(),
-          *node_->get_clock(),
-          2000,
-          "%s: progress stalled for %.2f s (cmd_v=%.3f m/s) -> triggering recovery",
-          plugin_name_.c_str(),
-          stalled_for,
-          cmd.twist.linear.x);
-        throw nav2_core::PlannerException(
-                "next_nav2_controller: progress stalled; requesting Nav2 replan/recovery");
-      }
-      // Re-arm warning window when stall abort is disabled.
-      last_progress_checkpoint_stamp_ = now;
-      last_progress_checkpoint_m_ = stable_progress_m_;
-    }
-  }
-
-  last_command_ = cmd.twist;
-  last_command_stamp_ = now;
-
-  publishDebug(projection.point, target_point, projection.lateral_error,
-    goal_distance, heading_error_reference_signed,
-    cmd.twist.linear.x, cmd.twist.angular.z,
-    final_approach, rotate_in_place_mode, now);
-
-  return cmd;
 }
 
 void NextNav2Controller::setSpeedLimit(const double & speed_limit, const bool & percentage)
@@ -1888,17 +989,9 @@ void NextNav2Controller::setSpeedLimit(const double & speed_limit, const bool & 
 bool NextNav2Controller::cancel()
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
-  in_waypoint_pivot_ = false;
-  pivot_consumed_waypoint_progress_ = -1.0;
-  pivot_start_stamp_ = rclcpp::Time();
-  pivot_last_yaw_progress_stamp_ = rclcpp::Time();
-  in_no_arc_rotate_mode_ = false;
-  in_rotate_to_heading_mode_ = false;
   in_rpp_rotate_mode_ = false;
   strict_line_path_captured_ = false;
   blocked_ = false;
-  mpc_v_sequence_.clear();
-  mpc_w_sequence_.clear();
   RCLCPP_DEBUG(node_->get_logger(), "%s: cancel() called", plugin_name_.c_str());
   return true;
 }
@@ -1906,13 +999,6 @@ bool NextNav2Controller::cancel()
 void NextNav2Controller::reset()
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
-  in_waypoint_pivot_ = false;
-  pivot_consumed_waypoint_progress_ = -1.0;
-  pivot_start_stamp_ = rclcpp::Time();
-  pivot_last_yaw_ = 0.0;
-  pivot_last_yaw_progress_stamp_ = rclcpp::Time();
-  in_no_arc_rotate_mode_ = false;
-  in_rotate_to_heading_mode_ = false;
   in_rpp_rotate_mode_ = false;
   strict_line_path_captured_ = false;
   blocked_ = false;
@@ -1920,11 +1006,79 @@ void NextNav2Controller::reset()
   stable_progress_m_ = 0.0;
   last_progress_checkpoint_m_ = 0.0;
   last_progress_checkpoint_stamp_ = rclcpp::Time();
-  mpc_v_sequence_.clear();
-  mpc_w_sequence_.clear();
   last_command_ = geometry_msgs::msg::Twist();
   last_command_stamp_ = rclcpp::Time();
   RCLCPP_DEBUG(node_->get_logger(), "%s: reset() called", plugin_name_.c_str());
+}
+
+void NextNav2Controller::handleSetMotionIntent(
+  const std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Request> request,
+  std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Response> response)
+{
+  // Issue 17: use the dedicated motion_intent mutex so a busy compute cycle
+  // cannot block service updates.
+  std::lock_guard<std::mutex> lock(motion_intent_mutex_);
+
+  std::string mode = request ? request->mode : "";
+  std::transform(
+    mode.begin(), mode.end(), mode.begin(),
+    [](unsigned char c) {return static_cast<char>(std::tolower(c));});
+
+  if (mode.empty() || mode == "normal" || mode == "clear") {
+    motion_intent_ = MotionIntent();
+    response->accepted = true;
+    response->intent_id = 0;
+    response->message = "Motion intent cleared";
+    return;
+  }
+
+  MotionIntent intent;
+  intent.active = true;
+  intent.intent_id = next_motion_intent_id_++;
+  intent.mode = mode;
+  intent.source = request ? request->source : "";
+  intent.target_pose = request->target_pose;
+  intent.max_linear_speed = std::max(0.0F, request->max_linear_speed);
+  intent.max_angular_speed = std::max(0.0F, request->max_angular_speed);
+  intent.xy_tolerance = std::max(0.0F, request->xy_tolerance);
+  intent.yaw_tolerance = std::max(0.0F, request->yaw_tolerance);
+  intent.timeout_sec = std::max(0.0F, request->timeout_sec);
+  intent.received_at = node_->now();
+  motion_intent_ = intent;
+
+  response->accepted = true;
+  response->intent_id = intent.intent_id;
+  response->message =
+    "Motion intent accepted: mode=" + intent.mode + " source=" + intent.source;
+}
+
+void NextNav2Controller::publishMotionIntentStatus(
+  const MotionIntent & intent_snapshot,
+  const std::string & state,
+  const std::string & limiting_factor,
+  double target_error,
+  double cmd_v,
+  double cmd_w,
+  const rclcpp::Time & stamp) const
+{
+  (void)stamp;
+  if (!motion_intent_status_pub_ || !motion_intent_status_pub_->is_activated()) {
+    return;
+  }
+
+  // Issue 17: publish from a locally-passed snapshot so we don't need to
+  // reacquire motion_intent_mutex_ here (avoids nesting).
+  next_ros2ws_interfaces::msg::MotionIntentStatus msg;
+  msg.intent_id = intent_snapshot.intent_id;
+  msg.active = intent_snapshot.active;
+  msg.source = intent_snapshot.source;
+  msg.mode = intent_snapshot.active ? intent_snapshot.mode : "normal";
+  msg.state = state;
+  msg.limiting_factor = limiting_factor;
+  msg.target_error = static_cast<float>(target_error);
+  msg.cmd_v = static_cast<float>(cmd_v);
+  msg.cmd_w = static_cast<float>(cmd_w);
+  motion_intent_status_pub_->publish(msg);
 }
 
 void NextNav2Controller::declareAndLoadParameters()
@@ -1951,32 +1105,6 @@ void NextNav2Controller::declareAndLoadParameters()
     node, plugin_name_ + ".acc_lim_w", rclcpp::ParameterValue(acc_lim_w_));
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".decel_lim_v", rclcpp::ParameterValue(decel_lim_v_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".horizon_time", rclcpp::ParameterValue(horizon_time_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".num_samples", rclcpp::ParameterValue(num_samples_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".sample_grid_v", rclcpp::ParameterValue(sample_grid_v_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".sample_grid_w", rclcpp::ParameterValue(sample_grid_w_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_lateral", rclcpp::ParameterValue(w_lateral_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_heading", rclcpp::ParameterValue(w_heading_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_progress", rclcpp::ParameterValue(w_progress_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_smooth", rclcpp::ParameterValue(w_smooth_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_obstacle", rclcpp::ParameterValue(w_obstacle_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_target", rclcpp::ParameterValue(w_target_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_bearing", rclcpp::ParameterValue(w_bearing_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_angular_rate", rclcpp::ParameterValue(w_angular_rate_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".w_misaligned_forward", rclcpp::ParameterValue(w_misaligned_forward_));
   nav2_util::declare_parameter_if_not_declared(
     node,
     plugin_name_ + ".enforce_diff_drive_kinematics",
@@ -2014,8 +1142,6 @@ void NextNav2Controller::declareAndLoadParameters()
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".abort_on_progress_stall", rclcpp::ParameterValue(abort_on_progress_stall_));
 
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".rollout_dt", rclcpp::ParameterValue(rollout_dt_));
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".transform_tolerance", rclcpp::ParameterValue(transform_tolerance_));
   nav2_util::declare_parameter_if_not_declared(
@@ -2075,19 +1201,17 @@ void NextNav2Controller::declareAndLoadParameters()
     plugin_name_ + ".strict_line_k_lateral",
     rclcpp::ParameterValue(strict_line_k_lateral_));
   nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".strict_line_rotate_only_error",
-    rclcpp::ParameterValue(strict_line_rotate_only_error_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".disallow_arcing", rclcpp::ParameterValue(disallow_arcing_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".no_arc_heading_error_threshold",
-    rclcpp::ParameterValue(no_arc_heading_error_threshold_));
-  nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".debug_publishers", rclcpp::ParameterValue(debug_publishers_));
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".control_mode", rclcpp::ParameterValue(control_mode_name_));
+  nav2_util::declare_parameter_if_not_declared(
+    node,
+    plugin_name_ + ".motion_intent_service_name",
+    rclcpp::ParameterValue(motion_intent_service_name_));
+  nav2_util::declare_parameter_if_not_declared(
+    node,
+    plugin_name_ + ".motion_intent_status_topic",
+    rclcpp::ParameterValue(motion_intent_status_topic_));
   nav2_util::declare_parameter_if_not_declared(
     node,
     plugin_name_ + ".rpp_use_velocity_scaled_lookahead",
@@ -2126,46 +1250,6 @@ void NextNav2Controller::declareAndLoadParameters()
     node,
     plugin_name_ + ".rpp_segment_lookahead_turn_threshold",
     rclcpp::ParameterValue(rpp_segment_lookahead_turn_threshold_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".rpp_use_obstacle_fallback", rclcpp::ParameterValue(rpp_use_obstacle_fallback_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".rpp_obstacle_fallback_cost_threshold",
-    rclcpp::ParameterValue(rpp_obstacle_fallback_cost_threshold_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".rpp_obstacle_fallback_v_samples",
-    rclcpp::ParameterValue(rpp_obstacle_fallback_v_samples_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".rpp_obstacle_fallback_w_samples",
-    rclcpp::ParameterValue(rpp_obstacle_fallback_w_samples_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_steps", rclcpp::ParameterValue(mpc_steps_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_iterations", rclcpp::ParameterValue(mpc_iterations_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_num_samples", rclcpp::ParameterValue(mpc_num_samples_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_noise_v", rclcpp::ParameterValue(mpc_noise_v_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_noise_w", rclcpp::ParameterValue(mpc_noise_w_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_warm_start", rclcpp::ParameterValue(mpc_warm_start_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".mpc_terminal_heading_weight",
-    rclcpp::ParameterValue(mpc_terminal_heading_weight_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".mpc_terminal_lateral_weight",
-    rclcpp::ParameterValue(mpc_terminal_lateral_weight_));
-  nav2_util::declare_parameter_if_not_declared(
-    node,
-    plugin_name_ + ".mpc_terminal_target_weight",
-    rclcpp::ParameterValue(mpc_terminal_target_weight_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".mpc_seed", rclcpp::ParameterValue(mpc_seed_));
 
   node->get_parameter(plugin_name_ + ".lookahead_distance", lookahead_distance_);
   node->get_parameter(plugin_name_ + ".lookahead_speed_gain", lookahead_speed_gain_);
@@ -2177,19 +1261,6 @@ void NextNav2Controller::declareAndLoadParameters()
   node->get_parameter(plugin_name_ + ".acc_lim_v", acc_lim_v_);
   node->get_parameter(plugin_name_ + ".acc_lim_w", acc_lim_w_);
   node->get_parameter(plugin_name_ + ".decel_lim_v", decel_lim_v_);
-  node->get_parameter(plugin_name_ + ".horizon_time", horizon_time_);
-  node->get_parameter(plugin_name_ + ".num_samples", num_samples_);
-  node->get_parameter(plugin_name_ + ".sample_grid_v", sample_grid_v_);
-  node->get_parameter(plugin_name_ + ".sample_grid_w", sample_grid_w_);
-  node->get_parameter(plugin_name_ + ".w_lateral", w_lateral_);
-  node->get_parameter(plugin_name_ + ".w_heading", w_heading_);
-  node->get_parameter(plugin_name_ + ".w_progress", w_progress_);
-  node->get_parameter(plugin_name_ + ".w_smooth", w_smooth_);
-  node->get_parameter(plugin_name_ + ".w_obstacle", w_obstacle_);
-  node->get_parameter(plugin_name_ + ".w_target", w_target_);
-  node->get_parameter(plugin_name_ + ".w_bearing", w_bearing_);
-  node->get_parameter(plugin_name_ + ".w_angular_rate", w_angular_rate_);
-  node->get_parameter(plugin_name_ + ".w_misaligned_forward", w_misaligned_forward_);
   node->get_parameter(plugin_name_ + ".enforce_diff_drive_kinematics", enforce_diff_drive_kinematics_);
   node->get_parameter(plugin_name_ + ".allow_reverse", allow_reverse_);
   node->get_parameter(plugin_name_ + ".wheel_separation", wheel_separation_);
@@ -2208,7 +1279,6 @@ void NextNav2Controller::declareAndLoadParameters()
   node->get_parameter(plugin_name_ + ".abort_on_blocked_timeout", abort_on_blocked_timeout_);
   node->get_parameter(plugin_name_ + ".abort_on_progress_stall", abort_on_progress_stall_);
 
-  node->get_parameter(plugin_name_ + ".rollout_dt", rollout_dt_);
   node->get_parameter(plugin_name_ + ".transform_tolerance", transform_tolerance_);
   node->get_parameter(plugin_name_ + ".plan_refresh_period", plan_refresh_period_);
   node->get_parameter(plugin_name_ + ".progress_backtrack_tolerance", progress_backtrack_tolerance_);
@@ -2232,13 +1302,10 @@ void NextNav2Controller::declareAndLoadParameters()
   node->get_parameter(plugin_name_ + ".strict_line_geometric_control", strict_line_geometric_control_);
   node->get_parameter(plugin_name_ + ".strict_line_k_heading", strict_line_k_heading_);
   node->get_parameter(plugin_name_ + ".strict_line_k_lateral", strict_line_k_lateral_);
-  node->get_parameter(plugin_name_ + ".strict_line_rotate_only_error", strict_line_rotate_only_error_);
-  node->get_parameter(plugin_name_ + ".disallow_arcing", disallow_arcing_);
-  node->get_parameter(
-    plugin_name_ + ".no_arc_heading_error_threshold",
-    no_arc_heading_error_threshold_);
   node->get_parameter(plugin_name_ + ".debug_publishers", debug_publishers_);
   node->get_parameter(plugin_name_ + ".control_mode", control_mode_name_);
+  node->get_parameter(plugin_name_ + ".motion_intent_service_name", motion_intent_service_name_);
+  node->get_parameter(plugin_name_ + ".motion_intent_status_topic", motion_intent_status_topic_);
   node->get_parameter(
     plugin_name_ + ".rpp_use_velocity_scaled_lookahead",
     rpp_use_velocity_scaled_lookahead_);
@@ -2268,60 +1335,6 @@ void NextNav2Controller::declareAndLoadParameters()
   node->get_parameter(
     plugin_name_ + ".rpp_segment_lookahead_turn_threshold",
     rpp_segment_lookahead_turn_threshold_);
-  node->get_parameter(
-    plugin_name_ + ".rpp_use_obstacle_fallback",
-    rpp_use_obstacle_fallback_);
-  node->get_parameter(
-    plugin_name_ + ".rpp_obstacle_fallback_cost_threshold",
-    rpp_obstacle_fallback_cost_threshold_);
-  node->get_parameter(
-    plugin_name_ + ".rpp_obstacle_fallback_v_samples",
-    rpp_obstacle_fallback_v_samples_);
-  node->get_parameter(
-    plugin_name_ + ".rpp_obstacle_fallback_w_samples",
-    rpp_obstacle_fallback_w_samples_);
-  node->get_parameter(plugin_name_ + ".mpc_steps", mpc_steps_);
-  node->get_parameter(plugin_name_ + ".mpc_iterations", mpc_iterations_);
-  node->get_parameter(plugin_name_ + ".mpc_num_samples", mpc_num_samples_);
-  node->get_parameter(plugin_name_ + ".mpc_noise_v", mpc_noise_v_);
-  node->get_parameter(plugin_name_ + ".mpc_noise_w", mpc_noise_w_);
-  node->get_parameter(plugin_name_ + ".mpc_warm_start", mpc_warm_start_);
-  node->get_parameter(
-    plugin_name_ + ".mpc_terminal_heading_weight",
-    mpc_terminal_heading_weight_);
-  node->get_parameter(
-    plugin_name_ + ".mpc_terminal_lateral_weight",
-    mpc_terminal_lateral_weight_);
-  node->get_parameter(
-    plugin_name_ + ".mpc_terminal_target_weight",
-    mpc_terminal_target_weight_);
-  node->get_parameter(plugin_name_ + ".mpc_seed", mpc_seed_);
-
-  // ── Waypoint pivot parameters ────────────────────────────────────────────
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".waypoint_pivot_enabled",
-    rclcpp::ParameterValue(waypoint_pivot_enabled_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".waypoint_pivot_threshold",
-    rclcpp::ParameterValue(waypoint_pivot_threshold_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".waypoint_pivot_approach_distance",
-    rclcpp::ParameterValue(waypoint_pivot_approach_distance_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".waypoint_pivot_center_epsilon",
-    rclcpp::ParameterValue(waypoint_pivot_center_epsilon_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".waypoint_pivot_angular_vel",
-    rclcpp::ParameterValue(waypoint_pivot_angular_vel_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".waypoint_pivot_done_threshold",
-    rclcpp::ParameterValue(waypoint_pivot_done_threshold_));
-  node->get_parameter(plugin_name_ + ".waypoint_pivot_enabled",           waypoint_pivot_enabled_);
-  node->get_parameter(plugin_name_ + ".waypoint_pivot_threshold",         waypoint_pivot_threshold_);
-  node->get_parameter(plugin_name_ + ".waypoint_pivot_approach_distance", waypoint_pivot_approach_distance_);
-  node->get_parameter(plugin_name_ + ".waypoint_pivot_center_epsilon",    waypoint_pivot_center_epsilon_);
-  node->get_parameter(plugin_name_ + ".waypoint_pivot_angular_vel",       waypoint_pivot_angular_vel_);
-  node->get_parameter(plugin_name_ + ".waypoint_pivot_done_threshold",    waypoint_pivot_done_threshold_);
 
   // ── Velocity profile parameters ──────────────────────────────────────────
   nav2_util::declare_parameter_if_not_declared(
@@ -2337,20 +1350,11 @@ void NextNav2Controller::declareAndLoadParameters()
   node->get_parameter(plugin_name_ + ".speed_profile_max_lateral_accel", speed_profile_max_lateral_accel_);
   node->get_parameter(plugin_name_ + ".speed_profile_min_speed",         speed_profile_min_speed_);
 
-  if (control_mode_name_ == "rpp") {
-    control_mode_ = ControlMode::Rpp;
-  } else if (control_mode_name_ == "mpc") {
-    control_mode_ = ControlMode::Mpc;
-  } else if (control_mode_name_ == "rollout") {
-    control_mode_ = ControlMode::Rollout;
-  } else {
-    RCLCPP_WARN(
-      node_->get_logger(),
-      "%s: unknown control_mode '%s', falling back to 'rollout'",
-      plugin_name_.c_str(),
-      control_mode_name_.c_str());
-    control_mode_name_ = "rollout";
-    control_mode_ = ControlMode::Rollout;
+  if (motion_intent_service_name_.empty()) {
+    motion_intent_service_name_ = "/controller_server/set_motion_intent";
+  }
+  if (motion_intent_status_topic_.empty()) {
+    motion_intent_status_topic_ = "/controller_server/motion_intent_status";
   }
 
   max_v_ = std::max(0.0, max_v_);
@@ -2365,17 +1369,9 @@ void NextNav2Controller::declareAndLoadParameters()
   decel_lim_v_ = std::max(0.05, std::abs(decel_lim_v_));
   rotate_in_place_max_v_ = std::clamp(std::abs(rotate_in_place_max_v_), 0.0, max_v_);
   base_rotate_in_place_max_v_ = rotate_in_place_max_v_;
-  horizon_time_ = std::max(0.2, horizon_time_);
-  num_samples_ = std::max(6, num_samples_);
-  sample_grid_v_ = std::max(2, sample_grid_v_);
-  sample_grid_w_ = std::max(3, sample_grid_w_);
   lookahead_speed_gain_ = std::max(0.0, lookahead_speed_gain_);
   lookahead_min_distance_ = std::max(0.05, lookahead_min_distance_);
   lookahead_max_distance_ = std::max(lookahead_min_distance_, lookahead_max_distance_);
-  w_target_ = std::max(0.0, w_target_);
-  w_bearing_ = std::max(0.0, w_bearing_);
-  w_angular_rate_ = std::max(0.0, w_angular_rate_);
-  w_misaligned_forward_ = std::max(0.0, w_misaligned_forward_);
   wheel_separation_ = std::max(0.0, wheel_separation_);
   max_wheel_linear_speed_ = std::max(0.0, max_wheel_linear_speed_);
   rotate_to_heading_threshold_ = std::clamp(std::abs(rotate_to_heading_threshold_), 0.1, 3.14);
@@ -2386,7 +1382,6 @@ void NextNav2Controller::declareAndLoadParameters()
   progress_stall_timeout_ = std::max(0.2, progress_stall_timeout_);
   progress_stall_epsilon_ = std::max(0.001, progress_stall_epsilon_);
   progress_stall_cmd_v_threshold_ = std::max(0.001, progress_stall_cmd_v_threshold_);
-  rollout_dt_ = std::max(0.02, rollout_dt_);
   plan_refresh_period_ = std::max(0.0, plan_refresh_period_);
   final_approach_distance_ = std::max(0.05, final_approach_distance_);
   blocked_timeout_ = std::max(0.2, blocked_timeout_);
@@ -2409,14 +1404,6 @@ void NextNav2Controller::declareAndLoadParameters()
   strict_line_lateral_weight_scale_ = std::max(0.0, strict_line_lateral_weight_scale_);
   strict_line_k_heading_ = std::max(0.0, strict_line_k_heading_);
   strict_line_k_lateral_ = std::max(0.0, strict_line_k_lateral_);
-  strict_line_rotate_only_error_ = std::clamp(
-    std::abs(strict_line_rotate_only_error_),
-    0.05,
-    1.57);
-  no_arc_heading_error_threshold_ = std::clamp(
-    std::abs(no_arc_heading_error_threshold_),
-    0.005,
-    0.50);
   rpp_desired_linear_vel_ = std::max(0.0, rpp_desired_linear_vel_);
   rpp_regulated_linear_scaling_min_radius_ = std::max(0.05, rpp_regulated_linear_scaling_min_radius_);
   rpp_regulated_linear_scaling_min_speed_ = std::max(0.0, rpp_regulated_linear_scaling_min_speed_);
@@ -2430,36 +1417,12 @@ void NextNav2Controller::declareAndLoadParameters()
     std::abs(rpp_segment_lookahead_turn_threshold_),
     0.01,
     1.57);
-  rpp_obstacle_fallback_cost_threshold_ = std::clamp(rpp_obstacle_fallback_cost_threshold_, 0.0, 1.0);
-  rpp_obstacle_fallback_v_samples_ = std::max(2, rpp_obstacle_fallback_v_samples_);
-  rpp_obstacle_fallback_w_samples_ = std::max(3, rpp_obstacle_fallback_w_samples_);
   rpp_collision_check_resolution_ = std::max(0.01, rpp_collision_check_resolution_);
-  mpc_steps_ = std::max(2, mpc_steps_);
-  mpc_iterations_ = std::max(1, mpc_iterations_);
-  mpc_num_samples_ = std::max(1, mpc_num_samples_);
-  mpc_noise_v_ = std::max(0.0, mpc_noise_v_);
-  mpc_noise_w_ = std::max(0.0, mpc_noise_w_);
-  mpc_terminal_heading_weight_ = std::max(0.0, mpc_terminal_heading_weight_);
-  mpc_terminal_lateral_weight_ = std::max(0.0, mpc_terminal_lateral_weight_);
-  mpc_terminal_target_weight_ = std::max(0.0, mpc_terminal_target_weight_);
-  mpc_rng_.seed(static_cast<std::mt19937::result_type>(std::max(0, mpc_seed_)));
-  mpc_v_sequence_.clear();
-  mpc_w_sequence_.clear();
 
   if (!allow_reverse_) {
     min_cruise_speed_ = std::min(min_cruise_speed_, max_v_);
   }
   segment_finish_epsilon_ = std::max(0.01, segment_finish_epsilon_);
-
-  // ── Waypoint pivot clamps ─────────────────────────────────────────────────
-  waypoint_pivot_threshold_         = std::clamp(std::abs(waypoint_pivot_threshold_), 0.05, kPi);
-  waypoint_pivot_approach_distance_ = std::max(0.05, waypoint_pivot_approach_distance_);
-  waypoint_pivot_center_epsilon_    = std::clamp(
-    waypoint_pivot_center_epsilon_,
-    segment_finish_epsilon_,
-    waypoint_pivot_approach_distance_);
-  waypoint_pivot_angular_vel_       = std::max(0.10, std::abs(waypoint_pivot_angular_vel_));
-  waypoint_pivot_done_threshold_    = std::clamp(std::abs(waypoint_pivot_done_threshold_), 0.02, 0.5);
 
   speed_profile_max_lateral_accel_ = std::max(0.1, speed_profile_max_lateral_accel_);
   speed_profile_min_speed_         = std::clamp(speed_profile_min_speed_, 0.0, base_max_v_);
@@ -2476,47 +1439,12 @@ void NextNav2Controller::declareAndLoadParameters()
       plugin_name_.c_str());
   }
 
-  // ── Issue 4: pivot watchdog parameters ───────────────────────────────────
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".pivot_timeout", rclcpp::ParameterValue(pivot_timeout_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".pivot_progress_epsilon", rclcpp::ParameterValue(pivot_progress_epsilon_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".pivot_progress_timeout", rclcpp::ParameterValue(pivot_progress_timeout_));
-  node->get_parameter(plugin_name_ + ".pivot_timeout",           pivot_timeout_);
-  node->get_parameter(plugin_name_ + ".pivot_progress_epsilon",  pivot_progress_epsilon_);
-  node->get_parameter(plugin_name_ + ".pivot_progress_timeout",  pivot_progress_timeout_);
-  pivot_timeout_          = std::max(0.5, pivot_timeout_);
-  pivot_progress_epsilon_ = std::max(0.001, pivot_progress_epsilon_);
-  pivot_progress_timeout_ = std::max(0.5, pivot_progress_timeout_);
-
-  // ── Issue 20: junction consumed latch ─────────────────────────────────────
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".pivot_departure_distance",
-    rclcpp::ParameterValue(pivot_departure_distance_));
-  node->get_parameter(plugin_name_ + ".pivot_departure_distance", pivot_departure_distance_);
-  pivot_departure_distance_ = std::max(0.05, pivot_departure_distance_);
-
-  // ── Issue 21: hysteresis thresholds ──────────────────────────────────────
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".no_arc_heading_exit_threshold",
-    rclcpp::ParameterValue(no_arc_heading_exit_threshold_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".rotate_to_heading_exit_threshold",
-    rclcpp::ParameterValue(rotate_to_heading_exit_threshold_));
+  // ── RPP rotate-to-heading exit angle ─────────────────────────────────────
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".rpp_rotate_to_heading_exit_angle",
     rclcpp::ParameterValue(rpp_rotate_to_heading_exit_angle_));
   node->get_parameter(
-    plugin_name_ + ".no_arc_heading_exit_threshold", no_arc_heading_exit_threshold_);
-  node->get_parameter(
-    plugin_name_ + ".rotate_to_heading_exit_threshold", rotate_to_heading_exit_threshold_);
-  node->get_parameter(
     plugin_name_ + ".rpp_rotate_to_heading_exit_angle", rpp_rotate_to_heading_exit_angle_);
-  no_arc_heading_exit_threshold_ = std::clamp(
-    std::abs(no_arc_heading_exit_threshold_), 0.002, no_arc_heading_error_threshold_);
-  rotate_to_heading_exit_threshold_ = std::clamp(
-    std::abs(rotate_to_heading_exit_threshold_), 0.02, rotate_to_heading_threshold_);
   rpp_rotate_to_heading_exit_angle_ = std::clamp(
     std::abs(rpp_rotate_to_heading_exit_angle_), 0.02, rpp_rotate_to_heading_min_angle_);
 
@@ -2532,15 +1460,11 @@ void NextNav2Controller::declareAndLoadParameters()
     strict_line_release_lateral_error_,
     strict_line_adaptive_max_limit_);
 
-  // ── Issues 23/25: capture and pivot entry speeds ─────────────────────────
+  // ── Issue 23: min capture speed ──────────────────────────────────────────
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".min_capture_speed", rclcpp::ParameterValue(min_capture_speed_));
-  nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".pivot_entry_speed", rclcpp::ParameterValue(pivot_entry_speed_));
   node->get_parameter(plugin_name_ + ".min_capture_speed", min_capture_speed_);
-  node->get_parameter(plugin_name_ + ".pivot_entry_speed",  pivot_entry_speed_);
   min_capture_speed_ = std::clamp(min_capture_speed_, 0.0, max_v_);
-  pivot_entry_speed_ = std::clamp(pivot_entry_speed_,  0.0, max_v_);
 
   // ── Issue 14: degenerate segment fallback ────────────────────────────────
   nav2_util::declare_parameter_if_not_declared(
@@ -2584,18 +1508,6 @@ void NextNav2Controller::declareAndLoadParameters()
       plugin_name_.c_str());
   }
 
-  // ── Issue 5: warn on overlapping rotation authorities ────────────────────
-  if (waypoint_pivot_enabled_ && rpp_use_rotate_to_heading_ &&
-    control_mode_ == ControlMode::Rpp)
-  {
-    RCLCPP_WARN(
-      node_->get_logger(),
-      "%s: 'waypoint_pivot_enabled' and 'rpp_use_rotate_to_heading' are both active in RPP "
-      "mode. Both can issue in-place rotation commands at a waypoint approach. Review which "
-      "authority should take precedence, and consider disabling 'rpp_use_rotate_to_heading' "
-      "when waypoint pivots are in use.",
-      plugin_name_.c_str());
-  }
 }
 
 nav_msgs::msg::Path NextNav2Controller::transformPathToGlobalFrame(const nav_msgs::msg::Path & path) const
@@ -2994,158 +1906,6 @@ void NextNav2Controller::advanceSegmentIfReady(
   }
 }
 
-NextNav2Controller::CandidateResult NextNav2Controller::scoreCandidate(
-  double candidate_v,
-  double candidate_w,
-  const geometry_msgs::msg::PoseStamped & robot_pose,
-  const geometry_msgs::msg::Twist & current_velocity,
-  const Segment & segment,
-  const geometry_msgs::msg::Point & target_point,
-  double heading_reference,
-  bool final_approach,
-  bool goal_reached,
-  double lateral_error_limit) const
-{
-  CandidateResult result;
-  result.v = candidate_v;
-  result.w = candidate_w;
-
-  const int steps = std::max(1, static_cast<int>(std::ceil(horizon_time_ / rollout_dt_)));
-  const double dt = horizon_time_ / static_cast<double>(steps);
-
-  const auto footprint = costmap_ros_->getRobotFootprint();
-
-  double x = robot_pose.pose.position.x;
-  double y = robot_pose.pose.position.y;
-  double theta = tf2::getYaw(robot_pose.pose.orientation);
-
-  double obstacle_integral = 0.0;
-  double lateral_error_integral = 0.0;
-
-  // Track simulated progress along the full path so scoring remains valid
-  // when a rollout crosses into a future segment near a turn.
-  const double total_path_length = segments_.back().cumulative_start + segments_.back().length;
-  const geometry_msgs::msg::Point init_robot_point = computeControlPoint(x, y, theta);
-  double sim_progress = segment.cumulative_start +
-    projectPointOntoSegment(init_robot_point, segment).t;
-  std::size_t sim_seg_idx = current_segment_index_;
-
-  for (int i = 0; i < steps; ++i) {
-    x += candidate_v * std::cos(theta) * dt;
-    y += candidate_v * std::sin(theta) * dt;
-    theta = angles::normalize_angle(theta + candidate_w * dt);
-
-    const geometry_msgs::msg::Point simulated_point = computeControlPoint(x, y, theta);
-
-    // Advance sim_seg_idx forward as the simulation progresses along the path.
-    while (sim_seg_idx + 1 < segments_.size()) {
-      const Projection fwd = projectPointOntoSegment(simulated_point, segments_[sim_seg_idx]);
-      const double remaining_on_seg = segments_[sim_seg_idx].length - fwd.t;
-      if (remaining_on_seg > segment_finish_epsilon_) {
-        break;
-      }
-      ++sim_seg_idx;
-    }
-    const Segment & sim_seg = segments_[sim_seg_idx];
-    const Projection simulated_projection = projectPointOntoSegment(simulated_point, sim_seg);
-    sim_progress = std::min(
-      total_path_length,
-      sim_seg.cumulative_start + simulated_projection.t);
-
-    // Issue 26: use the heading of the currently-simulated segment as the
-    // reference so scoring is aware of upcoming turns, not just the initial
-    // segment heading that was valid at tick entry.
-    const double sim_heading_ref = final_approach ? heading_reference : sim_seg.heading;
-
-    const double simulated_lateral_error = std::abs(simulated_projection.lateral_error);
-    lateral_error_integral += simulated_lateral_error;
-    if (strict_line_tracking_ && strict_line_path_captured_ &&
-      !final_approach && !goal_reached && simulated_lateral_error > lateral_error_limit) {
-      result.feasible = false;
-      return result;
-    }
-
-    if (!allow_unknown_space_ && footprintTouchesUnknown(x, y, theta, footprint)) {
-      result.feasible = false;
-      return result;
-    }
-
-    const double cost = poseCost(x, y, theta, footprint);
-    if (cost < 0.0 || cost >= static_cast<double>(nav2_costmap_2d::LETHAL_OBSTACLE)) {
-      result.feasible = false;
-      return result;
-    }
-
-    const double normalized_cost = cost >= static_cast<double>(nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE)
-      ? 1.0
-      : std::clamp(
-      cost / static_cast<double>(nav2_costmap_2d::MAX_NON_OBSTACLE),
-      0.0,
-      1.0);
-
-    obstacle_integral += normalized_cost;
-    (void)sim_heading_ref;  // used below at end-of-horizon
-  }
-
-  const geometry_msgs::msg::Point end_point = computeControlPoint(x, y, theta);
-
-  const Segment & final_sim_seg = segments_[sim_seg_idx];
-  const Projection end_projection = projectPointOntoSegment(end_point, final_sim_seg);
-  const double end_progress = sim_progress;
-  // Issue 26: use the final simulated segment's heading as the terminal
-  // reference so candidates that track upcoming turns are properly rewarded.
-  const double final_sim_heading_ref =
-    final_approach ? heading_reference : final_sim_seg.heading;
-  const double heading_error_end =
-    std::abs(angles::shortest_angular_distance(theta, final_sim_heading_ref));
-  const double target_dx = target_point.x - end_point.x;
-  const double target_dy = target_point.y - end_point.y;
-  const double target_distance_end = std::hypot(target_dx, target_dy);
-  const double target_heading = std::atan2(target_dy, target_dx);
-  const double target_bearing_error_end = target_distance_end > 0.02
-    ? std::abs(angles::shortest_angular_distance(theta, target_heading))
-    : 0.0;
-
-  const double v_ref =
-    std::abs(current_velocity.linear.x) > 0.01 ? current_velocity.linear.x : last_command_.linear.x;
-  const double w_ref =
-    std::abs(current_velocity.angular.z) > 0.01 ? current_velocity.angular.z : last_command_.angular.z;
-  const double dv = candidate_v - v_ref;
-  const double dw = candidate_w - w_ref;
-
-  const double smooth_cost = (dv * dv) + (0.4 * dw * dw);
-  const double command_jerk =
-    std::pow(candidate_v - last_command_.linear.x, 2) + 0.4 *
-    std::pow(candidate_w - last_command_.angular.z, 2);
-
-  const double lateral_error_avg = lateral_error_integral / static_cast<double>(steps);
-
-  double score =
-    (w_obstacle_ * (obstacle_integral / static_cast<double>(steps))) +
-    (w_smooth_ * (smooth_cost + command_jerk)) +
-    (w_angular_rate_ * candidate_w * candidate_w);
-
-  if (strict_line_tracking_ && strict_line_path_captured_ && !final_approach && !goal_reached) {
-    score += strict_line_lateral_weight_scale_ * w_lateral_ * lateral_error_avg * lateral_error_avg;
-  }
-
-  if (final_approach && !goal_reached) {
-    // Penalise angular rate during final approach to avoid overshooting the goal.
-    score += 0.3 * std::abs(candidate_w);
-  }
-
-  result.feasible = true;
-  result.score = score;
-  result.projected_progress = end_progress;
-  result.lateral_error_end = std::abs(end_projection.lateral_error);
-  result.heading_error_end = heading_error_end;
-  result.target_distance_end = target_distance_end;
-  result.target_bearing_error_end = target_bearing_error_end;
-  result.obstacle_cost_avg = obstacle_integral / static_cast<double>(steps);
-
-  return result;
-}
-
 double NextNav2Controller::poseCost(
   double x,
   double y,
@@ -3378,36 +2138,6 @@ void NextNav2Controller::publishDebug(
     msg.data = in_rotate ? 1.0 : 0.0;
     rotate_mode_pub_->publish(msg);
   }
-}
-
-// Issue 2/19: Swept collision check for in-place pivot.
-// Samples the footprint at equal angular increments between from_yaw and to_yaw
-// and rejects if any sample hits an obstacle or (when unknown space is blocked)
-// an unknown cell.
-bool NextNav2Controller::isPivotCollisionFree(
-  double from_yaw, double to_yaw, double x, double y,
-  const std::vector<geometry_msgs::msg::Point> & footprint) const
-{
-  const double sweep = std::abs(angles::shortest_angular_distance(from_yaw, to_yaw));
-  // At least 4 samples; finer sampling every ~8.5° (~0.15 rad) for accuracy.
-  const int samples = std::max(4, static_cast<int>(std::ceil(sweep / 0.15)));
-  for (int i = 0; i <= samples; ++i) {
-    const double alpha = static_cast<double>(i) / static_cast<double>(samples);
-    const double theta = angles::normalize_angle(
-      from_yaw + alpha * angles::shortest_angular_distance(from_yaw, to_yaw));
-
-    if (!allow_unknown_space_ && footprintTouchesUnknown(x, y, theta, footprint)) {
-      return false;
-    }
-
-    const double cost = poseCost(x, y, theta, footprint);
-    if (cost < 0.0 ||
-      cost >= static_cast<double>(nav2_costmap_2d::LETHAL_OBSTACLE))
-    {
-      return false;
-    }
-  }
-  return true;
 }
 
 }  // namespace next_nav2_controller
