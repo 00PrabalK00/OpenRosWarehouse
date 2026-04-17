@@ -337,10 +337,15 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // local costmap frame (e.g. odom), refresh transformed path periodically so
   // we do not chase stale transformed coordinates.
   const double refresh_period = std::max(0.0, plan_refresh_period_);
+  // Issue 12: once corridor is captured (strict-line locked), freeze the
+  // transformed path. This prevents the plan from shifting under the robot
+  // during insertion and eliminates TF inconsistency (Issue 11) by not
+  // re-sampling map->odom mid-corridor.
   const bool needs_refresh =
     !raw_plan_.poses.empty() &&
     !raw_plan_.header.frame_id.empty() &&
     raw_plan_.header.frame_id != global_frame_ &&
+    !strict_line_path_captured_ &&
     (last_plan_refresh_stamp_.nanoseconds() <= 0 ||
     (now - last_plan_refresh_stamp_).seconds() >= refresh_period);
   if (needs_refresh) {
@@ -700,6 +705,16 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       return stop;
     };
 
+  // Issue 5: hard corridor breach abort. Once the corridor is captured, any
+  // excursion beyond lateral_error_limit is a real failure (e.g. shelf leg
+  // contact) — do NOT keep driving forward. Hand off to Nav2 blocked/recovery.
+  if (strict_line_locked &&
+      std::isfinite(lateral_error_limit) &&
+      abs_lateral_error > lateral_error_limit)
+  {
+    return return_blocked_stop("strict-line corridor breach");
+  }
+
   {
     // Use long lookahead across collinear segments so dense straight paths do
     // not collapse into a tiny carrot and induce left-right chatter. Near a
@@ -955,9 +970,17 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     // this recompute, obstacle-cost slowdown / rate limiting produces a tighter
     // arc than intended. Issue 4/20: no final-approach heading injection; the
     // w clamp tied to |v| is applied in every phase so angular can't dominate
-    // linear motion as v decays.
+    // linear motion as v decays. Issue 5: while strict_line_locked, override
+    // RPP curvature with an explicit e_y + e_psi PD corridor law so the robot
+    // tracks the frozen line (not the carrot geometry) during insertion.
     if (!in_rpp_rotate_mode_) {
-      command_w = curvature * command_v;
+      if (strict_line_locked) {
+        const double e_y = projection.lateral_error;
+        const double e_psi = angles::shortest_angular_distance(robot_yaw, segment.heading);
+        command_w = (strict_line_k_heading_ * e_psi) - (strict_line_k_lateral_ * e_y);
+      } else {
+        command_w = curvature * command_v;
+      }
       const double tracking_w_limit = std::max(0.20, 2.0 * std::abs(command_v) + 0.05);
       const double clamped_w_limit = std::min(max_w_, tracking_w_limit);
       command_w = std::clamp(command_w, -clamped_w_limit, clamped_w_limit);
