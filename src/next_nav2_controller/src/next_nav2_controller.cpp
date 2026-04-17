@@ -529,9 +529,24 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
 
   const double abs_lateral_error = std::abs(projection.lateral_error);
 
+  // Issue 1: when motion_intent.mode == "insertion", the Nav2 controller is
+  // the sole velocity authority — force the strict-line corridor on even if
+  // the static param was left off, so insertion always runs through the
+  // corridor state machine and the e_y + e_psi corridor law.
+  // Issue 22: during insertion, disable adaptive corridor widening so the
+  // lateral limit stays fixed at strict_line_max_lateral_error_ regardless
+  // of accumulated drift — the corridor is the hard safety boundary that
+  // external interference cannot be allowed to loosen.
+  const bool insertion_mode =
+    active_motion_intent.active && active_motion_intent.mode == "insertion";
+  const bool strict_line_tracking_effective =
+    strict_line_tracking_ || insertion_mode;
+  const bool strict_line_adaptive_lateral_limit_effective =
+    strict_line_adaptive_lateral_limit_ && !insertion_mode;
+
   // Issue 7: keep the strict-line corridor state machine live through final
   // approach so lateral precision is preserved for the last centimeters.
-  if (strict_line_tracking_) {
+  if (strict_line_tracking_effective) {
     if (!strict_line_path_captured_) {
       if (abs_lateral_error <= strict_line_capture_lateral_error_) {
         strict_line_path_captured_ = true;
@@ -540,7 +555,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       strict_line_path_captured_ = false;
     }
   }
-  const bool strict_line_locked = strict_line_tracking_ && strict_line_path_captured_;
+  const bool strict_line_locked = strict_line_tracking_effective && strict_line_path_captured_;
 
   // Issue 9: allow the terminal speed envelope to decay cleanly to zero. The
   // previous 0.2 floor meant the controller kept "doing something" through the
@@ -573,7 +588,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   }
   double lateral_error_limit = std::numeric_limits<double>::infinity();
   if (strict_line_locked) {
-    if (strict_line_adaptive_lateral_limit_) {
+    if (strict_line_adaptive_lateral_limit_effective) {
       // Issue 22: clamp the adaptive widening to a hard ceiling so "strict"
       // mode remains meaningfully strict even under accumulated drift.
       lateral_error_limit = std::clamp(
