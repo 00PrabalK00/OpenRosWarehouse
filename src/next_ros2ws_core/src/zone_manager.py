@@ -41,7 +41,7 @@ import os
 from tf2_ros import Buffer, TransformListener
 from .db_manager import DatabaseManager
 from .action_registry import ACTION_MAPPING_PREFIX, merge_action_mappings, normalize_action_id
-from next2_shelf.shelf_docking import (
+from next2_shelf_simple.shelf_docking import (
     Pose2D as ShelfPose2D,
     RobotFootprint as ShelfRobotFootprint,
     ShelfGeometry,
@@ -146,6 +146,12 @@ class ZoneManager(Node):
             self._shelf_status_callback,
             10,
         )
+        self.shelf_simple_state_sub = self.create_subscription(
+            StringMsg,
+            '/shelf_simple/state',
+            self._shelf_simple_state_callback,
+            10,
+        )
 
         # Service servers
         self.save_zone_srv = self.create_service(
@@ -237,6 +243,14 @@ class ZoneManager(Node):
             SetBool,
             self.shelf_detector_enable_service,
         )
+        self.shelf_commit_client = self.create_client(
+            Trigger,
+            '/shelf/commit',
+        )
+        self.shelf_simple_start_client = self.create_client(
+            Trigger,
+            '/shelf_simple/start',
+        )
         self.controller_params_client = self.create_client(
             SetParameters,
             self.controller_set_params_service,
@@ -301,6 +315,7 @@ class ZoneManager(Node):
         self.distance_obstacle_hold_active = False
         self.latest_shelf_status: Dict[str, Any] = {}
         self.latest_shelf_status_receipt_monotonic = 0.0
+        self.shelf_simple_state = 'IDLE'  # tracks /shelf_simple/state
         self.registry_schema_version = 2
 
         # Legacy file paths for migration fallback
@@ -1287,6 +1302,9 @@ class ZoneManager(Node):
         self.latest_shelf_status = payload
         self.latest_shelf_status_receipt_monotonic = time.monotonic()
 
+    def _shelf_simple_state_callback(self, msg: StringMsg):
+        self.shelf_simple_state = str(msg.data or 'IDLE').strip()
+
     def _current_shelf_balance_sample(self) -> Optional[Dict[str, float]]:
         if not bool(self.goal_pose_handoff_intensity_balance_enabled):
             return None
@@ -1505,14 +1523,6 @@ class ZoneManager(Node):
             if not bool(payload.get('detector_enabled', False)):
                 return False
             if not bool(payload.get('candidate_valid', False)):
-                return False
-            if not bool(payload.get('candidate_fresh', False)):
-                return False
-            if not bool(payload.get('candidate_consistent', False)):
-                return False
-            if not bool(payload.get('solver_ok', False)):
-                return False
-            if self._shelf_candidate_hotspot_count(payload) < int(self.goal_pose_handoff_min_hotspot_count):
                 return False
         except Exception:
             return False
@@ -5532,46 +5542,83 @@ class ZoneManager(Node):
                     )
                     return ''
 
-                shelf_goal_pose, pose_err = self._build_shelf_goal_pose_from_status(base_frame)
-                if shelf_goal_pose is None:
+                # ---- Simple shelf insertion via shelf_simple ----
+                # Step 1: commit the detected shelf pose
+                _publish_feedback(
+                    waypoint_index,
+                    f'SHELF_CHECK: committing shelf at waypoint {waypoint_index + 1}/{total}',
+                )
+                commit_ok = False
+                if self.shelf_commit_client.wait_for_service(timeout_sec=1.0):
+                    try:
+                        commit_future = self.shelf_commit_client.call_async(Trigger.Request())
+                        await commit_future
+                        if commit_future.result() and commit_future.result().success:
+                            commit_ok = True
+                    except Exception as exc:
+                        self.get_logger().warn(f'Shelf commit call failed: {exc}')
+                if not commit_ok:
                     return (
-                        f'SHELF_CHECK could not build dock pose at waypoint '
-                        f'{waypoint_index + 1}/{total}: {pose_err}'
+                        f'SHELF_CHECK commit failed at waypoint '
+                        f'{waypoint_index + 1}/{total}'
                     )
 
-                class _FollowPathShelfGoalHandleAdapter:
-                    def __init__(self, outer_goal_handle):
-                        self._outer_goal_handle = outer_goal_handle
-
-                    @property
-                    def is_cancel_requested(self):
-                        return bool(self._outer_goal_handle.is_cancel_requested)
-
-                    def publish_feedback(self, feedback_msg):
-                        status_text = str(getattr(feedback_msg, 'status', '') or 'Shelf docking')
-                        _publish_feedback(
-                            waypoint_index,
-                            f'SHELF_CHECK: {status_text}',
-                        )
-
-                dock_ok, dock_msg = await self._execute_goal_pose_handoff_with_retries(
-                    shelf_goal_pose,
-                    _FollowPathShelfGoalHandleAdapter(goal_handle),
-                    target_label,
-                    local_insert_speed_cap=float(self.follow_path_shelf_docking_speed_cap),
+                # Step 2: trigger shelf_simple inserter
+                _publish_feedback(
+                    waypoint_index,
+                    f'SHELF_CHECK: starting shelf insertion at waypoint {waypoint_index + 1}/{total}',
                 )
-                if goal_handle.is_cancel_requested:
-                    goal_handle.canceled()
-                    result.success = False
-                    result.completed = int(max(0, completed_count))
-                    result.message = 'FollowPath canceled during shelf docking'
-                    return terminal_error
-                if self.estop_active:
-                    goal_handle.abort()
-                    result.success = False
-                    result.completed = int(max(0, completed_count))
-                    result.message = 'E-STOP active during shelf docking'
-                    return terminal_error
+                self.shelf_simple_state = 'IDLE'
+                start_ok = False
+                if self.shelf_simple_start_client.wait_for_service(timeout_sec=1.0):
+                    try:
+                        start_future = self.shelf_simple_start_client.call_async(Trigger.Request())
+                        await start_future
+                        if start_future.result() and start_future.result().success:
+                            start_ok = True
+                    except Exception as exc:
+                        self.get_logger().warn(f'Shelf simple start call failed: {exc}')
+                if not start_ok:
+                    return (
+                        f'SHELF_CHECK insertion start failed at waypoint '
+                        f'{waypoint_index + 1}/{total}'
+                    )
+
+                # Step 3: wait for inserter to finish (DONE or ABORTED)
+                insert_timeout = 45.0  # generous timeout
+                insert_deadline = time.monotonic() + insert_timeout
+                dock_ok = False
+                dock_msg = 'timeout'
+                while time.monotonic() < insert_deadline:
+                    if goal_handle.is_cancel_requested:
+                        goal_handle.canceled()
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = 'FollowPath canceled during shelf insertion'
+                        return terminal_error
+                    if self.estop_active:
+                        goal_handle.abort()
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = 'E-STOP active during shelf insertion'
+                        return terminal_error
+
+                    state = self.shelf_simple_state
+                    if state == 'DONE':
+                        dock_ok = True
+                        dock_msg = 'insertion complete'
+                        break
+                    elif state == 'ABORTED':
+                        dock_ok = False
+                        dock_msg = 'insertion aborted'
+                        break
+
+                    _publish_feedback(
+                        waypoint_index,
+                        f'SHELF_CHECK: inserting ({state}) at waypoint {waypoint_index + 1}/{total}',
+                    )
+                    await self._non_blocking_wait(0.25)
+
                 if not dock_ok:
                     return (
                         f'SHELF_CHECK docking failed at waypoint '
