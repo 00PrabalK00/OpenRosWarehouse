@@ -1,15 +1,17 @@
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <!-- Path is computed once. If an obstacle blocks the controller, the robot
-         stops in place (RPP collision detection zeros velocity). If the progress
-         checker times out, the Wait recovery pauses for 2 s then retries the
-         same path — no replanning around the obstacle. -->
-    <Sequence name="NavigateWaitForClear">
-      <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
-      <RecoveryNode number_of_retries="999999" name="FollowOrWait">
-        <FollowPath path="{path}" controller_id="GoToPoint"/>
-        <Wait wait_duration="2.0"/>
+    <PipelineSequence name="NavigateWithReplan">
+      <RateController hz="1.0">
+        <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+      </RateController>
+      <RecoveryNode number_of_retries="3" name="FollowPathWithRecovery">
+        <FollowPath path="{path}" controller_id="FollowPath"/>
+        <Sequence name="FollowPathRecovery">
+          <ClearEntireCostmap name="ClearLocalCostmap" service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap" service_name="global_costmap/clear_entirely_global_costmap"/>
+          <Wait wait_duration="1.0"/>
+        </Sequence>
       </RecoveryNode>
-    </Sequence>
+    </PipelineSequence>
   </BehaviorTree>
 </root>

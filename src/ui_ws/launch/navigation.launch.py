@@ -58,8 +58,6 @@ def generate_launch_description():
         'map_server',
         'planner_server',
         'controller_server',
-        'smoother_server',
-        'velocity_smoother',
         'local_costmap',
         'global_costmap',
         'behavior_server',
@@ -80,12 +78,6 @@ def generate_launch_description():
              parameters=[nav2_params_file], remappings=remappings),
         
         Node(package='nav2_controller', executable='controller_server', name='controller_server', output='screen',
-             parameters=[nav2_params_file], remappings=remappings),
-
-        Node(package='nav2_smoother', executable='smoother_server', name='smoother_server', output='screen',
-             parameters=[nav2_params_file], remappings=remappings),
-
-        Node(package='nav2_velocity_smoother', executable='velocity_smoother', name='velocity_smoother', output='screen',
              parameters=[nav2_params_file], remappings=remappings),
 
         # NOTE: In ROS 2 Humble the executable name is `nav2_costmap_2d` (not `costmap_2d`).

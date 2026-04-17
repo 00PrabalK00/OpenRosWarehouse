@@ -4,7 +4,7 @@ twist_mux:
       joystick:
         topic   : cmd_vel_joy
         timeout : 0.5
-        priority: 90  # Manual control
+        priority: 30  # Manual control; no longer an extreme override lane
       tracker:
         topic   : cmd_vel_tracker
         timeout : 0.5
@@ -18,7 +18,7 @@ twist_mux:
     # separate safety command topic is configured here.
     # Each lock priority is set one step ABOVE its matching topic priority so
     # it only gates that one source and nothing higher (e.g. navigation lock at
-    # priority 11 blocks cmd_vel at 10 but leaves cmd_vel_joy at 90 untouched).
+    # priority 11 blocks cmd_vel at 10 but leaves higher-priority manual lanes untouched).
     locks:
       navigation:
         topic   : /twist_mux/locks/navigation
@@ -31,4 +31,4 @@ twist_mux:
       joystick:
         topic   : /twist_mux/locks/joystick
         timeout : 0.0
-        priority: 91
+        priority: 31

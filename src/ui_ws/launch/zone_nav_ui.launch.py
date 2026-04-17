@@ -68,35 +68,6 @@ def generate_launch_description():
     if auto_reloc_params is not None:
         auto_reloc_param_sources.append(auto_reloc_params)
 
-    shelf_params = None
-    try:
-        shelf_share = get_package_share_directory('next2_shelf')
-        candidate = os.path.join(shelf_share, 'config', 'lidar_params.yaml')
-        if os.path.exists(candidate):
-            shelf_params = candidate
-    except PackageNotFoundError:
-        shelf_params = None
-    if shelf_params is None:
-        workspace_root = os.path.dirname(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(__file__)
-                )
-            )
-        )
-        candidate = os.path.join(
-            workspace_root,
-            'src',
-            'next2_shelf',
-            'config',
-            'lidar_params.yaml',
-        )
-        if os.path.exists(candidate):
-            shelf_params = candidate
-    shelf_param_sources = []
-    if shelf_params is not None:
-        shelf_param_sources.append(shelf_params)
-
     launch_items = [
         DeclareLaunchArgument(
             'use_sim_time',
@@ -164,14 +135,6 @@ def generate_launch_description():
         ),
 
         Node(
-            package='next2_shelf_simple',
-            executable='shelf_inserter',
-            name='shelf_inserter',
-            output='screen',
-            parameters=[robot_yaml, {'use_sim_time': use_sim_time}],
-        ),
-
-        Node(
             package='next_ros2ws_core',
             executable='navigation_arbitrator',
             name='navigation_arbitrator',
@@ -215,13 +178,13 @@ def generate_launch_description():
             parameters=[robot_yaml, {'use_sim_time': use_sim_time}]
         ),
 
-        # Shelf detector — next2_shelf workflow (tick-triggered goal publish)
+        # Shelf detector — simple intensity-based reflector detection
         Node(
-            package='next2_shelf',
+            package='next2_shelf_simple',
             executable='shelf_detector',
-            name='distance_calculator',
+            name='shelf_detector',
             output='screen',
-            parameters=shelf_param_sources + [{'use_sim_time': use_sim_time}],
+            parameters=[robot_yaml, {'use_sim_time': use_sim_time}],
             condition=IfCondition(enable_shelf_detector),
         ),
 

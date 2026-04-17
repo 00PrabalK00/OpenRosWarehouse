@@ -16,6 +16,7 @@ find_package(nav2_core REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
 find_package(nav2_util REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(next_ros2ws_interfaces REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
@@ -41,6 +42,7 @@ ament_target_dependencies(${PROJECT_NAME}
   nav2_costmap_2d
   nav2_util
   nav_msgs
+  next_ros2ws_interfaces
   pluginlib
   rclcpp
   rclcpp_lifecycle
@@ -78,6 +80,7 @@ ament_export_dependencies(
   nav2_costmap_2d
   nav2_util
   nav_msgs
+  next_ros2ws_interfaces
   pluginlib
   rclcpp
   rclcpp_lifecycle

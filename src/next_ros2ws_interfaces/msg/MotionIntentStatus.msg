@@ -1,0 +1,9 @@
+uint64 intent_id
+bool active
+string source
+string mode
+string state
+string limiting_factor
+float32 target_error
+float32 cmd_v
+float32 cmd_w

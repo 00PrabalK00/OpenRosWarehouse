@@ -9,7 +9,7 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.task import Future
@@ -47,19 +47,26 @@ class NavigationArbitrator(Node):
         self.robot_namespace = self._normalize_robot_namespace(
             self.declare_parameter('robot_namespace', '').value
         )
-        self.cb_group = ReentrantCallbackGroup()
+        # Reentrant group is only used for outbound action clients so that
+        # execute_* callbacks can await client futures without deadlocking.
+        # Inbound servers/services are mutually exclusive to match zone_manager's
+        # serialization semantics and prevent races between overlapping public goals.
+        self.client_cb_group = ReentrantCallbackGroup()
+        self._go_to_zone_cb_group = MutuallyExclusiveCallbackGroup()
+        self._follow_path_cb_group = MutuallyExclusiveCallbackGroup()
+        self._service_cb_group = MutuallyExclusiveCallbackGroup()
 
         self.go_to_zone_client = ActionClient(
             self,
             GoToZoneAction,
             self._endpoint('/zone_manager/go_to_zone'),
-            callback_group=self.cb_group,
+            callback_group=self.client_cb_group,
         )
         self.follow_path_client = ActionClient(
             self,
             FollowPathAction,
             self._endpoint('/zone_manager/zone_follow_path'),
-            callback_group=self.cb_group,
+            callback_group=self.client_cb_group,
         )
 
         self.go_to_zone_server = ActionServer(
@@ -69,7 +76,7 @@ class NavigationArbitrator(Node):
             execute_callback=self.execute_go_to_zone,
             goal_callback=self.go_to_zone_goal_callback,
             cancel_callback=self.go_to_zone_cancel_callback,
-            callback_group=self.cb_group,
+            callback_group=self._go_to_zone_cb_group,
         )
         self.follow_path_server = ActionServer(
             self,
@@ -78,20 +85,20 @@ class NavigationArbitrator(Node):
             execute_callback=self.execute_follow_path,
             goal_callback=self.follow_path_goal_callback,
             cancel_callback=self.follow_path_cancel_callback,
-            callback_group=self.cb_group,
+            callback_group=self._follow_path_cb_group,
         )
 
         self.request_goal_srv = self.create_service(
             RequestNavigation,
             self._endpoint('/arbitrator/request_goal'),
             self.request_goal_callback,
-            callback_group=self.cb_group,
+            callback_group=self._service_cb_group,
         )
         self.cancel_goal_srv = self.create_service(
             CancelNavigation,
             self._endpoint('/arbitrator/cancel_goal'),
             self.cancel_goal_callback,
-            callback_group=self.cb_group,
+            callback_group=self._service_cb_group,
         )
 
         self._state_lock = threading.RLock()

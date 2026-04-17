@@ -163,12 +163,9 @@ class StackManager(Node):
         }
         self._nav_lifecycle_nodes = (
             "controller_server",
-            "smoother_server",
             "planner_server",
             "behavior_server",
             "bt_navigator",
-            "waypoint_follower",
-            "velocity_smoother",
         )
         self._nav_state_clients = {
             node_name: self.create_client(GetState, f"/{node_name}/get_state")
