@@ -4361,6 +4361,65 @@ class ZoneManager(Node):
         return nav_path
 
 
+    def _build_alignment_approach_path(
+        self,
+        start_pose: PoseStamped,
+        end_pose: PoseStamped,
+        *,
+        segment_spacing: float = None,
+    ):
+        """Build an approach path where ALL poses carry the goal orientation.
+
+        Unlike ``_build_segment_follow_path`` (which stamps intermediate poses
+        with the segment travel bearing), this method stamps every pose —
+        including intermediate densification points — with ``end_pose``'s
+        orientation.  The Nav2 controller therefore tracks the desired heading
+        for the entire approach, preventing the overshoot that occurs when the
+        travel bearing diverges from the target yaw.
+
+        Used exclusively by ALIGN_AT_POINT when the robot still needs to close
+        an XY gap before it can do a pure in-place heading correction.
+        """
+        frame_id = end_pose.header.frame_id or start_pose.header.frame_id or 'map'
+        stamp = self.get_clock().now().to_msg()
+
+        sx = float(start_pose.pose.position.x)
+        sy = float(start_pose.pose.position.y)
+        ex = float(end_pose.pose.position.x)
+        ey = float(end_pose.pose.position.y)
+
+        dx = ex - sx
+        dy = ey - sy
+        distance = math.hypot(dx, dy)
+        base_spacing = self.path_follow_segment_spacing if segment_spacing is None else segment_spacing
+        spacing = max(0.05, float(base_spacing))
+        steps = max(1, int(math.ceil(distance / spacing)))
+
+        # Goal orientation — applied to EVERY pose, not just the last one.
+        goal_oq = end_pose.pose.orientation
+
+        poses = []
+        for step in range(steps + 1):
+            ratio = float(step) / float(steps)
+            pose = PoseStamped()
+            pose.header.frame_id = frame_id
+            pose.header.stamp = stamp
+            pose.pose.position.x = sx + dx * ratio
+            pose.pose.position.y = sy + dy * ratio
+            pose.pose.position.z = 0.0
+            pose.pose.orientation.x = float(goal_oq.x)
+            pose.pose.orientation.y = float(goal_oq.y)
+            pose.pose.orientation.z = float(goal_oq.z)
+            pose.pose.orientation.w = float(goal_oq.w)
+            poses.append(pose)
+
+        nav_path = NavPath()
+        nav_path.header.frame_id = frame_id
+        nav_path.header.stamp = stamp
+        nav_path.poses = poses
+        return nav_path
+
+
     def _build_full_follow_path(self, waypoints):
         """Build a single absolute nav_msgs/Path across all waypoints.
 
@@ -5095,11 +5154,31 @@ class ZoneManager(Node):
                 # contract if we hold one long FollowPath goal open.
                 align_deadline = time.monotonic() + align_timeout
                 last_err = abs(heading_delta)
+                # Track the initial rotation sign so we can detect overshoot:
+                # if the signed delta flips sign, the robot has crossed the target
+                # heading and should stop + settle rather than chase a new path.
+                initial_sign = 1.0 if heading_delta >= 0 else -1.0
                 while time.monotonic() < align_deadline:
                     stable_ok, last_err = await _heading_stable_within_tol(
                         align_pose_arg, heading_tol_arg)
                     if stable_ok:
                         return ''
+
+                    # Overshoot detection: if the signed heading delta has flipped
+                    # from the initial direction, the robot crossed the target.
+                    # Let it decelerate and re-check stability instead of sending
+                    # another FollowPath slice that would reverse direction and
+                    # create oscillation.
+                    current_signed_delta = self._heading_delta_to_goal(align_pose_arg)
+                    if math.isfinite(current_signed_delta):
+                        current_sign = 1.0 if current_signed_delta >= 0 else -1.0
+                        if current_sign != initial_sign:
+                            # Crossed zero — robot overshot.  Short settle then
+                            # re-check; if still overshooting the stable gate
+                            # will catch small errors.  Update sign for next pass.
+                            initial_sign = current_sign
+                            await self._non_blocking_wait(0.30)
+                            continue
 
                     robot_pose = self._robot_pose_in_frame(base_frame, timeout_sec=0.20)
                     if robot_pose is None:
@@ -5117,21 +5196,11 @@ class ZoneManager(Node):
                         - float(robot_pose.pose.position.y)
                     )
                     align_xy_error = math.hypot(align_dx, align_dy)
-                    heading_only_xy_threshold = max(
-                        0.02,
-                        min(
-                            0.05,
-                            float(getattr(self, 'path_waypoint_tolerance', 0.40)),
-                        ),
-                    )
+                    heading_only_xy_threshold = 0.05  # 5 cm — production tolerance
 
                     if align_xy_error <= heading_only_xy_threshold:
-                        # Once XY is already close enough, stop giving the controller a
-                        # tiny translational segment derived from the current pose. That
-                        # geometry keeps the segment heading biased toward "where the
-                        # robot is now" instead of the POI yaw, which can stall the last
-                        # part of a near-in-place alignment. A degenerate two-pose path
-                        # lets the controller fall back to its goal-yaw-aligned segment.
+                        # XY already precise.  Degenerate two-pose path lets the
+                        # controller do pure in-place yaw correction to goal heading.
                         nav_path = NavPath()
                         nav_path.header.frame_id = align_pose_arg.header.frame_id
                         nav_path.header.stamp = self.get_clock().now().to_msg()
@@ -5140,11 +5209,16 @@ class ZoneManager(Node):
                             self._copy_pose_stamped(align_pose_arg),
                         ]
                     else:
-                        nav_path = self._build_segment_follow_path(
+                        # Robot is >5 cm from waypoint XY — must drive there.
+                        # Build the path with ALL poses stamped to the GOAL
+                        # orientation, not the segment travel bearing.  This
+                        # prevents the controller from chasing the line-of-travel
+                        # heading which diverges from the desired yaw and causes
+                        # overshoot / oscillation on arrival.
+                        nav_path = self._build_alignment_approach_path(
                             robot_pose,
                             align_pose_arg,
                             segment_spacing=float(self.path_follow_segment_spacing),
-                            enforce_end_orientation=True,
                         )
 
                     remaining_align_time = max(0.0, align_deadline - time.monotonic())
@@ -5305,6 +5379,18 @@ class ZoneManager(Node):
                         poi_name,
                     )
                     if phase_err:
+                        # A convergence timeout is NOT fatal if we have retries
+                        # remaining — the overshoot detection + path fix may
+                        # have gotten closer.  Only propagate hard failures
+                        # (cancel, estop, lost pose, obstacle timeout).
+                        is_convergence_timeout = 'could not converge' in phase_err
+                        if is_convergence_timeout and attempt < max_attempts:
+                            self.get_logger().warn(
+                                f'ALIGN_AT_POINT spin timeout on attempt '
+                                f'{attempt}/{max_attempts}: {phase_err} -> retrying'
+                            )
+                            await self._non_blocking_wait(0.30)
+                            continue
                         return phase_err
 
                 # ── Post-align settle: wait for rotation to physically finish ──
