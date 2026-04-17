@@ -497,12 +497,36 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     const double intent_dy = intent_target.pose.position.y - robot_pose.pose.position.y;
     intent_target_error = std::hypot(intent_dx, intent_dy);
   }
-  const bool on_last_segment = (current_segment_index_ + 1) >= segments_.size();
-  const bool final_approach = on_last_segment && goal_distance <= final_approach_distance_;
   const double total_path_length = segments_.back().cumulative_start + segments_.back().length;
+  const double along_track_remaining = std::max(0.0, total_path_length - absolute_progress);
+  const bool on_last_segment = (current_segment_index_ + 1) >= segments_.size();
+  // Issue 8: trigger final approach from along-track remaining, not Euclidean
+  // distance to the goal pose. A laterally-offset robot that is spatially
+  // "near" the goal would otherwise enter the terminal phase early and drop
+  // strict-line precision before it has actually finished translating along
+  // the shelf axis.
+  const bool final_approach = on_last_segment && along_track_remaining <= final_approach_distance_;
+
+  // Issue 10: honor motion-intent tolerances for terminal behavior. When the
+  // caller has not specified, fall back to sensible defaults.
+  const double terminal_xy_tol =
+    (active_motion_intent.active && active_motion_intent.xy_tolerance > kTiny)
+    ? active_motion_intent.xy_tolerance : 0.03;
+  const double terminal_yaw_tol =
+    (active_motion_intent.active && active_motion_intent.yaw_tolerance > kTiny)
+    ? active_motion_intent.yaw_tolerance : 0.05;
+
+  // Issue 4: explicit terminal phase split. In TRANSLATE we drive forward with
+  // corridor precision and no heading injection. In YAW_SETTLE we force v=0
+  // and clean up residual yaw.
+  const bool arrived_xy =
+    on_last_segment && along_track_remaining <= terminal_xy_tol;
+
   const double abs_lateral_error = std::abs(projection.lateral_error);
 
-  if (strict_line_tracking_ && !final_approach) {
+  // Issue 7: keep the strict-line corridor state machine live through final
+  // approach so lateral precision is preserved for the last centimeters.
+  if (strict_line_tracking_) {
     if (!strict_line_path_captured_) {
       if (abs_lateral_error <= strict_line_capture_lateral_error_) {
         strict_line_path_captured_ = true;
@@ -511,11 +535,14 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       strict_line_path_captured_ = false;
     }
   }
-  const bool strict_line_locked = strict_line_tracking_ && !final_approach && strict_line_path_captured_;
+  const bool strict_line_locked = strict_line_tracking_ && strict_line_path_captured_;
 
+  // Issue 9: allow the terminal speed envelope to decay cleanly to zero. The
+  // previous 0.2 floor meant the controller kept "doing something" through the
+  // final centimeters instead of settling, which amplified Issue 4 and Issue 20.
   double final_scale = 1.0;
   if (final_approach && final_approach_distance_ > kTiny) {
-    final_scale = std::clamp(goal_distance / final_approach_distance_, 0.2, 1.0);
+    final_scale = std::clamp(along_track_remaining / final_approach_distance_, 0.0, 1.0);
   }
 
   const double adaptive_lookahead = lookahead_distance_ +
@@ -525,7 +552,11 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     lookahead_min_distance_,
     lookahead_max_distance_);
   const double lookahead = std::max(0.05, lookahead_nominal * final_scale);
-  double runtime_max_v = std::max(min_tracking_speed_, max_v_ * final_scale);
+  // Issue 9: in final approach do NOT floor at min_tracking_speed_ — let v
+  // decay to zero along with final_scale so the robot can actually stop.
+  double runtime_max_v = final_approach
+    ? (max_v_ * final_scale)
+    : std::max(min_tracking_speed_, max_v_ * final_scale);
   if (speed_profile_enabled_) {
     // Apply the precomputed per-segment velocity profile.  The backward pass in
     // buildVelocityProfile() already propagated braking constraints upstream, so
@@ -705,11 +736,21 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     // rather than driving "forward away" while distance can still decrease.
     const bool target_behind = (!allow_reverse_) && (x_robot < -0.02);
 
-    double command_v = std::min(runtime_max_v, std::max(min_tracking_speed_, rpp_desired_linear_vel_ * final_scale));
+    // Issue 9: in final approach don't floor the desired speed at
+    // min_tracking_speed_ — let it track final_scale all the way to zero so the
+    // terminal phase can actually settle rather than "keep doing something".
+    double command_v = final_approach
+      ? std::min(runtime_max_v, rpp_desired_linear_vel_ * final_scale)
+      : std::min(runtime_max_v, std::max(min_tracking_speed_, rpp_desired_linear_vel_ * final_scale));
     if (allow_reverse_ && x_robot < 0.0) {
       command_v = -command_v;
     } else if (!allow_reverse_) {
       command_v = std::max(0.0, command_v);
+    }
+    // Issue 4: once the robot has arrived at the goal xy, force v=0. Any
+    // residual yaw cleanup is handled by the rotate-to-heading machinery below.
+    if (arrived_xy) {
+      command_v = 0.0;
     }
 
     if (std::abs(curvature) > kTiny) {
@@ -742,16 +783,16 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     }
 
     double command_w = curvature * command_v;
-    if (final_approach) {
-      // During final approach the carrot collapses toward the goal point, so
-      // curvature can go to ~0 while a meaningful goal-heading error remains.
-      // Always feed back toward heading_reference here, even when strict-line
-      // tracking is disabled, so terminal heading convergence does not depend
-      // on a separate controller layer.
-      command_w += strict_line_k_heading_ * heading_blend * heading_error_reference_signed;
-    }
-    if (!final_approach) {
-      const double tracking_w_limit = std::max(0.20, 2.0 * std::abs(command_v));
+    // Issue 4: NO heading-blend injection during final approach. Mixing yaw
+    // cleanup with the last centimeters of translation causes the "slight
+    // pre-stop turn" symptom. Residual yaw is cleaned up by the rotate-to-
+    // heading state machine once the robot is at the goal xy (arrived_xy).
+    // Issue 20: apply an angular clamp tied to forward speed in ALL phases,
+    // including final approach, so |w| cannot dominate linear motion as v
+    // decays. The small additive term keeps very-low-speed corrective yaw
+    // possible without gating it entirely on |v|.
+    {
+      const double tracking_w_limit = std::max(0.20, 2.0 * std::abs(command_v) + 0.05);
       const double clamped_w_limit = std::min(max_w_, tracking_w_limit);
       command_w = std::clamp(command_w, -clamped_w_limit, clamped_w_limit);
     }
@@ -793,17 +834,27 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       rotate_heading_error_signed = target_heading_error_signed;
     }
 
-    // Issue 21: hysteresis for RPP rotate-to-heading mode
+    // Issue 4/21: hysteresis for RPP rotate-to-heading mode. When the robot
+    // has arrived at the goal xy, the entry threshold collapses to the caller's
+    // yaw tolerance so residual yaw is cleaned up in a dedicated YAW phase
+    // instead of mixed into translation. Exit threshold is half of entry so a
+    // small settling oscillation doesn't bounce us out of the rotation.
+    const double rotate_min_angle = arrived_xy
+      ? std::max(terminal_yaw_tol, 0.02)
+      : rpp_rotate_to_heading_min_angle_;
+    const double rotate_exit_angle = arrived_xy
+      ? std::max(0.5 * terminal_yaw_tol, 0.01)
+      : rpp_rotate_to_heading_exit_angle_;
     if (!in_rpp_rotate_mode_) {
       in_rpp_rotate_mode_ = rpp_use_rotate_to_heading_ &&
         (final_approach
-          ? (rotate_heading_error > rpp_rotate_to_heading_min_angle_)
-          : (target_behind || rotate_heading_error > rpp_rotate_to_heading_min_angle_));
+          ? (rotate_heading_error > rotate_min_angle)
+          : (target_behind || rotate_heading_error > rotate_min_angle));
     } else {
       in_rpp_rotate_mode_ = rpp_use_rotate_to_heading_ &&
         (final_approach
-          ? (rotate_heading_error > rpp_rotate_to_heading_exit_angle_)
-          : (target_behind || rotate_heading_error > rpp_rotate_to_heading_exit_angle_));
+          ? (rotate_heading_error > rotate_exit_angle)
+          : (target_behind || rotate_heading_error > rotate_exit_angle));
     }
 
     if (in_rpp_rotate_mode_)
@@ -887,26 +938,29 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       1.0 - (obstacle_speed_reduction_gain_ * obstacle_cost_avg),
       min_obstacle_speed_scale_,
       1.0);
-    runtime_max_v = std::max(min_tracking_speed_, runtime_max_v * obstacle_speed_scale);
+    // Issue 9: keep the min_tracking_speed_ floor out of final approach so
+    // obstacle-scaled runtime_max_v can also decay to zero.
+    runtime_max_v = final_approach
+      ? (runtime_max_v * obstacle_speed_scale)
+      : std::max(min_tracking_speed_, runtime_max_v * obstacle_speed_scale);
     const double runtime_min_v_cmd = allow_reverse_ ? -runtime_max_v : 0.0;
     command_v = std::clamp(command_v, runtime_min_v_cmd, runtime_max_v);
     command_v = std::clamp(command_v, v_min, v_max);
+    if (arrived_xy) {
+      command_v = 0.0;
+    }
 
     // Issue 3/18: preserve desired curvature after all forward-speed clamps.
     // Earlier stages computed command_w from the original command_v; without
     // this recompute, obstacle-cost slowdown / rate limiting produces a tighter
-    // arc than intended (sharper turn near inflated obstacles, and a residual
-    // "shove" near the goal when the speed floor is hit).
+    // arc than intended. Issue 4/20: no final-approach heading injection; the
+    // w clamp tied to |v| is applied in every phase so angular can't dominate
+    // linear motion as v decays.
     if (!in_rpp_rotate_mode_) {
       command_w = curvature * command_v;
-      if (final_approach) {
-        command_w +=
-          strict_line_k_heading_ * heading_blend * heading_error_reference_signed;
-      } else {
-        const double tracking_w_limit = std::max(0.20, 2.0 * std::abs(command_v));
-        const double clamped_w_limit = std::min(max_w_, tracking_w_limit);
-        command_w = std::clamp(command_w, -clamped_w_limit, clamped_w_limit);
-      }
+      const double tracking_w_limit = std::max(0.20, 2.0 * std::abs(command_v) + 0.05);
+      const double clamped_w_limit = std::min(max_w_, tracking_w_limit);
+      command_w = std::clamp(command_w, -clamped_w_limit, clamped_w_limit);
       enforce_diff_drive_limits(command_v, command_w);
     }
     command_w = std::clamp(command_w, w_min, w_max);
