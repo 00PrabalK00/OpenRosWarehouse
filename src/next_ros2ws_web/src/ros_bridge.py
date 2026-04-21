@@ -4698,7 +4698,17 @@ class RosBridge(Node):
         # Publishers owned by the web bridge for user commands.
         self.goal_pub = self.create_publisher(PoseStamped, self._topic('publisher_goal_pose'), 10)
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, self._topic('publisher_initial_pose'), 10)
-        self.cmd_vel_manual_pub = self.create_publisher(Twist, self._topic('publisher_cmd_vel_manual'), 10)
+        # cmd_vel_joy must use VOLATILE durability to prevent stale backward commands from
+        # replaying on startup after a reboot or E-stop cycle.
+        cmd_vel_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        self.cmd_vel_manual_pub = self.create_publisher(
+            Twist, self._topic('publisher_cmd_vel_manual'), qos_profile=cmd_vel_qos
+        )
         self.shelf_tick_pub = self.create_publisher(BoolMsg, '/tick', 10)
         self.shelf_detected = False
         self.shelf_detected_updated_at = 0.0

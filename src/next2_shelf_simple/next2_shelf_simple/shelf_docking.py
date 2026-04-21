@@ -111,24 +111,6 @@ def shift_along_heading(pose: Pose2D, distance: float) -> Pose2D:
     )
 
 
-def offset_pose_in_reference_frame(
-    reference_pose: Pose2D,
-    *,
-    forward_offset: float,
-    left_offset: float,
-) -> Pose2D:
-    heading_x = math.cos(float(reference_pose.yaw))
-    heading_y = math.sin(float(reference_pose.yaw))
-    left_x = -heading_y
-    left_y = heading_x
-    return Pose2D(
-        x=float(reference_pose.x) + (heading_x * float(forward_offset)) + (left_x * float(left_offset)),
-        y=float(reference_pose.y) + (heading_y * float(forward_offset)) + (left_y * float(left_offset)),
-        yaw=float(reference_pose.yaw),
-        frame_id=str(reference_pose.frame_id or 'map') or 'map',
-    )
-
-
 def pose_error_in_target_frame(robot_pose: Pose2D, target_pose: Pose2D) -> PoseError:
     if str(robot_pose.frame_id or 'map') != str(target_pose.frame_id or 'map'):
         raise ShelfDockingPlanError(
@@ -312,19 +294,12 @@ def build_shelf_navigation_targets(
     robot_pose: Pose2D,
     plan: ShelfDockingPlan,
 ) -> List[ShelfNavigationTarget]:
-    opening_error = pose_error_in_target_frame(robot_pose, plan.opening_line_pose)
+    approach_error = pose_error_in_target_frame(robot_pose, plan.approach_pose)
     entry_error = pose_error_in_target_frame(robot_pose, plan.entry_pose)
-    robot_forward_from_opening = -float(opening_error.forward_error)
-    robot_left_from_opening = -float(opening_error.left_error)
-    safe_forward_from_opening = -float(plan.approach_offset)
-    retreat_required = (
-        robot_forward_from_opening
-        > (safe_forward_from_opening + float(plan.position_tolerance))
-    )
-    lineup_required = (
-        retreat_required
-        or abs(robot_left_from_opening) > float(plan.entry_lateral_tolerance)
-        or abs(robot_forward_from_opening - safe_forward_from_opening) > float(plan.position_tolerance)
+    approach_required = (
+        float(approach_error.distance) > float(plan.position_tolerance)
+        or abs(float(approach_error.left_error)) > float(plan.entry_lateral_tolerance)
+        or abs(float(approach_error.heading_error)) > float(plan.heading_tolerance)
     )
     entry_required = (
         float(entry_error.distance) > float(plan.position_tolerance)
@@ -335,21 +310,10 @@ def build_shelf_navigation_targets(
         return []
 
     targets: List[ShelfNavigationTarget] = []
-    if retreat_required:
+    if approach_required:
         targets.append(
             ShelfNavigationTarget(
-                label='Shelf retreat',
-                pose=offset_pose_in_reference_frame(
-                    plan.opening_line_pose,
-                    forward_offset=safe_forward_from_opening,
-                    left_offset=robot_left_from_opening,
-                ),
-            )
-        )
-    if lineup_required:
-        targets.append(
-            ShelfNavigationTarget(
-                label='Shelf lineup',
+                label='Shelf centerline setup',
                 pose=plan.approach_pose,
             )
         )

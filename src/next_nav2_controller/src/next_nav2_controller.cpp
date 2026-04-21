@@ -296,6 +296,11 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     }
     active_motion_intent = motion_intent_;
   }
+  // Derive insertion_mode early — the corridor-specific behaviours (path
+  // freeze, e_y+e_psi law, corridor breach abort) must only apply during
+  // insertion. Outside insertion mode we follow the drawn path via RPP.
+  const bool insertion_mode =
+    active_motion_intent.active && active_motion_intent.mode == "insertion";
   const auto current_motion_state = [&](bool rotating) {
       if (active_motion_intent.active) {
         if (active_motion_intent.mode == "insertion") {
@@ -337,15 +342,17 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // local costmap frame (e.g. odom), refresh transformed path periodically so
   // we do not chase stale transformed coordinates.
   const double refresh_period = std::max(0.0, plan_refresh_period_);
-  // Issue 12: once corridor is captured (strict-line locked), freeze the
-  // transformed path. This prevents the plan from shifting under the robot
-  // during insertion and eliminates TF inconsistency (Issue 11) by not
-  // re-sampling map->odom mid-corridor.
+  // Issue 12: during insertion, freeze the transformed path once the corridor
+  // is captured — this prevents the plan shifting under the robot and
+  // eliminates TF inconsistency (Issue 11) by not re-sampling map->odom
+  // mid-corridor. Outside insertion the normal refresh cadence is kept so
+  // the robot keeps tracking the drawn path through curves and corners.
+  const bool freeze_path = insertion_mode && strict_line_path_captured_;
   const bool needs_refresh =
     !raw_plan_.poses.empty() &&
     !raw_plan_.header.frame_id.empty() &&
     raw_plan_.header.frame_id != global_frame_ &&
-    !strict_line_path_captured_ &&
+    !freeze_path &&
     (last_plan_refresh_stamp_.nanoseconds() <= 0 ||
     (now - last_plan_refresh_stamp_).seconds() >= refresh_period);
   if (needs_refresh) {
@@ -549,12 +556,17 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // lateral limit stays fixed at strict_line_max_lateral_error_ regardless
   // of accumulated drift — the corridor is the hard safety boundary that
   // external interference cannot be allowed to loosen.
-  const bool insertion_mode =
-    active_motion_intent.active && active_motion_intent.mode == "insertion";
+  // insertion_mode is derived earlier (near active_motion_intent snapshot).
   const bool strict_line_tracking_effective =
     strict_line_tracking_ || insertion_mode;
   const bool strict_line_adaptive_lateral_limit_effective =
     strict_line_adaptive_lateral_limit_ && !insertion_mode;
+  // Follow-up fix #5: force-disable reverse motion in insertion mode. The
+  // rotate-to-heading machinery only triggers on positive heading error, so
+  // allow_reverse_ + rpp_use_rotate_to_heading_ can produce a backwards nudge
+  // where an in-place yaw cleanup would be safer. During shelf insertion that
+  // backwards nudge is unacceptable; only forward motion is valid.
+  const bool allow_reverse_effective = allow_reverse_ && !insertion_mode;
 
   // Issue 7: keep the strict-line corridor state machine live through final
   // approach so lateral precision is preserved for the last centimeters.
@@ -630,7 +642,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     }
   }
 
-  const double runtime_min_v = allow_reverse_ ? -runtime_max_v : 0.0;
+  const double runtime_min_v = allow_reverse_effective ? -runtime_max_v : 0.0;
 
   const double target_progress = std::clamp(absolute_progress + lookahead, 0.0, total_path_length);
   std::size_t target_segment_index = current_segment_index_;
@@ -686,7 +698,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
 
   if (rotate_in_place_mode) {
     const double rotate_limit = std::max(0.0, std::min(v_max, rotate_in_place_max_v_));
-    v_min = allow_reverse_ ? -rotate_limit : 0.0;
+    v_min = allow_reverse_effective ? -rotate_limit : 0.0;
     v_max = rotate_limit;
     w_min = -max_w_;
     w_max = max_w_;
@@ -738,10 +750,12 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       return stop;
     };
 
-  // Issue 5: hard corridor breach abort. Once the corridor is captured, any
-  // excursion beyond lateral_error_limit is a real failure (e.g. shelf leg
-  // contact) — do NOT keep driving forward. Hand off to Nav2 blocked/recovery.
-  if (strict_line_locked &&
+  // Issue 5: hard corridor breach abort — only meaningful during insertion.
+  // Outside insertion a large lateral excursion just means the carrot-based
+  // RPP needs to curve back; aborting there would prevent normal path
+  // following. In insertion, any excursion beyond lateral_error_limit is a
+  // real failure (e.g. shelf leg contact) — hand off to Nav2 recovery.
+  if (insertion_mode && strict_line_locked &&
       std::isfinite(lateral_error_limit) &&
       abs_lateral_error > lateral_error_limit)
   {
@@ -782,7 +796,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       angles::shortest_angular_distance(robot_yaw, target_heading_now);
     // If the carrot is behind the base and reverse is disallowed, rotate first
     // rather than driving "forward away" while distance can still decrease.
-    const bool target_behind = (!allow_reverse_) && (x_robot < -0.02);
+    const bool target_behind = (!allow_reverse_effective) && (x_robot < -0.02);
 
     // Issue 9: in final approach don't floor the desired speed at
     // min_tracking_speed_ — let it track final_scale all the way to zero so the
@@ -790,9 +804,9 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     double command_v = final_approach
       ? std::min(runtime_max_v, rpp_desired_linear_vel_ * final_scale)
       : std::min(runtime_max_v, std::max(min_tracking_speed_, rpp_desired_linear_vel_ * final_scale));
-    if (allow_reverse_ && x_robot < 0.0) {
+    if (allow_reverse_effective && x_robot < 0.0) {
       command_v = -command_v;
-    } else if (!allow_reverse_) {
+    } else if (!allow_reverse_effective) {
       command_v = std::max(0.0, command_v);
     }
     // Issue 4: once the robot has arrived at the goal xy, force v=0. Any
@@ -819,7 +833,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     if (!final_approach) {
       const double cruise_floor = std::max(min_tracking_speed_, min_cruise_speed_);
       if (std::abs(command_v) < cruise_floor) {
-        if (allow_reverse_ && command_v < 0.0) {
+        if (allow_reverse_effective && command_v < 0.0) {
           command_v = -cruise_floor;
         } else {
           command_v = cruise_floor;
@@ -852,7 +866,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
 
         const double wheel_limit = std::max(0.0, max_wheel_linear_speed_);
         v_cmd = std::clamp(v_cmd, -wheel_limit, wheel_limit);
-        if (!allow_reverse_) {
+        if (!allow_reverse_effective) {
           v_cmd = std::max(0.0, v_cmd);
         }
 
@@ -912,13 +926,13 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
       // v_min/v_max clamp below cannot re-introduce forward motion while
       // the robot is supposed to be spinning in place.  This mirrors the
       // identical fix already applied to the non-RPP rotate_in_place_mode path.
-      v_min = allow_reverse_ ? -rotate_limit : 0.0;
+      v_min = allow_reverse_effective ? -rotate_limit : 0.0;
       v_max = rotate_limit;
       w_min = -max_w_;
       w_max = max_w_;
       command_v = final_approach
         ? 0.0
-        : (allow_reverse_ ? std::clamp(command_v, -rotate_limit, rotate_limit) : 0.0);
+        : (allow_reverse_effective ? std::clamp(command_v, -rotate_limit, rotate_limit) : 0.0);
       command_w = std::copysign(
         std::max(0.05, rpp_rotate_to_heading_angular_vel_),
         rotate_heading_error_signed);
@@ -991,7 +1005,7 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     runtime_max_v = final_approach
       ? (runtime_max_v * obstacle_speed_scale)
       : std::max(min_tracking_speed_, runtime_max_v * obstacle_speed_scale);
-    const double runtime_min_v_cmd = allow_reverse_ ? -runtime_max_v : 0.0;
+    const double runtime_min_v_cmd = allow_reverse_effective ? -runtime_max_v : 0.0;
     command_v = std::clamp(command_v, runtime_min_v_cmd, runtime_max_v);
     command_v = std::clamp(command_v, v_min, v_max);
     if (arrived_xy) {
@@ -1007,7 +1021,11 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
     // RPP curvature with an explicit e_y + e_psi PD corridor law so the robot
     // tracks the frozen line (not the carrot geometry) during insertion.
     if (!in_rpp_rotate_mode_) {
-      if (strict_line_locked) {
+      // Issue 5: override RPP curvature with the e_y+e_psi corridor law ONLY
+      // during insertion. Outside insertion we must follow the drawn path via
+      // RPP carrot-based curvature — the corridor law is a straight-line
+      // tracker and would cut corners on any curved path.
+      if (insertion_mode && strict_line_locked) {
         const double e_y = projection.lateral_error;
         const double e_psi = angles::shortest_angular_distance(robot_yaw, segment.heading);
         command_w = (strict_line_k_heading_ * e_psi) - (strict_line_k_lateral_ * e_y);
