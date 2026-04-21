@@ -7006,6 +7006,78 @@
             line-height: 1.4;
         }
 
+        /* Display panel — view toggles (moved in from re-viz-strip) */
+        .robot-editor-display-toggles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 6px 10px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .robot-editor-display-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.82);
+            cursor: pointer;
+            user-select: none;
+            transition: background 120ms ease;
+        }
+
+        .robot-editor-display-toggle:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .robot-editor-display-toggle input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: #38bdf8;
+            cursor: pointer;
+        }
+
+        /* More panel — secondary actions + utility selects */
+        .robot-editor-more-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .robot-editor-more-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .robot-editor-more-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .robot-editor-more-field label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.65);
+            line-height: 1.4;
+        }
+
+        /* Shape Builder — progressive disclosure for dimension fields */
+        .robot-editor-shape-grid[data-shape-type="box"] .robot-editor-shape-field-radius,
+        .robot-editor-shape-grid[data-shape-type="cylinder"] .robot-editor-shape-field-length,
+        .robot-editor-shape-grid[data-shape-type="cylinder"] .robot-editor-shape-field-width,
+        .robot-editor-shape-grid[data-shape-type="sphere"] .robot-editor-shape-field-length,
+        .robot-editor-shape-grid[data-shape-type="sphere"] .robot-editor-shape-field-width,
+        .robot-editor-shape-grid[data-shape-type="sphere"] .robot-editor-shape-field-height {
+            display: none;
+        }
+
         .robot-editor-toggle-cache {
             display: none !important;
         }
@@ -10236,31 +10308,105 @@
 
         #device-config-shell {
             display: flex;
+            flex-direction: column;
             flex: 1 1 auto;
             min-height: 0;
             overflow: hidden;
         }
 
-        #device-config-rail {
-            width: var(--shell-mode-rail-width);
-            min-width: var(--shell-mode-rail-width);
-            max-width: var(--shell-mode-rail-width);
-            background: var(--bg-chrome);
-            border-right: 1px solid var(--border-chrome);
+        #device-config-shell-body {
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 6px 0;
-            gap: 2px;
-            flex-shrink: 0;
+            flex: 1 1 auto;
+            min-height: 0;
             overflow: hidden;
+        }
+
+        /* Horizontal top rail for Device Config sections — matches app .mctrl-btn style */
+        #device-config-rail {
+            width: 100%;
+            min-width: 0;
+            max-width: none;
+            height: 48px;
+            min-height: 48px;
+            background: var(--bg-chrome);
+            border-bottom: 1px solid var(--border-chrome);
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 0 10px;
+            gap: 6px;
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+        }
+        #device-config-rail::-webkit-scrollbar { display: none; }
+
+        /* Buttons match .mctrl-btn: icon above label, pill shape, subtle bg */
+        #device-config-rail .mode-rail-btn {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            height: 32px !important;
+            min-width: 56px !important;
+            width: auto;
+            padding: 0 10px !important;
+            gap: 1px !important;
+            background: var(--bg-elevated) !important;
+            border: 1px solid var(--border-chrome) !important;
+            border-radius: 3px !important;
+            cursor: pointer;
+            color: var(--text-secondary) !important;
+            font-size: 8px !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background 0.1s, color 0.1s, border-color 0.1s;
+            position: relative;
+        }
+        #device-config-rail .mode-rail-btn i {
+            font-size: 10px !important;
+            line-height: 1 !important;
+            opacity: 1;
+        }
+        #device-config-rail .mode-rail-btn:hover {
+            background: rgba(255, 255, 255, 0.07) !important;
+            border-color: var(--border-secondary) !important;
+            color: var(--text-primary) !important;
+        }
+        #device-config-rail .mode-rail-btn.active {
+            background: var(--selected-blue-dim) !important;
+            border-color: var(--selected-blue) !important;
+            color: var(--selected-blue) !important;
+        }
+        /* Kill the old left-stripe active indicator — bg/border carry active state */
+        #device-config-rail .mode-rail-btn.active::before {
+            display: none !important;
+        }
+        #device-config-rail .mode-rail-label {
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+        /* Separator matches .mctrl-sep */
+        #device-config-rail .mode-rail-sep {
+            width: 1px;
+            height: 22px;
+            margin: 0 8px;
+            align-self: center;
+            background: var(--border-chrome);
+            flex-shrink: 0;
         }
 
         #device-config-main {
             flex: 1 1 auto;
             min-width: 0;
             display: flex;
-            order: 2;
         }
 
         #device-config-main-stage {
@@ -10906,90 +11052,121 @@
             max-height: 440px !important;
         }
 
-        #device-config-sidebar .robot-editor-frame-table {
+        /* ── Sidebar frame-table: card layout for readability ── */
+        #device-config-sidebar .robot-editor-frame-table,
+        #device-config-sidebar .robot-editor-frame-table tbody {
+            display: block !important;
             width: 100% !important;
-            min-width: 100% !important;
-            table-layout: fixed !important;
+            min-width: 0 !important;
         }
 
-        #device-config-sidebar .robot-editor-frame-table thead th {
-            height: 30px !important;
-            padding: 0 6px !important;
-            font-size: 8px !important;
-            letter-spacing: 0.08em !important;
-            color: rgba(148, 163, 184, 0.82) !important;
+        /* Hide the cramped table header; section headers (BASE & STRUCTURE, etc.) carry it */
+        #device-config-sidebar .robot-editor-frame-table thead {
+            display: none !important;
         }
 
-        #device-config-sidebar .robot-editor-frame-table th,
-        #device-config-sidebar .robot-editor-frame-table td {
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-            white-space: nowrap !important;
+        /* Each frame row becomes a compact card: name+Del on top, parent/joint below */
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] {
+            display: grid !important;
+            grid-template-columns: 1fr auto !important;
+            grid-template-rows: auto auto !important;
+            grid-template-areas:
+                "name   action"
+                "parent joint" !important;
+            column-gap: 8px !important;
+            row-gap: 6px !important;
+            padding: 8px 10px !important;
+            height: auto !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
         }
 
-        #device-config-sidebar .robot-editor-frame-table td {
-            padding: 6px !important;
+        /* Section group rows (BASE & STRUCTURE, WHEELS, etc.) stay as full-width headers */
+        #device-config-sidebar .robot-editor-frame-table tbody tr.robot-editor-frame-group-row {
+            display: block !important;
+            height: auto !important;
+        }
+        #device-config-sidebar .robot-editor-frame-table tbody tr.robot-editor-frame-group-row td {
+            display: block !important;
+            width: 100% !important;
+        }
+
+        /* Individual cells: default to stretch across the grid area */
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td {
+            display: block !important;
+            padding: 0 !important;
+            border: none !important;
+            overflow: visible !important;
+            white-space: normal !important;
+            font-size: 11px !important;
+            color: rgba(226, 232, 240, 0.92) !important;
+            min-width: 0 !important;
+            width: auto !important;
+            justify-self: stretch !important;
+            align-self: center !important;
+        }
+
+        /* Name cell spans parent+joint row too, so name+pill gets full width */
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(1) {
+            grid-area: name !important;
+        }
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(2) {
+            grid-area: parent !important;
+        }
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(3) {
+            grid-area: joint !important;
+        }
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(4),
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(5),
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(6) {
+            display: none !important;
+        }
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td:nth-child(7) {
+            grid-area: action !important;
+            justify-self: end !important;
+        }
+
+        /* Frame name cell: badge + full-width input side by side */
+        #device-config-sidebar .robot-editor-frame-name-cell {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+        #device-config-sidebar .robot-editor-frame-kind-badge {
+            flex: 0 0 auto !important;
+            min-width: 48px !important;
+            min-height: 22px !important;
             font-size: 9px !important;
-            line-height: 1.25 !important;
-            color: rgba(226, 232, 240, 0.9) !important;
+        }
+        #device-config-sidebar .robot-editor-frame-name-cell > .settings-input {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
         }
 
-        #device-config-sidebar .robot-editor-frame-table tbody tr {
-            height: 34px !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(1),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(1) {
-            width: 28% !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(2),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(2) {
-            width: 26% !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(3),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(3) {
-            width: 24% !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(4),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(4) {
-            display: none !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(5),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(5) {
-            display: none !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(6),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(6) {
-            display: none !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table th:nth-child(7),
-        #device-config-sidebar .robot-editor-frame-table.robot-editor-links-table td:nth-child(7) {
-            width: 22% !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table td .settings-input {
+        /* Dropdowns/inputs inside rows: fill their grid cell */
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] > td > .settings-input,
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] select.settings-input,
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] input.settings-input {
+            display: block !important;
+            box-sizing: border-box !important;
             min-width: 0 !important;
             width: 100% !important;
-            font-size: 9px !important;
+            max-width: 100% !important;
+            height: 28px !important;
+            font-size: 11px !important;
+            padding: 0 8px !important;
         }
 
-        #device-config-sidebar .robot-editor-frame-table td:last-child {
-            white-space: normal !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table td:last-child .btn {
-            width: 100% !important;
-            height: 22px !important;
-            min-height: 22px !important;
-            padding: 0 4px !important;
-            font-size: 8px !important;
-            margin: 1px 0 !important;
+        /* Del button stays compact next to name */
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] td:nth-child(7) .btn {
+            width: auto !important;
+            min-width: 42px !important;
+            height: 26px !important;
+            min-height: 26px !important;
+            padding: 0 10px !important;
+            font-size: 10px !important;
+            margin: 0 !important;
         }
 
         #device-config-sidebar .robot-editor-link-search-wrap {
@@ -11113,22 +11290,8 @@
         }
 
         @media (max-width: 1200px) {
-            #device-config-shell {
+            #device-config-shell-body {
                 flex-direction: column;
-            }
-
-            #device-config-rail {
-                width: 100%;
-                min-width: 0;
-                max-width: none;
-                height: auto;
-                flex-direction: row;
-                justify-content: flex-start;
-                padding: 6px;
-                border-right: none;
-                border-bottom: 1px solid var(--border-chrome);
-                overflow-x: auto;
-                overflow-y: hidden;
             }
 
             #device-config-sidebar {
@@ -11143,6 +11306,508 @@
             #device-config-main-stage {
                 margin: 8px 8px 0;
             }
+        }
+
+        /* ================================================================
+           DEVICE CONFIG — Clean Redesign
+           Toolbar hoisted to full-width strip; sidebar is pure inspector.
+           ================================================================ */
+
+        /* ── Shell structure ─────────────────────────────────── */
+        #device-config-shell {
+            flex-direction: column !important;
+        }
+
+        /* ── Full-width toolbar strip (below rail, above main+sidebar) ── */
+        #device-config-shell-toolbar {
+            flex-shrink: 0;
+            display: flex;
+            align-items: stretch;
+            background: var(--bg-chrome);
+            border-bottom: 1px solid var(--border-chrome);
+        }
+
+        /* Make the hoisted toolbar fill the strip naturally */
+        #device-config-shell-toolbar .robot-editor-collapse-shell {
+            flex: 1 1 auto;
+            border: none !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            overflow: visible !important;
+        }
+
+        #device-config-shell-toolbar .robot-editor-unified-toolbar {
+            flex: 1 1 auto !important;
+            height: 42px !important;
+            min-height: 42px !important;
+            padding: 0 14px !important;
+            gap: 5px !important;
+            border: none !important;
+            border-top: none !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+        }
+
+        /* Un-do the sidebar grid layout for buttons in the hoisted toolbar */
+        #device-config-shell-toolbar .re-tb-group {
+            display: inline-flex !important;
+            width: auto !important;
+            grid-template-columns: none !important;
+            gap: 4px !important;
+            flex-wrap: nowrap !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-spacer {
+            display: flex !important;
+            flex: 1 1 0 !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-sep {
+            display: block !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-btn,
+        #device-config-shell-toolbar .re-tb-panel-btn {
+            height: 26px !important;
+            min-height: 26px !important;
+            padding: 0 10px !important;
+            border-radius: 5px !important;
+            font-size: 10px !important;
+            font-weight: 600 !important;
+            text-transform: none !important;
+            letter-spacing: 0.01em !important;
+            width: auto !important;
+            justify-content: center !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-panel-btn {
+            border-radius: 999px !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-btn i,
+        #device-config-shell-toolbar .re-tb-panel-btn i {
+            font-size: 10px !important;
+        }
+
+        /* Subtle label for "ROBOT EDITOR" kicker in toolbar */
+        #device-config-shell-toolbar .robot-editor-title {
+            font-size: 9px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.14em !important;
+            color: rgba(148, 163, 184, 0.55) !important;
+            white-space: nowrap;
+        }
+
+        /* Collapse panels below toolbar — flat, no outer card */
+        #device-config-shell-toolbar .robot-editor-collapse-panels {
+            border: none !important;
+            border-top: 1px solid var(--border-chrome) !important;
+            border-radius: 0 !important;
+            background: var(--bg-inspector) !important;
+            box-shadow: none !important;
+            margin-top: 0 !important;
+        }
+
+        #device-config-shell-toolbar .robot-editor-collapse-panel {
+            border-bottom: 1px solid var(--border-chrome) !important;
+        }
+
+        /* ── Rail: slimmer, segmented control feel ─────────── */
+        #device-config-rail {
+            height: 40px !important;
+            min-height: 40px !important;
+            padding: 0 12px !important;
+            gap: 3px !important;
+            background: var(--bg-primary) !important;
+            border-bottom: 1px solid var(--border-chrome) !important;
+        }
+
+        #device-config-rail .mode-rail-btn {
+            height: 26px !important;
+            min-width: 52px !important;
+            padding: 0 12px !important;
+            border-radius: 4px !important;
+            font-size: 9px !important;
+            gap: 0 !important;
+        }
+
+        /* Hide the small icon in rail buttons — label-only for a cleaner look */
+        #device-config-rail .mode-rail-btn i {
+            display: none !important;
+        }
+
+        #device-config-rail .mode-rail-label {
+            font-size: 10px !important;
+            letter-spacing: 0.06em !important;
+        }
+
+        #device-config-rail .mode-rail-sep {
+            height: 16px !important;
+            margin: 0 6px !important;
+        }
+
+        /* ── Sidebar: narrower, inspector-only ───────────────── */
+        #device-config-sidebar {
+            width: clamp(300px, 23vw, 360px) !important;
+            min-width: clamp(300px, 23vw, 360px) !important;
+            max-width: clamp(300px, 23vw, 360px) !important;
+        }
+
+        /* Inspector header: remove LAYOUT badge noise */
+        .dc-insp-badge {
+            display: none !important;
+        }
+
+        .dc-insp-hdr {
+            padding: 7px 10px 6px !important;
+        }
+
+        .dc-insp-title {
+            font-size: 9px !important;
+            letter-spacing: 0.12em !important;
+            color: rgba(148, 163, 184, 0.7) !important;
+        }
+
+        /* Override sidebar-toolbar CSS that no longer applies */
+        #device-config-sidebar .robot-editor-unified-toolbar,
+        #device-config-sidebar .robot-editor-collapse-shell {
+            display: none !important;
+        }
+
+        /* ── Main stage: give the canvas a bit more room ──── */
+        #device-config-main-stage {
+            margin: 6px !important;
+        }
+
+        #device-config-main-scroll {
+            padding: 10px !important;
+            gap: 10px !important;
+        }
+
+        /* ── Sidebar viz-strip: compact toggle row ───────── */
+        #device-config-sidebar .re-viz-strip .toggle-grid {
+            gap: 3px !important;
+        }
+
+        #device-config-sidebar .re-viz-strip .toggle-item {
+            min-height: 24px !important;
+            padding: 4px 8px !important;
+            font-size: 9px !important;
+        }
+
+        /* ================================================================
+           DEVICE CONFIG — Visual Hierarchy & Breathing Room v3
+           Goal: one dominant zone (canvas), muted chrome, clear tiers.
+           ================================================================ */
+
+        /* ── Canvas panel: slim title bar ─────────────────────────────── */
+        #device-config-main-scroll .robot-editor-panel-header {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            flex-wrap: nowrap !important;
+            min-height: 36px !important;
+            padding: 0 14px !important;
+            gap: 10px !important;
+            border-bottom-color: rgba(71, 85, 105, 0.2) !important;
+            background: transparent !important;
+        }
+
+        #device-config-main-scroll .robot-editor-panel-header-meta {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 8px !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+        }
+
+        /* "ROBOT VISUALIZATION" label → tiny muted kicker */
+        #device-config-main-scroll .robot-editor-panel-header h3 {
+            font-size: 8px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.14em !important;
+            text-transform: uppercase !important;
+            color: rgba(71, 85, 105, 0.65) !important;
+            margin: 0 !important;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        #device-config-main-scroll .robot-editor-panel-subtitle {
+            font-size: 9px !important;
+            color: rgba(71, 85, 105, 0.7) !important;
+            margin: 0 !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #device-config-main-scroll .robot-editor-panel-badge {
+            font-size: 8px !important;
+            padding: 0 6px !important;
+            min-height: 17px !important;
+            flex-shrink: 0;
+        }
+
+        /* Clean badge: invisible until there are warnings */
+        #device-config-main-scroll .robot-editor-panel-badge[data-state="clean"] {
+            display: none !important;
+        }
+
+        /* ── Mode switcher: underline tabs, zero background ───────────── */
+        #device-config-main-scroll .robot-editor-visual-controls {
+            display: flex !important;
+            align-items: stretch !important;
+            justify-content: space-between !important;
+            padding: 0 14px !important;
+            gap: 0 !important;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.18) !important;
+        }
+
+        #device-config-main-scroll .robot-editor-mode-switcher {
+            display: flex !important;
+            align-items: stretch !important;
+            gap: 0 !important;
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+        }
+
+        #device-config-main-scroll .robot-editor-mode-btn {
+            height: 30px !important;
+            min-height: 30px !important;
+            padding: 0 10px !important;
+            background: transparent !important;
+            border: none !important;
+            border-bottom: 2px solid transparent !important;
+            border-radius: 0 !important;
+            color: rgba(100, 116, 139, 0.5) !important;
+            font-size: 9px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em !important;
+            text-transform: uppercase !important;
+            box-shadow: none !important;
+            transition: color 0.12s, border-bottom-color 0.12s !important;
+        }
+
+        #device-config-main-scroll .robot-editor-mode-btn:hover {
+            color: rgba(203, 213, 225, 0.72) !important;
+            background: transparent !important;
+            border-color: transparent !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        #device-config-main-scroll .robot-editor-mode-btn.active {
+            color: rgba(96, 165, 250, 0.88) !important;
+            border-bottom-color: rgba(96, 165, 250, 0.52) !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        /* ── Quick actions: icon-only, transparent ────────────────────── */
+        #device-config-main-scroll .robot-editor-quick-actions {
+            display: flex !important;
+            align-items: center !important;
+            gap: 2px !important;
+        }
+
+        #device-config-main-scroll .robot-editor-icon-btn span {
+            display: none !important;
+        }
+
+        #device-config-main-scroll .robot-editor-icon-btn {
+            width: 28px !important;
+            min-width: 28px !important;
+            height: 28px !important;
+            min-height: 28px !important;
+            padding: 0 !important;
+            border-radius: 5px !important;
+            background: transparent !important;
+            border-color: rgba(71, 85, 105, 0.28) !important;
+            color: rgba(100, 116, 139, 0.55) !important;
+            box-shadow: none !important;
+        }
+
+        #device-config-main-scroll .robot-editor-icon-btn:hover {
+            background: rgba(30, 41, 59, 0.55) !important;
+            border-color: rgba(148, 163, 184, 0.38) !important;
+            color: rgba(226, 232, 240, 0.85) !important;
+            transform: none !important;
+        }
+
+        /* ── Canvas focus: whisper quiet ──────────────────────────────── */
+        #device-config-main-scroll .robot-editor-focus-summary {
+            padding: 3px 14px 0 !important;
+            gap: 6px !important;
+            opacity: 0.4;
+            transition: opacity 0.15s;
+        }
+
+        #device-config-main-scroll .robot-editor-focus-summary:hover {
+            opacity: 1;
+        }
+
+        #device-config-main-scroll .robot-editor-focus-label {
+            font-size: 7px !important;
+            letter-spacing: 0.12em !important;
+        }
+
+        #device-config-main-scroll .robot-editor-focus-target {
+            font-size: 9px !important;
+            min-height: 16px !important;
+            padding: 0 6px !important;
+        }
+
+        #device-config-main-scroll .robot-editor-panel-subtitle.robot-editor-focus-context,
+        #device-config-main-scroll #robot-editor-focus-context {
+            font-size: 8px !important;
+        }
+
+        /* ── Canvas shell: less padding ───────────────────────────────── */
+        #device-config-main-scroll .robot-editor-canvas-shell {
+            padding: 8px 14px 8px !important;
+        }
+
+        /* ── Geometry warnings: muted, compact ────────────────────────── */
+        #device-config-main-scroll .robot-editor-geometry-warnings {
+            font-size: 9px !important;
+            line-height: 1.5 !important;
+            padding: 7px 10px !important;
+            margin: 0 14px 6px !important;
+            border-radius: 6px !important;
+            opacity: 0.6;
+        }
+
+        /* ── Legend + scale: nearly invisible ────────────────────────── */
+        #device-config-main-scroll .robot-editor-legend {
+            opacity: 0.3;
+            gap: 10px !important;
+            padding-top: 0 !important;
+            padding-bottom: 2px !important;
+        }
+
+        #device-config-main-scroll .urdf-viz-legend-item {
+            font-size: 8px !important;
+            gap: 4px !important;
+        }
+
+        #device-config-main-scroll .urdf-viz-legend-dot {
+            width: 6px !important;
+            height: 6px !important;
+        }
+
+        #device-config-main-scroll .robot-editor-scale-row {
+            opacity: 0.3;
+            padding-top: 2px !important;
+            padding-bottom: 10px !important;
+        }
+
+        #device-config-main-scroll .robot-editor-scale-label {
+            font-size: 8px !important;
+        }
+
+        /* ── Floating zoom: subtle overlay ───────────────────────────── */
+        #device-config-main-scroll .robot-editor-floating-zoom {
+            top: 18px !important;
+            right: 18px !important;
+            padding: 3px !important;
+            border-radius: 8px !important;
+            background: rgba(9, 13, 22, 0.65) !important;
+            border-color: rgba(71, 85, 105, 0.35) !important;
+            backdrop-filter: blur(6px) !important;
+        }
+
+        #device-config-main-scroll .robot-editor-floating-zoom .btn {
+            min-width: 26px !important;
+            width: 26px !important;
+            height: 26px !important;
+            border-radius: 6px !important;
+            background: transparent !important;
+            border-color: rgba(71, 85, 105, 0.3) !important;
+            color: rgba(148, 163, 184, 0.65) !important;
+            font-size: 12px !important;
+            padding: 0 !important;
+        }
+
+        /* ── Sidebar: section group row headers ──────────────────────── */
+        #device-config-sidebar .robot-editor-frame-group-row td {
+            padding: 12px 10px 3px !important;
+            font-size: 7px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.18em !important;
+            text-transform: uppercase !important;
+            color: rgba(71, 85, 105, 0.85) !important;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.16) !important;
+        }
+
+        /* ── Frame kind badges: smaller, less aggressive ─────────────── */
+        #device-config-sidebar .robot-editor-frame-kind-badge {
+            font-size: 7px !important;
+            letter-spacing: 0.04em !important;
+            min-width: 36px !important;
+            min-height: 16px !important;
+            padding: 0 4px !important;
+            border-radius: 3px !important;
+            opacity: 0.7;
+        }
+
+        /* ── Delete buttons: ghost until row is hovered ──────────────── */
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] td:nth-child(7) .btn {
+            background: transparent !important;
+            border-color: transparent !important;
+            color: transparent !important;
+            box-shadow: none !important;
+            transition: border-color 0.12s, color 0.12s, background 0.12s !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name]:hover td:nth-child(7) .btn {
+            border-color: rgba(71, 85, 105, 0.35) !important;
+            color: rgba(100, 116, 139, 0.6) !important;
+        }
+
+        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] td:nth-child(7) .btn:hover {
+            background: rgba(239, 68, 68, 0.1) !important;
+            border-color: rgba(239, 68, 68, 0.32) !important;
+            color: rgba(248, 113, 113, 0.85) !important;
+        }
+
+        /* ── Toolbar: primary vs ghost hierarchy ─────────────────────── */
+
+        /* Panel toggles (Config / View / Display / More): barely visible */
+        #device-config-shell-toolbar .re-tb-panel-btn {
+            background: transparent !important;
+            border-color: rgba(71, 85, 105, 0.25) !important;
+            color: rgba(71, 85, 105, 0.7) !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-panel-btn:hover {
+            background: rgba(30, 41, 59, 0.5) !important;
+            border-color: rgba(100, 116, 139, 0.4) !important;
+            color: rgba(148, 163, 184, 0.85) !important;
+        }
+
+        #device-config-shell-toolbar .re-tb-panel-btn.active {
+            background: rgba(30, 64, 175, 0.14) !important;
+            border-color: rgba(96, 165, 250, 0.28) !important;
+            color: rgba(147, 197, 253, 0.85) !important;
+        }
+
+        /* "ROBOT EDITOR" kicker: nearly invisible — context is already clear */
+        #device-config-shell-toolbar .robot-editor-title {
+            color: rgba(71, 85, 105, 0.4) !important;
+            font-size: 7px !important;
+            letter-spacing: 0.2em !important;
+        }
+
+        /* Separator: dimmer */
+        #device-config-shell-toolbar .re-tb-sep {
+            background: rgba(71, 85, 105, 0.25) !important;
         }
     </style>
 </head>
@@ -16981,7 +17646,13 @@
                                 }
                             });
 
-                            [reVizStrip, collapseShell, runtimeSettings, framePanel, linkPanel].forEach((node) => {
+                            // ── Hoist the editor toolbar into the full-width strip above main/sidebar ──
+                            const shellToolbar = document.getElementById('device-config-shell-toolbar');
+                            if (shellToolbar && collapseShell && collapseShell.parentElement !== shellToolbar) {
+                                shellToolbar.appendChild(collapseShell);
+                            }
+
+                            [reVizStrip, runtimeSettings, framePanel, linkPanel].forEach((node) => {
                                 if (node && node.parentElement !== configStack) {
                                     configStack.appendChild(node);
                                 }
@@ -20417,6 +21088,8 @@
                             }
                             ctx.restore();
                         }
+
+                        drawShelfPlanOverlayOnMap();
 
                         // Draw lidar scan overlays with operator-configurable style/color.
                         // Smoothing is applied in ROS bridge on polar ranges; avoid pixel-neighbor averaging here.
@@ -26603,19 +27276,6 @@
                         </div>
 
             <div id="settings-developer" class="settings-category">
-                <!-- Robot Visualization overlay settings -->
-                <div class="settings-card re-viz-strip">
-                    <div class="settings-card-header">
-                        <h4 class="settings-card-title">Robot Visualization</h4>
-                    </div>
-                    <div class="toggle-grid">
-                        <label class="toggle-item"><input type="checkbox" id="profile-toggle-show-zones" checked><span>Show Zones</span></label>
-                        <label class="toggle-item"><input type="checkbox" id="profile-toggle-show-paths" checked><span>Show Paths</span></label>
-                        <label class="toggle-item"><input type="checkbox" id="profile-toggle-follow-robot"><span>Follow Robot</span></label>
-                        <label class="toggle-item"><input type="checkbox" id="profile-toggle-robot-halo" checked><span>Robot Halo</span></label>
-                        <label class="toggle-item"><input type="checkbox" id="profile-toggle-robot-heading" checked><span>Robot Heading</span></label>
-                    </div>
-                </div>
                 <div class="robot-editor-workspace">
                     <div id="robot-editor-collapse-shell" class="robot-editor-collapse-shell">
                         <!-- ── Unified Toolbar (replaces topbar + actions-deck + collapse-bar) ── -->
@@ -26623,7 +27283,7 @@
                             <span class="robot-editor-title">ROBOT EDITOR</span>
                             <div class="re-tb-sep"></div>
 
-                            <!-- File operations -->
+                            <!-- Core file operations -->
                             <div class="re-tb-group">
                                 <button class="btn re-tb-btn" type="button"
                                     onclick="loadRobotEditor(false,false)" title="Load ROBOT Links from profile">
@@ -26633,10 +27293,6 @@
                                     onclick="saveRobotEditorDraft()" title="Save ROBOT Links">
                                     <i class="fas fa-save"></i> Save
                                 </button>
-                                <button class="btn re-tb-btn re-tb-btn-primary" type="button"
-                                    onclick="saveRobotEditorAndBuildUrdf()" title="Save links and compile URDF">
-                                    <i class="fas fa-bolt"></i> Save + URDF
-                                </button>
                                 <button class="btn re-tb-btn" type="button"
                                     onclick="exportRobotEditorUrdf()" title="Export URDF file">
                                     <i class="fas fa-file-export"></i> Export
@@ -26644,7 +27300,7 @@
                             </div>
                             <div class="re-tb-sep"></div>
 
-                            <!-- Link operations -->
+                            <!-- Core link operations -->
                             <div class="re-tb-group">
                                 <button class="btn re-tb-btn re-tb-btn-add" type="button"
                                     onclick="addRobotEditorLink()" title="Add a new robot link">
@@ -26654,13 +27310,9 @@
                                     onclick="renameOrDeleteSelectedRobotEditorLink()" title="Rename or delete selected link">
                                     <i class="fas fa-pen"></i> Edit Link
                                 </button>
-                                <button class="btn re-tb-btn" type="button"
-                                    onclick="loadRobotEditor(true,false)" title="Import from Gazebo URDF">
-                                    <i class="fas fa-file-import"></i> Import
-                                </button>
                             </div>
 
-                            <!-- Push panels + utils to the right -->
+                            <!-- Push panel toggles to the right -->
                             <div class="re-tb-spacer"></div>
 
                             <!-- Panel toggles (keep robot-editor-collapse-btn class for JS) -->
@@ -26683,24 +27335,13 @@
                                     title="Display Settings">
                                     <i class="fas fa-desktop"></i> Display
                                 </button>
+                                <button type="button" class="robot-editor-collapse-btn re-tb-panel-btn"
+                                    data-panel="more" aria-expanded="false"
+                                    onclick="toggleRobotEditorCollapsePanel('more', event)"
+                                    title="More actions">
+                                    <i class="fas fa-ellipsis-h"></i> More
+                                </button>
                             </div>
-                            <div class="re-tb-sep"></div>
-
-                            <!-- Utility selects -->
-                            <select id="robot-editor-console-mode" class="settings-input re-tb-select"
-                                onchange="onRobotEditorConsoleModeChanged(this.value)">
-                                <option value="console">Console</option>
-                                <option value="warnings">Warnings</option>
-                                <option value="events">Events</option>
-                                <option value="debug">Debug</option>
-                            </select>
-                            <select id="robot-editor-refresh-mode" class="settings-input re-tb-select"
-                                onchange="syncRobotEditorRefreshModeFromTopbar(this.value)">
-                                <option value="quick">Refresh</option>
-                                <option value="fit">Fit View</option>
-                                <option value="reload">Reload Draft</option>
-                                <option value="import">Reload URDF</option>
-                            </select>
                         </div>
 
                         <div class="robot-editor-collapse-panels">
@@ -26772,29 +27413,22 @@
                             <section class="robot-editor-collapse-panel robot-editor-collapse-tight" data-panel="view">
                                 <div class="robot-editor-config-body robot-editor-collapse-tight">
                                     <div class="robot-editor-view-options-row">
-                                        <select id="robot-editor-view-urdf-fetch" class="settings-input"
-                                            onchange="onRobotEditorUrdfFetchModeChanged(this.value)">
-                                            <option value="idle">URDF / Fetch ▼</option>
-                                            <option value="fetch_current">Fetch Current</option>
-                                            <option value="fetch_profile">Fetch From Profile</option>
-                                        </select>
-                                        <select id="robot-editor-view-urdf-visualization" class="settings-input"
-                                            onchange="onRobotEditorVisualizationModeChanged(this.value)">
-                                            <option value="topdown">Top-Down</option>
-                                            <option value="preview_3d">3D Preview</option>
-                                        </select>
-                                        <select id="robot-editor-view-frontend-editor" class="settings-input"
-                                            onchange="onRobotEditorFrontendModeChanged(this.value)">
-                                            <option value="shape">Frontend Editor ▼</option>
-                                            <option value="link">Link Mode</option>
-                                            <option value="shape">Shape Mode</option>
-                                        </select>
-                                        <select id="robot-editor-view-hand-operate" class="settings-input"
-                                            onchange="onRobotEditorHandOperateChanged(this.value)">
-                                            <option value="disabled">Hand Operate ▼</option>
-                                            <option value="disabled">Disabled</option>
-                                            <option value="enabled">Enabled</option>
-                                        </select>
+                                        <div class="robot-editor-more-field">
+                                            <label>Visualization</label>
+                                            <select id="robot-editor-view-urdf-visualization" class="settings-input"
+                                                onchange="onRobotEditorVisualizationModeChanged(this.value)">
+                                                <option value="topdown">Top-Down</option>
+                                                <option value="preview_3d">3D Preview</option>
+                                            </select>
+                                        </div>
+                                        <div class="robot-editor-more-field">
+                                            <label>Hand Operate</label>
+                                            <select id="robot-editor-view-hand-operate" class="settings-input"
+                                                onchange="onRobotEditorHandOperateChanged(this.value)">
+                                                <option value="disabled">Disabled</option>
+                                                <option value="enabled">Enabled</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -26802,22 +27436,64 @@
                             <section class="robot-editor-collapse-panel robot-editor-collapse-tight"
                                 data-panel="display">
                                 <div class="robot-editor-config-body robot-editor-collapse-tight">
-                                    <div class="robot-editor-display-row">
-                                        <div class="robot-editor-display-row-field">
-                                            <label>Refresh View</label>
-                                            <select id="robot-editor-refresh-mode-panel" class="settings-input"
-                                                onchange="syncRobotEditorRefreshModeFromPanel(this.value)">
-                                                <option value="quick">Refresh View ▼</option>
-                                                <option value="fit">Fit to View</option>
-                                                <option value="reload">Reload Draft</option>
-                                                <option value="import">Reload From URDF</option>
+                                    <div class="robot-editor-display-toggles">
+                                        <label class="robot-editor-display-toggle">
+                                            <input type="checkbox" id="profile-toggle-show-zones" checked>
+                                            <span>Show Zones</span>
+                                        </label>
+                                        <label class="robot-editor-display-toggle">
+                                            <input type="checkbox" id="profile-toggle-show-paths" checked>
+                                            <span>Show Paths</span>
+                                        </label>
+                                        <label class="robot-editor-display-toggle">
+                                            <input type="checkbox" id="profile-toggle-follow-robot">
+                                            <span>Follow Robot</span>
+                                        </label>
+                                        <label class="robot-editor-display-toggle">
+                                            <input type="checkbox" id="profile-toggle-robot-halo" checked>
+                                            <span>Robot Halo</span>
+                                        </label>
+                                        <label class="robot-editor-display-toggle">
+                                            <input type="checkbox" id="profile-toggle-robot-heading" checked>
+                                            <span>Robot Heading</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="robot-editor-collapse-panel robot-editor-collapse-tight" data-panel="more">
+                                <div class="robot-editor-config-body robot-editor-collapse-tight">
+                                    <div class="robot-editor-more-actions">
+                                        <button class="btn re-tb-btn re-tb-btn-primary" type="button"
+                                            onclick="saveRobotEditorAndBuildUrdf()"
+                                            title="Save links and compile URDF">
+                                            <i class="fas fa-bolt"></i> Save + URDF
+                                        </button>
+                                        <button class="btn re-tb-btn" type="button"
+                                            onclick="loadRobotEditor(true,false)" title="Import from Gazebo URDF">
+                                            <i class="fas fa-file-import"></i> Import URDF
+                                        </button>
+                                    </div>
+                                    <div class="robot-editor-more-grid">
+                                        <div class="robot-editor-more-field">
+                                            <label>Console</label>
+                                            <select id="robot-editor-console-mode" class="settings-input"
+                                                onchange="onRobotEditorConsoleModeChanged(this.value)">
+                                                <option value="console">Console</option>
+                                                <option value="warnings">Warnings</option>
+                                                <option value="events">Events</option>
+                                                <option value="debug">Debug</option>
                                             </select>
                                         </div>
-                                        <div class="robot-editor-display-row-info">
-                                            <label>View Mode</label>
-                                            <div id="robot-editor-display-info" class="robot-editor-display-info">
-                                                Top-down view pending...
-                                            </div>
+                                        <div class="robot-editor-more-field">
+                                            <label>Refresh</label>
+                                            <select id="robot-editor-refresh-mode" class="settings-input"
+                                                onchange="syncRobotEditorRefreshModeFromTopbar(this.value)">
+                                                <option value="quick">Refresh</option>
+                                                <option value="fit">Fit View</option>
+                                                <option value="reload">Reload Draft</option>
+                                                <option value="import">Reload URDF</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
@@ -26897,10 +27573,8 @@
                                 <div class="robot-editor-canvas-shell">
                                     <canvas id="robot-editor-canvas" width="960" height="360"></canvas>
                                     <div class="robot-editor-floating-zoom">
-                                        <button class="btn" type="button" onclick="zoomInRobotEditorView()">+</button>
-                                        <button class="btn" type="button" onclick="zoomOutRobotEditorView()">-</button>
-                                        <button class="btn" type="button" onclick="fitRobotEditorView()">Fit
-                                            to View</button>
+                                        <button class="btn" type="button" onclick="zoomInRobotEditorView()" title="Zoom in">+</button>
+                                        <button class="btn" type="button" onclick="zoomOutRobotEditorView()" title="Zoom out">-</button>
                                     </div>
                                 </div>
 
@@ -26968,12 +27642,6 @@
                                             link to inspect and edit its properties.</p>
                                     </div>
                                 </div>
-                                <div class="robot-editor-link-search-wrap">
-                                    <i class="fas fa-search"></i>
-                                    <input type="text" id="robot-editor-link-search"
-                                        class="settings-input robot-editor-tree-search" placeholder="Search links..."
-                                        oninput="onRobotEditorLinkSearchChanged(this.value)">
-                                </div>
 
                                 <div id="robot-editor-link-hierarchy" class="robot-editor-link-hierarchy">
                                     <div style="color: var(--text-secondary); font-size: 11px;">No links
@@ -27030,8 +27698,6 @@
 
                         <div id="robot-editor-bottom-panel" class="robot-editor-bottom-panel">
                             <div class="robot-editor-tab-nav">
-                                <button type="button" class="robot-editor-tab-btn" data-robot-editor-tab="links"
-                                    onclick="setRobotEditorBottomTab('links')">Link Tree</button>
                                 <button type="button" class="robot-editor-tab-btn active" data-robot-editor-tab="shapes"
                                     onclick="setRobotEditorBottomTab('shapes')">Shape Builder</button>
                                 <button type="button" class="robot-editor-tab-btn" data-robot-editor-tab="components"
@@ -27043,17 +27709,6 @@
                             </div>
 
                             <div class="robot-editor-tab-content">
-                                <div class="robot-editor-tab-pane" data-robot-editor-tab-pane="links">
-                                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
-                                        Link tree is live in the right panel. This tab mirrors current
-                                        hierarchy state.
-                                    </div>
-                                    <div id="robot-editor-link-tree-mirror" class="robot-editor-link-hierarchy">
-                                        <div style="color: var(--text-secondary); font-size: 11px;">No links
-                                            loaded.</div>
-                                    </div>
-                                </div>
-
                                 <div class="robot-editor-tab-pane active" data-robot-editor-tab-pane="shapes">
                                     <div class="robot-editor-shape-palette">
                                         <div class="robot-shape-palette-item" draggable="true" data-shape-type="box">
@@ -27107,7 +27762,7 @@
                                         </table>
                                     </div>
 
-                                    <div class="robot-editor-shape-grid">
+                                    <div class="robot-editor-shape-grid" data-shape-type="box">
                                         <div>
                                             <label>Name</label>
                                             <input type="text" id="robot-editor-shape-name" class="settings-input"
@@ -27146,22 +27801,22 @@
                                             <input type="number" id="robot-editor-shape-z" class="settings-input"
                                                 step="0.01" value="0.00">
                                         </div>
-                                        <div>
+                                        <div class="robot-editor-shape-field-width">
                                             <label>Width</label>
                                             <input type="number" id="robot-editor-shape-width" class="settings-input"
                                                 min="0.01" step="0.01" value="0.40">
                                         </div>
-                                        <div>
+                                        <div class="robot-editor-shape-field-length">
                                             <label>Length</label>
                                             <input type="number" id="robot-editor-shape-length" class="settings-input"
                                                 min="0.01" step="0.01" value="0.30">
                                         </div>
-                                        <div>
+                                        <div class="robot-editor-shape-field-height">
                                             <label>Height</label>
                                             <input type="number" id="robot-editor-shape-height" class="settings-input"
                                                 min="0.01" step="0.01" value="0.25">
                                         </div>
-                                        <div>
+                                        <div class="robot-editor-shape-field-radius">
                                             <label>Radius</label>
                                             <input type="number" id="robot-editor-shape-radius" class="settings-input"
                                                 min="0.005" step="0.01" value="0.15">
@@ -27506,33 +28161,38 @@
                 <div class="mode-rail-spacer"></div>
             </nav>
 
-            <div id="device-config-main">
-                <div id="device-config-main-stage">
-                    <div id="device-config-main-scroll"></div>
-                </div>
-            </div>
+            <!-- ── Robot-editor action toolbar (hoisted out of sidebar) ── -->
+            <div id="device-config-shell-toolbar"></div>
 
-            <aside id="device-config-sidebar">
-                <div class="dc-insp-hdr">
-                    <span class="dc-insp-title">DEVICE CONFIG</span>
-                    <span class="dc-insp-badge">LAYOUT</span>
+            <div id="device-config-shell-body">
+                <div id="device-config-main">
+                    <div id="device-config-main-stage">
+                        <div id="device-config-main-scroll"></div>
+                    </div>
                 </div>
-                <div class="dc-insp-tabs">
-                    <button class="dc-insp-tab-btn active" data-device-config-pane-btn="config"
-                        onclick="switchDeviceConfigPane('config')">Config</button>
-                    <button class="dc-insp-tab-btn" data-device-config-pane-btn="tools"
-                        onclick="switchDeviceConfigPane('tools')">Tools</button>
-                </div>
-                <div class="dc-insp-pane active" id="device-config-pane-config">
-                    <div id="device-config-config-stack"></div>
-                </div>
-                <div class="dc-insp-pane" id="device-config-pane-tools">
-                    <div id="device-config-tools-stack"></div>
-                </div>
-            </aside>
 
-            <div id="device-config-content" hidden>
-                <!-- scratch adoption target -->
+                <aside id="device-config-sidebar">
+                    <div class="dc-insp-hdr">
+                        <span class="dc-insp-title">DEVICE CONFIG</span>
+                        <span class="dc-insp-badge">LAYOUT</span>
+                    </div>
+                    <div class="dc-insp-tabs">
+                        <button class="dc-insp-tab-btn active" data-device-config-pane-btn="config"
+                            onclick="switchDeviceConfigPane('config')">Config</button>
+                        <button class="dc-insp-tab-btn" data-device-config-pane-btn="tools"
+                            onclick="switchDeviceConfigPane('tools')">Tools</button>
+                    </div>
+                    <div class="dc-insp-pane active" id="device-config-pane-config">
+                        <div id="device-config-config-stack"></div>
+                    </div>
+                    <div class="dc-insp-pane" id="device-config-pane-tools">
+                        <div id="device-config-tools-stack"></div>
+                    </div>
+                </aside>
+
+                <div id="device-config-content" hidden>
+                    <!-- scratch adoption target -->
+                </div>
             </div>
         </div>
     </div>
@@ -28024,6 +28684,119 @@
             return null;
         }
 
+        function offsetShelfPlotPoint(point, yaw, distance) {
+            if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y)) || !Number.isFinite(Number(yaw))) {
+                return null;
+            }
+            return {
+                x: Number(point.x) + (Math.cos(Number(yaw)) * Number(distance)),
+                y: Number(point.y) + (Math.sin(Number(yaw)) * Number(distance)),
+            };
+        }
+
+        function buildShelfPreviewPlanTargets(data = null, options = {}) {
+            const forMapOverlay = Boolean(options.forMapOverlay);
+            const previewPose = data?.committed_target_valid
+                ? (data?.committed_target_pose || data?.center_pose || data?.center_pose_raw || null)
+                : (data?.center_pose || data?.center_pose_raw || data?.committed_target_pose || null);
+            const finalPoseSource = data?.committed_target_pose || previewPose;
+            const finalPoint = parseShelfPlotPoint(finalPoseSource);
+            const yaw = Number(finalPoseSource?.yaw ?? previewPose?.yaw);
+            if (!finalPoint || !Number.isFinite(yaw)) {
+                return [];
+            }
+
+            let openingLine = parseShelfPlotPoint(previewPose?.front_midpoint);
+            if (forMapOverlay) {
+                const frameId = String(finalPoseSource?.frame_id || '').trim().toLowerCase();
+                if (frameId && frameId !== 'map') {
+                    return [];
+                }
+                // Map overlay must stay in map coordinates. Derive the visible targets
+                // from the committed/final map pose so they can't jump to detector-local space.
+                openingLine = offsetShelfPlotPoint(finalPoint, yaw, -0.32);
+            }
+            if (!openingLine) {
+                return [];
+            }
+
+            // Generated targets mirror the runtime shelf handoff:
+            // one centerline setup POI, then one guarded entry POI.
+            const entryGuardDistance = 0.46;
+            const centerlineSetupOffset = 0.55;
+
+            const centerlineSetup = offsetShelfPlotPoint(openingLine, yaw, -centerlineSetupOffset);
+            const entry = offsetShelfPlotPoint(openingLine, yaw, -entryGuardDistance);
+
+            const targets = [];
+            if (centerlineSetup) {
+                targets.push({ label: 'P1', text: 'Centerline', point: centerlineSetup, color: 'rgba(251, 191, 36, 0.98)' });
+            }
+            if (entry) {
+                targets.push({ label: 'P2', text: 'Entry', point: entry, color: 'rgba(45, 212, 191, 0.98)' });
+            }
+            return targets.filter((target) => target.point);
+        }
+
+        function drawShelfPlanOverlayOnMap() {
+            if (!mapReady || !mapData) return;
+            const planTargets = buildShelfPreviewPlanTargets(shelfStatusSnapshot, { forMapOverlay: true });
+            if (!planTargets.length) return;
+
+            ctx.save();
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.setLineDash([10, 6]);
+            ctx.strokeStyle = 'rgba(244, 114, 182, 0.82)';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            planTargets.forEach((target, index) => {
+                const [px, py] = worldToPixel(target.point.x, target.point.y);
+                if (index === 0) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            });
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            planTargets.forEach((target) => {
+                const [px, py] = worldToPixel(target.point.x, target.point.y);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+                ctx.beginPath();
+                ctx.arc(px, py, 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = target.color;
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(248, 250, 252, 0.94)';
+                ctx.lineWidth = 1.3;
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(248, 250, 252, 0.98)';
+                ctx.font = '700 11px Inter, Arial, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                const chipText = `${target.label} ${target.text}`;
+                const chipWidth = ctx.measureText(chipText).width + 14;
+                const chipX = px + 10;
+                const chipY = py - 11;
+                drawRoundedRect(ctx, chipX, chipY, chipWidth, 20, 9, {
+                    fillStyle: 'rgba(15, 23, 42, 0.86)',
+                    strokeStyle: target.color,
+                    lineWidth: 1.0,
+                });
+                ctx.fillText(chipText, chipX + 7, chipY + 10);
+            });
+            ctx.restore();
+        }
+
         function drawShelfPopupPreview(data = null) {
             const canvas = document.getElementById('shelf-popup-plot');
             const metaEl = document.getElementById('shelf-popup-plot-meta');
@@ -28054,12 +28827,16 @@
             const frontMid = parseShelfPlotPoint(previewPose?.front_midpoint);
             const backMid = parseShelfPlotPoint(previewPose?.back_midpoint);
             const committedPoint = parseShelfPlotPoint(data?.committed_target_pose);
+            const planTargets = buildShelfPreviewPlanTargets(data);
 
             const allPoints = [...hotspotPoints, ...orderedPoints];
             if (centerPoint) allPoints.push(centerPoint);
             if (frontMid) allPoints.push(frontMid);
             if (backMid) allPoints.push(backMid);
             if (committedPoint) allPoints.push(committedPoint);
+            planTargets.forEach((target) => {
+                if (target?.point) allPoints.push(target.point);
+            });
 
             const padX = 14;
             const padY = 12;
@@ -28198,6 +28975,36 @@
                 ctx.stroke();
             }
 
+            if (planTargets.length > 0) {
+                const planCanvasPoints = planTargets.map((target) => ({
+                    ...target,
+                    canvasPoint: toCanvas(target.point),
+                }));
+
+                ctx.setLineDash([6, 4]);
+                ctx.lineWidth = 1.4;
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.72)';
+                ctx.beginPath();
+                planCanvasPoints.forEach((target, index) => {
+                    if (index === 0) {
+                        ctx.moveTo(target.canvasPoint.x, target.canvasPoint.y);
+                    } else {
+                        ctx.lineTo(target.canvasPoint.x, target.canvasPoint.y);
+                    }
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                planCanvasPoints.forEach((target) => {
+                    ctx.fillStyle = target.color;
+                    ctx.beginPath();
+                    ctx.arc(target.canvasPoint.x, target.canvasPoint.y, 4.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'rgba(248, 250, 252, 0.96)';
+                    ctx.fillText(target.label, target.canvasPoint.x + 6, target.canvasPoint.y - 7);
+                });
+            }
+
             const frontWidth = Number(data?.preferred_front_width_m ?? data?.candidate_front_width_m ?? -1);
             const frameLabel = String(data?.scan_frame_id || '').trim();
             if (metaEl) {
@@ -28209,6 +29016,9 @@
                     if (frameLabel) {
                         parts.push(frameLabel);
                     }
+                    if (planTargets.length > 0) {
+                        parts.push(`${planTargets.length} plan target${planTargets.length === 1 ? '' : 's'}`);
+                    }
                     metaEl.textContent = parts.join(' • ');
                 } else {
                     metaEl.textContent = 'Waiting for scan';
@@ -28216,11 +29026,13 @@
             }
 
             if (captionEl) {
-                captionEl.textContent = orderedPoints.length >= 4
-                    ? 'Green is the front edge, amber is the back edge, and blue is the solved centerline.'
-                    : hotspotPoints.length > 0
-                        ? 'Yellow dots are live reflector hotspots. The preview is auto-fit to the current shelf geometry.'
-                        : 'Turn the detector on to see the live shelf geometry.';
+                captionEl.textContent = planTargets.length > 0
+                    ? 'P1 and P2 show the generated shelf POIs after commit: centerline setup and guarded entry. The pink X is the committed final shelf target.'
+                    : orderedPoints.length >= 4
+                        ? 'Green is the front edge, amber is the back edge, and blue is the solved centerline.'
+                        : hotspotPoints.length > 0
+                            ? 'Yellow dots are live reflector hotspots. The preview is auto-fit to the current shelf geometry.'
+                            : 'Turn the detector on to see the live shelf geometry.';
             }
         }
 
@@ -28296,6 +29108,9 @@
             }
 
             drawShelfPopupPreview(data);
+            if (typeof drawMap === 'function' && mapReady) {
+                drawMap();
+            }
         }
 
         function getShelfTriggerButtons() {
@@ -31586,7 +32401,7 @@
             const shell = document.getElementById('robot-editor-collapse-shell');
             if (!shell) return;
             const normalized = String(panelKey || '').trim().toLowerCase();
-            const validPanels = ['config', 'view', 'display'];
+            const validPanels = ['config', 'view', 'display', 'more'];
             const activePanel = validPanels.includes(normalized) ? normalized : '';
             robotEditorState.collapse_panel = activePanel;
 
@@ -31634,7 +32449,7 @@
 
         function setRobotEditorBottomTab(tabKey = 'shapes') {
             const desired = String(tabKey || '').trim().toLowerCase();
-            const valid = ['links', 'shapes', 'components'];
+            const valid = ['shapes', 'components'];
             const active = valid.includes(desired) ? desired : 'shapes';
             robotEditorState.bottom_tab = active;
 
@@ -33448,11 +34263,14 @@
 
         function onRobotEditorShapeTypeChanged(queueLive = false) {
             const type = readRobotEditorFieldText('robot-editor-shape-type', 'box').toLowerCase();
+            const normalizedType = ['box', 'cylinder', 'sphere'].includes(type) ? type : 'box';
             const radiusInput = document.getElementById('robot-editor-shape-radius');
             const widthInput = document.getElementById('robot-editor-shape-width');
             const lengthInput = document.getElementById('robot-editor-shape-length');
+            const grid = document.querySelector('.robot-editor-shape-grid');
+            if (grid) grid.setAttribute('data-shape-type', normalizedType);
             if (!radiusInput || !widthInput || !lengthInput) return;
-            const circleLike = type === 'sphere' || type === 'cylinder';
+            const circleLike = normalizedType === 'sphere' || normalizedType === 'cylinder';
             widthInput.disabled = circleLike;
             lengthInput.disabled = circleLike;
             radiusInput.disabled = false;

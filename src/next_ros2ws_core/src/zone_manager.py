@@ -2601,18 +2601,20 @@ class ZoneManager(Node):
 
         def _phase_acceptance_limits(phase_label: str) -> Tuple[float, float, float]:
             label = str(phase_label or '').strip().lower()
-            pos_tol = max(float(plan.position_tolerance), 0.07)
-            lat_tol = max(float(plan.entry_lateral_tolerance), 0.05)
-            heading_tol = max(float(plan.heading_tolerance), math.radians(10.0))
+            pos_tol = max(0.03, min(float(plan.position_tolerance), 0.06))
+            lat_tol = max(0.015, min(float(plan.entry_lateral_tolerance), 0.03))
+            heading_tol = max(0.02, min(float(plan.heading_tolerance), math.radians(4.0)))
             if 'retreat' in label:
-                pos_tol = max(pos_tol, 0.10)
-                heading_tol = max(heading_tol, math.radians(15.0))
-            elif 'lineup' in label:
-                heading_tol = max(heading_tol, math.radians(12.0))
+                pos_tol = max(pos_tol, 0.08)
+                heading_tol = max(heading_tol, math.radians(8.0))
+            elif 'centerline' in label or 'setup' in label or 'lineup' in label:
+                pos_tol = min(pos_tol, 0.05)
+                lat_tol = min(lat_tol, 0.025)
+                heading_tol = min(max(0.02, heading_tol), math.radians(3.0))
             elif 'entry alignment' in label:
-                pos_tol = max(float(plan.position_tolerance), 0.06)
-                lat_tol = max(float(plan.entry_lateral_tolerance), 0.04)
-                heading_tol = max(float(plan.heading_tolerance), math.radians(10.0))
+                pos_tol = max(0.025, min(float(plan.position_tolerance), 0.04))
+                lat_tol = max(0.012, min(float(plan.entry_lateral_tolerance), 0.02))
+                heading_tol = max(0.02, min(float(plan.heading_tolerance), math.radians(2.5)))
             return pos_tol, lat_tol, heading_tol
 
         def _phase_pose_satisfied(
@@ -2830,6 +2832,33 @@ class ZoneManager(Node):
                         f'{navigation_target.label.lower()}.'
                     ), None
 
+                should_align_before_continue = index < len(navigation_targets_arg)
+                if should_align_before_continue:
+                    self.get_logger().info(
+                        f'{log_prefix} phase {index}/{len(navigation_targets_arg)}: '
+                        f'ALIGN_TO_HEADING at {navigation_target.label} before continuing '
+                        f'toward the shelf.'
+                    )
+                    align_ok, align_msg = await self._execute_goal_pose_verification_correction(
+                        target_pose,
+                        goal_handle,
+                        f'{target_label}:{navigation_target.label}',
+                        feedback,
+                        attempt_index=index,
+                        attempt_total=len(navigation_targets_arg),
+                        max_speed_cap=local_insert_speed_cap,
+                    )
+                    if not align_ok:
+                        if goal_handle.is_cancel_requested:
+                            return None, align_msg, None
+                        return False, align_msg, None
+                    current_nav_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.30)
+                    if current_nav_pose is None:
+                        return False, (
+                            f'Unable to resolve robot pose in {frame_id} after '
+                            f'ALIGN_TO_HEADING at {navigation_target.label.lower()}.'
+                        ), None
+
             return True, '', current_nav_pose
 
         navigation_progress_start = 0.20
@@ -2857,41 +2886,12 @@ class ZoneManager(Node):
                 self._clear_active_goal_marker()
                 return False, f'Frozen shelf insert aborted during settle for "{target_label}": E-STOP active.'
 
-        refined_plan_applied = False
-        if bool(self.goal_pose_handoff_live_geometry_enabled):
-            refined_goal_pose, refine_err = self._build_shelf_goal_pose_from_status(frame_id)
-            if refined_goal_pose is not None:
-                final_pose = self._copy_pose_stamped(refined_goal_pose)
-                final_pose.header.stamp = self.get_clock().now().to_msg()
-                refined_plan, _refined_source, refined_plan_err = self._build_shelf_docking_plan(
-                    final_pose,
-                )
-                if refined_plan is None:
-                    self._clear_active_goal_marker()
-                    return False, refined_plan_err
-                # Guard against yaw flip: reject refinement if yaw changed >90°
-                # from committed plan (indicates front/back reflector swap).
-                yaw_jump = self._abs_angle_delta(
-                    refined_plan.final_pose.yaw, plan.final_pose.yaw
-                )
-                if yaw_jump > math.pi / 2.0:
-                    self.get_logger().warn(
-                        f'Frozen shelf insert: rejected live refinement — yaw jumped '
-                        f'{math.degrees(yaw_jump):.0f}deg (likely front/back flip). '
-                        f'Keeping committed plan for "{target_label}".'
-                    )
-                else:
-                    plan = refined_plan
-                    refined_plan_applied = True
-                    self.get_logger().info(
-                        f'Frozen shelf insert: refined live geometry target to '
-                        f'({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
-                        f'heading={math.degrees(plan.final_pose.yaw):.1f}deg for "{target_label}"'
-                    )
-            elif refine_err:
-                self.get_logger().debug(
-                    f'Frozen shelf insert kept precomputed target for "{target_label}": {refine_err}'
-                )
+        self.get_logger().info(
+            f'Frozen shelf insert: entry plan locked for "{target_label}" at '
+            f'({plan.final_pose.x:.2f}, {plan.final_pose.y:.2f}) '
+            f'heading={math.degrees(plan.final_pose.yaw):.1f}deg; '
+            f'live shelf geometry refinement is disabled during straight-in.'
+        )
 
         robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
         if robot_pose is None:
@@ -2908,45 +2908,263 @@ class ZoneManager(Node):
             self._pose_stamped_to_shelf_pose2d(robot_pose),
             plan,
         )
-        if refined_plan_applied and remaining_navigation_targets:
-            self.get_logger().info(
-                'Shelf refined-plan correction targets: '
-                + ' -> '.join(
-                    f'{target.label}({target.pose.x:.2f},{target.pose.y:.2f})'
-                    for target in remaining_navigation_targets
-                )
-            )
-            correction_ok, correction_msg, corrected_pose = await _execute_navigation_targets_sequence(
-                remaining_navigation_targets,
-                robot_pose,
-                progress_start=0.84,
-                progress_end=0.93,
-                log_prefix='Shelf refined-plan correction',
-            )
-            if not correction_ok:
-                self._clear_active_goal_marker()
-                return correction_ok, correction_msg
-            if corrected_pose is not None:
-                robot_pose = corrected_pose
-            assessment = assess_shelf_docking(
-                self._pose_stamped_to_shelf_pose2d(robot_pose),
-                plan,
-                local_insert_distance=float(self.goal_pose_handoff_local_insert_distance),
-                approach_arrival_tolerance=float(self.goal_pose_handoff_approach_arrival_tolerance),
-            )
-            remaining_navigation_targets = build_shelf_navigation_targets(
-                self._pose_stamped_to_shelf_pose2d(robot_pose),
-                plan,
-            )
+        residual_alignment_msg = ''
         if remaining_navigation_targets:
-            self._clear_active_goal_marker()
-            return False, (
+            residual_alignment_msg = (
                 'Shelf entry alignment still outside insertion guard after staged approach: '
                 + ' -> '.join(target.label for target in remaining_navigation_targets)
                 + f' (d_entry={assessment.robot_to_entry:.2f}m, '
                 f'entry_left={assessment.entry_error.left_error:.2f}m, '
                 f'heading_err={math.degrees(assessment.entry_error.heading_error):.1f}deg).'
             )
+            self.get_logger().warn(
+                f'Frozen shelf insert: residual staged alignment remains for "{target_label}". '
+                f'Handing off to dedicated pre-insert correction. {residual_alignment_msg}'
+            )
+
+        async def _require_stable_preinsert_alignment() -> Tuple[Optional[bool], str]:
+            entry_pose = self._shelf_pose2d_to_pose_stamped(plan.entry_pose)
+            loop_hz = max(5.0, float(self.goal_pose_handoff_local_insert_loop_hz))
+            hold_samples = max(
+                3,
+                int(self.goal_pose_handoff_local_insert_align_hold_samples),
+            )
+            max_wait_sec = max(1.5, (float(hold_samples) / loop_hz) + 1.0)
+            stable_delta = max(
+                0.003,
+                float(self.goal_pose_handoff_local_insert_align_stable_delta),
+            )
+            strict_pos_tol = max(
+                0.02,
+                min(float(plan.position_tolerance), 0.04),
+            )
+            strict_lat_tol = max(
+                0.01,
+                min(
+                    float(plan.entry_lateral_tolerance),
+                    float(self.goal_pose_handoff_local_insert_centerline_tolerance),
+                    0.02,
+                ),
+            )
+            strict_heading_tol = max(
+                0.02,
+                min(
+                    float(plan.heading_tolerance),
+                    float(self.goal_pose_handoff_local_insert_prealign_heading_tolerance),
+                    math.radians(2.5),
+                ),
+            )
+            allowed_forward_shortfall = max(
+                strict_pos_tol,
+                min(
+                    max(
+                        float(self.goal_pose_handoff_local_insert_position_tolerance),
+                        float(self.goal_pose_handoff_insertion_path_spacing) * 2.0,
+                    ),
+                    0.06,
+                ),
+            )
+            allowed_forward_overshoot = max(0.01, strict_pos_tol * 0.5)
+            heading_stable_delta = max(math.radians(0.3), strict_heading_tol * 0.35)
+            deadline = time.monotonic() + max_wait_sec
+            consecutive_stable = 0
+            prev_error = None
+            latest_error = None
+
+            while time.monotonic() < deadline:
+                if goal_handle.is_cancel_requested:
+                    return None, f'Frozen shelf insert canceled before straight-in for "{target_label}".'
+                if self.estop_active:
+                    return False, f'Frozen shelf insert aborted before straight-in for "{target_label}": E-STOP active.'
+                if self.distance_obstacle_hold_active:
+                    return False, f'Frozen shelf insert aborted before straight-in for "{target_label}": obstacle hold active.'
+
+                gate_error, gate_error_msg = self._pose_error_in_target_frame(
+                    entry_pose,
+                    robot_timeout_sec=0.20,
+                )
+                if gate_error is None:
+                    return False, gate_error_msg
+
+                latest_error = gate_error
+                forward_error = float(gate_error['forward_error'])
+                longitudinal_ready = (
+                    abs(float(gate_error['distance'])) <= strict_pos_tol
+                    or (
+                        forward_error >= -allowed_forward_overshoot
+                        and forward_error <= allowed_forward_shortfall
+                    )
+                )
+                stable_now = (
+                    longitudinal_ready
+                    and abs(float(gate_error['left_error'])) <= strict_lat_tol
+                    and abs(float(gate_error['heading_error'])) <= strict_heading_tol
+                )
+                if stable_now and prev_error is not None:
+                    stable_now = (
+                        abs(float(gate_error['forward_error']) - float(prev_error['forward_error'])) <= stable_delta
+                        and abs(float(gate_error['distance']) - float(prev_error['distance'])) <= stable_delta
+                        and
+                        abs(float(gate_error['left_error']) - float(prev_error['left_error'])) <= stable_delta
+                        and abs(float(gate_error['heading_error']) - float(prev_error['heading_error'])) <= heading_stable_delta
+                    )
+                consecutive_stable = (consecutive_stable + 1) if stable_now else 0
+                prev_error = gate_error
+
+                if consecutive_stable >= hold_samples:
+                    self.get_logger().info(
+                        f'Frozen shelf insert: strict pre-insert gate satisfied for "{target_label}" '
+                        f'with dist={float(gate_error["distance"]):.3f}m, '
+                        f'forward={forward_error:.3f}m, '
+                        f'left={float(gate_error["left_error"]):.3f}m, '
+                        f'heading={math.degrees(float(gate_error["heading_error"])):.2f}deg '
+                        f'held for {hold_samples} cycles.'
+                    )
+                    return True, ''
+
+                await self._non_blocking_wait(1.0 / loop_hz)
+
+            if latest_error is None:
+                return False, f'Frozen shelf insert gate timed out before straight-in for "{target_label}".'
+            return False, (
+                f'Frozen shelf insert refused straight-in for "{target_label}": alignment was not stable '
+                f'within {max_wait_sec:.1f}s '
+                f'(dist={float(latest_error["distance"]):.3f}m, '
+                f'forward={float(latest_error["forward_error"]):.3f}m, '
+                f'left={float(latest_error["left_error"]):.3f}m, '
+                f'heading={math.degrees(float(latest_error["heading_error"])):.2f}deg).'
+            )
+
+        async def _execute_preinsert_alignment_correction(
+            *,
+            attempt_index: int,
+            attempt_total: int,
+        ) -> Tuple[Optional[bool], str]:
+            entry_pose = self._shelf_pose2d_to_pose_stamped(plan.entry_pose)
+            align_timeout_sec = self._optional_timeout_parameter(
+                self.goal_pose_handoff_verify_correction_timeout_sec,
+                minimum=0.75,
+            )
+            align_speed = min(
+                0.06,
+                max(0.02, float(self.goal_pose_handoff_local_insert_speed)),
+            )
+            if local_insert_speed_cap is not None:
+                try:
+                    align_speed = min(
+                        align_speed,
+                        max(0.02, float(local_insert_speed_cap)),
+                    )
+                except Exception:
+                    pass
+            align_turn = min(
+                max(0.08, float(self.goal_pose_handoff_local_insert_align_max_turn)),
+                0.22,
+            )
+            align_xy_tol = max(
+                0.02,
+                min(
+                    float(plan.position_tolerance),
+                    float(self.goal_pose_handoff_local_insert_position_tolerance),
+                    0.04,
+                ),
+            )
+            align_yaw_tol = max(
+                0.02,
+                min(
+                    float(plan.heading_tolerance),
+                    float(self.goal_pose_handoff_local_insert_prealign_heading_tolerance),
+                    math.radians(3.0),
+                ),
+            )
+            align_start_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
+            if align_start_pose is None:
+                return False, (
+                    f'Frozen shelf insert alignment correction lost robot pose in {frame_id}.'
+                )
+
+            align_path = self._build_segment_follow_path(
+                align_start_pose,
+                entry_pose,
+                segment_spacing=float(self.goal_pose_handoff_insertion_path_spacing),
+                enforce_end_orientation=True,
+            )
+            intent_ok, intent_msg = await self._set_motion_intent(
+                'alignment',
+                entry_pose,
+                max_linear_speed=align_speed,
+                max_angular_speed=align_turn,
+                xy_tolerance=align_xy_tol,
+                yaw_tolerance=align_yaw_tol,
+                timeout_sec=max(align_timeout_sec, 1.0),
+                source='zone_manager:preinsert_align',
+            )
+            if not intent_ok:
+                return False, (
+                    'Frozen shelf insert could not set pre-insert alignment intent: '
+                    f'{intent_msg}'
+                )
+
+            feedback.progress = 0.835
+            feedback.status = (
+                f'Frozen shelf pre-insert alignment {attempt_index}/{attempt_total}: '
+                f'"{target_label}"'
+            )
+            goal_handle.publish_feedback(feedback)
+
+            try:
+                align_ok, align_msg = await _run_follow_path_phase(
+                    align_path,
+                    f'Frozen shelf pre-insert alignment {attempt_index}/{attempt_total}',
+                    (0.825, 0.84),
+                    target_pose_for_acceptance=entry_pose,
+                )
+                if not align_ok and goal_handle.is_cancel_requested:
+                    return None, align_msg
+                return align_ok, align_msg
+            finally:
+                await self._clear_motion_intent(source='zone_manager:preinsert_align')
+
+        gate_ok = False
+        gate_msg = residual_alignment_msg
+        if not residual_alignment_msg:
+            gate_ok, gate_msg = await _require_stable_preinsert_alignment()
+        if gate_ok is None:
+            self._clear_active_goal_marker()
+            return None, gate_msg
+        if not gate_ok:
+            correction_attempts = 2
+            corrected = False
+            last_gate_msg = gate_msg
+            for attempt_index in range(1, correction_attempts + 1):
+                self.get_logger().warn(
+                    f'Frozen shelf insert: strict gate failed for "{target_label}" '
+                    f'({last_gate_msg}). Running pre-insert alignment correction '
+                    f'{attempt_index}/{correction_attempts}.'
+                )
+                correction_ok, correction_msg = await _execute_preinsert_alignment_correction(
+                    attempt_index=attempt_index,
+                    attempt_total=correction_attempts,
+                )
+                if correction_ok is None:
+                    self._clear_active_goal_marker()
+                    return None, correction_msg
+                if not correction_ok:
+                    self._clear_active_goal_marker()
+                    return False, correction_msg or last_gate_msg
+
+                gate_ok, gate_msg = await _require_stable_preinsert_alignment()
+                if gate_ok is None:
+                    self._clear_active_goal_marker()
+                    return None, gate_msg
+                if gate_ok:
+                    corrected = True
+                    break
+                last_gate_msg = gate_msg
+
+            if not corrected:
+                self._clear_active_goal_marker()
+                return False, last_gate_msg
 
         feedback.progress = 0.84
         feedback.status = f'Shelf insertion: driving straight into shelf center for "{target_label}"'
@@ -3215,6 +3433,7 @@ class ZoneManager(Node):
     ) -> Tuple[Optional[bool], str]:
         frame_id = str(plan.final_pose.frame_id or 'map') or 'map'
         final_pose = self._shelf_pose2d_to_pose_stamped(plan.final_pose)
+        nav_path = None
         timeout_sec = self._optional_timeout_parameter(
             self.goal_pose_handoff_local_insert_timeout_sec,
             minimum=1.0,
@@ -3227,7 +3446,7 @@ class ZoneManager(Node):
                 pass
         max_turn = min(
             max(0.10, float(self.goal_pose_handoff_local_insert_max_turn)),
-            max(0.05, float(self.goal_pose_handoff_local_insert_align_max_turn)),
+            max(0.05, float(self.goal_pose_handoff_live_trim_max_turn)),
         )
         xy_tolerance = max(
             float(plan.position_tolerance),
@@ -3253,6 +3472,23 @@ class ZoneManager(Node):
             robot_pose=robot_pose,
         )
         initial_distance = float(initial_error['distance']) if initial_error else float('inf')
+        abort_lat_tol = max(
+            0.02,
+            min(
+                max(
+                    float(plan.insert_lateral_tolerance),
+                    float(self.goal_pose_handoff_local_insert_centerline_tolerance),
+                ),
+                0.04,
+            ),
+        )
+        abort_heading_tol = max(
+            max(0.02, float(plan.heading_tolerance)),
+            min(
+                float(self.goal_pose_handoff_local_insert_hard_yaw_abort),
+                math.radians(6.0),
+            ),
+        )
 
         intent_ok, intent_msg = await self._set_motion_intent(
             'insertion',
@@ -3268,8 +3504,12 @@ class ZoneManager(Node):
             return False, f'Shelf insertion could not set controller intent: {intent_msg}'
 
         last_feedback_ns = 0
+        dist_state = {
+            'remaining': float('inf'),
+            'speed': float('nan'),
+        }
 
-        def _on_feedback(remaining: float, speed: float) -> None:
+        def _publish_feedback(remaining: float, speed: float, current_error: Optional[Dict[str, float]] = None) -> None:
             nonlocal last_feedback_ns
             now_ns = self.get_clock().now().nanoseconds
             if (now_ns - last_feedback_ns) < int(0.15 * 1e9):
@@ -3286,21 +3526,125 @@ class ZoneManager(Node):
                 if math.isfinite(speed):
                     status += f', v={speed:.2f}m/s'
                 status += ')'
+            if current_error is not None:
+                status += (
+                    f' left={float(current_error["left_error"]):.3f}m'
+                    f' yaw={math.degrees(float(current_error["heading_error"])):.2f}deg'
+                )
             feedback.status = status
             goal_handle.publish_feedback(feedback)
             last_feedback_ns = now_ns
 
         try:
-            insert_ok, insert_msg = await self._run_nav_follow_path_phase(
-                nav_path,
-                goal_handle,
-                f'Shelf insertion "{target_label}"',
-                on_feedback=_on_feedback,
+            if not self.nav_follow_path_client.wait_for_server(timeout_sec=self.follow_path_server_wait_sec):
+                return False, 'Shelf insertion unavailable: Nav2 FollowPath action server not available.'
+
+            follow_goal = Nav2FollowPath.Goal()
+            follow_goal.path = nav_path
+            if hasattr(follow_goal, 'controller_id'):
+                follow_goal.controller_id = str(self.follow_path_controller_id or 'FollowPath')
+            if hasattr(follow_goal, 'goal_checker_id'):
+                follow_goal.goal_checker_id = str(self.follow_path_goal_checker_id or '')
+
+            def _insert_feedback(feedback_msg):
+                try:
+                    nav_fb = getattr(feedback_msg, 'feedback', feedback_msg)
+                    dist = getattr(nav_fb, 'distance_to_goal', None)
+                    if dist is None:
+                        dist = getattr(nav_fb, 'distance_remaining', None)
+                    if dist is not None:
+                        dist_state['remaining'] = float(dist)
+                    speed = getattr(nav_fb, 'speed', None)
+                    if speed is not None:
+                        dist_state['speed'] = float(speed)
+                except Exception:
+                    pass
+
+            self._publish_active_follow_path(nav_path.poses)
+            send_future = self.nav_follow_path_client.send_goal_async(
+                follow_goal,
+                feedback_callback=_insert_feedback,
             )
-            if not insert_ok and goal_handle.is_cancel_requested:
-                return None, insert_msg
-            if not insert_ok:
-                return False, insert_msg
+            nav_goal_handle = await send_future
+            if nav_goal_handle is None or not bool(getattr(nav_goal_handle, 'accepted', False)):
+                return False, f'Shelf insertion "{target_label}" was rejected by Nav2 FollowPath.'
+
+            self.follow_path_nav_goal = nav_goal_handle
+            nav_result_future = nav_goal_handle.get_result_async()
+            insertion_started_monotonic = time.monotonic()
+
+            while not nav_result_future.done():
+                if goal_handle.is_cancel_requested:
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    return None, f'Shelf insertion "{target_label}" canceled.'
+                if self.estop_active:
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    return False, f'Shelf insertion "{target_label}" aborted: E-STOP active.'
+                if self.distance_obstacle_hold_active:
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    return False, f'Shelf insertion "{target_label}" aborted: obstacle hold active.'
+
+                current_error, current_error_msg = self._pose_error_in_target_frame(
+                    final_pose,
+                    robot_timeout_sec=0.20,
+                )
+                if current_error is None:
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    return False, current_error_msg
+
+                if (
+                    abs(float(current_error['left_error'])) > abort_lat_tol
+                    or abs(float(current_error['heading_error'])) > abort_heading_tol
+                ):
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    return False, (
+                        f'Shelf insertion aborted for "{target_label}": drift exceeded guard '
+                        f'(left={float(current_error["left_error"]):.3f}m > {abort_lat_tol:.3f}m '
+                        f'or heading={math.degrees(float(current_error["heading_error"])):.2f}deg > '
+                        f'{math.degrees(abort_heading_tol):.2f}deg).'
+                    )
+
+                if timeout_sec > 0.0 and (time.monotonic() - insertion_started_monotonic) >= float(timeout_sec):
+                    try:
+                        await nav_goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    return False, (
+                        f'Shelf insertion "{target_label}" timed out after '
+                        f'{float(timeout_sec):.2f}s.'
+                    )
+
+                _publish_feedback(
+                    float(dist_state['remaining']),
+                    float(dist_state['speed']),
+                    current_error=current_error,
+                )
+                await self._non_blocking_wait(0.05)
+
+            wrapped = nav_result_future.result()
+            status = int(getattr(wrapped, 'status', GoalStatus.STATUS_UNKNOWN))
+            if status != GoalStatus.STATUS_SUCCEEDED:
+                if goal_handle.is_cancel_requested:
+                    return None, f'Shelf insertion "{target_label}" canceled.'
+                return False, (
+                    f'Shelf insertion "{target_label}" failed with status {status} '
+                    f'({self._goal_status_name(status)})'
+                )
 
             final_error, final_error_msg = self._pose_error_in_target_frame(final_pose)
             if final_error is None:
@@ -3312,6 +3656,8 @@ class ZoneManager(Node):
                 f'{math.degrees(float(final_error["heading_error"])):.1f}deg.'
             )
         finally:
+            self.follow_path_nav_goal = None
+            self._clear_active_follow_path()
             await self._clear_motion_intent(source='zone_manager:shelf_insert')
 
     def _curve_edge_extra_corridor_width(
