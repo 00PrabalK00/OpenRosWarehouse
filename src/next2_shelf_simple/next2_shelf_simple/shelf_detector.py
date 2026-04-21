@@ -21,6 +21,7 @@ All poses are published in base_link frame (x+ = robot forward).
 import json
 import math
 import time
+from collections import deque
 
 import rclpy
 from rclpy.node import Node
@@ -45,6 +46,20 @@ def _dist(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _circular_blend(prev_yaw: float, new_yaw: float, alpha: float) -> float:
+    prev_sin = math.sin(float(prev_yaw))
+    prev_cos = math.cos(float(prev_yaw))
+    new_sin = math.sin(float(new_yaw))
+    new_cos = math.cos(float(new_yaw))
+    sin_mix = ((1.0 - float(alpha)) * prev_sin) + (float(alpha) * new_sin)
+    cos_mix = ((1.0 - float(alpha)) * prev_cos) + (float(alpha) * new_cos)
+    return _normalize(math.atan2(sin_mix, cos_mix))
+
+
 class ShelfDetector(Node):
     def __init__(self):
         super().__init__('shelf_detector')
@@ -63,6 +78,13 @@ class ShelfDetector(Node):
         self.declare_parameter('max_range', 2.5)
         self.declare_parameter('status_topic', '/shelf/status_json')
         self.declare_parameter('publish_rate', 10.0)
+        self.declare_parameter('pose_ema_alpha', 0.35)
+        self.declare_parameter('stability_window_size', 8)
+        self.declare_parameter('min_consistent_observations', 4)
+        self.declare_parameter('stability_translation_tolerance', 0.025)
+        self.declare_parameter('stability_yaw_tolerance', math.radians(2.0))
+        self.declare_parameter('control_usable_confidence_threshold', 0.72)
+        self.declare_parameter('require_consistent_for_commit', False)
 
         self._p = {}
         for p in self._parameters:
@@ -82,8 +104,22 @@ class ShelfDetector(Node):
         self.last_reason = 'detector_disabled'
         self.last_solve_time = 0.0
         self.candidate_valid = False
+        self.candidate_consistent = False
         self.front_intensity_sum = 0.0
         self.back_intensity_sum = 0.0
+        self.pose_filter = None
+        self.candidate_track_id = 0
+        self.candidate_detectability_confidence = 0.0
+        self.candidate_control_usability_confidence = 0.0
+        self.candidate_stability_score = 0.0
+        self.candidate_position_std_m = 0.0
+        self.candidate_yaw_std_rad = 0.0
+        self.candidate_stable_tail_count = 0
+        self.candidate_stability_hold_sec = 0.0
+        self._candidate_metrics = {}
+        self._candidate_history = deque(
+            maxlen=max(3, int(self._p['stability_window_size']))
+        )
 
         # --- ROS interfaces ---
         self.scan_sub = self.create_subscription(
@@ -149,7 +185,8 @@ class ShelfDetector(Node):
 
     # ---- Services ----
     def _commit_cb(self, req, resp):
-        if self.live_pose and self.candidate_valid:
+        require_consistent = bool(self._p.get('require_consistent_for_commit', False))
+        if self.live_pose and self.candidate_valid and (self.candidate_consistent or not require_consistent):
             self.committed_pose = dict(self.live_pose)
             self.last_reason = 'committed'
             resp.success = True
@@ -161,7 +198,7 @@ class ShelfDetector(Node):
         elif not self.enabled:
             resp.success = False
             resp.message = 'Detector is disabled'
-        elif not self.candidate_valid:
+        elif not self.candidate_valid or (require_consistent and not self.candidate_consistent):
             resp.success = False
             resp.message = 'candidate_not_consistent'
             self.last_reason = 'candidate_not_consistent'
@@ -170,17 +207,40 @@ class ShelfDetector(Node):
             resp.message = 'No shelf pose available'
         return resp
 
+    def _reset_candidate_tracking(self):
+        self.candidate_valid = False
+        self.candidate_consistent = False
+        self.pose_filter = None
+        self.candidate_detectability_confidence = 0.0
+        self.candidate_control_usability_confidence = 0.0
+        self.candidate_stability_score = 0.0
+        self.candidate_position_std_m = 0.0
+        self.candidate_yaw_std_rad = 0.0
+        self.candidate_stable_tail_count = 0
+        self.candidate_stability_hold_sec = 0.0
+        self._candidate_metrics = {}
+        self._candidate_history.clear()
+
+    def _invalidate_candidate(self, reason: str):
+        had_candidate = self.live_pose is not None or bool(self._candidate_history)
+        self.live_pose = None
+        if had_candidate:
+            self.candidate_track_id += 1
+        self._reset_candidate_tracking()
+        self.last_reason = str(reason or 'candidate_invalid')
+
     def _enable_cb(self, req, resp):
         self.enabled = req.data
         if not self.enabled:
             self.live_pose = None
             self.committed_pose = None
-            self.candidate_valid = False
             self.hotspot_count = 0
             self.hotspot_points = []
             self.max_intensity = 0.0
+            self._reset_candidate_tracking()
             self.last_reason = 'detector_disabled'
         else:
+            self._reset_candidate_tracking()
             self.last_reason = 'waiting_for_scan'
         resp.success = True
         resp.message = f'Detector {"enabled" if self.enabled else "disabled"}'
@@ -199,11 +259,9 @@ class ShelfDetector(Node):
         self.max_intensity = max(intensities) if intensities else 0.0
 
         if len(points) < 2:
-            self.candidate_valid = False
-            self.live_pose = None
             self.hotspot_count = 0
             self.hotspot_points = []
-            self.last_reason = f'too_few_points ({len(points)})'
+            self._invalidate_candidate(f'too_few_points ({len(points)})')
             return
 
         # Step 2: proximity grouping (in laser frame)
@@ -211,10 +269,8 @@ class ShelfDetector(Node):
         self.hotspot_count = len(clusters)
 
         if len(clusters) < 2:
-            self.candidate_valid = False
-            self.live_pose = None
             self.hotspot_points = [[p[0], p[1]] for p in points]
-            self.last_reason = f'too_few_clusters ({len(clusters)})'
+            self._invalidate_candidate(f'too_few_clusters ({len(clusters)})')
             return
 
         # Compute centroids in laser frame
@@ -247,15 +303,211 @@ class ShelfDetector(Node):
         pose = self._solve_shelf(centroids, centroid_intensities, yaw_offset)
 
         if pose is None:
-            self.candidate_valid = False
-            self.live_pose = None
-            self.last_reason = 'no_valid_geometry'
+            self._invalidate_candidate('no_valid_geometry')
             return
 
-        self.live_pose = pose
+        self._update_candidate_tracking(
+            pose,
+            geometry_cluster_count=len(centroids),
+        )
         self.candidate_valid = True
         self.last_solve_time = time.time()
         self.last_reason = ''
+
+    def _update_candidate_tracking(self, pose, *, geometry_cluster_count: int):
+        now_sec = time.time()
+        if not self._candidate_history:
+            self.candidate_track_id += 1
+
+        alpha = _clamp01(float(self._p.get('pose_ema_alpha', 0.35)))
+        filtered_pose = dict(pose)
+        if self.pose_filter is None:
+            self.pose_filter = {
+                'x': float(pose['x']),
+                'y': float(pose['y']),
+                'yaw': float(pose['yaw']),
+            }
+        else:
+            self.pose_filter['x'] = ((1.0 - alpha) * float(self.pose_filter['x'])) + (alpha * float(pose['x']))
+            self.pose_filter['y'] = ((1.0 - alpha) * float(self.pose_filter['y'])) + (alpha * float(pose['y']))
+            self.pose_filter['yaw'] = _circular_blend(
+                float(self.pose_filter['yaw']),
+                float(pose['yaw']),
+                alpha,
+            )
+        filtered_pose['x'] = float(self.pose_filter['x'])
+        filtered_pose['y'] = float(self.pose_filter['y'])
+        filtered_pose['yaw'] = float(self.pose_filter['yaw'])
+        self.live_pose = filtered_pose
+
+        self._candidate_history.append(
+            {
+                'stamp_sec': now_sec,
+                'x': float(filtered_pose['x']),
+                'y': float(filtered_pose['y']),
+                'yaw': float(filtered_pose['yaw']),
+                'hotspot_count': int(self.hotspot_count),
+                'geometry_cluster_count': int(geometry_cluster_count),
+            }
+        )
+        self._candidate_metrics = self._compute_candidate_metrics(filtered_pose)
+        self.candidate_detectability_confidence = float(
+            self._candidate_metrics.get('detectability_confidence', 0.0)
+        )
+        self.candidate_control_usability_confidence = float(
+            self._candidate_metrics.get('control_usability_confidence', 0.0)
+        )
+        self.candidate_stability_score = float(
+            self._candidate_metrics.get('stability_score', 0.0)
+        )
+        self.candidate_position_std_m = float(
+            self._candidate_metrics.get('position_std_m', 0.0)
+        )
+        self.candidate_yaw_std_rad = float(
+            self._candidate_metrics.get('yaw_std_rad', 0.0)
+        )
+        self.candidate_stable_tail_count = int(
+            self._candidate_metrics.get('stable_tail_count', 0)
+        )
+        self.candidate_stability_hold_sec = float(
+            self._candidate_metrics.get('stable_hold_sec', 0.0)
+        )
+        self.candidate_consistent = bool(
+            self._candidate_metrics.get('candidate_consistent', False)
+        )
+
+    def _compute_candidate_metrics(self, pose):
+        samples = list(self._candidate_history)
+        if not samples:
+            return {}
+
+        xs = [float(sample['x']) for sample in samples]
+        ys = [float(sample['y']) for sample in samples]
+        yaws = [float(sample['yaw']) for sample in samples]
+        sample_count = len(samples)
+        min_consistent = max(2, int(self._p.get('min_consistent_observations', 4)))
+        translation_tol = max(0.005, float(self._p.get('stability_translation_tolerance', 0.025)))
+        yaw_tol = max(0.01, float(self._p.get('stability_yaw_tolerance', math.radians(2.0))))
+
+        mean_x = sum(xs) / sample_count
+        mean_y = sum(ys) / sample_count
+        position_variance = sum(
+            ((x - mean_x) ** 2) + ((y - mean_y) ** 2)
+            for x, y in zip(xs, ys)
+        ) / sample_count
+        position_std = math.sqrt(max(0.0, position_variance))
+
+        mean_sin = sum(math.sin(yaw) for yaw in yaws) / sample_count
+        mean_cos = sum(math.cos(yaw) for yaw in yaws) / sample_count
+        mean_yaw = math.atan2(mean_sin, mean_cos)
+        yaw_variance = sum(
+            _normalize(yaw - mean_yaw) ** 2
+            for yaw in yaws
+        ) / sample_count
+        yaw_std = math.sqrt(max(0.0, yaw_variance))
+
+        latest_x = float(pose['x'])
+        latest_y = float(pose['y'])
+        latest_yaw = float(pose['yaw'])
+        stable_tail_count = 0
+        stable_tail_start_sec = float(samples[-1]['stamp_sec'])
+        for sample in reversed(samples):
+            delta_pos = math.hypot(float(sample['x']) - latest_x, float(sample['y']) - latest_y)
+            delta_yaw = abs(_normalize(float(sample['yaw']) - latest_yaw))
+            if delta_pos <= translation_tol and delta_yaw <= yaw_tol:
+                stable_tail_count += 1
+                stable_tail_start_sec = float(sample['stamp_sec'])
+                continue
+            break
+        stable_hold_sec = max(0.0, float(samples[-1]['stamp_sec']) - stable_tail_start_sec)
+        observed_span_sec = max(0.0, float(samples[-1]['stamp_sec']) - float(samples[0]['stamp_sec']))
+        consistency_inlier_count = 0
+        for sample in samples:
+            delta_pos = math.hypot(float(sample['x']) - mean_x, float(sample['y']) - mean_y)
+            delta_yaw = abs(_normalize(float(sample['yaw']) - mean_yaw))
+            if delta_pos <= translation_tol and delta_yaw <= yaw_tol:
+                consistency_inlier_count += 1
+        consistency_ratio = (
+            float(consistency_inlier_count) / float(sample_count)
+            if sample_count > 0
+            else 0.0
+        )
+
+        front_width = self._safe_status_float(pose.get('front_width', float('nan')))
+        depth = self._safe_status_float(pose.get('depth', float('nan')))
+        hotspot_score = _clamp01(float(self.hotspot_count) / 4.0)
+        geometry_score = 1.0 if self.hotspot_count >= 4 else 0.82 if self.hotspot_count == 3 else 0.66 if self.hotspot_count == 2 else 0.0
+        width_mid = 0.5 * (float(self._p['expected_width_min']) + float(self._p['expected_width_max']))
+        width_half_range = max(1e-6, 0.5 * (float(self._p['expected_width_max']) - float(self._p['expected_width_min'])))
+        if front_width is None:
+            width_score = 0.35
+        else:
+            width_score = 1.0 - _clamp01(abs(float(front_width) - width_mid) / width_half_range)
+        if depth is None or depth < 0.0:
+            depth_score = 0.65
+        else:
+            depth_mid = 0.5 * (float(self._p['expected_depth_min']) + float(self._p['expected_depth_max']))
+            depth_half_range = max(1e-6, 0.5 * (float(self._p['expected_depth_max']) - float(self._p['expected_depth_min'])))
+            depth_score = 1.0 - _clamp01(abs(float(depth) - depth_mid) / depth_half_range)
+        intensity_score = _clamp01(
+            float(self.max_intensity) / max(1.0, float(self._p['intensity_threshold']) * 2.0)
+        )
+        balance = 1.0
+        total_intensity = float(self.front_intensity_sum + self.back_intensity_sum)
+        if total_intensity > 0.0 and self.back_intensity_sum > 0.0:
+            balance = abs(float(self.front_intensity_sum) - float(self.back_intensity_sum)) / total_intensity
+        balance_score = 1.0 - _clamp01(balance)
+        detectability = _clamp01(
+            (0.24 * hotspot_score)
+            + (0.22 * geometry_score)
+            + (0.18 * width_score)
+            + (0.10 * depth_score)
+            + (0.16 * intensity_score)
+            + (0.10 * balance_score)
+        )
+
+        fill_score = _clamp01(sample_count / float(min_consistent))
+        translation_score = 1.0 - _clamp01(position_std / translation_tol)
+        yaw_score = 1.0 - _clamp01(yaw_std / yaw_tol)
+        tail_score = _clamp01(stable_tail_count / float(min_consistent))
+        stability_score = _clamp01(
+            (0.20 * fill_score)
+            + (0.30 * translation_score)
+            + (0.30 * yaw_score)
+            + (0.20 * tail_score)
+        )
+        control_usable = _clamp01(
+            detectability * (0.40 + (0.60 * stability_score))
+        )
+        candidate_consistent = (
+            sample_count >= min_consistent
+            and consistency_inlier_count >= min_consistent
+            and stable_tail_count >= min_consistent
+            and position_std <= translation_tol
+            and yaw_std <= yaw_tol
+            and control_usable >= float(self._p.get('control_usable_confidence_threshold', 0.72))
+        )
+        return {
+            'sample_count': sample_count,
+            'observed_span_sec': observed_span_sec,
+            'stable_tail_count': stable_tail_count,
+            'stable_hold_sec': stable_hold_sec,
+            'consistency_required_count': min_consistent,
+            'consistency_window_count': sample_count,
+            'consistency_inlier_count': consistency_inlier_count,
+            'consistency_ratio': consistency_ratio,
+            'position_std_m': position_std,
+            'yaw_std_rad': yaw_std,
+            'detectability_confidence': detectability,
+            'control_usability_confidence': control_usable,
+            'stability_score': stability_score,
+            'candidate_consistent': candidate_consistent,
+            'geometry_score': geometry_score,
+            'width_score': width_score,
+            'depth_score': depth_score,
+            'balance_score': balance_score,
+            'intensity_score': intensity_score,
+        }
 
     def _filter_points(self, msg: LaserScan):
         """Filter scan by intensity and range, return Cartesian points + intensities."""
@@ -458,7 +710,7 @@ class ShelfDetector(Node):
             'ok': True,
             'detector_enabled': self.enabled,
             'candidate_valid': self.enabled and self.candidate_valid,
-            'candidate_consistent': self.enabled and self.candidate_valid,
+            'candidate_consistent': self.enabled and self.candidate_consistent,
             'solver_ok': self.enabled and self.candidate_valid,
             'committed_target_valid': self.committed_pose is not None,
             'committed_target_pose': self.committed_pose,
@@ -479,6 +731,25 @@ class ShelfDetector(Node):
             'front_width_m': front_width,
             'candidate_back_width_m': back_width,
             'back_width_m': back_width,
+            'candidate_track_id': int(self.candidate_track_id),
+            'candidate_detectability_confidence': self.candidate_detectability_confidence,
+            'candidate_control_usability_confidence': self.candidate_control_usability_confidence,
+            'candidate_stability_score': self.candidate_stability_score,
+            'candidate_position_std_m': self.candidate_position_std_m,
+            'candidate_yaw_std_rad': self.candidate_yaw_std_rad,
+            'candidate_yaw_std_deg': math.degrees(self.candidate_yaw_std_rad),
+            'candidate_stable_tail_count': int(self.candidate_stable_tail_count),
+            'candidate_stability_hold_sec': self.candidate_stability_hold_sec,
+            'candidate_stability_window_size': max(3, int(self._p['stability_window_size'])),
+            'candidate_stability_summary': dict(self._candidate_metrics),
+            'candidate_consistency_required_count': int(self._candidate_metrics.get('consistency_required_count', 0)),
+            'candidate_consistency_window_count': int(self._candidate_metrics.get('consistency_window_count', 0)),
+            'candidate_consistency_inlier_count': int(self._candidate_metrics.get('consistency_inlier_count', 0)),
+            'candidate_consistency_ratio': float(self._candidate_metrics.get('consistency_ratio', 0.0)),
+            'detectability_confidence': self.candidate_detectability_confidence,
+            'control_usability_confidence': self.candidate_control_usability_confidence,
+            'stability_score': self.candidate_stability_score,
+            'perception_contract_version': 2,
         }
 
         msg = String()

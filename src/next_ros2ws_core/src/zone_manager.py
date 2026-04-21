@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from geometry_msgs.msg import PoseStamped, Point
+from geometry_msgs.msg import PoseStamped, Point, Twist
 from nav_msgs.msg import Path as NavPath
 from next_ros2ws_interfaces.msg import Zone, Path as PathInfo, Layout as LayoutInfo
 from next_ros2ws_interfaces.srv import (
@@ -41,6 +41,18 @@ import os
 from tf2_ros import Buffer, TransformListener
 from .db_manager import DatabaseManager
 from .action_registry import ACTION_MAPPING_PREFIX, merge_action_mappings, normalize_action_id
+from .docking_contracts import (
+    CommittedDockFrame,
+    DockingState,
+    MotionAuthorityLease,
+    MotionAuthorityOwner,
+    MotionCommandEnvelope,
+    PreEntryGateSample,
+    ShelfPerceptionEstimate,
+)
+from .docking_gate import PreEntryGateThresholds, PreEntryQualificationWindow
+from .docking_insertion_controller import FrozenInsertionController, FrozenInsertionControllerConfig
+from .docking_motion_gate import DockingMotionAuthorityGate
 from next2_shelf_simple.shelf_docking import (
     Pose2D as ShelfPose2D,
     RobotFootprint as ShelfRobotFootprint,
@@ -48,6 +60,7 @@ from next2_shelf_simple.shelf_docking import (
     ShelfDockingParameters,
     ShelfDockingPlan,
     ShelfDockingPlanError,
+    ShelfNavigationTarget,
     assess_shelf_docking,
     build_shelf_navigation_targets,
     build_shelf_docking_plan,
@@ -892,6 +905,19 @@ class ZoneManager(Node):
             MarkerArray, self._endpoint('/next/viz/active_goal'), _viz_latch_qos)
         self._viz_active_path_pub = self.create_publisher(
             NavPath, self._endpoint('/next/viz/active_path'), 10)
+        # Docking must not share Nav2's /cmd_vel lane during committed entry.
+        # Use the tracker lane so twist_mux sees docking as a separate source
+        # with higher priority than navigation instead of interleaving messages
+        # from two controllers on the same topic.
+        self._docking_cmd_vel_topic = self._endpoint('/cmd_vel_tracker')
+        self._docking_cmd_vel_pub = self.create_publisher(
+            Twist, self._docking_cmd_vel_topic, 10
+        )
+        self._twist_mux_navigation_lock_pub = self.create_publisher(
+            BoolMsg, '/twist_mux/locks/navigation', 10
+        )
+        self._docking_motion_gate = DockingMotionAuthorityGate()
+        self._docking_motion_epoch = 0
         # Initial load from database
         self._load_all_caches()
         
@@ -1354,13 +1380,20 @@ class ZoneManager(Node):
             return None
 
         pose_dict = None
-        if self._shelf_candidate_ready():
+        committed_pose_dict = self.latest_shelf_status.get('committed_target_pose')
+        if (
+            bool(self.latest_shelf_status.get('committed_target_valid', False))
+            and isinstance(committed_pose_dict, dict)
+            and committed_pose_dict
+        ):
+            pose_dict = committed_pose_dict
+
+        if (not isinstance(pose_dict, dict) or not pose_dict) and self._shelf_candidate_ready():
             live_pose_dict = self.latest_shelf_status.get('center_pose')
             if isinstance(live_pose_dict, dict) and live_pose_dict:
                 pose_dict = live_pose_dict
 
         if not isinstance(pose_dict, dict) or not pose_dict:
-            committed_pose_dict = self.latest_shelf_status.get('committed_target_pose')
             if isinstance(committed_pose_dict, dict) and committed_pose_dict:
                 pose_dict = committed_pose_dict
 
@@ -1577,13 +1610,25 @@ class ZoneManager(Node):
         payload = self.latest_shelf_status
         if not isinstance(payload, dict) or not payload:
             return None, 'No shelf status available'
-        if not self._shelf_candidate_ready():
-            reason = str(payload.get('last_reason') or 'candidate_not_ready')
-            return None, f'Shelf candidate not ready: {reason}'
 
-        pose_dict = payload.get('center_pose')
+        pose_dict = None
+        committed_pose_dict = payload.get('committed_target_pose')
+        if (
+            bool(payload.get('committed_target_valid', False))
+            and isinstance(committed_pose_dict, dict)
+            and committed_pose_dict
+        ):
+            pose_dict = committed_pose_dict
+        else:
+            if not self._shelf_candidate_ready():
+                reason = str(payload.get('last_reason') or 'candidate_not_ready')
+                return None, f'Shelf candidate not ready: {reason}'
+            live_pose_dict = payload.get('center_pose')
+            if isinstance(live_pose_dict, dict) and live_pose_dict:
+                pose_dict = live_pose_dict
+
         if not isinstance(pose_dict, dict) or not pose_dict:
-            return None, 'Shelf status has no center pose'
+            return None, 'Shelf status has no committed or live center pose'
 
         source_frame = str(
             pose_dict.get('frame_id')
@@ -1782,7 +1827,17 @@ class ZoneManager(Node):
 
         longitudinal_tol = max(0.02, float(self.goal_pose_handoff_local_insert_position_tolerance))
         lateral_tol = max(0.02, float(self.goal_pose_handoff_local_insert_centerline_tolerance))
-        heading_tol = max(0.02, float(self.goal_pose_handoff_local_insert_heading_tolerance))
+        # Use the stricter prealign tolerance so the correction controller targets
+        # sub-prealign-threshold alignment, not the loose insertion tolerance.
+        # This prevents the correction from "succeeding" at a heading that the
+        # strict gate will immediately reject on the next pass.
+        heading_tol = max(
+            0.02,
+            min(
+                float(self.goal_pose_handoff_local_insert_prealign_heading_tolerance),
+                float(self.goal_pose_handoff_local_insert_heading_tolerance),
+            ),
+        )
         timeout_sec = self._optional_timeout_parameter(
             self.goal_pose_handoff_verify_correction_timeout_sec,
             minimum=0.50,
@@ -2540,6 +2595,106 @@ class ZoneManager(Node):
         except ShelfDockingPlanError as exc:
             return None, opening_source, str(exc)
 
+    def _build_committed_dock_frame(self, plan: ShelfDockingPlan) -> CommittedDockFrame:
+        payload = self.latest_shelf_status if isinstance(self.latest_shelf_status, dict) else {}
+        perception_pose = payload.get('center_pose') if isinstance(payload.get('center_pose'), dict) else {}
+        perception = ShelfPerceptionEstimate(
+            x=float(perception_pose.get('x', plan.final_pose.x)),
+            y=float(perception_pose.get('y', plan.final_pose.y)),
+            yaw=float(perception_pose.get('yaw', plan.final_pose.yaw)),
+            frame_id=str(perception_pose.get('frame_id', plan.final_pose.frame_id or 'map') or 'map'),
+            stamp_sec=float(time.time()),
+            hotspot_count=int(payload.get('hotspot_count', payload.get('candidate_hotspot_count', 0)) or 0),
+            front_width_m=self._safe_float(payload.get('candidate_front_width_m', payload.get('front_width_m', float('nan')))),
+            back_width_m=self._safe_float(payload.get('candidate_back_width_m', payload.get('back_width_m', float('nan')))),
+            depth_m=self._safe_float((perception_pose or {}).get('depth', float('nan'))),
+            track_id=int(payload.get('candidate_track_id', 0) or 0),
+            detectability_confidence=float(payload.get('candidate_detectability_confidence', payload.get('detectability_confidence', 0.0)) or 0.0),
+            control_usability_confidence=float(payload.get('candidate_control_usability_confidence', payload.get('control_usability_confidence', 0.0)) or 0.0),
+            stability_score=float(payload.get('candidate_stability_score', payload.get('stability_score', 0.0)) or 0.0),
+            stable_observation_count=int(payload.get('candidate_consistency_window_count', 0) or 0),
+            stable_tail_count=int(payload.get('candidate_stable_tail_count', 0) or 0),
+            stable_hold_sec=float(payload.get('candidate_stability_hold_sec', 0.0) or 0.0),
+            position_std_m=float(payload.get('candidate_position_std_m', 0.0) or 0.0),
+            yaw_std_rad=float(payload.get('candidate_yaw_std_rad', 0.0) or 0.0),
+            model_valid=bool(payload.get('candidate_valid', False)),
+        )
+        insertion_depth = max(
+            0.0,
+            ((float(plan.final_pose.x) - float(plan.opening_line_pose.x)) * math.cos(float(plan.final_pose.yaw)))
+            + ((float(plan.final_pose.y) - float(plan.opening_line_pose.y)) * math.sin(float(plan.final_pose.yaw))),
+        )
+        half_clearance = None
+        if plan.opening_width is not None:
+            half_clearance = max(0.0, float(plan.opening_width) * 0.5)
+        return CommittedDockFrame(
+            frame_id=str(plan.final_pose.frame_id or 'map') or 'map',
+            mouth_center_x=float(plan.opening_line_pose.x),
+            mouth_center_y=float(plan.opening_line_pose.y),
+            entry_x=float(plan.entry_pose.x),
+            entry_y=float(plan.entry_pose.y),
+            entry_yaw=float(plan.entry_pose.yaw),
+            final_x=float(plan.final_pose.x),
+            final_y=float(plan.final_pose.y),
+            final_yaw=float(plan.final_pose.yaw),
+            opening_width_m=(
+                None if plan.opening_width is None else float(plan.opening_width)
+            ),
+            expected_insertion_depth_m=float(insertion_depth),
+            left_clearance_m=half_clearance,
+            right_clearance_m=half_clearance,
+            committed_at_sec=float(time.time()),
+            valid_until_sec=None,
+            perception=perception,
+            source_state=DockingState.COMMIT_DOCK_FRAME,
+        )
+
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except Exception:
+            return None
+        return parsed if math.isfinite(parsed) else None
+
+    def _current_shelf_validation_confidence(
+        self,
+        *,
+        fallback: float = 1.0,
+        freshness_sec: float = 0.75,
+    ) -> float:
+        payload = self.latest_shelf_status if isinstance(self.latest_shelf_status, dict) else {}
+        if not payload:
+            return self._clamp(float(fallback), 0.0, 1.0)
+        receipt_age = time.monotonic() - float(self.latest_shelf_status_receipt_monotonic or 0.0)
+        if receipt_age > float(freshness_sec):
+            return self._clamp(float(fallback), 0.0, 1.0)
+        raw = (
+            payload.get('candidate_control_usability_confidence')
+            or payload.get('control_usability_confidence')
+            or payload.get('candidate_stability_score')
+            or payload.get('stability_score')
+            or fallback
+        )
+        try:
+            return self._clamp(float(raw), 0.0, 1.0)
+        except Exception:
+            return self._clamp(float(fallback), 0.0, 1.0)
+
+    def _publish_docking_twist(self, linear_x: float, angular_z: float) -> None:
+        msg = Twist()
+        msg.linear.x = float(linear_x)
+        msg.angular.z = float(angular_z)
+        self._docking_cmd_vel_pub.publish(msg)
+
+    def _set_navigation_lane_locked(self, locked: bool) -> None:
+        try:
+            msg = BoolMsg()
+            msg.data = bool(locked)
+            self._twist_mux_navigation_lock_pub.publish(msg)
+        except Exception:
+            pass
+
     async def _execute_goal_pose_handoff_follow_path(
         self,
         goal_pose: PoseStamped,
@@ -2909,6 +3064,8 @@ class ZoneManager(Node):
             plan,
         )
         residual_alignment_msg = ''
+        latest_gate_reasons = ()
+        latest_gate_error = None
         if remaining_navigation_targets:
             residual_alignment_msg = (
                 'Shelf entry alignment still outside insertion guard after staged approach: '
@@ -2923,6 +3080,7 @@ class ZoneManager(Node):
             )
 
         async def _require_stable_preinsert_alignment() -> Tuple[Optional[bool], str]:
+            nonlocal latest_gate_reasons, latest_gate_error
             entry_pose = self._shelf_pose2d_to_pose_stamped(plan.entry_pose)
             loop_hz = max(5.0, float(self.goal_pose_handoff_local_insert_loop_hz))
             hold_samples = max(
@@ -2951,7 +3109,7 @@ class ZoneManager(Node):
                 min(
                     float(plan.heading_tolerance),
                     float(self.goal_pose_handoff_local_insert_prealign_heading_tolerance),
-                    math.radians(2.5),
+                    math.radians(4.0),
                 ),
             )
             allowed_forward_shortfall = max(
@@ -2967,9 +3125,40 @@ class ZoneManager(Node):
             allowed_forward_overshoot = max(0.01, strict_pos_tol * 0.5)
             heading_stable_delta = max(math.radians(0.3), strict_heading_tol * 0.35)
             deadline = time.monotonic() + max_wait_sec
-            consecutive_stable = 0
-            prev_error = None
             latest_error = None
+            latest_metrics = None
+
+            perception_floor = 0.0
+            if isinstance(self.latest_shelf_status, dict) and self.latest_shelf_status:
+                try:
+                    perception_floor = float(
+                        self.latest_shelf_status.get('candidate_stability_score')
+                        or self.latest_shelf_status.get('control_usability_confidence')
+                        or 0.0
+                    )
+                except Exception:
+                    perception_floor = 0.0
+                perception_floor = self._clamp(perception_floor * 0.80, 0.0, 0.75)
+
+            gate_window = PreEntryQualificationWindow(
+                thresholds=PreEntryGateThresholds(
+                    min_samples=hold_samples,
+                    min_hold_sec=max(0.0, float(max(hold_samples - 1, 0)) / loop_hz),
+                    max_abs_lateral_error_m=strict_lat_tol,
+                    max_abs_heading_error_rad=strict_heading_tol,
+                    max_abs_entry_distance_m=allowed_forward_shortfall,
+                    max_abs_forward_error_m=allowed_forward_shortfall,
+                    max_lateral_std_m=max(0.002, stable_delta),
+                    max_heading_std_rad=heading_stable_delta,
+                    max_forward_std_m=max(0.002, stable_delta),
+                    min_mean_perception_stability_score=perception_floor,
+                    max_localization_disagreement_m=0.05,
+                    max_abs_odom_angular_speed_rad_s=0.15,
+                    max_abs_commanded_angular_speed_rad_s=0.10,
+                    max_angular_command_zero_crossings=0,
+                ),
+                max_samples=max(hold_samples + 4, 8),
+            )
 
             while time.monotonic() < deadline:
                 if goal_handle.is_cancel_requested:
@@ -2987,6 +3176,7 @@ class ZoneManager(Node):
                     return False, gate_error_msg
 
                 latest_error = gate_error
+                latest_gate_error = gate_error
                 forward_error = float(gate_error['forward_error'])
                 longitudinal_ready = (
                     abs(float(gate_error['distance'])) <= strict_pos_tol
@@ -2995,30 +3185,41 @@ class ZoneManager(Node):
                         and forward_error <= allowed_forward_shortfall
                     )
                 )
-                stable_now = (
-                    longitudinal_ready
-                    and abs(float(gate_error['left_error'])) <= strict_lat_tol
-                    and abs(float(gate_error['heading_error'])) <= strict_heading_tol
-                )
-                if stable_now and prev_error is not None:
-                    stable_now = (
-                        abs(float(gate_error['forward_error']) - float(prev_error['forward_error'])) <= stable_delta
-                        and abs(float(gate_error['distance']) - float(prev_error['distance'])) <= stable_delta
-                        and
-                        abs(float(gate_error['left_error']) - float(prev_error['left_error'])) <= stable_delta
-                        and abs(float(gate_error['heading_error']) - float(prev_error['heading_error'])) <= heading_stable_delta
+                perception_stability = 1.0
+                if isinstance(self.latest_shelf_status, dict) and self.latest_shelf_status:
+                    try:
+                        perception_stability = float(
+                            self.latest_shelf_status.get('candidate_stability_score')
+                            or self.latest_shelf_status.get('control_usability_confidence')
+                            or 1.0
+                        )
+                    except Exception:
+                        perception_stability = 1.0
+                latest_metrics = gate_window.add_sample(
+                    PreEntryGateSample(
+                        stamp_sec=time.monotonic(),
+                        lateral_error_m=float(gate_error['left_error']),
+                        heading_error_rad=float(gate_error['heading_error']),
+                        entry_distance_m=float(gate_error['distance']),
+                        forward_error_m=forward_error,
+                        odom_linear_speed_mps=0.0,
+                        odom_angular_speed_rad_s=0.0,
+                        commanded_linear_speed_mps=0.0,
+                        commanded_angular_speed_rad_s=0.0,
+                        perception_stability_score=max(0.0, perception_stability),
+                        localization_disagreement_m=0.0,
                     )
-                consecutive_stable = (consecutive_stable + 1) if stable_now else 0
-                prev_error = gate_error
+                )
 
-                if consecutive_stable >= hold_samples:
+                if latest_metrics.qualifies and longitudinal_ready:
                     self.get_logger().info(
                         f'Frozen shelf insert: strict pre-insert gate satisfied for "{target_label}" '
                         f'with dist={float(gate_error["distance"]):.3f}m, '
                         f'forward={forward_error:.3f}m, '
                         f'left={float(gate_error["left_error"]):.3f}m, '
                         f'heading={math.degrees(float(gate_error["heading_error"])):.2f}deg '
-                        f'held for {hold_samples} cycles.'
+                        f'held for {latest_metrics.sample_count} samples / '
+                        f'{latest_metrics.hold_duration_sec:.2f}s.'
                     )
                     return True, ''
 
@@ -3026,13 +3227,27 @@ class ZoneManager(Node):
 
             if latest_error is None:
                 return False, f'Frozen shelf insert gate timed out before straight-in for "{target_label}".'
+            rejection_parts = []
+            if latest_metrics is not None and latest_metrics.rejection_reasons:
+                rejection_parts.extend(str(reason) for reason in latest_metrics.rejection_reasons)
+            if not (
+                float(latest_error['forward_error']) >= -allowed_forward_overshoot
+                and float(latest_error['forward_error']) <= allowed_forward_shortfall
+            ):
+                rejection_parts.append('forward_guard')
+            rejection_suffix = ''
+            if rejection_parts:
+                rejection_suffix = f' reasons={",".join(sorted(set(rejection_parts)))}'
+            latest_gate_reasons = tuple(sorted(set(rejection_parts)))
             return False, (
                 f'Frozen shelf insert refused straight-in for "{target_label}": alignment was not stable '
                 f'within {max_wait_sec:.1f}s '
                 f'(dist={float(latest_error["distance"]):.3f}m, '
                 f'forward={float(latest_error["forward_error"]):.3f}m, '
                 f'left={float(latest_error["left_error"]):.3f}m, '
-                f'heading={math.degrees(float(latest_error["heading_error"])):.2f}deg).'
+                f'heading={math.degrees(float(latest_error["heading_error"])):.2f}deg, '
+                f'hold={0.0 if latest_metrics is None else latest_metrics.hold_duration_sec:.2f}s).'
+                f'{rejection_suffix}'
             )
 
         async def _execute_preinsert_alignment_correction(
@@ -3040,6 +3255,51 @@ class ZoneManager(Node):
             attempt_index: int,
             attempt_total: int,
         ) -> Tuple[Optional[bool], str]:
+            heading_only_failure = (
+                bool(latest_gate_reasons)
+                and all(reason == 'heading_error' for reason in latest_gate_reasons)
+            )
+            if heading_only_failure:
+                recovery_start_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
+                if recovery_start_pose is None:
+                    return False, (
+                        f'Frozen shelf insert heading recovery lost robot pose in {frame_id}.'
+                    )
+                recovery_targets = [
+                    ShelfNavigationTarget(
+                        label='Shelf centerline re-capture',
+                        pose=plan.approach_pose,
+                    ),
+                    ShelfNavigationTarget(
+                        label='Shelf entry alignment',
+                        pose=plan.entry_pose,
+                    ),
+                ]
+                feedback.progress = 0.825
+                feedback.status = (
+                    f'Frozen shelf heading recovery {attempt_index}/{attempt_total}: '
+                    f'"{target_label}"'
+                )
+                goal_handle.publish_feedback(feedback)
+                recovery_ok, recovery_msg, _ = await _execute_navigation_targets_sequence(
+                    recovery_targets,
+                    recovery_start_pose,
+                    progress_start=0.825,
+                    progress_end=0.84,
+                    log_prefix='Frozen shelf heading recovery',
+                )
+                if recovery_ok is None:
+                    return None, recovery_msg
+                if not recovery_ok:
+                    return False, (
+                        recovery_msg
+                        or (
+                            f'Frozen shelf heading recovery failed for "{target_label}" '
+                            f'after strict gate rejected heading at the shelf mouth.'
+                        )
+                    )
+                return True, ''
+
             entry_pose = self._shelf_pose2d_to_pose_stamped(plan.entry_pose)
             align_timeout_sec = self._optional_timeout_parameter(
                 self.goal_pose_handoff_verify_correction_timeout_sec,
@@ -3279,6 +3539,13 @@ class ZoneManager(Node):
                 return None, last_message or 'Goal-pose handoff canceled.'
             if self.estop_active:
                 return False, last_message or 'Goal-pose handoff aborted: E-STOP active.'
+            if (
+                last_message.startswith('Shelf insertion')
+                or last_message.startswith('Frozen shelf insert')
+                or 'insertion guard' in last_message.lower()
+                or 'pre-insert' in last_message.lower()
+            ):
+                return False, last_message
 
             if attempt >= max_attempts:
                 break
@@ -3433,90 +3700,172 @@ class ZoneManager(Node):
     ) -> Tuple[Optional[bool], str]:
         frame_id = str(plan.final_pose.frame_id or 'map') or 'map'
         final_pose = self._shelf_pose2d_to_pose_stamped(plan.final_pose)
-        nav_path = None
         timeout_sec = self._optional_timeout_parameter(
             self.goal_pose_handoff_local_insert_timeout_sec,
             minimum=1.0,
         )
-        max_speed = max(0.02, float(self.goal_pose_handoff_local_insert_max_speed))
-        if max_speed_cap is not None:
-            try:
-                max_speed = min(max_speed, max(0.02, float(max_speed_cap)))
-            except Exception:
-                pass
-        max_turn = min(
-            max(0.10, float(self.goal_pose_handoff_local_insert_max_turn)),
-            max(0.05, float(self.goal_pose_handoff_live_trim_max_turn)),
-        )
-        xy_tolerance = max(
-            float(plan.position_tolerance),
-            float(plan.insert_lateral_tolerance),
-        )
-        yaw_tolerance = max(
-            max(0.02, float(plan.heading_tolerance)),
-            float(self.goal_pose_handoff_local_insert_heading_tolerance),
-        )
-
         robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
         if robot_pose is None:
             return False, f'Unable to resolve robot pose in {frame_id} before shelf insertion.'
-
+        committed_frame = self._build_committed_dock_frame(plan)
+        fallback_confidence = max(
+            0.0,
+            float(
+                committed_frame.perception.control_usability_confidence
+                or committed_frame.perception.detectability_confidence
+                or 1.0
+            ),
+        )
+        insert_speed = max(
+            0.02,
+            min(
+                float(self.goal_pose_handoff_local_insert_entry_slow_speed),
+                float(self.goal_pose_handoff_local_insert_max_speed),
+            ),
+        )
+        if max_speed_cap is not None:
+            try:
+                insert_speed = min(insert_speed, max(0.02, float(max_speed_cap)))
+            except Exception:
+                pass
+        controller = FrozenInsertionController(
+            FrozenInsertionControllerConfig(
+                insert_speed_mps=float(insert_speed),
+                min_insert_speed_mps=max(0.02, min(float(insert_speed) * 0.5, float(insert_speed))),
+                braking_distance_m=max(
+                    0.05,
+                    min(
+                        max(
+                            float(self.goal_pose_handoff_local_insert_distance) * 0.35,
+                            float(committed_frame.expected_insertion_depth_m) * 0.30,
+                        ),
+                        max(0.05, float(committed_frame.expected_insertion_depth_m)),
+                    ),
+                ),
+                stop_distance_m=max(
+                    0.005,
+                    min(
+                        float(plan.position_tolerance),
+                        float(self.goal_pose_handoff_local_insert_position_tolerance) * 0.5,
+                        0.015,
+                    ),
+                ),
+                heading_gain=max(
+                    0.1,
+                    float(self.goal_pose_handoff_local_insert_final_heading_gain),
+                ),
+                lateral_gain=max(
+                    0.1,
+                    float(self.goal_pose_handoff_local_insert_lateral_gain),
+                ),
+                max_angular_speed_rad_s=min(
+                    max(0.03, float(self.goal_pose_handoff_live_trim_max_turn)),
+                    0.08,
+                ),
+                heading_only_lateral_threshold_m=max(
+                    0.004,
+                    min(float(plan.insert_lateral_tolerance) * 0.5, 0.01),
+                ),
+                heading_only_max_angular_speed_rad_s=min(
+                    0.05,
+                    max(0.02, float(self.goal_pose_handoff_live_trim_max_turn)),
+                ),
+                max_abs_lateral_error_m=max(
+                    0.02,
+                    min(
+                        max(
+                            float(plan.insert_lateral_tolerance),
+                            float(self.goal_pose_handoff_local_insert_centerline_tolerance),
+                        ),
+                        0.03,
+                    ),
+                ),
+                max_abs_heading_error_rad=max(
+                    math.radians(2.0),
+                    min(
+                        float(self.goal_pose_handoff_local_insert_hard_yaw_abort),
+                        math.radians(3.0),
+                    ),
+                ),
+                max_pose_jump_m=max(
+                    0.01,
+                    min(
+                        float(self.goal_pose_handoff_local_insert_progress_epsilon_m) * 2.0,
+                        0.03,
+                    ),
+                ),
+                min_perception_confidence=self._clamp(fallback_confidence * 0.75, 0.0, 0.75),
+                # Stop validating perception confidence once the robot reaches the shelf
+                # mouth (progress >= 0).  Beyond the opening line the robot nose physically
+                # occludes the shelf legs from LiDAR, so confidence legitimately degrades
+                # even during a perfect insertion.  The pre-insert gate already certified
+                # alignment quality; there is nothing useful to gain from aborting here.
+                perception_confidence_ignore_after_progress_m=0.0,
+                max_linear_accel_mps2=0.15,
+                max_linear_jerk_mps3=0.40,
+                max_angular_accel_rad_s2=0.20,
+                max_angular_jerk_rad_s3=0.60,
+                # Final entry should be straight and boring once pre-align passed.
+                allow_heading_correction=False,
+            )
+        )
         nav_path = self._build_segment_follow_path(
             robot_pose,
             final_pose,
             segment_spacing=float(self.goal_pose_handoff_insertion_path_spacing),
             enforce_end_orientation=True,
         )
-        initial_error, _ = self._pose_error_in_target_frame(
-            final_pose,
-            robot_pose=robot_pose,
-        )
-        initial_distance = float(initial_error['distance']) if initial_error else float('inf')
-        abort_lat_tol = max(
-            0.02,
-            min(
-                max(
-                    float(plan.insert_lateral_tolerance),
-                    float(self.goal_pose_handoff_local_insert_centerline_tolerance),
-                ),
-                0.04,
+        self._publish_active_follow_path(nav_path.poses)
+        await self._clear_motion_intent(source='zone_manager:shelf_insert_takeover')
+        self._docking_motion_epoch += 1
+        lease = MotionAuthorityLease(
+            owner=MotionAuthorityOwner.INSERTION_CONTROLLER,
+            state=DockingState.INSERT,
+            epoch=int(self._docking_motion_epoch),
+            granted_at_sec=float(time.time()),
+            expires_at_sec=(
+                None
+                if timeout_sec <= 0.0
+                else float(time.time()) + float(timeout_sec) + 1.0
             ),
-        )
-        abort_heading_tol = max(
-            max(0.02, float(plan.heading_tolerance)),
-            min(
-                float(self.goal_pose_handoff_local_insert_hard_yaw_abort),
-                math.radians(6.0),
-            ),
-        )
-
-        intent_ok, intent_msg = await self._set_motion_intent(
-            'insertion',
-            final_pose,
-            max_linear_speed=max_speed,
-            max_angular_speed=max_turn,
-            xy_tolerance=xy_tolerance,
-            yaw_tolerance=yaw_tolerance,
-            timeout_sec=max(timeout_sec, 1.0),
+            exclusive=True,
             source='zone_manager:shelf_insert',
         )
-        if not intent_ok:
-            return False, f'Shelf insertion could not set controller intent: {intent_msg}'
+        self._docking_motion_gate.set_lease(lease)
+        loop_hz = max(10.0, float(self.goal_pose_handoff_local_insert_loop_hz))
+        loop_dt = 1.0 / loop_hz
+        no_progress_timeout_sec = self._optional_timeout_parameter(
+            self.goal_pose_handoff_local_insert_no_progress_timeout_sec,
+            minimum=0.5,
+        )
+        progress_epsilon_m = max(
+            0.002,
+            float(self.goal_pose_handoff_local_insert_progress_epsilon_m),
+        )
+        insertion_started_monotonic = time.monotonic()
+        last_progress_monotonic = insertion_started_monotonic
+        best_remaining_distance = float('inf')
+        previous_robot_xy = None
+        heading_x = math.cos(float(committed_frame.entry_yaw))
+        heading_y = math.sin(float(committed_frame.entry_yaw))
+        left_x = -heading_y
+        left_y = heading_x
 
         last_feedback_ns = 0
-        dist_state = {
-            'remaining': float('inf'),
-            'speed': float('nan'),
-        }
 
-        def _publish_feedback(remaining: float, speed: float, current_error: Optional[Dict[str, float]] = None) -> None:
+        def _publish_feedback(
+            remaining: float,
+            speed: float,
+            current_error: Optional[Dict[str, float]] = None,
+        ) -> None:
             nonlocal last_feedback_ns
             now_ns = self.get_clock().now().nanoseconds
             if (now_ns - last_feedback_ns) < int(0.15 * 1e9):
                 return
 
             progress = 0.84
-            if math.isfinite(initial_distance) and initial_distance > 1e-6 and math.isfinite(remaining):
+            initial_distance = max(1e-6, float(committed_frame.expected_insertion_depth_m))
+            if math.isfinite(initial_distance) and math.isfinite(remaining):
                 phase_progress = 1.0 - (max(0.0, remaining) / initial_distance)
                 progress = 0.84 + (0.15 * max(0.0, min(1.0, phase_progress)))
             feedback.progress = float(self._clamp(progress, 0.84, 0.99))
@@ -3536,127 +3885,153 @@ class ZoneManager(Node):
             last_feedback_ns = now_ns
 
         try:
-            if not self.nav_follow_path_client.wait_for_server(timeout_sec=self.follow_path_server_wait_sec):
-                return False, 'Shelf insertion unavailable: Nav2 FollowPath action server not available.'
-
-            follow_goal = Nav2FollowPath.Goal()
-            follow_goal.path = nav_path
-            if hasattr(follow_goal, 'controller_id'):
-                follow_goal.controller_id = str(self.follow_path_controller_id or 'FollowPath')
-            if hasattr(follow_goal, 'goal_checker_id'):
-                follow_goal.goal_checker_id = str(self.follow_path_goal_checker_id or '')
-
-            def _insert_feedback(feedback_msg):
-                try:
-                    nav_fb = getattr(feedback_msg, 'feedback', feedback_msg)
-                    dist = getattr(nav_fb, 'distance_to_goal', None)
-                    if dist is None:
-                        dist = getattr(nav_fb, 'distance_remaining', None)
-                    if dist is not None:
-                        dist_state['remaining'] = float(dist)
-                    speed = getattr(nav_fb, 'speed', None)
-                    if speed is not None:
-                        dist_state['speed'] = float(speed)
-                except Exception:
-                    pass
-
-            self._publish_active_follow_path(nav_path.poses)
-            send_future = self.nav_follow_path_client.send_goal_async(
-                follow_goal,
-                feedback_callback=_insert_feedback,
-            )
-            nav_goal_handle = await send_future
-            if nav_goal_handle is None or not bool(getattr(nav_goal_handle, 'accepted', False)):
-                return False, f'Shelf insertion "{target_label}" was rejected by Nav2 FollowPath.'
-
-            self.follow_path_nav_goal = nav_goal_handle
-            nav_result_future = nav_goal_handle.get_result_async()
-            insertion_started_monotonic = time.monotonic()
-
-            while not nav_result_future.done():
+            self._set_navigation_lane_locked(True)
+            while True:
                 if goal_handle.is_cancel_requested:
-                    try:
-                        await nav_goal_handle.cancel_goal_async()
-                    except Exception:
-                        pass
+                    self._publish_docking_twist(0.0, 0.0)
                     return None, f'Shelf insertion "{target_label}" canceled.'
                 if self.estop_active:
-                    try:
-                        await nav_goal_handle.cancel_goal_async()
-                    except Exception:
-                        pass
+                    self._publish_docking_twist(0.0, 0.0)
                     return False, f'Shelf insertion "{target_label}" aborted: E-STOP active.'
                 if self.distance_obstacle_hold_active:
-                    try:
-                        await nav_goal_handle.cancel_goal_async()
-                    except Exception:
-                        pass
+                    self._publish_docking_twist(0.0, 0.0)
                     return False, f'Shelf insertion "{target_label}" aborted: obstacle hold active.'
-
-                current_error, current_error_msg = self._pose_error_in_target_frame(
-                    final_pose,
-                    robot_timeout_sec=0.20,
-                )
-                if current_error is None:
-                    try:
-                        await nav_goal_handle.cancel_goal_async()
-                    except Exception:
-                        pass
-                    return False, current_error_msg
-
-                if (
-                    abs(float(current_error['left_error'])) > abort_lat_tol
-                    or abs(float(current_error['heading_error'])) > abort_heading_tol
-                ):
-                    try:
-                        await nav_goal_handle.cancel_goal_async()
-                    except Exception:
-                        pass
+                robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
+                if robot_pose is None:
+                    self._publish_docking_twist(0.0, 0.0)
                     return False, (
-                        f'Shelf insertion aborted for "{target_label}": drift exceeded guard '
-                        f'(left={float(current_error["left_error"]):.3f}m > {abort_lat_tol:.3f}m '
-                        f'or heading={math.degrees(float(current_error["heading_error"])):.2f}deg > '
-                        f'{math.degrees(abort_heading_tol):.2f}deg).'
+                        f'Unable to resolve robot pose in {frame_id} during shelf insertion.'
+                    )
+                robot_yaw = self._yaw_from_quaternion(
+                    float(robot_pose.pose.orientation.x),
+                    float(robot_pose.pose.orientation.y),
+                    float(robot_pose.pose.orientation.z),
+                    float(robot_pose.pose.orientation.w),
+                )
+                robot_xy = (
+                    float(robot_pose.pose.position.x),
+                    float(robot_pose.pose.position.y),
+                )
+                pose_jump_m = 0.0
+                pose_jump_forward_m = 0.0
+                pose_jump_lateral_m = 0.0
+                if previous_robot_xy is not None:
+                    delta_x = robot_xy[0] - previous_robot_xy[0]
+                    delta_y = robot_xy[1] - previous_robot_xy[1]
+                    pose_jump_m = math.hypot(
+                        delta_x,
+                        delta_y,
+                    )
+                    pose_jump_forward_m = float((delta_x * heading_x) + (delta_y * heading_y))
+                    pose_jump_lateral_m = float((delta_x * left_x) + (delta_y * left_y))
+                previous_robot_xy = robot_xy
+                controller_output = controller.compute_from_pose(
+                    committed_frame,
+                    robot_x=robot_xy[0],
+                    robot_y=robot_xy[1],
+                    robot_yaw=robot_yaw,
+                    perception_confidence=self._current_shelf_validation_confidence(
+                        fallback=fallback_confidence,
+                    ),
+                    pose_jump_m=pose_jump_m,
+                    pose_jump_forward_m=pose_jump_forward_m,
+                    pose_jump_lateral_m=pose_jump_lateral_m,
+                    divergence_detected=False,
+                    now_sec=time.monotonic(),
+                )
+                dock_errors = controller_output.dock_errors
+                remaining_distance = (
+                    float(dock_errors.remaining_distance_m)
+                    if dock_errors is not None
+                    else float('inf')
+                )
+                if (
+                    math.isfinite(remaining_distance)
+                    and remaining_distance < (best_remaining_distance - progress_epsilon_m)
+                ):
+                    best_remaining_distance = remaining_distance
+                    last_progress_monotonic = time.monotonic()
+                current_error = None
+                if dock_errors is not None:
+                    current_error = {
+                        'distance': float(dock_errors.distance_to_entry_m),
+                        'forward_error': float(dock_errors.remaining_distance_m),
+                        'left_error': float(dock_errors.lateral_error_m),
+                        'heading_error': float(dock_errors.heading_error_rad),
+                    }
+                _publish_feedback(
+                    remaining_distance,
+                    float(controller_output.linear_speed_mps),
+                    current_error=current_error,
+                )
+                if controller_output.stop:
+                    self._publish_docking_twist(0.0, 0.0)
+                    if controller_output.target_depth_reached:
+                        final_heading_err_deg = 0.0
+                        if dock_errors is not None:
+                            final_heading_err_deg = math.degrees(
+                                float(dock_errors.heading_error_rad)
+                            )
+                        return True, (
+                            f'Shelf insertion reached target depth at ({plan.final_pose.x:.2f}, '
+                            f'{plan.final_pose.y:.2f}) with heading err '
+                            f'{final_heading_err_deg:.1f}deg; awaiting verify stage.'
+                        )
+                    if controller_output.success:
+                        return True, (
+                            f'Shelf insertion completed for "{target_label}": '
+                            f'{controller_output.reason}.'
+                        )
+                    return False, (
+                        f'Shelf insertion aborted for "{target_label}": '
+                        f'{controller_output.reason}.'
                     )
 
+                command = MotionCommandEnvelope(
+                    owner=MotionAuthorityOwner.INSERTION_CONTROLLER,
+                    state=DockingState.INSERT,
+                    epoch=int(lease.epoch),
+                    stamp_sec=float(time.time()),
+                    linear_speed_mps=float(controller_output.linear_speed_mps),
+                    angular_speed_rad_s=float(controller_output.angular_speed_rad_s),
+                    source='zone_manager:shelf_insert',
+                    valid_for_sec=max(0.15, loop_dt * 2.0),
+                )
+                gate_decision = self._docking_motion_gate.evaluate(
+                    command,
+                    docking_active=True,
+                    now_sec=float(time.time()),
+                )
+                if not gate_decision.accepted:
+                    self._publish_docking_twist(0.0, 0.0)
+                    return False, (
+                        f'Shelf insertion motion rejected for "{target_label}": '
+                        f'{gate_decision.reason}.'
+                    )
                 if timeout_sec > 0.0 and (time.monotonic() - insertion_started_monotonic) >= float(timeout_sec):
-                    try:
-                        await nav_goal_handle.cancel_goal_async()
-                    except Exception:
-                        pass
+                    self._publish_docking_twist(0.0, 0.0)
                     return False, (
                         f'Shelf insertion "{target_label}" timed out after '
                         f'{float(timeout_sec):.2f}s.'
                     )
-
-                _publish_feedback(
-                    float(dist_state['remaining']),
-                    float(dist_state['speed']),
-                    current_error=current_error,
+                if (
+                    no_progress_timeout_sec > 0.0
+                    and (time.monotonic() - last_progress_monotonic) >= float(no_progress_timeout_sec)
+                ):
+                    self._publish_docking_twist(0.0, 0.0)
+                    return False, (
+                        f'Shelf insertion "{target_label}" made no progress for '
+                        f'{float(no_progress_timeout_sec):.2f}s.'
+                    )
+                self._publish_docking_twist(
+                    gate_decision.applied_linear_speed_mps,
+                    gate_decision.applied_angular_speed_rad_s,
                 )
-                await self._non_blocking_wait(0.05)
-
-            wrapped = nav_result_future.result()
-            status = int(getattr(wrapped, 'status', GoalStatus.STATUS_UNKNOWN))
-            if status != GoalStatus.STATUS_SUCCEEDED:
-                if goal_handle.is_cancel_requested:
-                    return None, f'Shelf insertion "{target_label}" canceled.'
-                return False, (
-                    f'Shelf insertion "{target_label}" failed with status {status} '
-                    f'({self._goal_status_name(status)})'
-                )
-
-            final_error, final_error_msg = self._pose_error_in_target_frame(final_pose)
-            if final_error is None:
-                return False, final_error_msg
-
-            return True, (
-                f'Inserted to shelf center at ({plan.final_pose.x:.2f}, '
-                f'{plan.final_pose.y:.2f}) with heading err '
-                f'{math.degrees(float(final_error["heading_error"])):.1f}deg.'
-            )
+                await self._non_blocking_wait(loop_dt)
         finally:
-            self.follow_path_nav_goal = None
+            self._publish_docking_twist(0.0, 0.0)
+            self._set_navigation_lane_locked(False)
+            self._docking_motion_gate.clear()
             self._clear_active_follow_path()
             await self._clear_motion_intent(source='zone_manager:shelf_insert')
 
@@ -4543,6 +4918,7 @@ class ZoneManager(Node):
         if str(zone_name or '').strip() == self.GOAL_POSE_HANDOFF_NAME:
             ok, message = await self._execute_goal_pose_handoff_with_retries(
                 target_pose, goal_handle, target_label,
+                refresh_from_shelf_status=False,
             )
             result = GoToZoneAction.Result()
             result.message = str(message or '').strip()
@@ -6120,6 +6496,7 @@ class ZoneManager(Node):
                     goal_pose,
                     goal_handle,
                     target_label,
+                    refresh_from_shelf_status=False,
                 )
                 if dock_ok is None:
                     goal_handle.canceled()
