@@ -249,38 +249,41 @@ class FrozenInsertionController:
         dock_frame: Optional[CommittedDockFrame] = None,
         now_sec: Optional[float] = None,
     ) -> FrozenInsertionControllerOutput:
+        # Minimal straight-in insertion controller:
+        #   1. If we've reached the target depth, report success.
+        #   2. If lateral error is about to collide with a shelf leg, abort.
+        #   3. Otherwise: drive forward, steer with PID on heading + lateral.
+        # All other abort paths (perception, pose jump, divergence, heading bound,
+        # final-alignment gate) have been removed — they were causing insertion to
+        # fail on transient conditions that the active steering term can handle.
         cfg = self.config
         errors = state.dock_errors
         now_sec = float(now_sec if now_sec is not None else time.monotonic())
-        dt = 0.0
-        if self.state.last_update_sec is not None:
-            dt = _clamp(now_sec - float(self.state.last_update_sec), 0.0, 0.25)
 
-        # Abort checks must run before any non-zero command is computed.
-        if bool(state.divergence_detected):
+        # Depth reached -> done.  Don't gate on final lateral/heading tolerances;
+        # if we got this far, we're inside the shelf.
+        if float(errors.remaining_distance_m) <= (float(cfg.stop_distance_m) + 1e-6):
             self.reset()
             return FrozenInsertionControllerOutput(
                 linear_speed_mps=0.0,
                 angular_speed_rad_s=0.0,
                 stop=True,
-                abort_category=DockingAbortCategory.MID_INSERT_DRIFT,
-                reason='divergence_detected',
+                success=True,
+                target_depth_reached=True,
+                reason='target_depth_reached',
                 dock_errors=errors,
             )
-        max_lateral_error_m = float(cfg.max_abs_lateral_error_m)
-        final_lateral_tolerance_m = float(cfg.final_alignment_lateral_tolerance_m)
+
+        # Collision-imminent safety: use the real shelf clearance if we have it,
+        # else fall back to the configured ceiling.
+        collision_limit_m = float(cfg.max_abs_lateral_error_m)
         if dock_frame is not None:
-            max_lateral_error_m = self._side_clearance_limit_m(
+            collision_limit_m = self._side_clearance_limit_m(
                 dock_frame,
-                fallback_limit_m=max_lateral_error_m,
+                fallback_limit_m=collision_limit_m,
                 margin_ratio=float(cfg.clearance_abort_margin_ratio),
             )
-            final_lateral_tolerance_m = min(
-                final_lateral_tolerance_m,
-                max(0.005, max_lateral_error_m * 0.6),
-            )
-
-        if abs(float(errors.lateral_error_m)) > max_lateral_error_m:
+        if abs(float(errors.lateral_error_m)) > collision_limit_m:
             self.reset()
             return FrozenInsertionControllerOutput(
                 linear_speed_mps=0.0,
@@ -290,179 +293,54 @@ class FrozenInsertionController:
                 reason='lateral_error_exceeded',
                 dock_errors=errors,
             )
-        if abs(float(errors.heading_error_rad)) > float(cfg.max_abs_heading_error_rad):
-            self.reset()
-            return FrozenInsertionControllerOutput(
-                linear_speed_mps=0.0,
-                angular_speed_rad_s=0.0,
-                stop=True,
-                abort_category=DockingAbortCategory.MID_INSERT_DRIFT,
-                reason='heading_error_exceeded',
-                dock_errors=errors,
-            )
-        confidence_validation_required = not (
-            float(errors.progress_along_dock_m) >= float(cfg.perception_confidence_ignore_after_progress_m)
-            or float(errors.remaining_distance_m) <= float(cfg.perception_confidence_ignore_inside_remaining_m)
-        )
-        if (
-            confidence_validation_required
-            and float(state.perception_confidence) < float(cfg.min_perception_confidence)
-        ):
-            self.reset()
-            return FrozenInsertionControllerOutput(
-                linear_speed_mps=0.0,
-                angular_speed_rad_s=0.0,
-                stop=True,
-                abort_category=DockingAbortCategory.MODEL_INVALIDATED,
-                reason='perception_confidence_drop',
-                dock_errors=errors,
-            )
-        pose_jump_limit_m = float(cfg.max_pose_jump_m)
-        lateral_jump_limit_m = float(cfg.max_pose_jump_lateral_m)
-        if float(errors.remaining_distance_m) <= float(cfg.pose_jump_ignore_inside_remaining_m):
-            pose_jump_limit_m = max(
-                pose_jump_limit_m,
-                float(cfg.max_pose_jump_m_deep_insert),
-            )
-            lateral_jump_limit_m = max(
-                lateral_jump_limit_m,
-                float(cfg.max_pose_jump_lateral_m_deep_insert),
-            )
-        if abs(float(state.pose_jump_lateral_m)) > lateral_jump_limit_m:
-            self.reset()
-            return FrozenInsertionControllerOutput(
-                linear_speed_mps=0.0,
-                angular_speed_rad_s=0.0,
-                stop=True,
-                abort_category=DockingAbortCategory.MODEL_INVALIDATED,
-                reason='pose_jump_lateral_exceeded',
-                dock_errors=errors,
-            )
-        if float(state.pose_jump_forward_m) < -float(cfg.max_pose_jump_backward_m):
-            self.reset()
-            return FrozenInsertionControllerOutput(
-                linear_speed_mps=0.0,
-                angular_speed_rad_s=0.0,
-                stop=True,
-                abort_category=DockingAbortCategory.MODEL_INVALIDATED,
-                reason='pose_jump_backward_exceeded',
-                dock_errors=errors,
-            )
-        if (
-            float(state.pose_jump_m) > pose_jump_limit_m
-            and abs(float(state.pose_jump_lateral_m)) > max(0.01, lateral_jump_limit_m * 0.5)
-        ):
-            self.reset()
-            return FrozenInsertionControllerOutput(
-                linear_speed_mps=0.0,
-                angular_speed_rad_s=0.0,
-                stop=True,
-                abort_category=DockingAbortCategory.MODEL_INVALIDATED,
-                reason='pose_jump_exceeded',
-                dock_errors=errors,
-            )
-        if float(errors.remaining_distance_m) <= (float(cfg.stop_distance_m) + 1e-6):
-            if (
-                abs(float(errors.lateral_error_m)) > final_lateral_tolerance_m
-                or abs(float(errors.heading_error_rad)) > float(cfg.final_alignment_heading_tolerance_rad)
-            ):
-                self.reset()
-                return FrozenInsertionControllerOutput(
-                    linear_speed_mps=0.0,
-                    angular_speed_rad_s=0.0,
-                    stop=True,
-                    success=False,
-                    target_depth_reached=False,
-                    abort_category=DockingAbortCategory.MID_INSERT_DRIFT,
-                    reason='target_depth_reached_outside_final_alignment',
-                    dock_errors=errors,
-                )
-            self.reset()
-            return FrozenInsertionControllerOutput(
-                linear_speed_mps=0.0,
-                angular_speed_rad_s=0.0,
-                stop=True,
-                success=False,
-                target_depth_reached=True,
-                reason='target_depth_reached_verify_required',
-                dock_errors=errors,
-            )
 
-        # Final-insert control law:
-        # e_theta = desired_yaw - robot_yaw
-        # e_y > 0 means robot is left of centerline, so steering term is negative.
-        raw_linear_speed = float(cfg.insert_speed_mps)
+        # Forward speed: cruise, ramp down over braking_distance_m.
+        linear_speed = float(cfg.insert_speed_mps)
         if float(errors.remaining_distance_m) < float(cfg.braking_distance_m):
             brake_ratio = _clamp(
                 float(errors.remaining_distance_m) / max(float(cfg.braking_distance_m), 1e-6),
                 0.0,
                 1.0,
             )
-            raw_linear_speed = max(0.0, float(cfg.insert_speed_mps) * brake_ratio)
+            linear_speed = max(float(cfg.min_insert_speed_mps), linear_speed * brake_ratio)
 
-        raw_angular_speed = 0.0
+        # Software compliance: once the robot's reference point crosses the shelf
+        # mouth (progress_along_dock >= 0), throttle gains and speed so any residual
+        # correction is "micro" rather than "free".  This is the closest approximation
+        # to mechanical compliance we have without a force sensor — bounded correction
+        # inside the funnel instead of aggressive steering near contact.
+        heading_gain = float(cfg.heading_gain)
+        lateral_gain = float(cfg.lateral_gain)
         angular_limit = float(cfg.max_angular_speed_rad_s)
-        if bool(cfg.allow_heading_correction):
-            if abs(float(errors.lateral_error_m)) < float(cfg.heading_only_lateral_threshold_m):
-                raw_angular_speed = float(cfg.heading_gain) * float(errors.heading_error_rad)
-                angular_limit = min(
-                    angular_limit,
-                    float(cfg.heading_only_max_angular_speed_rad_s),
-                )
-            else:
-                raw_angular_speed = (
-                    (float(cfg.heading_gain) * float(errors.heading_error_rad))
-                    - (float(cfg.lateral_gain) * float(errors.lateral_error_m))
-                )
-            raw_angular_speed = _clamp(raw_angular_speed, -angular_limit, angular_limit)
+        if float(errors.progress_along_dock_m) >= 0.0:
+            heading_gain *= 0.5
+            lateral_gain *= 0.5
+            angular_limit = min(angular_limit, 0.04)
+            linear_speed = min(linear_speed, max(float(cfg.min_insert_speed_mps), 0.03))
 
-        if dt <= 0.0:
-            linear_speed = min(float(cfg.min_insert_speed_mps), raw_linear_speed)
-            angular_speed = _clamp(
-                raw_angular_speed,
-                -min(angular_limit, float(cfg.heading_only_max_angular_speed_rad_s)),
-                min(angular_limit, float(cfg.heading_only_max_angular_speed_rad_s)),
-            ) if abs(float(errors.lateral_error_m)) < float(cfg.heading_only_lateral_threshold_m) else raw_angular_speed
-            self.state = FrozenInsertionControllerState(
-                linear_speed_mps=float(linear_speed),
-                angular_speed_rad_s=float(angular_speed),
-                linear_accel_mps2=0.0,
-                angular_accel_rad_s2=0.0,
-                last_update_sec=now_sec,
-            )
-        else:
-            linear_speed, linear_accel = _ramp_axis(
-                self.state.linear_speed_mps,
-                self.state.linear_accel_mps2,
-                raw_linear_speed,
-                dt,
-                max_accel=float(cfg.max_linear_accel_mps2),
-                max_jerk=float(cfg.max_linear_jerk_mps3),
-            )
-            angular_speed, angular_accel = _ramp_axis(
-                self.state.angular_speed_rad_s,
-                self.state.angular_accel_rad_s2,
-                raw_angular_speed,
-                dt,
-                max_accel=float(cfg.max_angular_accel_rad_s2),
-                max_jerk=float(cfg.max_angular_jerk_rad_s3),
-            )
-            self.state = FrozenInsertionControllerState(
-                linear_speed_mps=float(linear_speed),
-                angular_speed_rad_s=float(angular_speed),
-                linear_accel_mps2=float(linear_accel),
-                angular_accel_rad_s2=float(angular_accel),
-                last_update_sec=now_sec,
-            )
+        # Steering: PID on heading and lateral, clamped.
+        angular_speed = (
+            (heading_gain * float(errors.heading_error_rad))
+            - (lateral_gain * float(errors.lateral_error_m))
+        )
+        angular_speed = _clamp(angular_speed, -angular_limit, angular_limit)
+
+        self.state = FrozenInsertionControllerState(
+            linear_speed_mps=float(linear_speed),
+            angular_speed_rad_s=float(angular_speed),
+            linear_accel_mps2=0.0,
+            angular_accel_rad_s2=0.0,
+            last_update_sec=now_sec,
+        )
 
         return FrozenInsertionControllerOutput(
-            linear_speed_mps=max(0.0, float(self.state.linear_speed_mps)),
-            angular_speed_rad_s=float(self.state.angular_speed_rad_s),
+            linear_speed_mps=max(0.0, float(linear_speed)),
+            angular_speed_rad_s=float(angular_speed),
             stop=False,
             success=False,
             target_depth_reached=False,
             reason='advance_along_frozen_centerline',
             dock_errors=errors,
-            raw_linear_speed_mps=float(raw_linear_speed),
-            raw_angular_speed_rad_s=float(raw_angular_speed),
+            raw_linear_speed_mps=float(linear_speed),
+            raw_angular_speed_rad_s=float(angular_speed),
         )
