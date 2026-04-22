@@ -155,7 +155,7 @@ class ZoneManager(Node):
         )
         self.shelf_status_sub = self.create_subscription(
             StringMsg,
-            '/shelf/status_json',
+            '/shelf/refined_status_json',
             self._shelf_status_callback,
             10,
         )
@@ -3394,6 +3394,27 @@ class ZoneManager(Node):
         if gate_ok is None:
             self._clear_active_goal_marker()
             return None, gate_msg
+        if not gate_ok and 'lateral_error' in latest_gate_reasons:
+            # Lateral error means the insertion controller will abort immediately
+            # (same collision limit check). Run one pre-insert correction so the
+            # robot can reach the entry centerline before straight-in.
+            self.get_logger().info(
+                f'Frozen shelf insert: gate failed with lateral_error for "{target_label}"; '
+                f'attempting one pre-insert alignment correction before straight-in.'
+            )
+            corr_ok, corr_msg = await _execute_preinsert_alignment_correction(
+                attempt_index=1,
+                attempt_total=1,
+            )
+            if corr_ok is None:
+                self._clear_active_goal_marker()
+                return None, corr_msg
+            if corr_ok:
+                # Correction moved the robot — re-test gate to confirm alignment.
+                gate_ok, gate_msg = await _require_stable_preinsert_alignment()
+                if gate_ok is None:
+                    self._clear_active_goal_marker()
+                    return None, gate_msg
         if not gate_ok:
             self.get_logger().warn(
                 f'Frozen shelf insert: gate advisory failed for "{target_label}" '
@@ -3519,13 +3540,15 @@ class ZoneManager(Node):
                 return None, last_message or 'Goal-pose handoff canceled.'
             if self.estop_active:
                 return False, last_message or 'Goal-pose handoff aborted: E-STOP active.'
-            if (
-                last_message.startswith('Shelf insertion')
-                or last_message.startswith('Frozen shelf insert')
-                or 'insertion guard' in last_message.lower()
-                or 'pre-insert' in last_message.lower()
-            ):
-                return False, last_message
+
+            # Previously the wrapper bailed out here on any message starting with
+            # "Shelf insertion" / "Frozen shelf insert" / "insertion guard" /
+            # "pre-insert", which meant insertion-path aborts never used the
+            # configured retry budget.  In practice the main failure mode is a
+            # transiently-biased shelf yaw estimate: attempt 1 plans with a bad
+            # yaw, aborts mid-insertion, and a fresh perception sample on a later
+            # attempt lines up correctly.  Letting the loop retry replicates what
+            # manually re-triggering the goto does.
 
             if attempt >= max_attempts:
                 break

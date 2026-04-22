@@ -188,6 +188,18 @@ def generate_launch_description():
             condition=IfCondition(enable_shelf_detector),
         ),
 
+        # Shelf geometric refiner + validator — paper-based leg fitting / pose NLS
+        # Subscribes to /shelf/status_json (detector) + /scan, publishes
+        # /shelf/refined_status_json which zone_manager reads instead.
+        Node(
+            package='next2_shelf_simple',
+            executable='shelf_geometric_refiner',
+            name='shelf_geometric_refiner',
+            output='screen',
+            parameters=[robot_yaml, {'use_sim_time': use_sim_time}],
+            condition=IfCondition(enable_shelf_detector),
+        ),
+
         Node(
             package='next_ros2ws_tools',
             executable='auto_reloc',
