@@ -6245,6 +6245,678 @@ class RosBridge(Node):
             },
         }
 
+    # ---------- recognition / action-point helpers ----------
+
+    @staticmethod
+    def _recognition_slug(raw: Any, fallback: str = 'asset') -> str:
+        text = re.sub(r'[^a-z0-9]+', '_', str(raw or '').strip().lower()).strip('_')
+        return text or fallback
+
+    @staticmethod
+    def _normalize_recognition_category(raw: Any) -> str:
+        value = str(raw or '').strip().lower()
+        mapping = {
+            'shelf': 'shelves',
+            'shelves': 'shelves',
+            'pallet': 'pallets',
+            'pallets': 'pallets',
+            'dock': 'docks',
+            'docks': 'docks',
+            'fixture': 'fixtures',
+            'fixtures': 'fixtures',
+        }
+        return mapping.get(value, 'shelves')
+
+    @staticmethod
+    def _normalize_action_point_type(raw: Any) -> str:
+        value = str(raw or '').strip().lower()
+        if value in {'shelf', 'dock', 'pallet', 'fixture'}:
+            return value
+        return 'generic'
+
+    def _build_default_recognition_template(self, category: str = 'shelves') -> Dict[str, Any]:
+        normalized_category = self._normalize_recognition_category(category)
+        base_name = {
+            'shelves': 'Shelf Std',
+            'pallets': 'Pallet Face',
+            'docks': 'Dock Face',
+            'fixtures': 'Fixture Marker',
+        }.get(normalized_category, 'Recognition Asset')
+        geometry_type = {
+            'shelves': 'shelf_profile',
+            'pallets': 'pallet_profile',
+            'docks': 'dock_profile',
+            'fixtures': 'fixture_profile',
+        }.get(normalized_category, 'recognition_profile')
+
+        family_key = f'{self._recognition_slug(normalized_category)}_{self._recognition_slug(base_name, "asset")}'
+        template_id = f'{family_key}__v1'
+        return {
+            'template_id': template_id,
+            'family_key': family_key,
+            'name': base_name,
+            'category': normalized_category,
+            'geometry_type': geometry_type,
+            'version': 1,
+            'status': 'draft',
+            'parent_template_id': '',
+            'dimensions': {
+                'width': 1.20,
+                'depth': 0.92,
+                'opening_width': 0.96,
+                'capture_depth': 0.72,
+                'clearance': 0.08,
+            },
+            'geometry': {
+                'points': [
+                    {'id': 'entry_left', 'name': 'Entry Left', 'x': -0.48, 'y': -0.36, 'required': True, 'kind': 'endpoint'},
+                    {'id': 'entry_right', 'name': 'Entry Right', 'x': 0.48, 'y': -0.36, 'required': True, 'kind': 'endpoint'},
+                    {'id': 'rear_left', 'name': 'Rear Left', 'x': -0.48, 'y': 0.36, 'required': False, 'kind': 'anchor'},
+                    {'id': 'rear_right', 'name': 'Rear Right', 'x': 0.48, 'y': 0.36, 'required': False, 'kind': 'anchor'},
+                    {'id': 'center', 'name': 'Center', 'x': 0.0, 'y': 0.0, 'required': True, 'kind': 'center'},
+                ],
+                'segments': [
+                    {'id': 'front_span', 'start': 'entry_left', 'end': 'entry_right', 'role': 'opening', 'distance': 0.96},
+                    {'id': 'center_axis', 'start': 'center', 'end': 'rear_right', 'role': 'alignment', 'distance': 0.36},
+                ],
+                'rectangles': [
+                    {'id': 'shelf_body', 'role': 'capture_zone', 'x': -0.60, 'y': -0.46, 'width': 1.20, 'height': 0.92},
+                ],
+                'annotations': [
+                    {'id': 'centerline', 'type': 'centerline', 'x1': 0.0, 'y1': -0.46, 'x2': 0.0, 'y2': 0.46},
+                ],
+            },
+            'constraints': [
+                {'id': 'c_opening_width', 'type': 'distance', 'target': 'front_span', 'value': 0.96, 'label': 'Opening width', 'required': True},
+                {'id': 'c_center_lock', 'type': 'center_lock', 'target': 'center', 'label': 'Center lock', 'required': True},
+            ],
+            'algorithm': {
+                'required_points': ['entry_left', 'entry_right', 'center'],
+                'center_strategy': 'midpoint',
+                'insertion_axis': 'forward_y',
+            },
+            'notes': '',
+            'validation': {},
+        }
+
+    def _normalize_recognition_template_payload(
+        self,
+        raw_template: Any,
+        *,
+        existing_template: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        source = raw_template if isinstance(raw_template, dict) else {}
+        seed_category = (
+            source.get('category')
+            or (existing_template.get('category') if isinstance(existing_template, dict) else 'shelves')
+            or 'shelves'
+        )
+        normalized_category = self._normalize_recognition_category(seed_category)
+        base = copy.deepcopy(
+            existing_template if isinstance(existing_template, dict) and existing_template else
+            self._build_default_recognition_template(normalized_category)
+        )
+
+        for key in ('name', 'geometry_type', 'status', 'parent_template_id', 'notes'):
+            if key in source:
+                base[key] = source.get(key)
+        for key in ('dimensions', 'algorithm'):
+            if isinstance(source.get(key), dict):
+                merged = copy.deepcopy(base.get(key) if isinstance(base.get(key), dict) else {})
+                merged.update(copy.deepcopy(source.get(key)))
+                base[key] = merged
+
+        geometry = copy.deepcopy(base.get('geometry') if isinstance(base.get('geometry'), dict) else {})
+        incoming_geometry = source.get('geometry') if isinstance(source.get('geometry'), dict) else {}
+        for list_key in ('points', 'segments', 'rectangles', 'annotations'):
+            if isinstance(incoming_geometry.get(list_key), list):
+                geometry[list_key] = copy.deepcopy(incoming_geometry.get(list_key))
+            elif not isinstance(geometry.get(list_key), list):
+                geometry[list_key] = []
+        base['geometry'] = geometry
+
+        if isinstance(source.get('constraints'), list):
+            base['constraints'] = copy.deepcopy(source.get('constraints'))
+        elif not isinstance(base.get('constraints'), list):
+            base['constraints'] = []
+
+        base['category'] = normalized_category
+        base['status'] = str(base.get('status', 'draft') or 'draft').strip().lower()
+        if base['status'] not in {'draft', 'published', 'deprecated'}:
+            base['status'] = 'draft'
+
+        requested_family = str(source.get('family_key', base.get('family_key', '')) or '').strip()
+        requested_name = str(base.get('name', '') or '').strip() or 'Recognition Asset'
+        base['name'] = requested_name
+        base['family_key'] = requested_family or str(base.get('family_key', '') or '').strip() or (
+            f'{self._recognition_slug(normalized_category)}_{self._recognition_slug(requested_name, "asset")}'
+        )
+
+        try:
+            version = max(1, int(source.get('version', base.get('version', 1)) or 1))
+        except Exception:
+            version = max(1, int(base.get('version', 1) or 1))
+        base['version'] = version
+
+        requested_template_id = str(source.get('template_id', base.get('template_id', '')) or '').strip()
+        base['template_id'] = requested_template_id or f'{base["family_key"]}__v{version}'
+        base['parent_template_id'] = str(base.get('parent_template_id', '') or '').strip()
+        base['geometry_type'] = str(base.get('geometry_type', 'recognition_profile') or 'recognition_profile').strip().lower()
+
+        dims = base.get('dimensions') if isinstance(base.get('dimensions'), dict) else {}
+        rects = base.get('geometry', {}).get('rectangles', [])
+        if isinstance(rects, list) and rects:
+            primary_rect = rects[0] if isinstance(rects[0], dict) else {}
+            try:
+                if not float(dims.get('width', 0.0) or 0.0):
+                    dims['width'] = round(abs(float(primary_rect.get('width', 0.0) or 0.0)), 3)
+                if not float(dims.get('depth', 0.0) or 0.0):
+                    dims['depth'] = round(abs(float(primary_rect.get('height', 0.0) or 0.0)), 3)
+            except Exception:
+                pass
+        base['dimensions'] = dims
+
+        base['validation'] = self._validate_recognition_template_payload(base)
+        return base
+
+    def _validate_recognition_template_payload(self, template: Any) -> Dict[str, Any]:
+        payload = template if isinstance(template, dict) else {}
+        category = self._normalize_recognition_category(payload.get('category', 'shelves'))
+        dimensions = payload.get('dimensions') if isinstance(payload.get('dimensions'), dict) else {}
+        geometry = payload.get('geometry') if isinstance(payload.get('geometry'), dict) else {}
+        points = geometry.get('points') if isinstance(geometry.get('points'), list) else []
+        segments = geometry.get('segments') if isinstance(geometry.get('segments'), list) else []
+        rectangles = geometry.get('rectangles') if isinstance(geometry.get('rectangles'), list) else []
+        constraints = payload.get('constraints') if isinstance(payload.get('constraints'), list) else []
+        issues: List[Dict[str, Any]] = []
+
+        def add_issue(severity: str, code: str, title: str, detail: str, affected: str, fix: str):
+            issues.append({
+                'severity': severity,
+                'code': code,
+                'title': title,
+                'detail': detail,
+                'affected_geometry': affected,
+                'recommended_fix': fix,
+            })
+
+        name = str(payload.get('name', '') or '').strip()
+        geometry_type = str(payload.get('geometry_type', '') or '').strip()
+        if not name:
+            add_issue('error', 'missing_name', 'Template name missing', 'Recognition templates need a name before they can be saved or published.', 'template', 'Add a short family name in Properties.')
+        if not geometry_type:
+            add_issue('error', 'missing_geometry_type', 'Geometry type missing', 'Choose the recognition geometry type expected by the stack.', 'template', 'Select a geometry type in Properties.')
+
+        try:
+            width = float(dimensions.get('width', 0.0) or 0.0)
+        except Exception:
+            width = 0.0
+        try:
+            depth = float(dimensions.get('depth', 0.0) or 0.0)
+        except Exception:
+            depth = 0.0
+        if width <= 0.0 or depth <= 0.0:
+            add_issue('error', 'invalid_dimensions', 'Critical dimensions incomplete', 'Width and depth must be positive so the center point can be solved consistently.', 'dimensions', 'Set valid width and depth values.')
+
+        if len(rectangles) == 0 and len(points) < 2:
+            add_issue('error', 'empty_geometry', 'Recognition geometry incomplete', 'The template needs at least a capture rectangle or anchor points.', 'geometry', 'Draw a rectangle or add the minimum points.')
+
+        point_ids: Set[str] = set()
+        duplicate_ids: Set[str] = set()
+        required_points = 0
+        for point in points:
+            if not isinstance(point, dict):
+                continue
+            point_id = str(point.get('id', '') or '').strip()
+            if point_id:
+                if point_id in point_ids:
+                    duplicate_ids.add(point_id)
+                point_ids.add(point_id)
+            if bool(point.get('required', False)):
+                required_points += 1
+
+        if duplicate_ids:
+            add_issue('error', 'duplicate_points', 'Duplicate point ids', f'Point ids must be unique. Duplicates: {", ".join(sorted(duplicate_ids))}.', 'points', 'Rename or remove duplicated points.')
+
+        if category == 'shelves':
+            if required_points < 2:
+                add_issue('error', 'missing_required_points', 'Shelf anchors missing', 'Shelf recognition needs at least two required anchor points or endpoints.', 'points', 'Add the required entry points for the shelf face.')
+            centerline_present = False
+            for annotation in (geometry.get('annotations') if isinstance(geometry.get('annotations'), list) else []):
+                if isinstance(annotation, dict) and str(annotation.get('type', '') or '').strip().lower() == 'centerline':
+                    centerline_present = True
+                    break
+            if not centerline_present:
+                add_issue('warning', 'center_ambiguity', 'Center calculation may be ambiguous', 'No centerline or equivalent alignment guide is defined for the shelf.', 'geometry', 'Add a centerline or center anchor for insertion alignment.')
+            opening_constraints = [
+                item for item in constraints
+                if isinstance(item, dict) and str(item.get('type', '') or '').strip().lower() == 'distance'
+            ]
+            if not opening_constraints and len(segments) == 0:
+                add_issue('warning', 'missing_opening_span', 'Opening span not constrained', 'Shelf opening width is not captured by a segment or distance constraint.', 'constraints', 'Define the opening span with a segment or distance constraint.')
+
+        for rect in rectangles:
+            if not isinstance(rect, dict):
+                continue
+            try:
+                rect_width = abs(float(rect.get('width', 0.0) or 0.0))
+                rect_height = abs(float(rect.get('height', 0.0) or 0.0))
+            except Exception:
+                rect_width = 0.0
+                rect_height = 0.0
+            if rect_width <= 0.0 or rect_height <= 0.0:
+                add_issue('error', 'broken_rectangle', 'Broken rectangle geometry', 'A recognition rectangle has zero or invalid size.', str(rect.get('id', 'rectangle')), 'Resize or delete the invalid rectangle.')
+
+        for constraint in constraints:
+            if not isinstance(constraint, dict):
+                continue
+            if str(constraint.get('type', '') or '').strip().lower() == 'distance':
+                try:
+                    value = float(constraint.get('value', 0.0) or 0.0)
+                except Exception:
+                    value = 0.0
+                if value <= 0.0:
+                    add_issue('error', 'invalid_constraint', 'Constraint value invalid', 'Distance constraints must be greater than zero.', str(constraint.get('id', 'constraint')), 'Set a positive distance or remove the constraint.')
+
+        error_count = sum(1 for issue in issues if issue.get('severity') == 'error')
+        warning_count = sum(1 for issue in issues if issue.get('severity') == 'warning')
+        pass_count = 3 if error_count == 0 else max(0, 3 - error_count)
+        state = 'error' if error_count else ('warning' if warning_count else 'ok')
+        return {
+            'state': state,
+            'summary': {
+                'errors': error_count,
+                'warnings': warning_count,
+                'passes': pass_count,
+            },
+            'issues': issues,
+        }
+
+    def _load_recognition_templates_from_db(self) -> Dict[str, Dict[str, Any]]:
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'get_recognition_templates'):
+            return {}
+        try:
+            templates = manager.get_recognition_templates()
+        except Exception as exc:
+            self.get_logger().warn(f'Failed loading recognition templates from DB: {exc}')
+            return {}
+        return templates if isinstance(templates, dict) else {}
+
+    def _save_recognition_template_to_db(self, template_id: str, payload: Dict[str, Any]) -> bool:
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'save_recognition_template'):
+            return False
+        try:
+            return bool(manager.save_recognition_template(template_id, payload))
+        except Exception as exc:
+            self.get_logger().warn(f'Failed saving recognition template "{template_id}": {exc}')
+            return False
+
+    def _delete_recognition_template_from_db(self, template_id: str) -> bool:
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'delete_recognition_template'):
+            return False
+        try:
+            return bool(manager.delete_recognition_template(template_id))
+        except Exception as exc:
+            self.get_logger().warn(f'Failed deleting recognition template "{template_id}": {exc}')
+            return False
+
+    def _load_action_point_configs_from_db(self) -> Dict[str, Dict[str, Any]]:
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'get_action_point_configs'):
+            return {}
+        try:
+            configs = manager.get_action_point_configs()
+        except Exception as exc:
+            self.get_logger().warn(f'Failed loading action point configs from DB: {exc}')
+            return {}
+        return configs if isinstance(configs, dict) else {}
+
+    def _save_action_point_config_to_db(self, zone_name: str, payload: Dict[str, Any]) -> bool:
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'save_action_point_config'):
+            return False
+        try:
+            return bool(manager.save_action_point_config(zone_name, payload))
+        except Exception as exc:
+            self.get_logger().warn(f'Failed saving action point config for "{zone_name}": {exc}')
+            return False
+
+    def _delete_action_point_config_from_db(self, zone_name: str) -> bool:
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'delete_action_point_config'):
+            return False
+        try:
+            return bool(manager.delete_action_point_config(zone_name))
+        except Exception as exc:
+            self.get_logger().warn(f'Failed deleting action point config for "{zone_name}": {exc}')
+            return False
+
+    @staticmethod
+    def _build_recognition_usage_index(action_point_configs: Dict[str, Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        usage: Dict[str, List[Dict[str, Any]]] = {}
+        for zone_name, config in (action_point_configs or {}).items():
+            if not isinstance(config, dict):
+                continue
+            template_id = str(config.get('template_id', '') or '').strip()
+            if not template_id:
+                continue
+            usage.setdefault(template_id, []).append({
+                'zone_name': str(zone_name or '').strip(),
+                'action_id': str(config.get('action_id', config.get('action', '')) or '').strip(),
+                'point_type': str(config.get('point_type', 'generic') or 'generic').strip().lower(),
+                'recognize': bool(config.get('recognize', False)),
+            })
+        for entries in usage.values():
+            entries.sort(key=lambda item: str(item.get('zone_name', '')))
+        return usage
+
+    def _recognition_family_key_for_template(self, template: Dict[str, Any]) -> str:
+        payload = template if isinstance(template, dict) else {}
+        category = self._normalize_recognition_category(payload.get('category', 'shelves'))
+        name = str(payload.get('name', '') or '').strip() or 'Recognition Asset'
+        return f'{self._recognition_slug(category)}_{self._recognition_slug(name, "asset")}'
+
+    @staticmethod
+    def _recognition_is_local_identity(template_id: str, family_key: str) -> bool:
+        template_text = str(template_id or '').strip().lower()
+        family_text = str(family_key or '').strip().lower()
+        prefixes = ('local_', 'localimport_', 'local_import_')
+        return template_text.startswith(prefixes) or family_text.startswith(prefixes)
+
+    @staticmethod
+    def _recognition_next_family_version(templates: Dict[str, Dict[str, Any]], family_key: str) -> int:
+        versions = [
+            int(item.get('version', 1) or 1)
+            for item in (templates or {}).values()
+            if isinstance(item, dict) and str(item.get('family_key', '') or '').strip() == str(family_key or '').strip()
+        ]
+        return (max(versions) if versions else 0) + 1
+
+    @staticmethod
+    def _recognition_content_signature(template: Dict[str, Any]) -> str:
+        payload = copy.deepcopy(template if isinstance(template, dict) else {})
+        for key in (
+            'validation',
+            'usage',
+            'usage_count',
+            'safe_versioning_required',
+            'created_at',
+            'updated_at',
+        ):
+            payload.pop(key, None)
+        payload.pop('status', None)
+        return json.dumps(payload, sort_keys=True, separators=(',', ':'))
+
+    def _decorate_recognition_template_with_usage(
+        self,
+        template: Dict[str, Any],
+        usage_index: Dict[str, List[Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        payload = self._normalize_recognition_template_payload(template, existing_template=template)
+        template_id = str(payload.get('template_id', '') or '').strip()
+        usages = usage_index.get(template_id, [])
+        payload['usage_count'] = len(usages)
+        payload['usage'] = usages
+        payload['safe_versioning_required'] = bool(
+            payload.get('status') == 'published' and len(usages) > 0
+        )
+        return payload
+
+    def _decorate_zone_with_action_point_config(
+        self,
+        zone_name: str,
+        zone: Dict[str, Any],
+        action_point_configs: Dict[str, Dict[str, Any]],
+        recognition_templates: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        zone_payload = copy.deepcopy(zone if isinstance(zone, dict) else {})
+        zone_type = str(zone_payload.get('type', 'normal') or 'normal').strip().lower()
+        if zone_type != 'action':
+            zone_payload.pop('action_point_config', None)
+            return zone_payload
+
+        raw_config = action_point_configs.get(zone_name, {}) if isinstance(action_point_configs, dict) else {}
+        config = copy.deepcopy(raw_config if isinstance(raw_config, dict) else {})
+        action_id = str(config.get('action_id', zone_payload.get('action', '')) or '').strip()
+        point_type = self._normalize_action_point_type(config.get('point_type', 'generic'))
+        template_id = str(config.get('template_id', '') or '').strip()
+        recognize = bool(config.get('recognize', False))
+        template = recognition_templates.get(template_id, {}) if template_id else {}
+
+        warnings: List[str] = []
+        template_summary: Optional[Dict[str, Any]] = None
+        if template_id and not template:
+            warnings.append('Linked shelf template is missing from the recognition library.')
+        if template:
+            template_status = str(template.get('status', 'draft') or 'draft').strip().lower()
+            template_summary = {
+                'template_id': str(template.get('template_id', template_id) or template_id),
+                'name': str(template.get('name', template_id) or template_id),
+                'version': int(template.get('version', 1) or 1),
+                'status': template_status,
+                'category': str(template.get('category', '') or ''),
+                'geometry_type': str(template.get('geometry_type', '') or ''),
+                'dimensions': copy.deepcopy(template.get('dimensions', {})),
+            }
+            if template_status == 'deprecated':
+                warnings.append('Linked shelf template is deprecated. Review before deployment.')
+            elif template_status == 'draft':
+                warnings.append('Linked shelf template is still a draft.')
+
+        normalized_config = {
+            'zone_name': str(zone_name or '').strip(),
+            'point_type': point_type,
+            'template_id': template_id,
+            'action_id': action_id,
+            'action': action_id,
+            'recognize': recognize,
+            'template_summary': template_summary,
+            'warnings': warnings,
+        }
+        if isinstance(config.get('notes', ''), str) and str(config.get('notes', '')).strip():
+            normalized_config['notes'] = str(config.get('notes', '')).strip()
+
+        metadata = zone_payload.get('metadata') if isinstance(zone_payload.get('metadata'), dict) else {}
+        metadata = copy.deepcopy(metadata)
+        metadata['action_point'] = normalized_config
+        zone_payload['metadata'] = metadata
+        zone_payload['action_point_config'] = normalized_config
+        return zone_payload
+
+    def list_recognition_templates(self):
+        templates = self._load_recognition_templates_from_db()
+        action_point_configs = self._load_action_point_configs_from_db()
+        usage_index = self._build_recognition_usage_index(action_point_configs)
+
+        out: List[Dict[str, Any]] = []
+        for template_id, template in templates.items():
+            if not isinstance(template, dict):
+                continue
+            out.append(self._decorate_recognition_template_with_usage(template, usage_index))
+
+        out.sort(
+            key=lambda item: (
+                str(item.get('category', '') or ''),
+                str(item.get('family_key', '') or ''),
+                -int(item.get('version', 1) or 1),
+                str(item.get('name', '') or ''),
+            )
+        )
+        return self._ok(True, f'Retrieved {len(out)} recognition template(s)', templates=out)
+
+    def save_recognition_template(self, template: Any):
+        templates = self._load_recognition_templates_from_db()
+        action_point_configs = self._load_action_point_configs_from_db()
+        usage_index = self._build_recognition_usage_index(action_point_configs)
+        requested = template if isinstance(template, dict) else {}
+        current_id = str(requested.get('template_id', '') or '').strip()
+        existing = templates.get(current_id, {}) if current_id else {}
+        normalized = self._normalize_recognition_template_payload(
+            requested,
+            existing_template=existing if isinstance(existing, dict) else None,
+        )
+        canonical_family_key = self._recognition_family_key_for_template(normalized)
+        if self._recognition_is_local_identity(
+            str(normalized.get('template_id', '') or ''),
+            str(normalized.get('family_key', '') or ''),
+        ):
+            normalized['family_key'] = canonical_family_key
+            normalized['version'] = max(1, self._recognition_next_family_version(templates, canonical_family_key))
+            normalized['template_id'] = f'{canonical_family_key}__v{normalized["version"]}'
+            if current_id and current_id != normalized['template_id']:
+                normalized['parent_template_id'] = current_id
+
+        existing_status = str(existing.get('status', 'draft') or 'draft').strip().lower() if isinstance(existing, dict) else 'draft'
+        if isinstance(existing, dict) and existing and existing_status == 'published':
+            current_signature = self._recognition_content_signature(
+                self._normalize_recognition_template_payload(existing, existing_template=existing)
+            )
+            requested_signature = self._recognition_content_signature(normalized)
+            if current_signature == requested_signature:
+                decorated = self._decorate_recognition_template_with_usage(existing, usage_index)
+                return self._ok(
+                    True,
+                    f'Published template "{decorated.get("name", "template")}" is unchanged',
+                    template=decorated,
+                    validation=decorated.get('validation', {}),
+                )
+
+            family_key = str(existing.get('family_key', canonical_family_key) or canonical_family_key).strip() or canonical_family_key
+            normalized['family_key'] = family_key
+            normalized['version'] = max(1, self._recognition_next_family_version(templates, family_key))
+            normalized['template_id'] = f'{family_key}__v{normalized["version"]}'
+            normalized['parent_template_id'] = current_id
+
+        normalized['status'] = 'draft'
+        normalized['validation'] = self._validate_recognition_template_payload(normalized)
+        saved = self._save_recognition_template_to_db(str(normalized.get('template_id', '') or ''), normalized)
+        if not saved:
+            return self._ok(False, 'Failed to save recognition template', template=normalized)
+        decorated = self._decorate_recognition_template_with_usage(normalized, usage_index)
+        message = f'Saved draft "{decorated.get("name", "template")}"'
+        if str(decorated.get('parent_template_id', '') or '').strip() == current_id and current_id and current_id != str(decorated.get('template_id', '') or '').strip():
+            message = f'Saved new draft version v{decorated.get("version", 1)} for "{decorated.get("name", "template")}"'
+        return self._ok(True, message, template=decorated, validation=decorated.get('validation', {}))
+
+    def validate_recognition_template(self, template: Any):
+        normalized = self._normalize_recognition_template_payload(template)
+        validation = normalized.get('validation', {}) if isinstance(normalized.get('validation'), dict) else {}
+        errors = int(validation.get('summary', {}).get('errors', 0) or 0)
+        state = str(validation.get('state', 'ok') or 'ok')
+        message = 'Recognition template is ready'
+        if errors > 0:
+            message = f'Recognition template has {errors} blocking issue(s)'
+        elif state == 'warning':
+            message = 'Recognition template has non-blocking warnings'
+        return self._ok(errors == 0, message, template=normalized, validation=validation)
+
+    def duplicate_recognition_template(self, template_id: str):
+        templates = self._load_recognition_templates_from_db()
+        source = templates.get(str(template_id or '').strip(), {})
+        if not isinstance(source, dict) or not source:
+            return self._ok(False, f'Recognition template "{template_id}" not found')
+
+        duplicate = self._normalize_recognition_template_payload(source, existing_template=source)
+        duplicate_name = f'{str(source.get("name", "Template") or "Template").strip()} Copy'
+        duplicate_family = f'{self._recognition_slug(self._normalize_recognition_category(source.get("category", "shelves")))}_{self._recognition_slug(duplicate_name, "asset")}'
+        duplicate['name'] = duplicate_name
+        duplicate['family_key'] = duplicate_family
+        duplicate['version'] = 1
+        duplicate['status'] = 'draft'
+        duplicate['parent_template_id'] = str(source.get('template_id', '') or '').strip()
+        duplicate['template_id'] = f'{duplicate_family}__v1'
+        duplicate['validation'] = self._validate_recognition_template_payload(duplicate)
+
+        saved = self._save_recognition_template_to_db(duplicate['template_id'], duplicate)
+        if not saved:
+            return self._ok(False, 'Failed to duplicate recognition template')
+        return self._ok(True, f'Duplicated "{source.get("name", "template")}"', template=duplicate)
+
+    def publish_recognition_template(self, template: Any):
+        templates = self._load_recognition_templates_from_db()
+        action_point_configs = self._load_action_point_configs_from_db()
+        usage_index = self._build_recognition_usage_index(action_point_configs)
+        requested = template if isinstance(template, dict) else {}
+        current_id = str(requested.get('template_id', '') or '').strip()
+        existing = templates.get(current_id, {}) if current_id else {}
+        normalized = self._normalize_recognition_template_payload(requested, existing_template=existing if isinstance(existing, dict) else None)
+        canonical_family_key = self._recognition_family_key_for_template(normalized)
+        if self._recognition_is_local_identity(
+            str(normalized.get('template_id', '') or ''),
+            str(normalized.get('family_key', '') or ''),
+        ):
+            normalized['family_key'] = canonical_family_key
+            normalized['version'] = max(1, self._recognition_next_family_version(templates, canonical_family_key))
+            normalized['template_id'] = f'{canonical_family_key}__v{normalized["version"]}'
+            if current_id and current_id != normalized['template_id']:
+                normalized['parent_template_id'] = current_id
+        validation = normalized.get('validation', {}) if isinstance(normalized.get('validation'), dict) else {}
+        error_count = int(validation.get('summary', {}).get('errors', 0) or 0)
+        if error_count > 0:
+            return self._ok(False, f'Cannot publish with {error_count} validation error(s)', template=normalized, validation=validation)
+
+        current_usage = usage_index.get(current_id, [])
+        create_new_version = bool(
+            existing
+            and str(existing.get('status', 'draft') or 'draft').strip().lower() == 'published'
+            and len(current_usage) > 0
+        )
+        if create_new_version:
+            family_key = str(existing.get('family_key', normalized.get('family_key', '')) or normalized.get('family_key', '')).strip() or normalized.get('family_key', '')
+            next_version = max(
+                int(existing.get('version', 1) or 1),
+                max(
+                    [
+                        int(item.get('version', 1) or 1)
+                        for item in templates.values()
+                        if isinstance(item, dict) and str(item.get('family_key', '') or '').strip() == family_key
+                    ] or [1]
+                ),
+            ) + 1
+            normalized['family_key'] = family_key
+            normalized['version'] = next_version
+            normalized['template_id'] = f'{family_key}__v{next_version}'
+            normalized['parent_template_id'] = current_id
+
+        normalized['status'] = 'published'
+        normalized['validation'] = self._validate_recognition_template_payload(normalized)
+        saved = self._save_recognition_template_to_db(str(normalized.get('template_id', '') or ''), normalized)
+        if not saved:
+            return self._ok(False, 'Failed to publish recognition template', template=normalized, validation=normalized.get('validation', {}))
+
+        decorated = self._decorate_recognition_template_with_usage(normalized, usage_index)
+        message = f'Published "{normalized.get("name", "template")}"'
+        if create_new_version:
+            message = f'Published new safe version v{normalized.get("version", 1)} for "{normalized.get("name", "template")}"'
+        return self._ok(True, message, template=decorated, validation=decorated.get('validation', {}), created_new_version=create_new_version)
+
+    def delete_recognition_template(self, template_id: str):
+        target_template_id = str(template_id or '').strip()
+        if not target_template_id:
+            return self._ok(False, 'template_id is required')
+
+        action_point_configs = self._load_action_point_configs_from_db()
+        usage_index = self._build_recognition_usage_index(action_point_configs)
+        usages = usage_index.get(target_template_id, [])
+        if usages:
+            return self._ok(False, 'Cannot delete a template that is referenced by action points', usage=usages)
+
+        deleted = self._delete_recognition_template_from_db(target_template_id)
+        return self._ok(bool(deleted), 'Recognition template deleted' if deleted else 'Recognition template not found')
+
+    def export_recognition_template(self, template_id: str):
+        templates = self._load_recognition_templates_from_db()
+        action_point_configs = self._load_action_point_configs_from_db()
+        usage_index = self._build_recognition_usage_index(action_point_configs)
+        template = templates.get(str(template_id or '').strip(), {})
+        if not isinstance(template, dict) or not template:
+            return self._ok(False, f'Recognition template "{template_id}" not found')
+        normalized = self._decorate_recognition_template_with_usage(template, usage_index)
+        return self._ok(True, f'Exported "{normalized.get("name", "template")}"', template=normalized)
+
     # ---------- map helpers ----------
 
     def _occupancy_to_png_payload(self, map_msg: OccupancyGrid):
@@ -6526,12 +7198,19 @@ class RosBridge(Node):
             msg = response.message if response is not None else 'GetZones failed'
             return self._ok(False, str(msg), zones={})
 
+        recognition_templates = self._load_recognition_templates_from_db()
+        action_point_configs = self._load_action_point_configs_from_db()
         zones = {}
         for zone_msg in response.zones:
             name = str(zone_msg.name).strip()
             if not name:
                 continue
-            zones[name] = self._zone_msg_to_dict(zone_msg)
+            zones[name] = self._decorate_zone_with_action_point_config(
+                name,
+                self._zone_msg_to_dict(zone_msg),
+                action_point_configs,
+                recognition_templates,
+            )
         return self._ok(True, f'Retrieved {len(zones)} zones', zones=zones)
 
     def save_zone(
@@ -6544,6 +7223,10 @@ class RosBridge(Node):
         speed: float = 0.5,
         action: str = '',
         charge_duration: float = 0.0,
+        point_type: str = 'generic',
+        template_id: str = '',
+        recognize: bool = False,
+        action_point_notes: str = '',
     ):
         zone_name = (name or '').strip()
         if not zone_name:
@@ -6582,16 +7265,46 @@ class RosBridge(Node):
             or float(charge_duration) > 0.0
         )
         if not needs_metadata_update:
-            return self._ok(True, str(response.message))
+            meta = self._ok(True, str(response.message))
+        else:
+            meta = self.update_zone_params(
+                zone_name,
+                zone_type,
+                float(speed),
+                str(action or ''),
+                float(charge_duration),
+                point_type=point_type,
+                template_id=template_id,
+                recognize=recognize,
+                action_point_notes=action_point_notes,
+            )
+            if not meta.get('ok'):
+                return self._ok(
+                    True,
+                    f'{response.message}. Metadata update warning: {meta.get("message", "unknown")}',
+                )
 
-        meta = self.update_zone_params(zone_name, zone_type, float(speed), str(action or ''), float(charge_duration))
-        if meta.get('ok'):
-            return self._ok(True, str(response.message))
-
-        return self._ok(
-            True,
-            f'{response.message}. Metadata update warning: {meta.get("message", "unknown")}',
+        should_persist_action_point = (
+            str(zone_type or 'normal').strip().lower() == 'action'
+            or bool(template_id)
+            or self._normalize_action_point_type(point_type) != 'generic'
+            or bool(recognize)
         )
+        if should_persist_action_point:
+            action_point_payload = {
+                'zone_name': zone_name,
+                'point_type': self._normalize_action_point_type(point_type),
+                'template_id': str(template_id or '').strip(),
+                'action_id': str(action or '').strip(),
+                'action': str(action or '').strip(),
+                'recognize': bool(recognize),
+                'notes': str(action_point_notes or '').strip(),
+            }
+            self._save_action_point_config_to_db(zone_name, action_point_payload)
+        else:
+            self._delete_action_point_config_from_db(zone_name)
+
+        return self._ok(True, str(response.message))
 
     def delete_zone(self, name: str):
         req = DeleteZone.Request()
@@ -6603,7 +7316,10 @@ class RosBridge(Node):
             return self._ok(False, 'Delete zone timed out')
         if response is None:
             return self._ok(False, 'Delete zone failed')
-        return self._ok(bool(response.ok), str(response.message))
+        ok = bool(response.ok)
+        if ok:
+            self._delete_action_point_config_from_db(str(name or ''))
+        return self._ok(ok, str(response.message))
 
     def reorder_zones(self, zone_names: List[str]):
         req = ReorderZones.Request()
@@ -6617,7 +7333,19 @@ class RosBridge(Node):
             return self._ok(False, 'Reorder zones failed')
         return self._ok(bool(response.ok), str(response.message))
 
-    def update_zone_params(self, name: str, zone_type: str, speed: float, action: str, charge_duration: float):
+    def update_zone_params(
+        self,
+        name: str,
+        zone_type: str,
+        speed: float,
+        action: str,
+        charge_duration: float,
+        *,
+        point_type: str = 'generic',
+        template_id: str = '',
+        recognize: bool = False,
+        action_point_notes: str = '',
+    ):
         req = UpdateZoneParams.Request()
         req.name = str(name or '')
         req.type = str(zone_type or 'normal')
@@ -6637,7 +7365,30 @@ class RosBridge(Node):
             return self._ok(False, 'Update zone params timed out')
         if response is None:
             return self._ok(False, 'Update zone params failed')
-        return self._ok(bool(response.ok), str(response.message))
+        ok = bool(response.ok)
+        if ok:
+            should_persist_action_point = (
+                str(zone_type or 'normal').strip().lower() == 'action'
+                or bool(template_id)
+                or self._normalize_action_point_type(point_type) != 'generic'
+                or bool(recognize)
+            )
+            if should_persist_action_point:
+                self._save_action_point_config_to_db(
+                    str(name or ''),
+                    {
+                        'zone_name': str(name or '').strip(),
+                        'point_type': self._normalize_action_point_type(point_type),
+                        'template_id': str(template_id or '').strip(),
+                        'action_id': str(action or '').strip(),
+                        'action': str(action or '').strip(),
+                        'recognize': bool(recognize),
+                        'notes': str(action_point_notes or '').strip(),
+                    },
+                )
+            else:
+                self._delete_action_point_config_from_db(str(name or ''))
+        return self._ok(ok, str(response.message))
 
     # ---------- go-to-zone action ----------
 
