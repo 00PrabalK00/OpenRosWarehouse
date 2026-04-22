@@ -1,5 +1,5 @@
 schema_version: 1
-profile_version: 4
+profile_version: 5
 robot_id: UGV-01
 namespace: /
 base_frame: base_footprint
@@ -90,10 +90,10 @@ urdf_artifact:
 robot_builder:
   schema_version: 1
   source: robot_editor
-  base_link: base_link
+  base_link: base_footprint
   links:
   - name: base_link
-    parent: ''
+    parent: base_footprint
     joint_type: fixed
     joint_xyz:
     - 0.0
@@ -104,7 +104,7 @@ robot_builder:
     - 0.0
     - 0.0
   - name: base_footprint
-    parent: base_link
+    parent: ''
     joint_type: fixed
     joint_xyz:
     - 0.0
@@ -355,7 +355,7 @@ robot_builder:
     height: 0.04
     radius: 0.05
     color: '#60a5fa'
-  updated_at: 1772604570
+  updated_at: 1776826364
 release:
   production: false
   production_marked_at: 0

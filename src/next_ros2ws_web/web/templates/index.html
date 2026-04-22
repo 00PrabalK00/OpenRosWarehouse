@@ -11309,506 +11309,374 @@
         }
 
         /* ================================================================
-           DEVICE CONFIG — Clean Redesign
-           Toolbar hoisted to full-width strip; sidebar is pure inspector.
-           ================================================================ */
+           DEVICE CONFIG v3 — scoped from device_config.html
+           same design DNA as home page
+        ══════════════════════════════════════════════════════ */
 
-        /* ── Shell structure ─────────────────────────────────── */
-        #device-config-shell {
-            flex-direction: column !important;
+        /* Tab shell */
+        #device-config-tab.active {
+            padding: 0 !important; background: var(--bg-primary) !important;
+            display: flex !important; flex-direction: column !important; overflow: hidden !important;
         }
 
-        /* ── Full-width toolbar strip (below rail, above main+sidebar) ── */
-        #device-config-shell-toolbar {
-            flex-shrink: 0;
-            display: flex;
-            align-items: stretch;
-            background: var(--bg-chrome);
+        /* Typography helpers scoped to tab */
+        #device-config-tab .dc-t-label   { font-size: 9px;  font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-field-label); line-height: 1; }
+        #device-config-tab .dc-t-value   { font-size: 11px; color: var(--text-field-value); font-family: 'Roboto Mono', monospace; }
+        #device-config-tab .dc-t-caption { font-size: 10px; color: var(--text-tertiary); }
+        #device-config-tab .dc-mono      { font-family: 'Roboto Mono', monospace; }
+
+        /* ── Button primitives ──────────────────────────────── */
+        .dc-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+            height: 26px; padding: 0 10px; border-radius: 3px; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+            border: 1px solid var(--border-chrome); background: var(--bg-elevated);
+            color: var(--text-secondary); cursor: pointer; font-family: inherit;
+            transition: background 0.12s, color 0.12s, border-color 0.12s; flex-shrink: 0;
+        }
+        .dc-btn i { font-size: 10px; }
+        .dc-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); border-color: var(--border-secondary, #3d4a5c); }
+        .dc-btn.active,
+        .dc-btn.dc-btn-active { background: var(--selected-blue-dim); border-color: var(--selected-blue); color: var(--accent-blue, #4299E1); }
+        .dc-btn.dc-btn-primary { background: var(--selected-blue-dim); border-color: var(--selected-blue); color: var(--accent-blue, #4299E1); }
+        .dc-btn.dc-btn-primary:hover { background: rgba(38,105,200,0.24); }
+        .dc-btn.dc-btn-success { background: rgba(29,122,67,0.18); border-color: rgba(72,187,120,0.45); color: #68d391; }
+        .dc-btn.dc-btn-success:hover { background: rgba(29,122,67,0.28); }
+        .dc-btn.dc-btn-danger  { background: rgba(196,43,43,0.14); border-color: rgba(252,129,129,0.35); color: #fc8181; }
+
+        /* ── Command Bar ────────────────────────────────────── */
+        #dc-cmdbar {
+            height: 44px; flex-shrink: 0;
+            background: var(--bg-chrome); border-bottom: 1px solid var(--border-chrome);
+            display: flex; align-items: center; z-index: 100;
+        }
+        .dc-cmdbar-profile {
+            display: flex; align-items: center; gap: 10px;
+            padding: 0 14px 0 12px; height: 100%; cursor: pointer;
+            border-right: 1px solid var(--border-chrome); flex-shrink: 0; min-width: 220px;
+        }
+        .dc-cmdbar-profile:hover { background: rgba(255,255,255,0.03); }
+        .dc-profile-icon {
+            width: 30px; height: 30px; border-radius: 5px; flex-shrink: 0;
+            background: var(--selected-blue-dim); border: 1px solid rgba(38,105,200,0.3);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--accent-blue, #4299E1); font-size: 13px;
+        }
+        .dc-profile-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .dc-profile-name { font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dc-profile-sub  { display: flex; align-items: center; gap: 6px; }
+        .dc-profile-ver  { font-size: 9px; color: var(--text-tertiary); font-family: 'Roboto Mono', monospace; }
+        .dc-profile-chip {
+            font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 1px 5px; border-radius: 2px;
+        }
+        .dc-profile-chip.draft     { background: rgba(168,84,0,0.2); border: 1px solid rgba(237,137,54,0.35); color: #ed8936; }
+        .dc-profile-chip.published { background: rgba(29,122,67,0.2);  border: 1px solid rgba(72,187,120,0.35); color: #48bb78; }
+        .dc-profile-chip.na        { background: var(--bg-elevated); border: 1px solid var(--border-chrome); color: var(--text-field-label); }
+        .dc-cmdbar-validation {
+            display: flex; align-items: center; gap: 6px; padding: 0 12px; flex-shrink: 0;
+            border-right: 1px solid var(--border-chrome); height: 100%;
+        }
+        .dc-val-chip {
+            display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+            padding: 2px 7px; border-radius: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+        }
+        .dc-val-chip.error { background: rgba(196,43,43,0.15); border: 1px solid rgba(252,129,129,0.3); color: #fc8181; }
+        .dc-val-chip.warn  { background: rgba(168,84,0,0.15);  border: 1px solid rgba(237,137,54,0.3);  color: #ed8936; }
+        .dc-val-chip.ok    { background: rgba(29,122,67,0.15);  border: 1px solid rgba(72,187,120,0.3);  color: #48bb78; }
+        .dc-val-chip i     { font-size: 8px; }
+        .dc-cmdbar-spacer  { flex: 1; }
+        .dc-cmdbar-actions { display: flex; align-items: center; gap: 4px; padding: 0 10px; height: 100%; flex-shrink: 0; }
+        .dc-cmdbar-more-btn {
+            width: 28px; height: 26px; padding: 0; font-size: 13px; cursor: pointer;
+            border-radius: 3px; border: 1px solid var(--border-chrome); font-family: inherit;
+            background: var(--bg-elevated); color: var(--text-tertiary); flex-shrink: 0;
+        }
+        .dc-cmdbar-more-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+
+        /* ── Main viewport ──────────────────────────────────── */
+        #dc-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+        /* ── Mode Rail ──────────────────────────────────────── */
+        #dc-rail {
+            width: 52px; min-width: 52px; flex-shrink: 0;
+            background: var(--bg-chrome); border-right: 1px solid var(--border-chrome);
+            display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 1px;
+            z-index: 50; overflow: hidden;
+        }
+        .dc-rail-btn {
+            position: relative; width: 40px; height: 44px; border: none; border-radius: 5px;
+            background: transparent; color: var(--text-tertiary); cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+            font-size: 14px; padding: 4px; transition: background 0.14s, color 0.14s; font-family: inherit;
+        }
+        .dc-rail-btn:hover  { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+        .dc-rail-btn.active { background: var(--selected-blue-dim); color: var(--selected-blue); }
+        .dc-rail-btn.active::before {
+            content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
+            width: 3px; background: var(--selected-blue); border-radius: 0 2px 2px 0;
+        }
+        .dc-rail-label {
+            font-size: 7px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+            line-height: 1; text-align: center;
+        }
+        .dc-rail-sep     { width: 26px; height: 1px; background: var(--border-chrome); margin: 3px 0; flex-shrink: 0; }
+        .dc-rail-spacer  { flex: 1; }
+
+        /* ── Canvas workspace ───────────────────────────────── */
+        #dc-canvas-zone {
+            flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+            background: var(--bg-canvas);
+        }
+        #dc-canvas-header {
+            height: 38px; flex-shrink: 0;
+            background: var(--bg-chrome); border-bottom: 1px solid var(--border-chrome);
+            display: flex; align-items: center; padding: 0 12px; gap: 8px;
+        }
+        .dc-cvs-view-label  { font-size: 10px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.04em; flex-shrink: 0; }
+        .dc-cvs-sep         { width: 1px; height: 18px; background: var(--border-chrome); flex-shrink: 0; }
+        .dc-cvs-profile-ctx { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+        .dc-cvs-spacer      { flex: 1; }
+        .dc-cvs-view-toggle {
+            display: flex; align-items: center; gap: 1px;
+            background: var(--bg-canvas); border: 1px solid var(--border-chrome); border-radius: 4px; padding: 2px;
+        }
+        .dc-cvs-view-btn {
+            height: 24px; padding: 0 10px; border-radius: 2px; border: none; background: transparent;
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+            color: var(--text-tertiary); cursor: pointer; transition: background 0.12s, color 0.12s; font-family: inherit;
+        }
+        .dc-cvs-view-btn.active { background: var(--bg-elevated); color: var(--text-primary); }
+        .dc-cvs-issue-chip {
+            display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+            padding: 2px 8px; border-radius: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; flex-shrink: 0;
+        }
+        .dc-cvs-issue-chip.has-errors { background: rgba(196,43,43,0.15); border: 1px solid rgba(252,129,129,0.3); color: #fc8181; }
+        .dc-cvs-issue-chip.has-warns  { background: rgba(168,84,0,0.15);  border: 1px solid rgba(237,137,54,0.3);  color: #ed8936; }
+        .dc-cvs-issue-chip.all-ok     { background: rgba(29,122,67,0.15);  border: 1px solid rgba(72,187,120,0.3);  color: #48bb78; }
+        #dc-canvas-main {
+            flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--bg-canvas);
+        }
+        /* Grid background on canvas */
+        #dc-canvas-main::before {
+            content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+            background-image:
+                linear-gradient(rgba(45,55,72,0.25) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(45,55,72,0.25) 1px, transparent 1px),
+                linear-gradient(rgba(45,55,72,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(45,55,72,0.1) 1px, transparent 1px);
+            background-size: 80px 80px, 80px 80px, 20px 20px, 20px 20px;
+        }
+        /* Robot editor visual panel fills canvas completely */
+        #dc-canvas-main .robot-editor-visual-panel {
+            position: relative; z-index: 1;
+            display: flex !important; flex-direction: column !important;
+            height: 100% !important; min-height: 0 !important;
+            border: none !important; border-radius: 0 !important;
+            background: transparent !important; box-shadow: none !important; margin: 0 !important;
+        }
+        #dc-canvas-main #robot-editor-canvas { flex: 1 1 auto !important; min-height: 100px !important; }
+        #dc-canvas-main #robot-editor-status { display: none !important; }
+
+        /* ── Inspector ──────────────────────────────────────── */
+        #dc-inspector {
+            width: 292px; min-width: 292px; flex-shrink: 0;
+            background: var(--bg-inspector); border-left: 1px solid var(--border-chrome);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .dc-insp-header {
+            height: 38px; flex-shrink: 0; background: var(--bg-elevated);
             border-bottom: 1px solid var(--border-chrome);
-        }
-
-        /* Make the hoisted toolbar fill the strip naturally */
-        #device-config-shell-toolbar .robot-editor-collapse-shell {
-            flex: 1 1 auto;
-            border: none !important;
-            border-radius: 0 !important;
-            background: transparent !important;
-            overflow: visible !important;
-        }
-
-        #device-config-shell-toolbar .robot-editor-unified-toolbar {
-            flex: 1 1 auto !important;
-            height: 42px !important;
-            min-height: 42px !important;
-            padding: 0 14px !important;
-            gap: 5px !important;
-            border: none !important;
-            border-top: none !important;
-            border-radius: 0 !important;
-            background: transparent !important;
-            box-shadow: none !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-        }
-
-        /* Un-do the sidebar grid layout for buttons in the hoisted toolbar */
-        #device-config-shell-toolbar .re-tb-group {
-            display: inline-flex !important;
-            width: auto !important;
-            grid-template-columns: none !important;
-            gap: 4px !important;
-            flex-wrap: nowrap !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-spacer {
-            display: flex !important;
-            flex: 1 1 0 !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-sep {
-            display: block !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-btn,
-        #device-config-shell-toolbar .re-tb-panel-btn {
-            height: 26px !important;
-            min-height: 26px !important;
-            padding: 0 10px !important;
-            border-radius: 5px !important;
-            font-size: 10px !important;
-            font-weight: 600 !important;
-            text-transform: none !important;
-            letter-spacing: 0.01em !important;
-            width: auto !important;
-            justify-content: center !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-panel-btn {
-            border-radius: 999px !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-btn i,
-        #device-config-shell-toolbar .re-tb-panel-btn i {
-            font-size: 10px !important;
-        }
-
-        /* Subtle label for "ROBOT EDITOR" kicker in toolbar */
-        #device-config-shell-toolbar .robot-editor-title {
-            font-size: 9px !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.14em !important;
-            color: rgba(148, 163, 184, 0.55) !important;
-            white-space: nowrap;
-        }
-
-        /* Collapse panels below toolbar — flat, no outer card */
-        #device-config-shell-toolbar .robot-editor-collapse-panels {
-            border: none !important;
-            border-top: 1px solid var(--border-chrome) !important;
-            border-radius: 0 !important;
-            background: var(--bg-inspector) !important;
-            box-shadow: none !important;
-            margin-top: 0 !important;
-        }
-
-        #device-config-shell-toolbar .robot-editor-collapse-panel {
-            border-bottom: 1px solid var(--border-chrome) !important;
-        }
-
-        /* ── Rail: slimmer, segmented control feel ─────────── */
-        #device-config-rail {
-            height: 40px !important;
-            min-height: 40px !important;
-            padding: 0 12px !important;
-            gap: 3px !important;
-            background: var(--bg-primary) !important;
-            border-bottom: 1px solid var(--border-chrome) !important;
-        }
-
-        #device-config-rail .mode-rail-btn {
-            height: 26px !important;
-            min-width: 52px !important;
-            padding: 0 12px !important;
-            border-radius: 4px !important;
-            font-size: 9px !important;
-            gap: 0 !important;
-        }
-
-        /* Hide the small icon in rail buttons — label-only for a cleaner look */
-        #device-config-rail .mode-rail-btn i {
-            display: none !important;
-        }
-
-        #device-config-rail .mode-rail-label {
-            font-size: 10px !important;
-            letter-spacing: 0.06em !important;
-        }
-
-        #device-config-rail .mode-rail-sep {
-            height: 16px !important;
-            margin: 0 6px !important;
-        }
-
-        /* ── Sidebar: narrower, inspector-only ───────────────── */
-        #device-config-sidebar {
-            width: clamp(300px, 23vw, 360px) !important;
-            min-width: clamp(300px, 23vw, 360px) !important;
-            max-width: clamp(300px, 23vw, 360px) !important;
-        }
-
-        /* Inspector header: remove LAYOUT badge noise */
-        .dc-insp-badge {
-            display: none !important;
-        }
-
-        .dc-insp-hdr {
-            padding: 7px 10px 6px !important;
-        }
-
-        .dc-insp-title {
-            font-size: 9px !important;
-            letter-spacing: 0.12em !important;
-            color: rgba(148, 163, 184, 0.7) !important;
-        }
-
-        /* Override sidebar-toolbar CSS that no longer applies */
-        #device-config-sidebar .robot-editor-unified-toolbar,
-        #device-config-sidebar .robot-editor-collapse-shell {
-            display: none !important;
-        }
-
-        /* ── Main stage: give the canvas a bit more room ──── */
-        #device-config-main-stage {
-            margin: 6px !important;
-        }
-
-        #device-config-main-scroll {
-            padding: 10px !important;
-            gap: 10px !important;
-        }
-
-        /* ── Sidebar viz-strip: compact toggle row ───────── */
-        #device-config-sidebar .re-viz-strip .toggle-grid {
-            gap: 3px !important;
-        }
-
-        #device-config-sidebar .re-viz-strip .toggle-item {
-            min-height: 24px !important;
-            padding: 4px 8px !important;
-            font-size: 9px !important;
-        }
-
-        /* ================================================================
-           DEVICE CONFIG — Visual Hierarchy & Breathing Room v3
-           Goal: one dominant zone (canvas), muted chrome, clear tiers.
-           ================================================================ */
-
-        /* ── Canvas panel: slim title bar ─────────────────────────────── */
-        #device-config-main-scroll .robot-editor-panel-header {
-            display: flex !important;
-            flex-direction: row !important;
-            align-items: center !important;
-            flex-wrap: nowrap !important;
-            min-height: 36px !important;
-            padding: 0 14px !important;
-            gap: 10px !important;
-            border-bottom-color: rgba(71, 85, 105, 0.2) !important;
-            background: transparent !important;
-        }
-
-        #device-config-main-scroll .robot-editor-panel-header-meta {
-            display: flex !important;
-            flex-direction: row !important;
-            align-items: center !important;
-            gap: 8px !important;
-            flex: 1 1 auto !important;
-            min-width: 0 !important;
-        }
-
-        /* "ROBOT VISUALIZATION" label → tiny muted kicker */
-        #device-config-main-scroll .robot-editor-panel-header h3 {
-            font-size: 8px !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.14em !important;
-            text-transform: uppercase !important;
-            color: rgba(71, 85, 105, 0.65) !important;
-            margin: 0 !important;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        #device-config-main-scroll .robot-editor-panel-subtitle {
-            font-size: 9px !important;
-            color: rgba(71, 85, 105, 0.7) !important;
-            margin: 0 !important;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        #device-config-main-scroll .robot-editor-panel-badge {
-            font-size: 8px !important;
-            padding: 0 6px !important;
-            min-height: 17px !important;
-            flex-shrink: 0;
-        }
-
-        /* Clean badge: invisible until there are warnings */
-        #device-config-main-scroll .robot-editor-panel-badge[data-state="clean"] {
-            display: none !important;
-        }
-
-        /* ── Mode switcher: underline tabs, zero background ───────────── */
-        #device-config-main-scroll .robot-editor-visual-controls {
-            display: flex !important;
-            align-items: stretch !important;
-            justify-content: space-between !important;
-            padding: 0 14px !important;
-            gap: 0 !important;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.18) !important;
-        }
-
-        #device-config-main-scroll .robot-editor-mode-switcher {
-            display: flex !important;
-            align-items: stretch !important;
-            gap: 0 !important;
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-        }
-
-        #device-config-main-scroll .robot-editor-mode-btn {
-            height: 30px !important;
-            min-height: 30px !important;
-            padding: 0 10px !important;
-            background: transparent !important;
-            border: none !important;
-            border-bottom: 2px solid transparent !important;
-            border-radius: 0 !important;
-            color: rgba(100, 116, 139, 0.5) !important;
-            font-size: 9px !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.08em !important;
-            text-transform: uppercase !important;
-            box-shadow: none !important;
-            transition: color 0.12s, border-bottom-color 0.12s !important;
-        }
-
-        #device-config-main-scroll .robot-editor-mode-btn:hover {
-            color: rgba(203, 213, 225, 0.72) !important;
-            background: transparent !important;
-            border-color: transparent !important;
-            transform: none !important;
-            box-shadow: none !important;
-        }
-
-        #device-config-main-scroll .robot-editor-mode-btn.active {
-            color: rgba(96, 165, 250, 0.88) !important;
-            border-bottom-color: rgba(96, 165, 250, 0.52) !important;
-            background: transparent !important;
-            box-shadow: none !important;
-        }
-
-        /* ── Quick actions: icon-only, transparent ────────────────────── */
-        #device-config-main-scroll .robot-editor-quick-actions {
-            display: flex !important;
-            align-items: center !important;
-            gap: 2px !important;
-        }
-
-        #device-config-main-scroll .robot-editor-icon-btn span {
-            display: none !important;
-        }
-
-        #device-config-main-scroll .robot-editor-icon-btn {
-            width: 28px !important;
-            min-width: 28px !important;
-            height: 28px !important;
-            min-height: 28px !important;
-            padding: 0 !important;
-            border-radius: 5px !important;
-            background: transparent !important;
-            border-color: rgba(71, 85, 105, 0.28) !important;
-            color: rgba(100, 116, 139, 0.55) !important;
-            box-shadow: none !important;
-        }
-
-        #device-config-main-scroll .robot-editor-icon-btn:hover {
-            background: rgba(30, 41, 59, 0.55) !important;
-            border-color: rgba(148, 163, 184, 0.38) !important;
-            color: rgba(226, 232, 240, 0.85) !important;
-            transform: none !important;
-        }
-
-        /* ── Canvas focus: whisper quiet ──────────────────────────────── */
-        #device-config-main-scroll .robot-editor-focus-summary {
-            padding: 3px 14px 0 !important;
-            gap: 6px !important;
-            opacity: 0.4;
-            transition: opacity 0.15s;
-        }
-
-        #device-config-main-scroll .robot-editor-focus-summary:hover {
-            opacity: 1;
-        }
-
-        #device-config-main-scroll .robot-editor-focus-label {
-            font-size: 7px !important;
-            letter-spacing: 0.12em !important;
-        }
-
-        #device-config-main-scroll .robot-editor-focus-target {
-            font-size: 9px !important;
-            min-height: 16px !important;
-            padding: 0 6px !important;
-        }
-
-        #device-config-main-scroll .robot-editor-panel-subtitle.robot-editor-focus-context,
-        #device-config-main-scroll #robot-editor-focus-context {
-            font-size: 8px !important;
-        }
-
-        /* ── Canvas shell: less padding ───────────────────────────────── */
-        #device-config-main-scroll .robot-editor-canvas-shell {
-            padding: 8px 14px 8px !important;
-        }
-
-        /* ── Geometry warnings: muted, compact ────────────────────────── */
-        #device-config-main-scroll .robot-editor-geometry-warnings {
-            font-size: 9px !important;
-            line-height: 1.5 !important;
-            padding: 7px 10px !important;
-            margin: 0 14px 6px !important;
-            border-radius: 6px !important;
-            opacity: 0.6;
-        }
-
-        /* ── Legend + scale: nearly invisible ────────────────────────── */
-        #device-config-main-scroll .robot-editor-legend {
-            opacity: 0.3;
-            gap: 10px !important;
-            padding-top: 0 !important;
-            padding-bottom: 2px !important;
-        }
-
-        #device-config-main-scroll .urdf-viz-legend-item {
-            font-size: 8px !important;
-            gap: 4px !important;
-        }
-
-        #device-config-main-scroll .urdf-viz-legend-dot {
-            width: 6px !important;
-            height: 6px !important;
-        }
-
-        #device-config-main-scroll .robot-editor-scale-row {
-            opacity: 0.3;
-            padding-top: 2px !important;
-            padding-bottom: 10px !important;
-        }
-
-        #device-config-main-scroll .robot-editor-scale-label {
-            font-size: 8px !important;
-        }
-
-        /* ── Floating zoom: subtle overlay ───────────────────────────── */
-        #device-config-main-scroll .robot-editor-floating-zoom {
-            top: 18px !important;
-            right: 18px !important;
-            padding: 3px !important;
-            border-radius: 8px !important;
-            background: rgba(9, 13, 22, 0.65) !important;
-            border-color: rgba(71, 85, 105, 0.35) !important;
-            backdrop-filter: blur(6px) !important;
-        }
-
-        #device-config-main-scroll .robot-editor-floating-zoom .btn {
-            min-width: 26px !important;
-            width: 26px !important;
-            height: 26px !important;
-            border-radius: 6px !important;
-            background: transparent !important;
-            border-color: rgba(71, 85, 105, 0.3) !important;
-            color: rgba(148, 163, 184, 0.65) !important;
-            font-size: 12px !important;
-            padding: 0 !important;
-        }
-
-        /* ── Sidebar: section group row headers ──────────────────────── */
-        #device-config-sidebar .robot-editor-frame-group-row td {
-            padding: 12px 10px 3px !important;
-            font-size: 7px !important;
-            font-weight: 800 !important;
-            letter-spacing: 0.18em !important;
-            text-transform: uppercase !important;
-            color: rgba(71, 85, 105, 0.85) !important;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.16) !important;
-        }
-
-        /* ── Frame kind badges: smaller, less aggressive ─────────────── */
-        #device-config-sidebar .robot-editor-frame-kind-badge {
-            font-size: 7px !important;
-            letter-spacing: 0.04em !important;
-            min-width: 36px !important;
-            min-height: 16px !important;
-            padding: 0 4px !important;
-            border-radius: 3px !important;
-            opacity: 0.7;
-        }
-
-        /* ── Delete buttons: ghost until row is hovered ──────────────── */
-        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] td:nth-child(7) .btn {
-            background: transparent !important;
-            border-color: transparent !important;
-            color: transparent !important;
-            box-shadow: none !important;
-            transition: border-color 0.12s, color 0.12s, background 0.12s !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name]:hover td:nth-child(7) .btn {
-            border-color: rgba(71, 85, 105, 0.35) !important;
-            color: rgba(100, 116, 139, 0.6) !important;
-        }
-
-        #device-config-sidebar .robot-editor-frame-table tbody tr[data-link-name] td:nth-child(7) .btn:hover {
-            background: rgba(239, 68, 68, 0.1) !important;
-            border-color: rgba(239, 68, 68, 0.32) !important;
-            color: rgba(248, 113, 113, 0.85) !important;
-        }
-
-        /* ── Toolbar: primary vs ghost hierarchy ─────────────────────── */
-
-        /* Panel toggles (Config / View / Display / More): barely visible */
-        #device-config-shell-toolbar .re-tb-panel-btn {
-            background: transparent !important;
-            border-color: rgba(71, 85, 105, 0.25) !important;
-            color: rgba(71, 85, 105, 0.7) !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-panel-btn:hover {
-            background: rgba(30, 41, 59, 0.5) !important;
-            border-color: rgba(100, 116, 139, 0.4) !important;
-            color: rgba(148, 163, 184, 0.85) !important;
-        }
-
-        #device-config-shell-toolbar .re-tb-panel-btn.active {
-            background: rgba(30, 64, 175, 0.14) !important;
-            border-color: rgba(96, 165, 250, 0.28) !important;
-            color: rgba(147, 197, 253, 0.85) !important;
-        }
-
-        /* "ROBOT EDITOR" kicker: nearly invisible — context is already clear */
-        #device-config-shell-toolbar .robot-editor-title {
-            color: rgba(71, 85, 105, 0.4) !important;
-            font-size: 7px !important;
-            letter-spacing: 0.2em !important;
-        }
-
-        /* Separator: dimmer */
-        #device-config-shell-toolbar .re-tb-sep {
-            background: rgba(71, 85, 105, 0.25) !important;
-        }
+            display: flex; align-items: center; padding: 0 10px; gap: 8px;
+        }
+        .dc-insp-header-title {
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-secondary); flex: 1;
+        }
+        .dc-insp-mode-badge {
+            font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+            padding: 1px 5px; border-radius: 2px;
+            background: var(--selected-blue-dim); color: var(--selected-blue);
+            border: 1px solid rgba(38,105,200,0.35);
+        }
+        .dc-insp-tabs {
+            display: flex; align-items: stretch; flex-shrink: 0;
+            background: var(--bg-elevated); border-bottom: 1px solid var(--border-chrome);
+        }
+        .dc-insp-tab {
+            flex: 1; height: 32px; border: none; background: transparent; cursor: pointer;
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-tertiary); border-bottom: 2px solid transparent;
+            transition: color 0.14s, border-color 0.14s; font-family: inherit;
+        }
+        .dc-insp-tab:hover  { color: var(--text-secondary); }
+        .dc-insp-tab.active { color: var(--selected-blue); border-bottom-color: var(--selected-blue); }
+        .dc-insp-pane { display: none; flex: 1; flex-direction: column; overflow-y: auto; min-height: 0; }
+        .dc-insp-pane.active { display: flex; }
+        .dc-insp-pane::-webkit-scrollbar { width: 5px; }
+        .dc-insp-pane::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 3px; }
+
+        /* ── Inspector content ──────────────────────────────── */
+        .dc-insp-section {
+            padding: 5px 10px 3px; flex-shrink: 0; background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-chrome);
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-secondary); position: sticky; top: 0; z-index: 3;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .dc-prop-row {
+            display: flex; align-items: center; padding: 4px 10px; gap: 8px;
+            min-height: 28px; border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .dc-prop-lbl {
+            flex: 0 0 88px; font-size: 10px; color: var(--text-field-label);
+            text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .dc-prop-val {
+            flex: 1; font-size: 11px; color: var(--text-field-value);
+            font-family: 'Roboto Mono', monospace; overflow: hidden; text-overflow: ellipsis;
+        }
+        .dc-prop-input {
+            flex: 1; font-size: 11px; color: var(--text-primary); font-family: 'Roboto Mono', monospace;
+            background: var(--bg-canvas); border: 1px solid var(--border-chrome);
+            border-radius: 3px; padding: 2px 6px; height: 24px; min-width: 0; box-sizing: border-box;
+        }
+        .dc-prop-input:focus { border-color: var(--selected-blue); outline: none; }
+
+        /* ── Overview grid ──────────────────────────────────── */
+        .dc-overview-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+            background: var(--border-chrome); border: 1px solid var(--border-chrome);
+            border-radius: 4px; margin: 8px 10px;
+        }
+        .dc-ov-cell  { padding: 8px 10px; background: var(--bg-canvas); display: flex; flex-direction: column; gap: 3px; }
+        .dc-ov-lbl   { font-size: 9px; color: var(--text-field-label); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+        .dc-ov-val   { font-size: 13px; font-weight: 700; color: var(--text-primary); font-family: 'Roboto Mono', monospace; }
+
+        /* ── Tags ───────────────────────────────────────────── */
+        .dc-tag { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 2px; }
+        .dc-tag-blue   { background: rgba(66,153,225,0.15); border: 1px solid rgba(66,153,225,0.3);   color: #7dd3fc; }
+        .dc-tag-green  { background: rgba(72,187,120,0.15); border: 1px solid rgba(72,187,120,0.3);   color: #68d391; }
+        .dc-tag-amber  { background: rgba(237,137,54,0.15); border: 1px solid rgba(237,137,54,0.3);   color: #ed8936; }
+        .dc-tag-purple { background: rgba(192,132,252,0.15); border: 1px solid rgba(192,132,252,0.3); color: #c084fc; }
+        .dc-tag-gray   { background: rgba(113,128,150,0.15); border: 1px solid rgba(113,128,150,0.3); color: #a0aec0; }
+
+        /* ── Hierarchy tree ─────────────────────────────────── */
+        .dc-tree-node {
+            display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+            cursor: pointer; min-height: 28px; border-bottom: 1px solid rgba(255,255,255,0.025);
+            transition: background 0.1s;
+        }
+        .dc-tree-node:hover    { background: rgba(255,255,255,0.04); }
+        .dc-tree-node.selected { background: var(--selected-blue-dim); }
+        .dc-tree-node.selected .dc-tree-node-name { color: var(--accent-blue, #4299E1); }
+        .dc-tree-node-expand { width: 14px; height: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; color: var(--text-tertiary); }
+        .dc-tree-node-icon   { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; width: 14px; text-align: center; }
+        .dc-tree-node-name   { font-size: 11px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dc-tree-node-badge  { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 2px; flex-shrink: 0; background: var(--bg-elevated); color: var(--text-field-label); border: 1px solid var(--border-chrome); }
+        .dc-tree-node-badge.joint   { color: #7dd3fc; border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.08); }
+        .dc-tree-node-badge.sensor  { color: #c084fc; border-color: rgba(192,132,252,0.3); background: rgba(192,132,252,0.08); }
+        .dc-tree-node-badge.wheel   { color: #86efac; border-color: rgba(134,239,172,0.3); background: rgba(134,239,172,0.08); }
+        .dc-tree-node-badge.caster  { color: #fde68a; border-color: rgba(253,230,138,0.3); background: rgba(253,230,138,0.08); }
+        .dc-tree-node-badge.drive   { color: #7dd3fc; border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.08); }
+        .dc-tree-filtered-out { display: none; }
+
+        /* ── Validation ─────────────────────────────────────── */
+        .dc-val-summary-bar {
+            display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+            background: var(--bg-elevated); border-bottom: 1px solid var(--border-chrome); flex-shrink: 0;
+        }
+        .dc-val-health-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dc-val-health-label { font-size: 10px; font-weight: 700; color: var(--text-secondary); flex: 1; }
+        .dc-val-cat-hdr {
+            padding: 6px 10px 4px; font-size: 8px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-field-label);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .dc-val-issue {
+            display: flex; gap: 8px; padding: 7px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer; transition: background 0.1s;
+        }
+        .dc-val-issue:hover { background: rgba(255,255,255,0.04); }
+        .dc-val-issue-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+        .dc-val-issue-dot.error { background: #fc8181; }
+        .dc-val-issue-dot.warn  { background: #ed8936; }
+        .dc-val-issue-dot.pass  { background: #48bb78; }
+        .dc-val-issue-body   { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .dc-val-issue-title  { font-size: 11px; color: var(--text-secondary); }
+        .dc-val-issue-detail { font-size: 10px; color: var(--text-tertiary); line-height: 1.4; }
+        .dc-val-issue-fix    { font-size: 10px; color: var(--accent-blue, #4299E1); margin-top: 2px; }
+        .dc-val-issue-component {
+            flex-shrink: 0; align-self: flex-start; margin-top: 1px;
+            font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 2px;
+            background: var(--bg-elevated); border: 1px solid var(--border-chrome); color: var(--text-field-label);
+        }
+        .dc-val-empty { padding: 24px 16px; font-size: 11px; color: var(--text-tertiary); text-align: center; }
+
+        /* ── Overflow menu ──────────────────────────────────── */
+        #dc-overflow-menu {
+            position: fixed; z-index: 9100; display: none; flex-direction: column;
+            background: var(--bg-chrome); border: 1px solid var(--border-chrome);
+            border-radius: 5px; min-width: 196px; padding: 4px 0;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        #dc-overflow-menu.open { display: flex; }
+        .dc-om-hdr  { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-field-label); padding: 5px 12px 3px; }
+        .dc-om-sep  { height: 1px; background: var(--border-chrome); margin: 3px 0; }
+        .dc-om-item {
+            display: flex; align-items: center; gap: 9px; padding: 7px 12px;
+            font-size: 11px; font-weight: 500; color: var(--text-secondary);
+            border: none; background: transparent; cursor: pointer;
+            text-align: left; width: 100%; font-family: inherit; transition: background 0.1s;
+        }
+        .dc-om-item:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+        .dc-om-item i { font-size: 11px; width: 14px; color: var(--text-field-label); flex-shrink: 0; }
+        .dc-om-item.dc-om-danger { color: #fc8181; }
+        .dc-om-item.dc-om-danger i { color: #fc8181; }
+
+        /* ── Profile dropdown ───────────────────────────────── */
+        #dc-profile-dropdown {
+            position: fixed; z-index: 9100; display: none; flex-direction: column;
+            background: var(--bg-chrome); border: 1px solid var(--border-chrome);
+            border-radius: 5px; min-width: 240px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+        #dc-profile-dropdown.open { display: flex; }
+        .dc-pd-hdr {
+            padding: 8px 12px; border-bottom: 1px solid var(--border-chrome);
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-field-label); flex-shrink: 0;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .dc-pd-list { max-height: 280px; overflow-y: auto; }
+        .dc-pd-item {
+            display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;
+            border: none; background: transparent; text-align: left; width: 100%; font-family: inherit;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .dc-pd-item:hover  { background: rgba(255,255,255,0.06); }
+        .dc-pd-item.active { background: var(--selected-blue-dim); }
+        .dc-pd-item-dot    { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dc-pd-item-meta   { flex: 1; min-width: 0; }
+        .dc-pd-item-name   { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+        .dc-pd-item-ver    { font-size: 9px; color: var(--text-tertiary); font-family: 'Roboto Mono', monospace; }
+        .dc-pd-footer      { padding: 6px 8px; border-top: 1px solid var(--border-chrome); display: flex; gap: 4px; }
+
+        /* ── Modal backdrop ─────────────────────────────────── */
+        #dc-modal-backdrop {
+            position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.55); display: none;
+        }
+        #dc-modal-backdrop.open { display: block; }
+
+        /* ── Misc / empty state ─────────────────────────────── */
+        .dc-insp-empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 32px 20px; gap: 10px; text-align: center; color: var(--text-tertiary); opacity: 0.7;
+        }
+        .dc-insp-empty i { font-size: 26px; opacity: 0.35; }
+        .dc-insp-empty-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
     </style>
 </head>
 
@@ -17616,60 +17484,19 @@
                         if (typeof ensureRobotEditorBuilderPlacement === 'function') {
                             ensureRobotEditorBuilderPlacement();
                         }
-                        const devSection = document.getElementById('settings-developer');
-                        const scratch = document.getElementById('device-config-content') || document.getElementById('device-config-tab');
-                        if (devSection && scratch && devSection.parentElement !== scratch) {
-                            scratch.appendChild(devSection);
-                            devSection.classList.remove('settings-category');
-                        }
-                        const builderWs = document.getElementById('robot-editor-builder-workspace');
-                        if (builderWs && scratch && builderWs.parentElement !== scratch) {
-                            scratch.appendChild(builderWs);
+                        const canvasMain = document.getElementById('dc-canvas-main');
+                            if (!canvasMain) return;
+
+                        // Move robot visualization panel → canvas main
+                        const visualPanel = document.querySelector('.robot-editor-visual-panel');
+                        if (visualPanel && visualPanel.parentElement !== canvasMain) {
+                            canvasMain.appendChild(visualPanel);
                         }
 
-                        const mainScroll = document.getElementById('device-config-main-scroll');
-                        const configStack = document.getElementById('device-config-config-stack');
-                        const toolsStack = document.getElementById('device-config-tools-stack');
-                        if (mainScroll && configStack && toolsStack) {
-                            const reVizStrip = devSection ? devSection.querySelector('.re-viz-strip') : null;
-                            const collapseShell = document.getElementById('robot-editor-collapse-shell');
-                            const runtimeSettings = document.getElementById('robot-runtime-settings-container');
-                            const status = document.getElementById('robot-editor-status');
-                            const visualPanel = document.querySelector('.robot-editor-visual-panel');
-                            const framePanel = document.querySelector('.robot-editor-frame-panel');
-                            const linkPanel = document.querySelector('.robot-editor-link-panel');
-                            const bottomPanel = document.getElementById('robot-editor-bottom-panel');
-
-                            [status, visualPanel].forEach((node) => {
-                                if (node && node.parentElement !== mainScroll) {
-                                    mainScroll.appendChild(node);
-                                }
-                            });
-
-                            // ── Hoist the editor toolbar into the full-width strip above main/sidebar ──
-                            const shellToolbar = document.getElementById('device-config-shell-toolbar');
-                            if (shellToolbar && collapseShell && collapseShell.parentElement !== shellToolbar) {
-                                shellToolbar.appendChild(collapseShell);
-                            }
-
-                            [reVizStrip, runtimeSettings, framePanel, linkPanel].forEach((node) => {
-                                if (node && node.parentElement !== configStack) {
-                                    configStack.appendChild(node);
-                                }
-                            });
-
-                            if (bottomPanel && bottomPanel.parentElement !== toolsStack) {
-                                toolsStack.appendChild(bottomPanel);
-                            }
-                        }
-                        if (typeof syncDeviceConfigPanelButtons === 'function') {
-                            syncDeviceConfigPanelButtons();
-                        }
-                        if (typeof setDeviceConfigRailActive === 'function') {
-                            setDeviceConfigRailActive('visual');
-                        }
+                        // Collapse shell / toolbar – just hide it, cmdbar replaces it
+                        const collapseShell = document.getElementById('robot-editor-collapse-shell');
+                        if (collapseShell) collapseShell.style.display = 'none';
                     }
-                    // (adoptDevConfigContent is called in window.onload to ensure DOM is ready)
 
                     function scrollDeviceConfigTo(targetId) {
                         const target = document.getElementById(targetId);
@@ -17678,63 +17505,532 @@
                     }
 
                     function syncDeviceConfigPanelButtons() {
-                        const activePanel = String((window.robotEditorState && window.robotEditorState.collapse_panel) || '').trim().toLowerCase();
-                        document.querySelectorAll('.device-config-panel-btn').forEach((btn) => {
-                            const key = String(btn.dataset.panel || '').trim().toLowerCase();
-                            btn.classList.toggle('active', !!key && key === activePanel);
-                        });
+                        /* kept for backward compat – no-op in new layout */
                     }
 
                     function toggleDeviceConfigPanel(panelKey) {
-                        toggleRobotEditorCollapsePanel(panelKey);
-                        syncDeviceConfigPanelButtons();
-                        scrollDeviceConfigTo('robot-editor-collapse-shell');
+                        if (typeof toggleRobotEditorCollapsePanel === 'function') {
+                            toggleRobotEditorCollapsePanel(panelKey);
+                        }
                     }
 
                     function switchDeviceConfigPane(paneKey) {
-                        const normalized = paneKey === 'tools' ? 'tools' : 'config';
-                        document.querySelectorAll('[data-device-config-pane-btn]').forEach((btn) => {
-                            btn.classList.toggle('active', btn.getAttribute('data-device-config-pane-btn') === normalized);
-                        });
-                        document.querySelectorAll('.dc-insp-pane').forEach((pane) => {
-                            pane.classList.toggle('active', pane.id === `device-config-pane-${normalized}`);
-                        });
+                        /* kept for backward compat – delegates to dcOpenInspTab */
+                        dcOpenInspTab(paneKey === 'tools' ? 'hierarchy' : 'properties');
                     }
 
                     function setDeviceConfigRailActive(sectionKey) {
-                        document.querySelectorAll('[data-device-config-section]').forEach((btn) => {
-                            btn.classList.toggle('active', btn.getAttribute('data-device-config-section') === sectionKey);
-                        });
+                        const modeMap = { visual: 'structure', frames: 'structure', links: 'structure', shapes: 'motion', components: 'structure' };
+                        dcSetMode(modeMap[sectionKey] || 'structure');
                     }
 
                     function focusDeviceConfigSection(sectionKey) {
-                        const meta = {
-                            visual: { pane: 'config', targetId: 'device-config-main-scroll' },
-                            frames: { pane: 'config', targetId: 'robot-editor-frame-panel' },
-                            links: { pane: 'config', targetId: 'robot-editor-link-panel' },
-                            shapes: {
-                                pane: 'tools',
-                                targetId: 'robot-editor-bottom-panel',
-                                beforeScroll: () => setRobotEditorBottomTab('shapes'),
-                            },
-                            components: {
-                                pane: 'tools',
-                                targetId: 'robot-editor-bottom-panel',
-                                beforeScroll: () => setRobotEditorBottomTab('components'),
-                            },
-                        }[sectionKey] || { pane: 'config', targetId: 'device-config-main-scroll' };
-
-                        if (typeof meta.beforeScroll === 'function') {
-                            meta.beforeScroll();
-                        }
-                        switchDeviceConfigPane(meta.pane);
                         setDeviceConfigRailActive(sectionKey);
+                    }
 
-                        const target = document.getElementById(meta.targetId);
-                        if (target && typeof target.scrollIntoView === 'function') {
-                            target.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+                    /* ══ DC v3 functions ═══════════════════════════════════ */
+
+                    function dcOpenInspTab(tab) {
+                        document.querySelectorAll('.dc-insp-tab').forEach((btn) => {
+                            btn.classList.toggle('active', btn.dataset.dcTab === tab);
+                        });
+                        document.querySelectorAll('.dc-insp-pane').forEach((pane) => {
+                            const active = pane.id === `dc-pane-${tab}`;
+                            pane.classList.toggle('active', active);
+                        });
+                        if (tab === 'hierarchy') dcRefreshHierarchy();
+                        if (tab === 'validation') dcRefreshValidation();
+                    }
+
+                    function dcSetMode(mode) {
+                        document.querySelectorAll('.dc-rail-btn').forEach((btn) => {
+                            btn.classList.toggle('active', btn.dataset.dcMode === mode);
+                        });
+                        const badge = document.getElementById('dc-insp-mode-badge');
+                        if (badge) badge.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+                        // Diagnostics mode → auto-show validation pane
+                        if (mode === 'diagnostics') {
+                            dcOpenInspTab('validation');
                         }
                     }
+
+                    function dcSetCanvasView(view, btn) {
+                        document.querySelectorAll('.dc-cvs-view-btn').forEach((b) => b.classList.remove('active'));
+                        if (btn) btn.classList.add('active');
+                            const label = { top: 'Top View', side: 'Side View', iso: 'Iso View' }[view] || 'Top View';
+                            const lbl = document.getElementById('dc-canvas-view-label');
+                            if (lbl) lbl.textContent = label;
+                            if (window.robotEditorState) {
+                                window.robotEditorState.visualization_mode = view;
+                            }
+                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                    }
+
+                    function dcRefreshHierarchy(filterMode) {
+                        const tree = document.getElementById('dc-hier-tree');
+                        if (!tree) return;
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const mode = filterMode || (() => {
+                            const activeBtn = document.querySelector('.dc-rail-btn.active');
+                            return activeBtn ? activeBtn.dataset.dcMode : 'structure';
+                        })();
+
+                        // Mode-based type filtering
+                        const sensorTypes = ['lidar', 'laser', 'camera', 'imu', 'sensor'];
+                        const motionTypes = ['wheel', 'caster', 'drive', 'motor'];
+
+                        const filtered = links.filter((lk) => {
+                            const t = (lk.type || lk.link_type || '').toLowerCase();
+                            if (mode === 'sensors') return sensorTypes.some((k) => t.includes(k));
+                            if (mode === 'motion') return motionTypes.some((k) => t.includes(k));
+                            return true; // structure / safety / diagnostics → show all
+                        });
+
+                        const iconMap = { lidar: 'fa-satellite-dish', laser: 'fa-satellite-dish', camera: 'fa-camera', imu: 'fa-microchip', wheel: 'fa-circle', caster: 'fa-circle-notch', drive: 'fa-tachometer-alt', sensor: 'fa-broadcast-tower' };
+                        const badgeMap = { lidar: 'sensor', laser: 'sensor', camera: 'sensor', imu: 'sensor', wheel: 'wheel', caster: 'wheel', drive: 'drive', motor: 'drive' };
+
+                        if (filtered.length === 0) {
+                            tree.innerHTML = `<div class="dc-tree-node" style="pointer-events:none;"><span class="dc-tree-name" style="color:var(--text-tertiary);">No links in this mode</span></div>`;
+                            return;
+                        }
+
+                        tree.innerHTML = filtered.map((lk) => {
+                            const name = lk.name || lk.link_name || '—';
+                            const t = (lk.type || lk.link_type || '').toLowerCase();
+                            const icon = iconMap[Object.keys(iconMap).find((k) => t.includes(k)) || ''] || 'fa-circle-small';
+                            const badgeClass = badgeMap[Object.keys(badgeMap).find((k) => t.includes(k)) || ''] || '';
+                            const badgeLabel = t || 'link';
+                            return `<div class="dc-tree-node" onclick="dcSelectLink(${JSON.stringify(name)})">
+                                <span class="dc-tree-node-expand"><i class="fas fa-chevron-right"></i></span>
+                                <span class="dc-tree-node-icon"><i class="fas ${icon}"></i></span>
+                                <span class="dc-tree-node-name">${name}</span>
+                                <span class="dc-tree-node-badge ${badgeClass}">${badgeLabel}</span>
+                            </div>`;
+                        }).join('');
+                    }
+
+                    function dcFilterHierarchy(q) {
+                        const lq = q.toLowerCase();
+                        document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach((node) => {
+                            const name = (node.querySelector('.dc-tree-node-name') || {}).textContent || '';
+                            node.classList.toggle('dc-tree-filtered-out', !!lq && !name.toLowerCase().includes(lq));
+                        });
+                    }
+
+                    function dcSelectLink(linkName) {
+                        document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach((node) => {
+                            const name = (node.querySelector('.dc-tree-node-name') || {}).textContent || '';
+                            node.classList.toggle('selected', name === linkName);
+                        });
+                        dcOpenInspTab('properties');
+                        dcShowDetailEditor(linkName);
+                        // Delegate to robot editor if available
+                        if (typeof selectRobotEditorLink === 'function') selectRobotEditorLink(linkName);
+                    }
+
+                    function dcBuildDetailHTML(name, linkData) {
+                        const d = linkData || {};
+                        const type = d.type || d.link_type || 'link';
+                        const mass = d.mass != null ? `${parseFloat(d.mass).toFixed(3)} kg` : '—';
+                        const parent = d.parent || d.parent_link || '—';
+                        const collision = (d.collision && d.collision.enabled !== false) ? 'Enabled' : 'Disabled';
+                        return `
+                            <div style="padding:10px 10px 4px;">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                                    <span style="font-size:13px;font-weight:700;color:var(--text-primary);">${name}</span>
+                                    <span class="dc-tag dc-tag-blue">${type}</span>
+                                </div>
+                                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">Selected link details</div>
+                            </div>
+                            <div class="dc-insp-section">Link Properties</div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Name</span><span class="dc-prop-val">${name}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Type</span><span class="dc-prop-val">${type}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Mass</span><span class="dc-prop-val">${mass}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Parent</span><span class="dc-prop-val">${parent}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Collision</span><span class="dc-prop-val">${collision}</span></div>
+                            <div style="padding:8px 10px;display:flex;gap:4px;">
+                                <button class="dc-btn" onclick="dcShowOverview()"><i class="fas fa-arrow-left"></i> Back to Overview</button>
+                            </div>
+                        `;
+                    }
+
+                    function dcShowDetailEditor(linkName) {
+                        const ov = document.getElementById('dc-overview-state');
+                        const dt = document.getElementById('dc-detail-state');
+                        if (!dt) return;
+                        const links = ((window.robotEditorState || {}).model || {}).links || [];
+                        const linkData = links.find((l) => (l.name || l.link_name) === linkName) || {};
+                        dt.innerHTML = dcBuildDetailHTML(linkName, linkData);
+                        dt.style.display = '';
+                        if (ov) ov.style.display = 'none';
+                    }
+
+                    function dcRefreshValidation() {
+                        const valList = document.getElementById('dc-val-list');
+                            const valSummary = document.getElementById('dc-val-summary-bar');
+                            const healthDot = document.getElementById('dc-val-health-dot');
+                            const healthLabel = document.getElementById('dc-val-health-label');
+                        if (!valList) return;
+
+                        const state = window.robotEditorState || {};
+                        const warnings = Array.isArray(state.geometry_warnings) ? state.geometry_warnings : [];
+                        const extra = Array.isArray(state.urdf_errors) ? state.urdf_errors : [];
+                        const all = [...warnings.map((w) => ({ type: 'warn', ...w })), ...extra.map((e) => ({ type: 'error', ...e }))];
+
+                        dcUpdateIssueBadge(all);
+
+                        if (all.length === 0) {
+                            valList.innerHTML = '<div class="dc-val-empty"><i class="fas fa-check-circle" style="color:#48bb78;margin-right:6px;"></i>No issues found</div>';
+                                if (valSummary) valSummary.style.display = 'none';
+                                if (healthDot) { healthDot.style.background = '#48bb78'; }
+                                if (healthLabel) healthLabel.textContent = 'No issues';
+                            return;
+                        }
+
+                        const errCount = all.filter((i) => i.type === 'error').length;
+                        const warnCount = all.filter((i) => i.type === 'warn').length;
+                            if (valSummary) valSummary.style.display = '';
+                            if (healthDot) healthDot.style.background = errCount ? '#fc8181' : '#ed8936';
+                            if (healthLabel) healthLabel.textContent = [errCount ? `${errCount} Error${errCount > 1 ? 's' : ''}` : '', warnCount ? `${warnCount} Warning${warnCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+
+                        valList.innerHTML = all.map((issue) => {
+                            const msg = issue.message || issue.msg || issue.text || JSON.stringify(issue);
+                            const comp = issue.link || issue.component || issue.name || '';
+                            return `<div class="dc-val-issue">
+                                    <span class="dc-val-issue-dot ${issue.type === 'error' ? 'error' : 'warn'}"></span>
+                                <div class="dc-val-issue-body">
+                                    <div class="dc-val-issue-title">${msg}</div>
+                                    ${comp ? `<div class="dc-val-issue-detail">${comp}</div>` : ''}
+                                </div>
+                            </div>`;
+                        }).join('');
+                    }
+
+                    function dcUpdateIssueBadge(issues) {
+                            const chip = document.getElementById('dc-cvs-issue-chip');
+                            const errChip = document.getElementById('dc-val-chip-error');
+                            const warnChip = document.getElementById('dc-val-chip-warn');
+                            const okChip = document.getElementById('dc-val-chip-ok');
+                            const errCount = document.getElementById('dc-val-err-count');
+                            const warnCount = document.getElementById('dc-val-warn-count');
+                        if (!chip) return;
+                        issues = issues || [];
+                            const errs = issues.filter(i => i.type === 'error').length;
+                            const warns = issues.filter(i => i.type === 'warn').length;
+                            if (errChip) { errChip.style.display = errs ? '' : 'none'; if (errCount) errCount.textContent = errs; }
+                            if (warnChip) { warnChip.style.display = warns ? '' : 'none'; if (warnCount) warnCount.textContent = warns; }
+                            if (okChip) okChip.style.display = (!errs && !warns) ? '' : 'none';
+                        if (issues.length === 0) {
+                            chip.style.display = 'none';
+                            return;
+                        }
+                            const hasErrors = errs > 0;
+                            chip.className = `dc-cvs-issue-chip ${hasErrors ? 'has-errors' : 'has-warns'}`;
+                        chip.style.display = '';
+                        chip.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${issues.length} issue${issues.length > 1 ? 's' : ''}`;
+                    }
+
+                    function dcUpdateCommandBar() {
+                        const profileId = window.activeRobotProfileId;
+                        const profilesById = window.robotProfilesById || {};
+                        const profile = profileId && profilesById[profileId];
+
+                        const nameEl = document.getElementById('dc-profile-name');
+                        const verEl = document.getElementById('dc-profile-ver');
+                        const chipEl = document.getElementById('dc-profile-chip');
+                        const ctxEl = document.getElementById('dc-cvs-profile-ctx');
+
+                        if (profile) {
+                            if (nameEl) nameEl.textContent = profile.display_name || profile.name || profileId;
+                            if (verEl) verEl.textContent = profile.version || 'v—';
+                            if (chipEl) {
+                                const state = profile.state || (profile.has_urdf ? 'published' : 'draft');
+                                chipEl.textContent = state;
+                                chipEl.className = `dc-profile-chip ${(state === 'published' || profile.has_urdf) ? 'published' : 'draft'}`;
+                            }
+                            if (ctxEl) ctxEl.textContent = profile.display_name || profileId;
+                        } else if (profileId) {
+                            if (nameEl) nameEl.textContent = profileId;
+                            if (verEl) verEl.textContent = '—';
+                            if (chipEl) { chipEl.textContent = 'draft'; chipEl.className = 'dc-profile-chip draft'; }
+                            if (ctxEl) ctxEl.textContent = profileId;
+                        } else {
+                            if (nameEl) nameEl.textContent = 'No profile';
+                            if (verEl) verEl.textContent = '—';
+                            if (chipEl) { chipEl.textContent = '—'; chipEl.className = 'dc-profile-chip na'; }
+                            if (ctxEl) ctxEl.textContent = 'No profile loaded';
+                        }
+
+                            // Update overview state in inspector
+                            const ovName = document.getElementById('dc-ov-profile-name');
+                            const ovTag = document.getElementById('dc-ov-profile-tag');
+                            const ovSub = document.getElementById('dc-ov-profile-sub');
+                            if (profile) {
+                                if (ovName) ovName.textContent = profile.display_name || profile.name || profileId;
+                                if (ovTag) {
+                                    const st = profile.state || (profile.has_urdf ? 'published' : 'draft');
+                                    ovTag.textContent = st;
+                                    ovTag.className = `dc-tag ${st === 'published' ? 'dc-tag-green' : 'dc-tag-amber'}`;
+                                }
+                                if (ovSub) ovSub.textContent = profile.description || (profile.robot_model ? `Model: ${profile.robot_model}` : '');
+                            } else {
+                                if (ovName) ovName.textContent = profileId || 'No profile';
+                                if (ovTag) { ovTag.textContent = '—'; ovTag.className = 'dc-tag dc-tag-gray'; }
+                                if (ovSub) ovSub.textContent = profileId ? '' : 'Select a profile to begin';
+                            }
+
+                            // Update robot model stats in overview grid
+                            const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                            const links = Array.isArray(model.links) ? model.links : [];
+                            const sensorCount = links.filter(l => { const t = (l.type||l.link_type||'').toLowerCase(); return ['lidar','camera','imu','sensor'].some(k => t.includes(k)); }).length;
+                            const geom = model.geometry || {};
+                            const fmt = v => v != null ? (parseFloat(v).toFixed(3) + ' m') : '—';
+                            const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+                            setEl('dc-ov-length', fmt(geom.length));
+                            setEl('dc-ov-width',  fmt(geom.width));
+                            setEl('dc-ov-height', fmt(geom.height));
+                            setEl('dc-ov-mass',   geom.mass != null ? (parseFloat(geom.mass).toFixed(2) + ' kg') : '—');
+                            setEl('dc-ov-frames', links.length || '—');
+                            setEl('dc-ov-sensors', sensorCount || '—');
+                            setEl('dc-ov-base-link', model.base_link || '—');
+                            setEl('dc-ov-base-frame', model.base_frame || model.odom_frame || '—');
+                            const firstJoint = (model.joints || [])[0];
+                            setEl('dc-ov-joint-type', firstJoint ? (firstJoint.type || '—') : '—');
+                            const fp = model.footprint || {};
+                            setEl('dc-ov-fp-shape',   fp.type || (model.footprint_type || '—'));
+                            setEl('dc-ov-fp-radius',  fp.radius != null ? fp.radius.toFixed(3) : '—');
+                            setEl('dc-ov-fp-padding', fp.padding != null ? fp.padding.toFixed(3) : '—');
+                    }
+
+                    async function dcApplyToRobot() {
+                        const profileId = window.activeRobotProfileId;
+                        if (!profileId) { alert('No profile selected.'); return; }
+                        if (typeof saveRobotEditorAndBuildUrdf === 'function') {
+                            await saveRobotEditorAndBuildUrdf();
+                        }
+                        // Push to runtime
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/deployment/push', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ robot_id: profileId, apply_runtime: true })
+                            });
+                            const data = await resp.json();
+                            const statusEl = document.getElementById('dc-status-text');
+                            if (statusEl) statusEl.textContent = data.ok ? 'Applied to robot successfully' : (data.message || data.error || 'Apply failed');
+                        } catch (e) {
+                            const statusEl = document.getElementById('dc-status-text');
+                            if (statusEl) statusEl.textContent = 'Apply failed: ' + e.message;
+                        }
+                    }
+
+                    async function dcCloneProfile() {
+                        dcCloseAllMenus();
+                        const profileId = window.activeRobotProfileId;
+                        if (!profileId) { alert('No profile selected.'); return; }
+                        const profiles = window.robotProfilesById || {};
+                        const base = profiles[profileId] || {};
+                        const newName = prompt('Enter name for duplicated profile:', (base.display_name || profileId) + ' (copy)');
+                        if (!newName) return;
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/clone', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ source_robot_id: profileId, overrides: { display_name: newName }, activate: false })
+                            });
+                            const data = await resp.json();
+                            if (data.ok) {
+                                if (typeof loadRobotProfiles === 'function') await loadRobotProfiles();
+                                dcUpdateCommandBar();
+                                dcBuildProfileDropdown();
+                            } else {
+                                alert('Clone failed: ' + (data.message || data.error || 'Unknown error'));
+                            }
+                        } catch (e) {
+                            alert('Clone failed: ' + e.message);
+                        }
+                    }
+
+                    async function dcDeleteProfile() {
+                        dcCloseAllMenus();
+                        const profileId = window.activeRobotProfileId;
+                        if (!profileId) return;
+                        const confirmed = (typeof showConfirm === 'function')
+                            ? await showConfirm(`Delete profile "${profileId}"? This cannot be undone.`, 'Delete', 'Cancel')
+                            : confirm(`Delete profile "${profileId}"? This cannot be undone.`);
+                        if (!confirmed) return;
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ robot_id: profileId })
+                            });
+                            const data = await resp.json();
+                            if (data.ok) {
+                                window.activeRobotProfileId = null;
+                                if (typeof loadRobotProfiles === 'function') await loadRobotProfiles();
+                                dcUpdateCommandBar();
+                            } else {
+                                alert('Delete not supported or failed: ' + (data.message || data.error || 'Unknown error'));
+                            }
+                        } catch (e) {
+                            alert('Delete failed: ' + e.message);
+                        }
+                    }
+
+                    function dcToggleMoreMenu(event) { dcToggleOverflowMenu(event); }
+
+                    function dcToggleOverflowMenu(event) {
+                        if (event) event.stopPropagation();
+                        const menu = document.getElementById('dc-overflow-menu');
+                        if (!menu) return;
+                        if (menu.classList.contains('open')) { dcCloseAllMenus(); return; }
+                        dcCloseAllMenus();
+                        const btn = document.getElementById('dc-more-btn');
+                        if (btn) {
+                            const rect = btn.getBoundingClientRect();
+                            menu.style.top = (rect.bottom + 4) + 'px';
+                            menu.style.right = (window.innerWidth - rect.right) + 'px';
+                            menu.style.left = '';
+                        }
+                        menu.classList.add('open');
+                        document.getElementById('dc-modal-backdrop')?.classList.add('open');
+                    }
+
+                    function dcToggleProfilePicker(event) { dcToggleProfileDropdown(event); }
+
+                    function dcToggleProfileDropdown(event) {
+                        if (event) event.stopPropagation();
+                        const dd = document.getElementById('dc-profile-dropdown');
+                        if (!dd) return;
+                        if (dd.classList.contains('open')) { dcCloseAllMenus(); return; }
+                        dcCloseAllMenus();
+                        dcBuildProfileDropdown();
+                        const card = event?.currentTarget || document.querySelector('.dc-cmdbar-profile');
+                        if (card) {
+                            const rect = card.getBoundingClientRect();
+                            dd.style.top = rect.bottom + 'px';
+                            dd.style.left = rect.left + 'px';
+                        }
+                        dd.classList.add('open');
+                        document.getElementById('dc-modal-backdrop')?.classList.add('open');
+                    }
+
+                    function dcBuildProfileDropdown() {
+                        const list = document.getElementById('dc-pd-list');
+                        if (!list) return;
+                        const profilesById = window.robotProfilesById || {};
+                        const activeId = window.activeRobotProfileId;
+                        const ids = Object.keys(profilesById);
+                        if (ids.length === 0) {
+                            list.innerHTML = '<div style="padding:12px;font-size:11px;color:var(--text-tertiary);">No profiles found</div>';
+                            return;
+                        }
+                        list.innerHTML = ids.map((id) => {
+                            const p = profilesById[id] || {};
+                            const name = p.display_name || p.name || id;
+                            const ver = p.version || '';
+                            const isActive = id === activeId;
+                            const state = p.state || (p.has_urdf ? 'published' : 'draft');
+                            const dotColor = state === 'published' ? '#48bb78' : '#ed8936';
+                            return `<button class="dc-pd-item${isActive ? ' active' : ''}" onclick="dcSwitchProfile(${JSON.stringify(id)})">
+                                <span class="dc-pd-item-dot" style="background:${dotColor};"></span>
+                                <span class="dc-pd-item-meta">
+                                    <span class="dc-pd-item-name">${name}</span>
+                                    ${ver ? `<br><span class="dc-pd-item-ver">${ver}</span>` : ''}
+                                </span>
+                            </button>`;
+                        }).join('');
+                    }
+
+                    function dcCloseAllMenus() {
+                        document.getElementById('dc-overflow-menu')?.classList.remove('open');
+                        document.getElementById('dc-profile-dropdown')?.classList.remove('open');
+                        document.getElementById('dc-modal-backdrop')?.classList.remove('open');
+                    }
+
+                    async function dcSwitchProfile(profileId) {
+                        dcCloseAllMenus();
+                        window.activeRobotProfileId = profileId;
+                        try {
+                            await fetch('/api/settings/robot_profiles/select', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ robot_id: profileId, apply_map: false })
+                            });
+                        } catch (e) { /* non-fatal */ }
+                        if (typeof loadRobotEditor === 'function') {
+                            await loadRobotEditor(false, false);
+                        }
+                        dcUpdateCommandBar();
+                        dcRefreshHierarchy();
+                        dcRefreshValidation();
+                    }
+
+                        function dcToggleLayer(layer, btn) {
+                            if (btn) btn.classList.toggle('active');
+                            if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        }
+
+                        function dcHandleCanvasClick(event) {
+                            const part = event.target.closest('[data-part]');
+                            if (part) {
+                                dcSelectLink(part.dataset.part);
+                            } else {
+                                dcShowOverview();
+                            }
+                        }
+
+                        function dcShowOverview() {
+                            const ov = document.getElementById('dc-overview-state');
+                            const dt = document.getElementById('dc-detail-state');
+                            if (ov) ov.style.display = '';
+                            if (dt) dt.style.display = 'none';
+                            document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach(n => n.classList.remove('selected'));
+                        }
+
+                        function dcNewProfile() {
+                            dcCloseAllMenus();
+                            const name = prompt('New profile name:');
+                            if (!name) return;
+                            fetch('/api/settings/robot_profiles/create', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ display_name: name })
+                            }).then(r => r.json()).then(async data => {
+                                if (data.ok && typeof loadRobotProfiles === 'function') {
+                                    await loadRobotProfiles();
+                                    dcUpdateCommandBar();
+                                    dcBuildProfileDropdown();
+                                } else { alert('Failed: ' + (data.message || data.error || 'Unknown')); }
+                            }).catch(e => alert('Failed: ' + e.message));
+                        }
+
+                        function dcManageProfiles() {
+                            dcCloseAllMenus();
+                            // Navigate to Settings > Robot Profiles if available
+                            if (typeof switchTab === 'function') switchTab('settings');
+                        }
+
+                    async function dcInitLoad() {
+                        adoptDevConfigContent();
+                        dcOpenInspTab('properties');
+                        dcSetMode('structure');
+                        try {
+                            if (typeof loadRobotProfiles === 'function') {
+                                await loadRobotProfiles();
+                            }
+                            if (window.activeRobotProfileId && typeof loadRobotEditor === 'function') {
+                                await loadRobotEditor(false, true);
+                            }
+                        } catch (e) { /* non-fatal */ }
+                        dcUpdateCommandBar();
+                        dcRefreshHierarchy();
+                        dcRefreshValidation();
+                    }
+                    // (adoptDevConfigContent is called in window.onload to ensure DOM is ready)
+
 
                     // ── Diagnostics panel health summary ─────────────────────
                     function refreshDiagnosticsHealth() {
@@ -28130,72 +28426,207 @@
 
     <!-- ── Device Config Tab ───────────────────────────────── -->
     <div id="device-config-tab" class="tab-content">
-        <div id="device-config-shell">
-            <nav id="device-config-rail">
-                <button class="mode-rail-btn active" data-device-config-section="visual"
-                    onclick="focusDeviceConfigSection('visual')" title="Robot Visualizer">
-                    <i class="fas fa-cube"></i>
-                    <span class="mode-rail-label">Visual</span>
-                </button>
-                <button class="mode-rail-btn" data-device-config-section="frames"
-                    onclick="focusDeviceConfigSection('frames')" title="Frame Table">
-                    <i class="fas fa-table"></i>
-                    <span class="mode-rail-label">Frames</span>
-                </button>
-                <button class="mode-rail-btn" data-device-config-section="links"
-                    onclick="focusDeviceConfigSection('links')" title="Link Configuration">
-                    <i class="fas fa-link"></i>
-                    <span class="mode-rail-label">Links</span>
-                </button>
-                <div class="mode-rail-sep"></div>
-                <button class="mode-rail-btn" data-device-config-section="shapes"
-                    onclick="focusDeviceConfigSection('shapes')" title="Shape Builder">
-                    <i class="fas fa-draw-polygon"></i>
-                    <span class="mode-rail-label">Shapes</span>
-                </button>
-                <button class="mode-rail-btn" data-device-config-section="components"
-                    onclick="focusDeviceConfigSection('components')" title="Component Tree">
-                    <i class="fas fa-sitemap"></i>
-                    <span class="mode-rail-label">Parts</span>
-                </button>
-                <div class="mode-rail-spacer"></div>
-            </nav>
 
-            <!-- ── Robot-editor action toolbar (hoisted out of sidebar) ── -->
-            <div id="device-config-shell-toolbar"></div>
-
-            <div id="device-config-shell-body">
-                <div id="device-config-main">
-                    <div id="device-config-main-stage">
-                        <div id="device-config-main-scroll"></div>
+        <!-- ══ COMMAND BAR ══════════════════════════════════════ -->
+        <div id="dc-cmdbar">
+            <!-- Active profile card -->
+            <div class="dc-cmdbar-profile" onclick="dcToggleProfileDropdown(event)" title="Click to switch profile">
+                <div class="dc-profile-icon"><i class="fas fa-cube"></i></div>
+                <div class="dc-profile-meta">
+                    <div id="dc-profile-name" class="dc-profile-name">Loading…</div>
+                    <div class="dc-profile-sub">
+                        <span id="dc-profile-ver" class="dc-profile-ver mono">—</span>
+                        <span id="dc-profile-chip" class="dc-profile-chip draft">Draft</span>
+                        <span id="dc-profile-saved" class="dc-t-caption"></span>
                     </div>
-                </div>
-
-                <aside id="device-config-sidebar">
-                    <div class="dc-insp-hdr">
-                        <span class="dc-insp-title">DEVICE CONFIG</span>
-                        <span class="dc-insp-badge">LAYOUT</span>
-                    </div>
-                    <div class="dc-insp-tabs">
-                        <button class="dc-insp-tab-btn active" data-device-config-pane-btn="config"
-                            onclick="switchDeviceConfigPane('config')">Config</button>
-                        <button class="dc-insp-tab-btn" data-device-config-pane-btn="tools"
-                            onclick="switchDeviceConfigPane('tools')">Tools</button>
-                    </div>
-                    <div class="dc-insp-pane active" id="device-config-pane-config">
-                        <div id="device-config-config-stack"></div>
-                    </div>
-                    <div class="dc-insp-pane" id="device-config-pane-tools">
-                        <div id="device-config-tools-stack"></div>
-                    </div>
-                </aside>
-
-                <div id="device-config-content" hidden>
-                    <!-- scratch adoption target -->
                 </div>
             </div>
+            <!-- Validation summary -->
+            <div class="dc-cmdbar-validation">
+                <span class="dc-t-label" style="margin-right:2px;">Issues</span>
+                <span id="dc-val-chip-error" class="dc-val-chip error" style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-times-circle"></i> <span id="dc-val-err-count">0</span></span>
+                <span id="dc-val-chip-warn"  class="dc-val-chip warn"  style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-exclamation-triangle"></i> <span id="dc-val-warn-count">0</span></span>
+                <span id="dc-val-chip-ok"    class="dc-val-chip ok"    style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> OK</span>
+            </div>
+            <div class="dc-cmdbar-spacer"></div>
+            <!-- Primary actions -->
+            <div class="dc-cmdbar-actions">
+                <button class="dc-btn" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Import URDF</button>
+                <button class="dc-btn" onclick="saveRobotEditorDraft()"><i class="fas fa-save"></i> Save Draft</button>
+                <button class="dc-btn dc-btn-primary" onclick="saveRobotEditorAndBuildUrdf()"><i class="fas fa-check-circle"></i> Validate &amp; Build</button>
+                <button class="dc-btn" onclick="exportRobotEditorUrdf()"><i class="fas fa-download"></i> Export</button>
+                <button class="dc-btn dc-btn-success" onclick="dcApplyToRobot()"><i class="fas fa-rocket"></i> Publish</button>
+                <button class="dc-cmdbar-more-btn" id="dc-more-btn" onclick="dcToggleOverflowMenu(event)" title="More actions"><i class="fas fa-ellipsis-v"></i></button>
+            </div>
         </div>
-    </div>
+
+        <!-- ══ MAIN VIEWPORT: rail | canvas | inspector ═════════ -->
+        <div id="dc-body">
+
+            <!-- ── Mode Rail ────────────────────────────────────── -->
+            <nav id="dc-rail">
+                <button class="dc-rail-btn active" data-dc-mode="structure" onclick="dcSetMode('structure')" title="Structure">
+                    <i class="fas fa-sitemap"></i>
+                    <span class="dc-rail-label">Structure</span>
+                </button>
+                <button class="dc-rail-btn" data-dc-mode="sensors" onclick="dcSetMode('sensors')" title="Sensors">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span class="dc-rail-label">Sensors</span>
+                </button>
+                <button class="dc-rail-btn" data-dc-mode="motion" onclick="dcSetMode('motion')" title="Motion">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span class="dc-rail-label">Motion</span>
+                </button>
+                <div class="dc-rail-sep"></div>
+                <button class="dc-rail-btn" data-dc-mode="safety" onclick="dcSetMode('safety')" title="Safety">
+                    <i class="fas fa-shield-alt"></i>
+                    <span class="dc-rail-label">Safety</span>
+                </button>
+                <button class="dc-rail-btn" data-dc-mode="diagnostics" onclick="dcSetMode('diagnostics')" title="Diagnostics">
+                    <i class="fas fa-stethoscope"></i>
+                    <span class="dc-rail-label">Diagn.</span>
+                </button>
+                <div class="dc-rail-spacer"></div>
+                <div class="dc-rail-sep"></div>
+                <button class="dc-rail-btn" data-dc-mode="settings" onclick="dcSetMode('settings')" title="Config Settings">
+                    <i class="fas fa-cog"></i>
+                    <span class="dc-rail-label">Settings</span>
+                </button>
+            </nav>
+
+            <!-- ── Canvas Workspace ──────────────────────────────── -->
+            <div id="dc-canvas-zone">
+                <!-- Canvas header strip -->
+                <div id="dc-canvas-header">
+                    <span class="dc-cvs-view-label" id="dc-canvas-view-label">Top View</span>
+                    <div class="dc-cvs-sep"></div>
+                    <span class="dc-cvs-profile-ctx" id="dc-cvs-profile-ctx">No profile loaded</span>
+                    <div class="dc-cvs-sep"></div>
+                    <!-- View toggle -->
+                    <div class="dc-cvs-view-toggle">
+                        <button class="dc-cvs-view-btn active" onclick="dcSetCanvasView('top', this)">Top</button>
+                        <button class="dc-cvs-view-btn" onclick="dcSetCanvasView('side', this)">Side</button>
+                        <button class="dc-cvs-view-btn" onclick="dcSetCanvasView('iso', this)">Iso</button>
+                    </div>
+                    <!-- Visual layer toggles -->
+                    <button class="dc-btn" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
+                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-sensors" onclick="dcToggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
+                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-safety" onclick="dcToggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
+                    <div class="dc-cvs-spacer"></div>
+                    <!-- Canvas issue chip -->
+                    <span id="dc-cvs-issue-chip" class="dc-cvs-issue-chip" style="display:none;" onclick="dcOpenInspTab('validation')"></span>
+                </div>
+                <!-- Robot canvas area — robot-editor-visual-panel moved here -->
+                <div id="dc-canvas-main" onclick="dcHandleCanvasClick(event)">
+                    <!-- robot-editor-visual-panel adopted by adoptDevConfigContent() -->
+                </div>
+            </div>
+
+            <!-- ── Inspector Panel ───────────────────────────────── -->
+            <aside id="dc-inspector">
+                <div class="dc-insp-header">
+                    <span class="dc-insp-header-title" id="dc-insp-title">Inspector</span>
+                    <span class="dc-insp-mode-badge" id="dc-insp-mode-badge">Structure</span>
+                </div>
+                <div class="dc-insp-tabs">
+                    <button class="dc-insp-tab active" data-dc-tab="properties" onclick="dcOpenInspTab('properties')">Properties</button>
+                    <button class="dc-insp-tab" data-dc-tab="hierarchy" onclick="dcOpenInspTab('hierarchy')">Hierarchy</button>
+                    <button class="dc-insp-tab" data-dc-tab="validation" onclick="dcOpenInspTab('validation')">Validation</button>
+                </div>
+
+                <!-- Properties pane -->
+                <div class="dc-insp-pane active" id="dc-pane-properties">
+                    <!-- Overview (shown when nothing selected) -->
+                    <div id="dc-overview-state">
+                        <div style="padding:10px 10px 4px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                                <span id="dc-ov-profile-name" style="font-size:13px;font-weight:700;color:var(--text-primary);">No profile</span>
+                                <span id="dc-ov-profile-tag" class="dc-tag dc-tag-amber">Draft</span>
+                            </div>
+                            <div id="dc-ov-profile-sub" style="font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">Select a profile to begin</div>
+                            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;" id="dc-ov-val-row">
+                                <span class="dc-val-chip error" id="dc-ov-err-chip" style="display:none;"></span>
+                                <span class="dc-val-chip warn"  id="dc-ov-warn-chip" style="display:none;"></span>
+                            </div>
+                        </div>
+                        <!-- Stats grid -->
+                        <div class="dc-overview-grid" id="dc-ov-stats-grid">
+                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Length</span><span class="dc-ov-val" id="dc-ov-length">—</span></div>
+                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Width</span><span class="dc-ov-val" id="dc-ov-width">—</span></div>
+                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Height</span><span class="dc-ov-val" id="dc-ov-height">—</span></div>
+                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Mass</span><span class="dc-ov-val" id="dc-ov-mass">—</span></div>
+                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Frames</span><span class="dc-ov-val" id="dc-ov-frames">—</span></div>
+                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Sensors</span><span class="dc-ov-val" id="dc-ov-sensors">—</span></div>
+                        </div>
+                        <!-- Quick actions -->
+                        <div style="padding:4px 10px 8px;display:flex;gap:4px;flex-wrap:wrap;">
+                            <button class="dc-btn dc-btn-primary" style="flex:1;" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Import URDF</button>
+                            <button class="dc-btn" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> Validate</button>
+                        </div>
+                        <!-- Base Link -->
+                        <div class="dc-insp-section">Base Link</div>
+                        <div class="dc-prop-row"><span class="dc-prop-lbl">Name</span><span class="dc-prop-val" id="dc-ov-base-link">—</span></div>
+                        <div class="dc-prop-row"><span class="dc-prop-lbl">Base Frame</span><span class="dc-prop-val" id="dc-ov-base-frame">—</span></div>
+                        <div class="dc-prop-row"><span class="dc-prop-lbl">Joint Type</span><span class="dc-prop-val" id="dc-ov-joint-type">—</span></div>
+                        <!-- Footprint -->
+                        <div class="dc-insp-section">Footprint</div>
+                        <div class="dc-prop-row"><span class="dc-prop-lbl">Shape</span><span class="dc-prop-val" id="dc-ov-fp-shape">—</span></div>
+                        <div class="dc-prop-row"><span class="dc-prop-lbl">Radius</span><span class="dc-prop-val dc-mono" id="dc-ov-fp-radius">—</span></div>
+                        <div class="dc-prop-row"><span class="dc-prop-lbl">Padding</span><span class="dc-prop-val dc-mono" id="dc-ov-fp-padding">—</span></div>
+                    </div>
+                    <!-- Detail editor (shown when a link is selected) -->
+                    <div id="dc-detail-state" style="display:none;"></div>
+                </div>
+
+                <!-- Hierarchy pane -->
+                <div class="dc-insp-pane" id="dc-pane-hierarchy">
+                    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;">
+                        <input class="dc-prop-input" style="width:100%;" placeholder="Filter links…" oninput="dcFilterHierarchy(this.value)" id="dc-hier-search">
+                    </div>
+                    <div id="dc-hier-tree" style="flex:1;overflow-y:auto;"></div>
+                </div>
+
+                <!-- Validation pane -->
+                <div class="dc-insp-pane" id="dc-pane-validation">
+                    <div class="dc-val-summary-bar" id="dc-val-summary-bar" style="display:none;">
+                        <div class="dc-val-health-dot" id="dc-val-health-dot"></div>
+                        <span class="dc-val-health-label" id="dc-val-health-label">No issues</span>
+                    </div>
+                    <div id="dc-val-list"></div>
+                </div>
+            </aside>
+
+        </div><!-- #dc-body -->
+
+        <!-- Overflow menu -->
+        <div id="dc-overflow-menu">
+            <div class="dc-om-hdr">Profile Actions</div>
+            <button class="dc-om-item" onclick="loadRobotEditor(false, false)"><i class="fas fa-sync"></i> Reload from Profile</button>
+            <button class="dc-om-item" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Reimport from URDF</button>
+            <button class="dc-om-item" onclick="dcCloneProfile()"><i class="fas fa-copy"></i> Duplicate Profile</button>
+            <div class="dc-om-sep"></div>
+            <div class="dc-om-hdr">File</div>
+            <button class="dc-om-item" onclick="exportRobotEditorUrdf()"><i class="fas fa-file-export"></i> Export URDF</button>
+            <div class="dc-om-sep"></div>
+            <button class="dc-om-item dc-om-danger" onclick="dcDeleteProfile()"><i class="fas fa-trash"></i> Delete Profile</button>
+        </div>
+
+        <!-- Profile dropdown -->
+        <div id="dc-profile-dropdown">
+            <div class="dc-pd-hdr">
+                Robot Profiles
+                <button class="dc-btn" style="height:20px;padding:0 8px;font-size:9px;" onclick="dcNewProfile()"><i class="fas fa-plus"></i> New</button>
+            </div>
+            <div id="dc-pd-list" class="dc-pd-list"></div>
+            <div class="dc-pd-footer">
+                <button class="dc-btn" style="flex:1;" onclick="dcManageProfiles()"><i class="fas fa-list"></i> Manage All</button>
+            </div>
+        </div>
+
+        <!-- Backdrop for menus -->
+        <div id="dc-modal-backdrop" onclick="dcCloseAllMenus()"></div>
+
+    </div><!-- #device-config-tab -->
 
     <script>
         // Tab switching function
@@ -28254,11 +28685,11 @@
             }
 
             if (tabName === 'device-config') {
-                if (typeof adoptDevConfigContent === 'function') {
-                    adoptDevConfigContent();
-                }
-                if (typeof focusDeviceConfigSection === 'function') {
-                    focusDeviceConfigSection('visual');
+                if (typeof dcInitLoad === 'function') {
+                    dcInitLoad();
+                } else {
+                    if (typeof adoptDevConfigContent === 'function') adoptDevConfigContent();
+                    if (typeof focusDeviceConfigSection === 'function') focusDeviceConfigSection('visual');
                 }
             }
         }

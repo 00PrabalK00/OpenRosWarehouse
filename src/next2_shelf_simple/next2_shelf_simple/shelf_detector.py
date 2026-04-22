@@ -595,29 +595,72 @@ class ShelfDetector(Node):
             return None
 
     def _solve_4(self, centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max):
-        """4 centroids: pair into front/back by distance from robot."""
-        indexed = sorted(range(4), key=lambda i: math.hypot(*centroids[i]))
+        """4 centroids: pick the width-pair/depth-pair partition that best fits
+        the expected shelf dimensions.
 
-        front_pair = [indexed[0], indexed[1]]
-        back_pair = [indexed[2], indexed[3]]
+        Pairing by distance-from-robot only works when the robot is roughly in
+        front of the shelf.  When the robot is offset laterally, a back-near-side
+        leg can be closer than a front-far-side leg, which confuses that sort and
+        produces a yaw 90° off reality.  Instead, try all three ways to pair
+        4 points into 2 pairs and keep the pairing whose pair-widths look like
+        the shelf width AND whose midpoint-distance looks like the shelf depth.
+        """
+        target_w = 0.5 * (w_min + w_max)
+        target_d = 0.5 * (d_min + d_max)
 
-        fw = _dist(centroids[front_pair[0]], centroids[front_pair[1]])
-        bw = _dist(centroids[back_pair[0]], centroids[back_pair[1]])
+        candidate_pairings = (
+            ((0, 1), (2, 3)),
+            ((0, 2), (1, 3)),
+            ((0, 3), (1, 2)),
+        )
 
-        if not (w_min <= fw <= w_max and w_min <= bw <= w_max):
+        best = None
+        best_score = float('inf')
+        for pair_a, pair_b in candidate_pairings:
+            width_a = _dist(centroids[pair_a[0]], centroids[pair_a[1]])
+            width_b = _dist(centroids[pair_b[0]], centroids[pair_b[1]])
+            if not (w_min <= width_a <= w_max and w_min <= width_b <= w_max):
+                continue
+
+            mid_a = (
+                0.5 * (centroids[pair_a[0]][0] + centroids[pair_a[1]][0]),
+                0.5 * (centroids[pair_a[0]][1] + centroids[pair_a[1]][1]),
+            )
+            mid_b = (
+                0.5 * (centroids[pair_b[0]][0] + centroids[pair_b[1]][0]),
+                0.5 * (centroids[pair_b[0]][1] + centroids[pair_b[1]][1]),
+            )
+            depth = _dist(mid_a, mid_b)
+            if not (d_min <= depth <= d_max):
+                continue
+
+            # Score favors pair-widths near shelf width and midpoint-distance
+            # near shelf depth.  Normalised so neither term dominates purely by
+            # unit scale.
+            score = (
+                (abs(width_a - target_w) + abs(width_b - target_w)) / max(target_w, 1e-6)
+                + abs(depth - target_d) / max(target_d, 1e-6)
+            )
+            if score < best_score:
+                best_score = score
+                # Front pair = whichever midpoint is closer to the robot origin.
+                if math.hypot(*mid_a) <= math.hypot(*mid_b):
+                    front_pair, back_pair = list(pair_a), list(pair_b)
+                    front_width, back_width = width_a, width_b
+                    fm, bm = mid_a, mid_b
+                else:
+                    front_pair, back_pair = list(pair_b), list(pair_a)
+                    front_width, back_width = width_b, width_a
+                    fm, bm = mid_b, mid_a
+                best = (front_pair, back_pair, front_width, back_width, fm, bm, depth)
+
+        if best is None:
             return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
 
-        fm = ((centroids[front_pair[0]][0] + centroids[front_pair[1]][0]) / 2,
-              (centroids[front_pair[0]][1] + centroids[front_pair[1]][1]) / 2)
-        bm = ((centroids[back_pair[0]][0] + centroids[back_pair[1]][0]) / 2,
-              (centroids[back_pair[0]][1] + centroids[back_pair[1]][1]) / 2)
-        depth = _dist(fm, bm)
+        front_pair, back_pair, fw, bw, fm, bm, depth = best
 
-        if not (d_min <= depth <= d_max):
-            return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
-
-        cx = (fm[0] + bm[0]) / 2
-        cy = (fm[1] + bm[1]) / 2
+        cx = 0.5 * (fm[0] + bm[0])
+        cy = 0.5 * (fm[1] + bm[1])
 
         # Yaw = direction from front to back (into the shelf)
         yaw = _normalize(math.atan2(bm[1] - fm[1], bm[0] - fm[0]))
