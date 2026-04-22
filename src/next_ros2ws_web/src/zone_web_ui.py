@@ -1571,6 +1571,58 @@ def clone_robot_profile():
     return _status(result, fail_code=503)
 
 
+@app.route('/api/settings/robot_profiles/create', methods=['POST'])
+def create_robot_profile():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    overrides = data.get('overrides', {})
+    if not isinstance(overrides, dict):
+        overrides = {}
+
+    if not overrides:
+        candidate_keys = (
+            'robot_id',
+            'display_name',
+            'base_robot_id',
+            'namespace',
+            'base_frame',
+            'urdf_source',
+            'nav2_params_file',
+            'map_association',
+            'sensor_frames',
+            'ui_toggles',
+            'topics',
+            'mappings',
+        )
+        overrides = {
+            key: data.get(key)
+            for key in candidate_keys
+            if key in data
+        }
+
+    activate = bool(data.get('activate', True))
+    result = node.create_robot_profile(overrides=overrides, activate=activate)
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/settings/robot_profiles/delete', methods=['POST'])
+def delete_robot_profile():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    robot_id = str(data.get('robot_id', '') or '').strip()
+    if not robot_id:
+        return jsonify({'ok': False, 'message': 'robot_id is required'}), 400
+
+    result = node.delete_robot_profile(robot_id)
+    return _status(result, fail_code=400)
+
+
 @app.route('/api/settings/robot_profiles/robot_editor', methods=['GET'])
 def get_robot_profile_robot_editor():
     node, err = _node()

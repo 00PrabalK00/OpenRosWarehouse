@@ -353,6 +353,17 @@ shelf_geometric_refiner:
     # Input data freshness
     scan_max_age_sec : 0.40   # s  discard cached scan older than this
 
+    # Proximity guard — skip pipeline when shelf centre is this close to the
+    # robot (robot is inside or directly under the shelf, scanner sees back
+    # legs).  Must be > half the shelf length (0.90 / 2 = 0.45 m) to catch
+    # worst-case centroid when only back legs are visible.
+    min_rough_pose_distance_m : 0.40   # m  (default 0.40 m)
+
+    # Yaw sanity check — reject NLS result if it diverges more than this
+    # from the detector's heading.  Guards against 180° flip when only back
+    # legs are in view.
+    max_refined_yaw_delta_deg : 45.0   # deg  (default 45°)
+
     # Temporal stability (Stage G repeated-recognition)
     temporal_window_size  : 8      # number of recent poses to keep
     temporal_pos_tol_m    : 0.025  # m  position consistency window

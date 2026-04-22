@@ -10324,6 +10324,154 @@ class RosBridge(Node):
 
         return merged
 
+    @staticmethod
+    def _normalize_profile_robot_id(raw_value: Any, fallback: str = 'UGV-01') -> str:
+        cleaned = re.sub(r'[^a-zA-Z0-9_-]+', '-', str(raw_value or '').strip()).strip('-_')
+        return cleaned or str(fallback or 'UGV-01').strip() or 'UGV-01'
+
+    def _next_available_profile_robot_id(self, seed: Any, existing_ids: Optional[Set[str]] = None) -> str:
+        known_ids = set(existing_ids or set())
+        base = self._normalize_profile_robot_id(seed, fallback='UGV-01')
+        candidate = base
+        suffix = 2
+        while candidate in known_ids:
+            candidate = f'{base}_{suffix}'
+            suffix += 1
+        return candidate
+
+    def create_robot_profile(self, overrides: Any = None, activate: bool = True):
+        requested = overrides if isinstance(overrides, dict) else {}
+        profiles = self._load_robot_profiles()
+        known_ids = set(profiles.keys())
+
+        requested_robot_id = str(requested.get('robot_id', '') or '').strip()
+        requested_display_name = str(requested.get('display_name', '') or '').strip()
+        requested_seed = requested_robot_id or requested_display_name or 'UGV-01'
+        target_robot_id = self._next_available_profile_robot_id(requested_seed, known_ids)
+
+        base_robot_id = str(requested.get('base_robot_id', '') or '').strip()
+        source_robot_id = ''
+        if base_robot_id in profiles:
+            source_robot_id = base_robot_id
+        else:
+            active_robot_id = str(self.active_robot_profile_id or '').strip()
+            if active_robot_id in profiles:
+                source_robot_id = active_robot_id
+            elif profiles:
+                source_robot_id = sorted(profiles.keys())[0]
+
+        if source_robot_id:
+            clone_overrides = dict(requested)
+            clone_overrides['robot_id'] = target_robot_id
+            clone_overrides.pop('base_robot_id', None)
+            clone_overrides.pop('display_name', None)
+            return self.clone_robot_profile(source_robot_id, clone_overrides, activate=activate)
+
+        nav2_default = os.path.join(self.ui_root, 'config', 'nav2_params.yaml')
+        nav2_params_file = nav2_default if os.path.exists(nav2_default) else ''
+        active_map_yaml = self._resolve_active_map_yaml() or ''
+        default_profile = {
+            'schema_version': self.PROFILE_SCHEMA_VERSION,
+            'profile_version': 1,
+            'robot_id': target_robot_id,
+            'namespace': '/',
+            'base_frame': 'base_link',
+            'sensor_frames': dict(self.DEFAULT_SENSOR_FRAMES),
+            'urdf_source': self._default_description_urdf_source(),
+            'nav2_params_file': nav2_params_file,
+            'map_association': {
+                'active_map': self._profile_map_reference(active_map_yaml),
+            },
+            'ui_toggles': dict(self.DEFAULT_UI_TOGGLES),
+            'mappings': copy.deepcopy(getattr(self, 'cached_settings_mappings', self._merge_mappings_with_defaults({}))),
+            'topics': copy.deepcopy(getattr(self, 'topic_config', self._merge_topics_with_defaults({}))),
+        }
+        candidate = self._merge_profile_overrides(default_profile, requested)
+        candidate['robot_id'] = target_robot_id
+        candidate['profile_version'] = 1
+        candidate['urdf_artifact'] = {}
+        candidate['release'] = self._sanitize_profile_release({})
+        candidate['bringup'] = self._sanitize_profile_bringup({})
+        candidate = self._sanitize_profile_payload(candidate, fallback_robot_id=target_robot_id)
+
+        try:
+            saved_profile = self._save_profile_to_disk(candidate, allow_overwrite=False)
+        except Exception as exc:
+            return self._ok(False, f'Failed to create robot profile: {exc}')
+
+        if activate:
+            applied = self.select_robot_profile(target_robot_id, apply_map=False)
+            if bool(applied.get('ok')):
+                applied['message'] = f'Created robot profile "{target_robot_id}"'
+            return applied
+
+        return self._ok(
+            True,
+            f'Created robot profile "{target_robot_id}"',
+            target_robot_id=target_robot_id,
+            profile=saved_profile,
+            profiles_dir=self.robot_profiles_dir,
+        )
+
+    def delete_robot_profile(self, robot_id: str):
+        target_robot_id = str(robot_id or '').strip()
+        if not target_robot_id:
+            return self._ok(False, 'robot_id is required')
+
+        profiles = self._load_robot_profiles()
+        if target_robot_id not in profiles:
+            return self._ok(False, f'Robot profile "{target_robot_id}" not found')
+        if len(profiles) <= 1:
+            return self._ok(False, 'At least one robot profile must remain')
+
+        deleting_active = str(self.active_robot_profile_id or '').strip() == target_robot_id
+        if deleting_active:
+            self._stop_managed_robot_state_publisher()
+
+        profile_path = str(self.robot_profile_files.get(target_robot_id, '') or self._profile_file_path(target_robot_id)).strip()
+        cleanup_paths = [
+            profile_path,
+            os.path.join(self.robot_profiles_dir, 'artifacts', self._safe_profile_slug(target_robot_id)),
+            self._bringup_report_dir(target_robot_id),
+            self._deploy_robot_snapshots_dir(target_robot_id),
+            self._deploy_active_dir(target_robot_id),
+        ]
+        for path in cleanup_paths:
+            resolved = str(path or '').strip()
+            if not resolved or not os.path.exists(resolved):
+                continue
+            try:
+                if os.path.isdir(resolved):
+                    shutil.rmtree(resolved, ignore_errors=False)
+                else:
+                    os.remove(resolved)
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                return self._ok(False, f'Failed deleting robot profile "{target_robot_id}": {exc}')
+
+        profiles.pop(target_robot_id, None)
+        self.robot_profile_files.pop(target_robot_id, None)
+        self._save_all_profiles_to_db(profiles)
+
+        next_robot_id = str(self.active_robot_profile_id or '').strip()
+        if deleting_active or next_robot_id not in profiles:
+            next_robot_id = sorted(profiles.keys())[0]
+
+        self._save_profile_registry_state(next_robot_id)
+        if deleting_active:
+            self.active_robot_profile = None
+            self.active_robot_profile_id = ''
+            applied = self.select_robot_profile(next_robot_id, apply_map=False)
+            if bool(applied.get('ok')):
+                applied['message'] = f'Deleted robot profile "{target_robot_id}"'
+            return applied
+
+        payload = self.list_robot_profiles()
+        if bool(payload.get('ok')):
+            payload['message'] = f'Deleted robot profile "{target_robot_id}"'
+        return payload
+
     def select_robot_profile(self, robot_id: str, apply_map: bool = True):
         chosen = str(robot_id or '').strip()
         if not chosen:

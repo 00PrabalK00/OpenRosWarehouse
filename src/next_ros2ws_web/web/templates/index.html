@@ -148,6 +148,35 @@
             max-width: 100% !important; gap: 2px !important;
             overflow: visible !important; padding: 0 6px !important; align-items: stretch !important;
         }
+        #device-config-top-controls {
+            display: none;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 1;
+            gap: 4px;
+            padding: 0 8px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        #device-config-top-controls .mctrl-btn {
+            flex-shrink: 0;
+        }
+        #device-config-top-controls .mctrl-btn.device-config-primary {
+            background: var(--selected-blue-dim);
+            border-color: var(--selected-blue);
+            color: var(--accent-blue);
+        }
+        #device-config-top-controls .mctrl-btn.device-config-success {
+            background: rgba(29,122,67,0.18);
+            border-color: rgba(72,187,120,0.45);
+            color: #68d391;
+        }
+        #device-config-top-controls .mctrl-btn.device-config-status {
+            cursor: default;
+            color: var(--text-secondary);
+        }
+        #device-config-top-controls::-webkit-scrollbar { height: 3px; }
+        #device-config-top-controls::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 2px; }
         /* Context toolbar section: vertical label + row of buttons */
         .ctx-section {
             display: flex; flex-direction: column;
@@ -11386,7 +11415,15 @@
         .dc-val-chip.ok    { background: rgba(29,122,67,0.15);  border: 1px solid rgba(72,187,120,0.3);  color: #48bb78; }
         .dc-val-chip i     { font-size: 8px; }
         .dc-cmdbar-spacer  { flex: 1; }
-        .dc-cmdbar-actions { display: flex; align-items: center; gap: 4px; padding: 0 10px; height: 100%; flex-shrink: 0; }
+        .dc-cmdbar-status {
+            padding: 0 12px;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 360px;
+        }
         .dc-cmdbar-more-btn {
             width: 28px; height: 26px; padding: 0; font-size: 13px; cursor: pointer;
             border-radius: 3px; border: 1px solid var(--border-chrome); font-family: inherit;
@@ -11467,6 +11504,9 @@
                 linear-gradient(90deg, rgba(45,55,72,0.1) 1px, transparent 1px);
             background-size: 80px 80px, 80px 80px, 20px 20px, 20px 20px;
         }
+        #dc-canvas-main[data-grid-visible="0"]::before {
+            display: none;
+        }
         /* Robot editor visual panel fills canvas completely */
         #dc-canvas-main .robot-editor-visual-panel {
             position: relative; z-index: 1;
@@ -11475,8 +11515,94 @@
             border: none !important; border-radius: 0 !important;
             background: transparent !important; box-shadow: none !important; margin: 0 !important;
         }
-        #dc-canvas-main #robot-editor-canvas { flex: 1 1 auto !important; min-height: 100px !important; }
+        #dc-canvas-main .robot-editor-panel-header,
+        #dc-canvas-main .robot-editor-visual-controls,
+        #dc-canvas-main .robot-editor-focus-summary,
+        #dc-canvas-main .robot-editor-geometry-warnings,
+        #dc-canvas-main .robot-editor-legend,
+        #dc-canvas-main .robot-editor-scale-row,
+        #dc-canvas-main .robot-editor-floating-zoom {
+            display: none !important;
+        }
+        #dc-canvas-main .robot-editor-canvas-shell {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            height: 100% !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        #dc-canvas-main #robot-editor-canvas {
+            flex: 1 1 auto !important;
+            min-height: 100px !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
         #dc-canvas-main #robot-editor-status { display: none !important; }
+        .dc-view-controls {
+            position: absolute;
+            right: 14px;
+            bottom: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            z-index: 5;
+        }
+        .dc-vc-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 4px;
+            background: var(--bg-chrome);
+            border: 1px solid var(--border-chrome);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.12s, color 0.12s, border-color 0.12s;
+            font-family: inherit;
+        }
+        .dc-vc-btn:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-color: var(--border-secondary);
+        }
+        .dc-vc-btn.active {
+            background: var(--selected-blue-dim);
+            border-color: var(--selected-blue);
+            color: var(--accent-blue);
+        }
+        .dc-vc-sep {
+            width: 20px;
+            height: 1px;
+            background: var(--border-chrome);
+        }
+        .dc-canvas-ruler {
+            position: absolute;
+            left: 14px;
+            bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            pointer-events: none;
+            z-index: 4;
+        }
+        .dc-canvas-ruler-bar {
+            width: 80px;
+            height: 4px;
+            background: var(--text-tertiary);
+            border-radius: 2px;
+        }
+        .dc-canvas-ruler-label {
+            font-size: 9px;
+            color: var(--text-tertiary);
+            font-family: 'Roboto Mono', monospace;
+        }
 
         /* ── Inspector ──────────────────────────────────────── */
         #dc-inspector {
@@ -11850,6 +11976,27 @@
 
                 <!-- ── SYSTEM — always visible ─── -->
                 <button class="mctrl-btn" onclick="mctrlParameter()" title="Navigation Parameters"><i class="fas fa-sliders-h"></i><span>PARAM</span></button>
+            </div>
+            <div id="device-config-top-controls" class="navigator-top-controls">
+                <button class="mctrl-btn" type="button" onclick="loadRobotEditor(true, false)" title="Reload robot editor from the current URDF/Xacro source">
+                    <i class="fas fa-file-import"></i><span>IMPORT URDF</span>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="saveRobotEditorDraft()" title="Save the current profile draft">
+                    <i class="fas fa-save"></i><span>SAVE DRAFT</span>
+                </button>
+                <button class="mctrl-btn device-config-primary" type="button" onclick="saveRobotEditorAndBuildUrdf()" title="Validate the draft and compile URDF">
+                    <i class="fas fa-check-circle"></i><span>VALIDATE &amp; BUILD</span>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="exportRobotEditorUrdf()" title="Download the generated URDF source">
+                    <i class="fas fa-download"></i><span>EXPORT</span>
+                </button>
+                <button class="mctrl-btn device-config-success" type="button" onclick="dcApplyToRobot()" title="Save, compile, and publish the active profile to runtime">
+                    <i class="fas fa-rocket"></i><span>PUBLISH</span>
+                </button>
+                <button class="mctrl-btn" id="dc-more-btn" type="button" onclick="dcToggleOverflowMenu(event)" title="More actions">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <span class="mctrl-btn device-config-status" id="dc-toolbar-status" title="Device config status">Ready</span>
             </div>
         </div>
 
@@ -17496,6 +17643,99 @@
                         // Collapse shell / toolbar – just hide it, cmdbar replaces it
                         const collapseShell = document.getElementById('robot-editor-collapse-shell');
                         if (collapseShell) collapseShell.style.display = 'none';
+                        dcSyncCanvasControls();
+                    }
+
+                    function dcEnsureCanvasState() {
+                        if (!window.robotEditorState || typeof window.robotEditorState !== 'object') {
+                            return {
+                                show_grid: true,
+                                show_labels: true,
+                                view: 'top',
+                            };
+                        }
+                        if (!window.robotEditorState.device_config_canvas || typeof window.robotEditorState.device_config_canvas !== 'object') {
+                            window.robotEditorState.device_config_canvas = {
+                                show_grid: true,
+                                show_labels: true,
+                                view: 'top',
+                            };
+                        }
+                        return window.robotEditorState.device_config_canvas;
+                    }
+
+                    function dcSetStatus(message, level = 'info', toast = false) {
+                        const palette = {
+                            success: 'var(--accent-success)',
+                            error: '#fc8181',
+                            warning: '#ed8936',
+                            info: 'var(--text-secondary)',
+                        };
+                        ['dc-cmdbar-status', 'dc-toolbar-status'].forEach((id) => {
+                            const el = document.getElementById(id);
+                            if (!el) return;
+                            el.textContent = String(message || '').trim() || 'Ready';
+                            el.style.color = palette[level] || palette.info;
+                        });
+                        if (toast && typeof showStatus === 'function') {
+                            showStatus(String(message || '').trim() || 'Ready', level, { suppressLog: false });
+                        }
+                    }
+
+                    function dcSyncCanvasControls() {
+                        const canvasState = dcEnsureCanvasState();
+                        const view = String(canvasState.view || 'top').trim().toLowerCase();
+                        document.querySelectorAll('.dc-cvs-view-btn').forEach((button) => {
+                            const key = String(button.dataset.dcView || '').trim().toLowerCase();
+                            button.classList.toggle('active', key === view);
+                        });
+                        const toggles = (window.robotEditorState && window.robotEditorState.view_toggles) || {};
+                        const setActive = (id, active) => {
+                            const el = document.getElementById(id);
+                            if (el) el.classList.toggle('active', Boolean(active));
+                        };
+                        setActive('dc-toggle-collision', toggles.show_collision !== false);
+                        setActive('dc-toggle-sensors', toggles.show_lidar_fov !== false || toggles.show_camera_fov !== false);
+                        setActive('dc-toggle-safety', toggles.show_safety_zones !== false);
+                        setActive('dc-grid-btn', canvasState.show_grid !== false);
+                        setActive('dc-labels-btn', canvasState.show_labels !== false);
+                        const canvasMain = document.getElementById('dc-canvas-main');
+                        if (canvasMain) {
+                            canvasMain.dataset.gridVisible = canvasState.show_grid === false ? '0' : '1';
+                        }
+                    }
+
+                    function dcRefreshAfterRobotEditorChange() {
+                        dcUpdateCommandBar();
+                        dcRefreshHierarchy();
+                        dcRefreshValidation();
+                        dcSyncCanvasControls();
+                    }
+
+                    function dcCanvasZoomIn() {
+                        if (typeof zoomInRobotEditorView === 'function') zoomInRobotEditorView();
+                    }
+
+                    function dcCanvasZoomOut() {
+                        if (typeof zoomOutRobotEditorView === 'function') zoomOutRobotEditorView();
+                    }
+
+                    function dcCanvasFit() {
+                        if (typeof fitRobotEditorView === 'function') fitRobotEditorView();
+                    }
+
+                    function dcToggleCanvasGrid() {
+                        const canvasState = dcEnsureCanvasState();
+                        canvasState.show_grid = canvasState.show_grid === false;
+                        dcSyncCanvasControls();
+                        if (typeof drawRobotEditorCanvas === 'function') drawRobotEditorCanvas();
+                    }
+
+                    function dcToggleCanvasLabels() {
+                        const canvasState = dcEnsureCanvasState();
+                        canvasState.show_labels = canvasState.show_labels === false;
+                        dcSyncCanvasControls();
+                        if (typeof drawRobotEditorCanvas === 'function') drawRobotEditorCanvas();
                     }
 
                     function scrollDeviceConfigTo(targetId) {
@@ -17548,22 +17788,58 @@
                         });
                         const badge = document.getElementById('dc-insp-mode-badge');
                         if (badge) badge.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+                        const presetMap = {
+                            structure: 'structure',
+                            sensors: 'sensors',
+                            motion: 'motion',
+                            safety: 'structure',
+                            diagnostics: 'debug',
+                        };
+                        if (mode === 'settings') {
+                            if (typeof switchTab === 'function') switchTab('settings');
+                            return;
+                        }
+                        if (typeof setRobotEditorVisualPreset === 'function' && presetMap[mode]) {
+                            setRobotEditorVisualPreset(presetMap[mode]);
+                        }
+                        dcRefreshHierarchy(mode);
                         // Diagnostics mode → auto-show validation pane
                         if (mode === 'diagnostics') {
                             dcOpenInspTab('validation');
                         }
+                        dcSyncCanvasControls();
                     }
 
                     function dcSetCanvasView(view, btn) {
                         document.querySelectorAll('.dc-cvs-view-btn').forEach((b) => b.classList.remove('active'));
                         if (btn) btn.classList.add('active');
-                            const label = { top: 'Top View', side: 'Side View', iso: 'Iso View' }[view] || 'Top View';
-                            const lbl = document.getElementById('dc-canvas-view-label');
-                            if (lbl) lbl.textContent = label;
-                            if (window.robotEditorState) {
-                                window.robotEditorState.visualization_mode = view;
-                            }
-                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        const label = { top: 'Top View', side: 'Side View', iso: 'Iso View' }[view] || 'Top View';
+                        const lbl = document.getElementById('dc-canvas-view-label');
+                        if (lbl) lbl.textContent = label;
+                        const canvasState = dcEnsureCanvasState();
+                        canvasState.view = view;
+                        if (typeof onRobotEditorVisualizationModeChanged === 'function') {
+                            onRobotEditorVisualizationModeChanged(view === 'top' ? 'topdown' : 'preview_3d');
+                        } else if (typeof drawRobotEditorCanvas === 'function') {
+                            drawRobotEditorCanvas();
+                        }
+                        dcSyncCanvasControls();
+                    }
+
+                    function dcInferLinkKind(link) {
+                        const descriptor = [
+                            String(link?.type || ''),
+                            String(link?.link_type || ''),
+                            String(link?.name || ''),
+                            String(link?.link_name || ''),
+                        ].join(' ').toLowerCase();
+                        if (/(lidar|laser|scan)/.test(descriptor)) return 'lidar';
+                        if (/(camera|cam)/.test(descriptor)) return 'camera';
+                        if (/\bimu\b/.test(descriptor)) return 'imu';
+                        if (/(wheel|drive|motor)/.test(descriptor)) return 'wheel';
+                        if (/caster/.test(descriptor)) return 'caster';
+                        if (/(base|chassis|body|footprint)/.test(descriptor)) return 'base';
+                        return 'link';
                     }
 
                     function dcRefreshHierarchy(filterMode) {
@@ -17577,18 +17853,15 @@
                         })();
 
                         // Mode-based type filtering
-                        const sensorTypes = ['lidar', 'laser', 'camera', 'imu', 'sensor'];
-                        const motionTypes = ['wheel', 'caster', 'drive', 'motor'];
-
                         const filtered = links.filter((lk) => {
-                            const t = (lk.type || lk.link_type || '').toLowerCase();
-                            if (mode === 'sensors') return sensorTypes.some((k) => t.includes(k));
-                            if (mode === 'motion') return motionTypes.some((k) => t.includes(k));
+                            const kind = dcInferLinkKind(lk);
+                            if (mode === 'sensors') return ['lidar', 'camera', 'imu'].includes(kind);
+                            if (mode === 'motion') return ['wheel', 'caster'].includes(kind);
                             return true; // structure / safety / diagnostics → show all
                         });
 
-                        const iconMap = { lidar: 'fa-satellite-dish', laser: 'fa-satellite-dish', camera: 'fa-camera', imu: 'fa-microchip', wheel: 'fa-circle', caster: 'fa-circle-notch', drive: 'fa-tachometer-alt', sensor: 'fa-broadcast-tower' };
-                        const badgeMap = { lidar: 'sensor', laser: 'sensor', camera: 'sensor', imu: 'sensor', wheel: 'wheel', caster: 'wheel', drive: 'drive', motor: 'drive' };
+                        const iconMap = { lidar: 'fa-satellite-dish', camera: 'fa-camera', imu: 'fa-microchip', wheel: 'fa-circle', caster: 'fa-circle-notch', base: 'fa-cube', link: 'fa-project-diagram' };
+                        const badgeMap = { lidar: 'sensor', camera: 'sensor', imu: 'sensor', wheel: 'wheel', caster: 'wheel', base: 'base', link: 'link' };
 
                         if (filtered.length === 0) {
                             tree.innerHTML = `<div class="dc-tree-node" style="pointer-events:none;"><span class="dc-tree-name" style="color:var(--text-tertiary);">No links in this mode</span></div>`;
@@ -17597,10 +17870,10 @@
 
                         tree.innerHTML = filtered.map((lk) => {
                             const name = lk.name || lk.link_name || '—';
-                            const t = (lk.type || lk.link_type || '').toLowerCase();
-                            const icon = iconMap[Object.keys(iconMap).find((k) => t.includes(k)) || ''] || 'fa-circle-small';
-                            const badgeClass = badgeMap[Object.keys(badgeMap).find((k) => t.includes(k)) || ''] || '';
-                            const badgeLabel = t || 'link';
+                            const kind = dcInferLinkKind(lk);
+                            const icon = iconMap[kind] || 'fa-circle-small';
+                            const badgeClass = badgeMap[kind] || '';
+                            const badgeLabel = kind;
                             return `<div class="dc-tree-node" onclick="dcSelectLink(${JSON.stringify(name)})">
                                 <span class="dc-tree-node-expand"><i class="fas fa-chevron-right"></i></span>
                                 <span class="dc-tree-node-icon"><i class="fas ${icon}"></i></span>
@@ -17627,11 +17900,12 @@
                         dcShowDetailEditor(linkName);
                         // Delegate to robot editor if available
                         if (typeof selectRobotEditorLink === 'function') selectRobotEditorLink(linkName);
+                        if (typeof centerRobotEditorOnLink === 'function') centerRobotEditorOnLink(linkName);
                     }
 
                     function dcBuildDetailHTML(name, linkData) {
                         const d = linkData || {};
-                        const type = d.type || d.link_type || 'link';
+                        const type = dcInferLinkKind(d);
                         const mass = d.mass != null ? `${parseFloat(d.mass).toFixed(3)} kg` : '—';
                         const parent = d.parent || d.parent_link || '—';
                         const collision = (d.collision && d.collision.enabled !== false) ? 'Enabled' : 'Disabled';
@@ -17729,6 +18003,7 @@
                             chip.className = `dc-cvs-issue-chip ${hasErrors ? 'has-errors' : 'has-warns'}`;
                         chip.style.display = '';
                         chip.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${issues.length} issue${issues.length > 1 ? 's' : ''}`;
+                        dcSyncCanvasControls();
                     }
 
                     function dcUpdateCommandBar() {
@@ -17743,13 +18018,13 @@
 
                         if (profile) {
                             if (nameEl) nameEl.textContent = profile.display_name || profile.name || profileId;
-                            if (verEl) verEl.textContent = profile.version || 'v—';
+                            if (verEl) verEl.textContent = `v${profile.profile_version || profile.version || '—'}`;
                             if (chipEl) {
-                                const state = profile.state || (profile.has_urdf ? 'published' : 'draft');
+                                const state = profile.state || (profile.production ? 'published' : 'draft');
                                 chipEl.textContent = state;
-                                chipEl.className = `dc-profile-chip ${(state === 'published' || profile.has_urdf) ? 'published' : 'draft'}`;
+                                chipEl.className = `dc-profile-chip ${(state === 'published' || profile.production) ? 'published' : 'draft'}`;
                             }
-                            if (ctxEl) ctxEl.textContent = profile.display_name || profileId;
+                            if (ctxEl) ctxEl.textContent = `${profile.display_name || profileId} · v${profile.profile_version || profile.version || '—'}`;
                         } else if (profileId) {
                             if (nameEl) nameEl.textContent = profileId;
                             if (verEl) verEl.textContent = '—';
@@ -17769,7 +18044,7 @@
                             if (profile) {
                                 if (ovName) ovName.textContent = profile.display_name || profile.name || profileId;
                                 if (ovTag) {
-                                    const st = profile.state || (profile.has_urdf ? 'published' : 'draft');
+                                    const st = profile.state || (profile.production ? 'published' : 'draft');
                                     ovTag.textContent = st;
                                     ovTag.className = `dc-tag ${st === 'published' ? 'dc-tag-green' : 'dc-tag-amber'}`;
                                 }
@@ -17783,7 +18058,7 @@
                             // Update robot model stats in overview grid
                             const model = (window.robotEditorState && window.robotEditorState.model) || {};
                             const links = Array.isArray(model.links) ? model.links : [];
-                            const sensorCount = links.filter(l => { const t = (l.type||l.link_type||'').toLowerCase(); return ['lidar','camera','imu','sensor'].some(k => t.includes(k)); }).length;
+                            const sensorCount = links.filter((link) => ['lidar', 'camera', 'imu'].includes(dcInferLinkKind(link))).length;
                             const geom = model.geometry || {};
                             const fmt = v => v != null ? (parseFloat(v).toFixed(3) + ' m') : '—';
                             const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -17801,13 +18076,26 @@
                             setEl('dc-ov-fp-shape',   fp.type || (model.footprint_type || '—'));
                             setEl('dc-ov-fp-radius',  fp.radius != null ? fp.radius.toFixed(3) : '—');
                             setEl('dc-ov-fp-padding', fp.padding != null ? fp.padding.toFixed(3) : '—');
+                            dcSyncCanvasControls();
                     }
 
                     async function dcApplyToRobot() {
                         const profileId = window.activeRobotProfileId;
-                        if (!profileId) { alert('No profile selected.'); return; }
+                        if (!profileId) {
+                            dcSetStatus('Select a robot profile before publishing', 'warning', true);
+                            return;
+                        }
+                        let saveResult = null;
                         if (typeof saveRobotEditorAndBuildUrdf === 'function') {
-                            await saveRobotEditorAndBuildUrdf();
+                            saveResult = await saveRobotEditorAndBuildUrdf();
+                        }
+                        if (!saveResult || saveResult.ok === false || (saveResult.compile_requested && saveResult.compile_ok === false)) {
+                            dcSetStatus(
+                                saveResult?.message || 'Fix validation/build issues before publishing',
+                                'error',
+                                true,
+                            );
+                            return;
                         }
                         // Push to runtime
                         try {
@@ -17817,18 +18105,23 @@
                                 body: JSON.stringify({ robot_id: profileId, apply_runtime: true })
                             });
                             const data = await resp.json();
-                            const statusEl = document.getElementById('dc-status-text');
-                            if (statusEl) statusEl.textContent = data.ok ? 'Applied to robot successfully' : (data.message || data.error || 'Apply failed');
+                            dcSetStatus(
+                                data.ok ? (data.message || `Published "${profileId}" to runtime`) : (data.message || data.error || 'Apply failed'),
+                                data.ok ? 'success' : 'error',
+                                true,
+                            );
                         } catch (e) {
-                            const statusEl = document.getElementById('dc-status-text');
-                            if (statusEl) statusEl.textContent = 'Apply failed: ' + e.message;
+                            dcSetStatus(`Apply failed: ${e.message}`, 'error', true);
                         }
                     }
 
                     async function dcCloneProfile() {
                         dcCloseAllMenus();
                         const profileId = window.activeRobotProfileId;
-                        if (!profileId) { alert('No profile selected.'); return; }
+                        if (!profileId) {
+                            dcSetStatus('Select a robot profile before duplicating it', 'warning', true);
+                            return;
+                        }
                         const profiles = window.robotProfilesById || {};
                         const base = profiles[profileId] || {};
                         const newName = prompt('Enter name for duplicated profile:', (base.display_name || profileId) + ' (copy)');
@@ -17837,18 +18130,18 @@
                             const resp = await fetch('/api/settings/robot_profiles/clone', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ source_robot_id: profileId, overrides: { display_name: newName }, activate: false })
+                                body: JSON.stringify({ source_robot_id: profileId, overrides: { robot_id: newName }, activate: false })
                             });
                             const data = await resp.json();
                             if (data.ok) {
                                 if (typeof loadRobotProfiles === 'function') await loadRobotProfiles();
-                                dcUpdateCommandBar();
-                                dcBuildProfileDropdown();
+                                dcRefreshAfterRobotEditorChange();
+                                dcSetStatus(data.message || `Duplicated "${profileId}"`, 'success', true);
                             } else {
-                                alert('Clone failed: ' + (data.message || data.error || 'Unknown error'));
+                                dcSetStatus(data.message || data.error || 'Clone failed', 'error', true);
                             }
                         } catch (e) {
-                            alert('Clone failed: ' + e.message);
+                            dcSetStatus(`Clone failed: ${e.message}`, 'error', true);
                         }
                     }
 
@@ -17868,14 +18161,14 @@
                             });
                             const data = await resp.json();
                             if (data.ok) {
-                                window.activeRobotProfileId = null;
                                 if (typeof loadRobotProfiles === 'function') await loadRobotProfiles();
-                                dcUpdateCommandBar();
+                                dcRefreshAfterRobotEditorChange();
+                                dcSetStatus(data.message || `Deleted "${profileId}"`, 'success', true);
                             } else {
-                                alert('Delete not supported or failed: ' + (data.message || data.error || 'Unknown error'));
+                                dcSetStatus(data.message || data.error || 'Delete failed', 'error', true);
                             }
                         } catch (e) {
-                            alert('Delete failed: ' + e.message);
+                            dcSetStatus(`Delete failed: ${e.message}`, 'error', true);
                         }
                     }
 
@@ -17930,15 +18223,15 @@
                         list.innerHTML = ids.map((id) => {
                             const p = profilesById[id] || {};
                             const name = p.display_name || p.name || id;
-                            const ver = p.version || '';
+                            const ver = p.profile_version || p.version || '';
                             const isActive = id === activeId;
-                            const state = p.state || (p.has_urdf ? 'published' : 'draft');
+                            const state = p.state || (p.production ? 'published' : 'draft');
                             const dotColor = state === 'published' ? '#48bb78' : '#ed8936';
                             return `<button class="dc-pd-item${isActive ? ' active' : ''}" onclick="dcSwitchProfile(${JSON.stringify(id)})">
                                 <span class="dc-pd-item-dot" style="background:${dotColor};"></span>
                                 <span class="dc-pd-item-meta">
                                     <span class="dc-pd-item-name">${name}</span>
-                                    ${ver ? `<br><span class="dc-pd-item-ver">${ver}</span>` : ''}
+                                    ${ver ? `<br><span class="dc-pd-item-ver">v${ver}</span>` : ''}
                                 </span>
                             </button>`;
                         }).join('');
@@ -17963,14 +18256,31 @@
                         if (typeof loadRobotEditor === 'function') {
                             await loadRobotEditor(false, false);
                         }
-                        dcUpdateCommandBar();
-                        dcRefreshHierarchy();
-                        dcRefreshValidation();
+                        dcRefreshAfterRobotEditorChange();
+                        dcSetStatus(`Loaded profile "${profileId}"`, 'success', false);
                     }
 
                         function dcToggleLayer(layer, btn) {
-                            if (btn) btn.classList.toggle('active');
-                            if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                            const setChecked = (id, checked) => {
+                                const input = document.getElementById(id);
+                                if (input) input.checked = Boolean(checked);
+                            };
+                            const current = btn ? btn.classList.contains('active') : false;
+                            const next = !current;
+                            if (layer === 'collision') {
+                                setChecked('robot-editor-show-collision', next);
+                            } else if (layer === 'sensors') {
+                                setChecked('robot-editor-show-lidar-fov', next);
+                                setChecked('robot-editor-show-camera-fov', next);
+                            } else if (layer === 'safety') {
+                                setChecked('robot-editor-show-safety-zones', next);
+                            }
+                            if (typeof onRobotEditorViewToggleChanged === 'function') {
+                                onRobotEditorViewToggleChanged();
+                            } else if (typeof refreshRobotEditorUi === 'function') {
+                                refreshRobotEditorUi();
+                            }
+                            dcSyncCanvasControls();
                         }
 
                         function dcHandleCanvasClick(event) {
@@ -17997,26 +18307,33 @@
                             fetch('/api/settings/robot_profiles/create', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ display_name: name })
+                                body: JSON.stringify({ robot_id: name, activate: true })
                             }).then(r => r.json()).then(async data => {
                                 if (data.ok && typeof loadRobotProfiles === 'function') {
                                     await loadRobotProfiles();
-                                    dcUpdateCommandBar();
-                                    dcBuildProfileDropdown();
-                                } else { alert('Failed: ' + (data.message || data.error || 'Unknown')); }
-                            }).catch(e => alert('Failed: ' + e.message));
+                                    dcRefreshAfterRobotEditorChange();
+                                    dcSetStatus(data.message || `Created "${name}"`, 'success', true);
+                                } else {
+                                    dcSetStatus(data.message || data.error || 'Create failed', 'error', true);
+                                }
+                            }).catch(e => dcSetStatus(`Create failed: ${e.message}`, 'error', true));
                         }
 
                         function dcManageProfiles() {
                             dcCloseAllMenus();
                             // Navigate to Settings > Robot Profiles if available
                             if (typeof switchTab === 'function') switchTab('settings');
+                            dcSetStatus('Opened profile settings', 'info', false);
                         }
 
                     async function dcInitLoad() {
                         adoptDevConfigContent();
                         dcOpenInspTab('properties');
                         dcSetMode('structure');
+                        const initialView = dcEnsureCanvasState().view || 'top';
+                        const viewButtonMap = { top: 0, side: 1, iso: 2 };
+                        const viewButtons = document.querySelectorAll('.dc-cvs-view-btn');
+                        dcSetCanvasView(initialView, viewButtons[viewButtonMap[initialView] || 0] || null);
                         try {
                             if (typeof loadRobotProfiles === 'function') {
                                 await loadRobotProfiles();
@@ -18025,9 +18342,8 @@
                                 await loadRobotEditor(false, true);
                             }
                         } catch (e) { /* non-fatal */ }
-                        dcUpdateCommandBar();
-                        dcRefreshHierarchy();
-                        dcRefreshValidation();
+                        dcRefreshAfterRobotEditorChange();
+                        dcSetStatus(window.activeRobotProfileId ? `Ready · ${window.activeRobotProfileId}` : 'Ready', 'info', false);
                     }
                     // (adoptDevConfigContent is called in window.onload to ensure DOM is ready)
 
@@ -28449,15 +28765,7 @@
                 <span id="dc-val-chip-ok"    class="dc-val-chip ok"    style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> OK</span>
             </div>
             <div class="dc-cmdbar-spacer"></div>
-            <!-- Primary actions -->
-            <div class="dc-cmdbar-actions">
-                <button class="dc-btn" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Import URDF</button>
-                <button class="dc-btn" onclick="saveRobotEditorDraft()"><i class="fas fa-save"></i> Save Draft</button>
-                <button class="dc-btn dc-btn-primary" onclick="saveRobotEditorAndBuildUrdf()"><i class="fas fa-check-circle"></i> Validate &amp; Build</button>
-                <button class="dc-btn" onclick="exportRobotEditorUrdf()"><i class="fas fa-download"></i> Export</button>
-                <button class="dc-btn dc-btn-success" onclick="dcApplyToRobot()"><i class="fas fa-rocket"></i> Publish</button>
-                <button class="dc-cmdbar-more-btn" id="dc-more-btn" onclick="dcToggleOverflowMenu(event)" title="More actions"><i class="fas fa-ellipsis-v"></i></button>
-            </div>
+            <div id="dc-cmdbar-status" class="dc-cmdbar-status mono">Ready</div>
         </div>
 
         <!-- ══ MAIN VIEWPORT: rail | canvas | inspector ═════════ -->
@@ -28504,9 +28812,9 @@
                     <div class="dc-cvs-sep"></div>
                     <!-- View toggle -->
                     <div class="dc-cvs-view-toggle">
-                        <button class="dc-cvs-view-btn active" onclick="dcSetCanvasView('top', this)">Top</button>
-                        <button class="dc-cvs-view-btn" onclick="dcSetCanvasView('side', this)">Side</button>
-                        <button class="dc-cvs-view-btn" onclick="dcSetCanvasView('iso', this)">Iso</button>
+                        <button class="dc-cvs-view-btn active" data-dc-view="top" onclick="dcSetCanvasView('top', this)">Top</button>
+                        <button class="dc-cvs-view-btn" data-dc-view="side" onclick="dcSetCanvasView('side', this)">Side</button>
+                        <button class="dc-cvs-view-btn" data-dc-view="iso" onclick="dcSetCanvasView('iso', this)">Iso</button>
                     </div>
                     <!-- Visual layer toggles -->
                     <button class="dc-btn" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
@@ -28519,6 +28827,19 @@
                 <!-- Robot canvas area — robot-editor-visual-panel moved here -->
                 <div id="dc-canvas-main" onclick="dcHandleCanvasClick(event)">
                     <!-- robot-editor-visual-panel adopted by adoptDevConfigContent() -->
+                    <div id="dc-view-controls" class="dc-view-controls">
+                        <button class="dc-vc-btn" type="button" onclick="dcCanvasZoomIn()" title="Zoom in"><i class="fas fa-plus"></i></button>
+                        <button class="dc-vc-btn" type="button" onclick="dcCanvasZoomOut()" title="Zoom out"><i class="fas fa-minus"></i></button>
+                        <div class="dc-vc-sep"></div>
+                        <button class="dc-vc-btn" type="button" onclick="dcCanvasFit()" title="Fit to view"><i class="fas fa-expand-arrows-alt"></i></button>
+                        <div class="dc-vc-sep"></div>
+                        <button class="dc-vc-btn active" id="dc-grid-btn" type="button" onclick="dcToggleCanvasGrid()" title="Toggle grid"><i class="fas fa-th"></i></button>
+                        <button class="dc-vc-btn active" id="dc-labels-btn" type="button" onclick="dcToggleCanvasLabels()" title="Toggle labels"><i class="fas fa-tag"></i></button>
+                    </div>
+                    <div class="dc-canvas-ruler">
+                        <div class="dc-canvas-ruler-bar"></div>
+                        <span id="dc-canvas-ruler-label" class="dc-canvas-ruler-label">0.5 m</span>
+                    </div>
                 </div>
             </div>
 
@@ -28641,6 +28962,7 @@
             });
 
             document.body.classList.toggle('editor-tab-active', tabName === 'editor');
+            document.body.classList.toggle('device-config-tab-active', tabName === 'device-config');
 
             // Deactivate all tab-button elements (legacy nav)
             document.querySelectorAll('.tab-button').forEach(btn => {
@@ -28656,6 +28978,10 @@
             const navControls = document.getElementById('navigator-top-controls');
             if (navControls) {
                 navControls.style.display = (tabName === 'navigator') ? '' : 'none';
+            }
+            const deviceConfigControls = document.getElementById('device-config-top-controls');
+            if (deviceConfigControls) {
+                deviceConfigControls.style.display = (tabName === 'device-config') ? '' : 'none';
             }
 
             // Show selected tab
@@ -32412,7 +32738,20 @@
             };
         }
 
+        function isRobotEditorDeviceConfigCanvas(canvas = null) {
+            const target = canvas || document.getElementById('robot-editor-canvas');
+            return Boolean(target && target.closest && target.closest('#dc-canvas-main'));
+        }
+
         function getRobotEditorRulerMetrics(dpr = 1) {
+            if (isRobotEditorDeviceConfigCanvas()) {
+                const ratio = Math.max(1, Number(dpr) || 1);
+                return {
+                    top: 0,
+                    left: 0,
+                    pad: Math.round(24 * ratio),
+                };
+            }
             const ratio = Math.max(1, Number(dpr) || 1);
             return {
                 top: Math.round(24 * ratio),
@@ -33182,6 +33521,9 @@
         }
 
         function drawRobotEditorGrid(ctx, transform, dpr = 1) {
+            if (isRobotEditorDeviceConfigCanvas() && robotEditorState.device_config_canvas?.show_grid === false) {
+                return;
+            }
             const view = getRobotEditorViewportRect(transform);
             if (!view) return;
             const topLeft = robotEditorCanvasToWorld(view.x, view.y);
@@ -33226,6 +33568,9 @@
         }
 
         function drawRobotEditorRulers(ctx, transform, dpr = 1) {
+            if (isRobotEditorDeviceConfigCanvas()) {
+                return;
+            }
             const view = getRobotEditorViewportRect(transform);
             if (!view) return;
             const topLeft = robotEditorCanvasToWorld(view.x, view.y);
@@ -33404,7 +33749,7 @@
             ctx.restore();
         }
 
-        function drawRobotEditorBaseAxes(ctx, basePose, scale, dpr = 1, alpha = 1) {
+        function drawRobotEditorBaseAxes(ctx, basePose, scale, dpr = 1, alpha = 1, showLabels = true) {
             if (!basePose) return;
             const origin = robotEditorWorldToCanvas(basePose.x, basePose.y);
             if (!origin) return;
@@ -33454,17 +33799,19 @@
             ctx.lineTo(origin.x, origin.y + (8 * dpr));
             ctx.stroke();
 
-            ctx.fillStyle = '#ef4444';
-            ctx.font = `${11 * dpr}px Roboto Mono, monospace`;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'bottom';
-            if (xEnd) ctx.fillText('X', xEnd.x + (4 * dpr), xEnd.y - (2 * dpr));
+            if (showLabels) {
+                ctx.fillStyle = '#ef4444';
+                ctx.font = `${11 * dpr}px Roboto Mono, monospace`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                if (xEnd) ctx.fillText('X', xEnd.x + (4 * dpr), xEnd.y - (2 * dpr));
 
-            ctx.fillStyle = '#22c55e';
-            if (yEnd) ctx.fillText('Y', yEnd.x + (4 * dpr), yEnd.y - (2 * dpr));
+                ctx.fillStyle = '#22c55e';
+                if (yEnd) ctx.fillText('Y', yEnd.x + (4 * dpr), yEnd.y - (2 * dpr));
 
-            ctx.fillStyle = '#e2e8f0';
-            ctx.fillText('base_link', origin.x + (7 * dpr), origin.y + (12 * dpr));
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fillText('base_link', origin.x + (7 * dpr), origin.y + (12 * dpr));
+            }
             ctx.restore();
         }
 
@@ -33727,6 +34074,8 @@
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
+            const deviceConfigCanvas = isRobotEditorDeviceConfigCanvas(canvas);
+            const showDeviceConfigLabels = !deviceConfigCanvas || robotEditorState.device_config_canvas?.show_labels !== false;
 
             const rect = canvas.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
@@ -33878,7 +34227,7 @@
                         || (presetConfig.preset === 'sensors' && shapeRole === 'sensor')
                         || (presetConfig.preset === 'motion' && (shapeRole === 'wheel' || shapeRole === 'caster'))
                     );
-                    if (showLabel) {
+                    if (showLabel && showDeviceConfigLabels) {
                         ctx.save();
                         ctx.globalAlpha = isSelected ? 1.0 : (linkSelected ? 0.92 : 0.74);
                         ctx.fillStyle = isSelected ? '#f97316' : 'rgba(226, 232, 240, 0.92)';
@@ -33924,7 +34273,7 @@
                     || presetConfig.showDebugLabels
                     || (presetConfig.preset === 'motion' && (categoryKey === 'wheels' || categoryKey === 'casters'))
                     || (!focusActive && isBase);
-                if (showLinkLabel) {
+                if (showLinkLabel && showDeviceConfigLabels) {
                     ctx.fillStyle = 'rgba(226, 232, 240, 0.8)';
                     ctx.font = `${10 * dpr}px Roboto Mono, monospace`;
                     ctx.textAlign = 'left';
@@ -33937,7 +34286,14 @@
             drawRobotEditorWarningIndicators(ctx, warnings, dpr);
 
             const basePose = linkPoses[baseName] || { x: 0, y: 0, yaw: 0 };
-            drawRobotEditorBaseAxes(ctx, basePose, transform.scale, dpr, presetConfig.preset === 'sensors' ? 0.55 : 0.92);
+            drawRobotEditorBaseAxes(
+                ctx,
+                basePose,
+                transform.scale,
+                dpr,
+                presetConfig.preset === 'sensors' ? 0.55 : 0.92,
+                showDeviceConfigLabels,
+            );
             ctx.restore();
 
             drawRobotEditorRulers(ctx, transform, dpr);
@@ -34546,6 +34902,9 @@
             populateRobotEditorShapeInputs(selectedShape || null);
             onRobotEditorShapeTypeChanged();
             drawRobotEditorCanvas();
+            if (typeof dcSyncCanvasControls === 'function') {
+                dcSyncCanvasControls();
+            }
         }
 
         function selectRobotEditorLink(linkName, options = {}) {
@@ -35089,6 +35448,9 @@
                 robotEditorState.canvas_camera = null;
                 robotEditorState.fit_to_view_pending = true;
                 refreshRobotEditorUi();
+                if (typeof dcRefreshAfterRobotEditorChange === 'function') {
+                    dcRefreshAfterRobotEditorChange();
+                }
 
                 if (data.profile && typeof data.profile === 'object') {
                     const profileId = String(data.profile.robot_id || robotEditorState.robot_id).trim();
@@ -35117,7 +35479,7 @@
             const targetRobotId = String(activeRobotProfileId || '').trim();
             if (!targetRobotId) {
                 setRobotEditorStatus('Select a robot profile first', 'error');
-                return;
+                return null;
             }
 
             ensureRobotEditorBaseLinkConsistency();
@@ -35142,7 +35504,7 @@
                 if (!data.ok) {
                     setRobotEditorStatus(data.message || 'Failed saving ROBOT editor', 'error');
                     showStatus(data.message || 'Failed saving ROBOT editor', 'error');
-                    return;
+                    return null;
                 }
 
                 if (data.profile && typeof data.profile === 'object') {
@@ -35157,24 +35519,29 @@
                     const fallbackBase = String(data.profile_fields?.base_frame || robotEditorState.model?.base_link || 'base_link');
                     robotEditorState.model = normalizeRobotEditorModel(data.robot_builder, fallbackBase);
                 }
+                if (typeof dcRefreshAfterRobotEditorChange === 'function') {
+                    dcRefreshAfterRobotEditorChange();
+                }
 
                 const compileRequested = Boolean(data.compile_requested);
                 const compileOk = Boolean(data.compile_ok);
                 const level = compileRequested ? (compileOk ? 'success' : 'warning') : 'success';
                 setRobotEditorStatus(data.message || 'ROBOT editor saved', level);
                 showStatus(data.message || 'ROBOT editor saved', level === 'warning' ? 'error' : 'success');
+                return data;
             } catch (error) {
                 setRobotEditorStatus(`ROBOT editor save error: ${error.message}`, 'error');
                 showStatus('Failed saving ROBOT editor', 'error');
+                return null;
             }
         }
 
         function saveRobotEditorDraft() {
-            saveRobotEditor(false);
+            return saveRobotEditor(false);
         }
 
         function saveRobotEditorAndBuildUrdf() {
-            saveRobotEditor(true);
+            return saveRobotEditor(true);
         }
 
         function populateRobotProfileSelect(activeId) {
