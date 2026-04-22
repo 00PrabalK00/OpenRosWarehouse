@@ -62,7 +62,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 16px;
+    height: 16px;
     padding: 0 6px;
     border-radius: 3px;
     border: 1px solid rgba(111, 163, 228, 0.22);
@@ -72,6 +72,26 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+/* Warn/error/ok badges that live INSIDE library cards: keep them 1 line
+   and smaller than the card title so they don't dominate. */
+.rcg-library-card .recognition-toolbar-chip,
+.rcg-library-card .rcg-dimension-pill,
+.rcg-library-card [class*="chip"],
+.rcg-library-card [class*="badge"] {
+    height: 14px;
+    padding: 0 5px;
+    font-size: 8px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.rcg-library-card-head {
+    flex-wrap: wrap;
 }
 
 .recognition-toolbar-chip.warn {
@@ -116,8 +136,9 @@
 
 #recognition-body {
     display: grid;
-    /* 44px rail + 220px panel | flexible canvas | 260px inspector */
-    grid-template-columns: 264px minmax(0, 1fr) 260px;
+    /* 44px rail + 220px panel | flexible canvas | resizable inspector */
+    grid-template-columns: 264px minmax(0, 1fr) var(--rcg-inspector-width, 260px);
+    grid-template-rows: 1fr;
     gap: 0;
     flex: 1 1 auto;
     min-height: 0;
@@ -129,6 +150,8 @@
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr);
     min-width: 0;
+    min-height: 0;
+    height: 100%;
     border-right: 1px solid var(--border-primary, #2d3748);
     background: var(--bg-secondary, #161b26);
 }
@@ -194,6 +217,8 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
+    height: 100%;
 }
 
 /* ── Pane header — compact, matches sidebar-panel-header ─────── */
@@ -306,16 +331,20 @@
 }
 
 .rcg-readonly-field {
-    min-height: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     width: 100%;
+    min-width: 0;
     border: 1px solid var(--border-primary, #2d3748);
     border-radius: 3px;
     background: var(--bg-tertiary, #1a202c);
     color: var(--text-primary, #e2e8f0);
     padding: 4px 8px;
     font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .rcg-readonly-mono {
@@ -775,13 +804,17 @@
 
 .rcg-form-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 6px;
     margin-top: 8px;
 }
 
 .rcg-form-grid.single {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.rcg-form-field {
+    min-width: 0;
 }
 
 .rcg-form-field label,
