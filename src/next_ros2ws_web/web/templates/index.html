@@ -1044,6 +1044,162 @@
         .params-popup-pane { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
         .params-popup-pane.active { display: flex; }
 
+        /* ── Params redesign ───────────────────────── */
+        .prm-search-bar {
+            display: flex; align-items: center; gap: 6px;
+            padding: 7px 10px; border-bottom: 1px solid var(--border-chrome);
+            background: var(--bg-chrome); flex-shrink: 0;
+        }
+        .prm-search-icon { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+        .prm-search-input {
+            flex: 1; background: var(--bg-elevated); border: 1px solid var(--border-chrome);
+            border-radius: 4px; color: var(--text-primary); font-size: 11px;
+            padding: 3px 7px; outline: none; min-width: 0;
+        }
+        .prm-search-input:focus { border-color: var(--accent-normal); }
+        .prm-search-input::placeholder { color: var(--text-tertiary); }
+        .prm-type-filter {
+            background: var(--bg-elevated); border: 1px solid var(--border-chrome);
+            border-radius: 4px; color: var(--text-secondary); font-size: 10px;
+            padding: 3px 5px; outline: none; flex-shrink: 0;
+        }
+        .prm-action-btn {
+            background: var(--bg-elevated); border: 1px solid var(--border-chrome);
+            border-radius: 4px; color: var(--text-secondary); font-size: 10px;
+            padding: 3px 8px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+        .prm-action-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .prm-status-bar {
+            padding: 3px 10px; font-size: 10px; flex-shrink: 0;
+            border-bottom: 1px solid var(--border-chrome); background: var(--bg-panel);
+            color: var(--text-tertiary); min-height: 22px; display: flex; align-items: center;
+        }
+        .prm-param-list { flex: 1; overflow-y: auto; }
+        .prm-section-hdr {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 5px 10px; background: var(--bg-chrome);
+            border-bottom: 1px solid var(--border-chrome); cursor: pointer;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+            text-transform: uppercase; color: var(--text-secondary); user-select: none;
+        }
+        .prm-section-hdr:hover { background: var(--bg-elevated); }
+        .prm-section-body { overflow: hidden; }
+        .prm-param-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-size: 11px;
+        }
+        .prm-param-row.hidden { display: none; }
+        .prm-param-row:hover { background: rgba(255,255,255,0.03); }
+        .prm-param-key { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .prm-param-key .prm-ns { color: var(--text-tertiary); font-size: 9px; }
+        .prm-param-val {
+            background: transparent; border: 1px solid transparent;
+            color: var(--text-primary); font-size: 11px; font-family: monospace;
+            padding: 1px 4px; border-radius: 3px; text-align: right;
+            width: 110px; flex-shrink: 0;
+        }
+        .prm-param-val:focus { background: var(--bg-elevated); border-color: var(--accent-normal); outline: none; }
+        .prm-param-val.unsaved { border-color: #f59e0b !important; }
+        .prm-param-val.saved { border-color: #4ade80; animation: pm-flash 0.4s ease forwards; }
+        @keyframes pm-flash { to { border-color: transparent; } }
+        .prm-topic-type { color: var(--text-tertiary); font-size: 9px; flex-shrink: 0; width: 70px; text-align: right; }
+        .prm-empty {
+            padding: 30px; text-align: center; color: var(--text-tertiary);
+            font-size: 11px; font-style: italic;
+        }
+
+        /* ── Recognition tab ─────────────────────────────────── */
+        #recognition-body { display: flex; height: 100%; overflow: hidden; background: var(--bg-primary); }
+        #recognition-library { display: flex; flex-shrink: 0; width: 240px; min-width: 160px; max-width: 320px; border-right: 1px solid var(--border-heavy); background: var(--bg-panel); flex-direction: row; }
+        .rcg-library-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; width: 44px; border-right: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
+        .rcg-category-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 36px; height: 40px; border: none; border-radius: 5px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 9px; padding: 4px 2px; transition: background 0.15s, color 0.15s; }
+        .rcg-category-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .rcg-category-btn.active { background: var(--accent-normal); color: #fff; }
+        .rcg-category-btn i { font-size: 14px; }
+        .rcg-library-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .rcg-pane-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
+        .rcg-pane-kicker { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 2px; }
+        .rcg-pane-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+        .rcg-stage-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+        .rcg-stage-subtitle { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; }
+        .rcg-inline-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+        .rcg-inline-btn { display: flex; align-items: center; gap: 3px; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 3px 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+        .rcg-inline-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-search-wrap { padding: 6px 8px; border-bottom: 1px solid var(--border-chrome); flex-shrink: 0; }
+        .rcg-search-input { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px; outline: none; }
+        .rcg-search-input:focus { border-color: var(--accent-normal); }
+        .rcg-search-input::placeholder { color: var(--text-tertiary); }
+        .rcg-library-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+        .rcg-lib-status { padding: 4px 8px; font-size: 10px; color: var(--text-tertiary); border-top: 1px solid var(--border-chrome); min-height: 22px; display: flex; align-items: center; flex-shrink: 0; }
+        .rcg-file-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; font-size: 11px; transition: background 0.12s; }
+        .rcg-file-row:hover { background: rgba(255,255,255,0.04); }
+        .rcg-file-row.active { background: rgba(99,179,237,0.15); border-left: 2px solid var(--accent-normal); }
+        .rcg-file-icon { font-size: 12px; color: var(--text-tertiary); flex-shrink: 0; width: 14px; text-align: center; }
+        .rcg-file-name { flex: 1; min-width: 0; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rcg-file-sync { font-size: 9px; flex-shrink: 0; }
+        .rcg-file-sync.synced { color: #4ade80; }
+        .rcg-file-sync.unsynced { color: #f59e0b; }
+        .rcg-file-actions { display: flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+        .rcg-file-row:hover .rcg-file-actions { opacity: 1; }
+        .rcg-file-act-btn { background: none; border: none; color: var(--text-tertiary); font-size: 10px; padding: 2px 4px; cursor: pointer; border-radius: 3px; }
+        .rcg-file-act-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        #recognition-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border-heavy); }
+        .rcg-stage-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; flex-wrap: wrap; gap: 6px; }
+        #recognition-form-area { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+        .rcg-stage-status { padding: 3px 10px; font-size: 10px; color: var(--text-tertiary); border-top: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; min-height: 22px; display: flex; align-items: center; }
+        .rcg-save-btn { background: var(--accent-normal); border: none; border-radius: 4px; color: #fff; font-size: 10px; padding: 4px 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .rcg-save-btn:hover { filter: brightness(1.15); }
+        .rcg-push-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 4px 10px; cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .rcg-push-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-copy-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 4px 8px; cursor: pointer; }
+        .rcg-copy-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .rcg-del-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--accent-danger,#fc8181); font-size: 10px; padding: 4px 8px; cursor: pointer; }
+        .rcg-del-btn:hover { background: rgba(252,129,129,0.15); }
+        #recognition-inspector { width: 280px; min-width: 200px; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-panel); position: relative; }
+        .rcg-inspector-resizer { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 5; }
+        .rcg-inspector-resizer:hover { background: var(--accent-normal); }
+        .rcg-inspector-tabs { display: flex; border-bottom: 1px solid var(--border-heavy); flex-shrink: 0; background: var(--bg-chrome); }
+        .rcg-inspector-tab { flex: 1; padding: 5px 6px; border: none; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+        .rcg-inspector-tab:hover { color: var(--text-primary); }
+        .rcg-inspector-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-normal); }
+        .rcg-empty-state { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
+        .rcg-empty-state > div { max-width: 200px; }
+        .rcg-empty-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; font-style: italic; }
+        .rcg-popover { position: absolute; right: 8px; top: 36px; z-index: 200; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 6px; padding: 4px; display: none; flex-direction: column; gap: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 180px; }
+        .rcg-popover.open { display: flex; }
+        .rcg-usage-section { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .rcg-usage-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 5px; }
+        .rcg-usage-p { font-size: 10px; color: var(--text-tertiary); line-height: 1.5; margin-bottom: 3px; }
+        .rcg-usage-list { list-style: none; padding: 0; margin: 4px 0; }
+        .rcg-usage-list li { font-size: 10px; color: var(--text-tertiary); padding: 2px 0 2px 12px; position: relative; line-height: 1.5; }
+        .rcg-usage-list li::before { content: '•'; position: absolute; left: 2px; color: var(--accent-normal); }
+        .rcg-val-item { display: flex; align-items: flex-start; gap: 6px; padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .rcg-val-icon { flex-shrink: 0; font-size: 10px; margin-top: 1px; }
+        .rcg-val-text { font-size: 10px; color: var(--text-secondary); }
+        .rcg-val-ok { color: #4ade80; }
+        .rcg-val-warn { color: #f59e0b; }
+        .rcg-val-err { color: #fc8181; }
+        .rcg-form-section { border-bottom: 1px solid var(--border-chrome); padding-bottom: 10px; margin-bottom: 10px; }
+        .rcg-form-section:last-child { border-bottom: none; }
+        .rcg-form-section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); padding: 6px 0 6px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+        .rcg-form-section-title i { color: var(--accent-normal); }
+        .rcg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .rcg-form-row { display: flex; flex-direction: column; gap: 2px; }
+        .rcg-form-row.full { grid-column: 1 / -1; }
+        .rcg-form-label { font-size: 9px; color: var(--text-tertiary); padding-left: 1px; }
+        .rcg-form-input { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 3px; color: var(--text-primary); font-size: 11px; font-family: monospace; padding: 3px 6px; outline: none; width: 100%; }
+        .rcg-form-input:focus { border-color: var(--accent-normal); }
+        .rcg-form-input.unsaved { border-color: #f59e0b; }
+        .rcg-form-input.saved { border-color: #4ade80; }
+        .rcg-form-select { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 3px; color: var(--text-primary); font-size: 11px; padding: 3px 6px; outline: none; width: 100%; }
+        .rcg-form-select:focus { border-color: var(--accent-normal); }
+        .rcg-form-note { font-size: 9px; color: var(--text-tertiary); font-style: italic; margin-top: 1px; grid-column: 1 / -1; }
+        .rcg-form-check-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; color: var(--text-secondary); grid-column: 1 / -1; }
+        .rcg-form-check-row input[type="checkbox"] { accent-color: var(--accent-normal); width: 13px; height: 13px; }
+        .rcg-section-label { padding: 4px 10px 2px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); }
+
         * {
             margin: 0;
             padding: 0;
@@ -17683,12 +17839,10 @@
                         if (typeof loadNav2ParameterEditor === 'function') {
                             loadNav2ParameterEditor(true);
                         }
-                        if (typeof loadAvailableTopics === 'function') {
-                            loadAvailableTopics();
-                        }
-                        if (typeof loadCurrentMappings === 'function') {
-                            loadCurrentMappings();
-                        }
+                        // Load data for the new backend-connected tabs
+                        loadRobotYamlParams();
+                        loadTopicMappingsForPopup();
+                        loadSafetyParams();
                     }
                     function closeParamsPopup() {
                         const p = document.getElementById('params-popup');
@@ -17701,33 +17855,23 @@
                         const pane = document.getElementById('params-tab-' + tabName);
                         if (pane) pane.classList.add('active');
                         if (btn) btn.classList.add('active');
-                        if (tabName === 'topic' && typeof updateMappingsTable === 'function') {
-                            updateMappingsTable();
-                        }
+                        if (tabName === 'robot')    loadRobotYamlParams();
+                        if (tabName === 'safety')   loadSafetyParams();
+                        if (tabName === 'topic')    loadTopicMappingsForPopup();
                     }
                     function adoptParamsContent() {
+                        // Nav2 tab: append nav2 editor card BELOW the search bar header rows
                         const nav2Tab = document.getElementById('params-tab-nav2');
-                        const topicTab = document.getElementById('params-tab-topic');
                         const nav2Card = document.getElementById('settings-navigation-nav2-card');
-                        const nav2Ws = document.getElementById('settings-nav2-editor');
-                        const topicsCard = document.getElementById('settings-developer-topics-card');
-                        const topicsDiv = document.querySelector('#settings-topics > div');
-
+                        const nav2Ws   = document.getElementById('settings-nav2-editor');
                         if (nav2Tab) {
-                            if (nav2Card) {
-                                nav2Tab.replaceChildren(nav2Card);
-                            } else if (nav2Ws) {
-                                nav2Tab.replaceChildren(nav2Ws);
-                            }
+                            // Remove any previously adopted child (keep .prm-search-bar & .prm-status-bar)
+                            const adopted = nav2Tab.querySelector(':not(.prm-search-bar):not(.prm-status-bar)');
+                            if (adopted) adopted.remove();
+                            const toAdopt = nav2Card || nav2Ws;
+                            if (toAdopt) nav2Tab.appendChild(toAdopt);
                         }
-
-                        if (topicTab) {
-                            if (topicsCard) {
-                                topicTab.replaceChildren(topicsCard);
-                            } else if (topicsDiv) {
-                                topicTab.replaceChildren(topicsDiv);
-                            }
-                        }
+                        // Topic tab is now self-contained (loadTopicMappingsForPopup handles it)
                     }
 
                     function restoreParamsContent() {
@@ -17736,14 +17880,352 @@
                         if (navShell && nav2Card && nav2Card.parentElement !== navShell) {
                             navShell.appendChild(nav2Card);
                         }
+                    }
 
-                        const developerCategory = document.getElementById('settings-developer');
-                        const topicsCard = document.getElementById('settings-developer-topics-card');
-                        if (developerCategory && topicsCard && topicsCard.parentElement !== developerCategory) {
-                            developerCategory.insertBefore(topicsCard, developerCategory.firstChild || null);
+                    // ─────────────────────────────────────────────────────────
+                    // Params popup – backend-connected tabs
+                    // ─────────────────────────────────────────────────────────
+
+                    // ── Nav2 search filter ────────────────────────────────────
+                    function filterNav2Params(query) {
+                        const q = (query || '').toLowerCase().trim();
+                        const nav2Tab = document.getElementById('params-tab-nav2');
+                        if (!nav2Tab) return;
+                        // Try to filter rows in the adopted nav2 editor
+                        nav2Tab.querySelectorAll('[data-param-key], .nav2-param-row, .param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
+                            row.classList.toggle('hidden', q !== '' && !text.includes(q));
+                        });
+                        // Also try span/input pairs inside the editor
+                        nav2Tab.querySelectorAll('.param-item, .nav2-item').forEach(item => {
+                            const text = item.textContent.toLowerCase();
+                            item.style.display = (q === '' || text.includes(q)) ? '' : 'none';
+                        });
+                    }
+
+                    async function applyNav2ParamsFromPopup() {
+                        const btn = document.getElementById('nav2-apply-btn');
+                        const statusEl = document.getElementById('nav2-status-text');
+                        const statusBar = document.getElementById('nav2-status-bar');
+                        if (btn) btn.disabled = true;
+                        if (statusBar) statusBar.style.display = 'flex';
+                        if (statusEl) { statusEl.style.color = '#60a5fa'; statusEl.textContent = 'Applying…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/nav2_parameters/apply', { method: 'POST' });
+                            const data = await resp.json().catch(() => ({}));
+                            if (statusEl) {
+                                statusEl.style.color = resp.ok ? '#4ade80' : '#fc8181';
+                                statusEl.textContent = resp.ok ? 'Applied successfully' : (data.error || 'Apply failed');
+                            }
+                        } catch (err) {
+                            if (statusEl) { statusEl.style.color = '#fc8181'; statusEl.textContent = 'Network error: ' + err.message; }
+                        } finally {
+                            if (btn) btn.disabled = false;
                         }
                     }
-                    // ── Device Config tab adoption ────────────────────────────
+
+                    // ── Robot Params (robot_editor) ───────────────────────────
+                    let _robotYamlCache = null;
+
+                    async function loadRobotYamlParams() {
+                        const listEl  = document.getElementById('robot-param-list');
+                        const statEl  = document.getElementById('robot-status-text');
+                        const statBar = document.getElementById('robot-status-bar');
+                        if (!listEl) return;
+                        listEl.innerHTML = '<div class="prm-empty">Loading…</div>';
+                        if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Fetching robot parameters…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor');
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            const data = await resp.json();
+                            _robotYamlCache = data;
+                            renderRobotYamlParams(data);
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Loaded – click a value to edit, blur to save'; }
+                        } catch (err) {
+                            listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
+                        }
+                    }
+
+                    function renderRobotYamlParams(data) {
+                        const listEl = document.getElementById('robot-param-list');
+                        if (!listEl) return;
+                        // Flatten robot editor fields into key→value sections
+                        const sections = [];
+                        function collectSection(title, obj) {
+                            if (!obj || typeof obj !== 'object') return;
+                            const rows = [];
+                            function flatten(prefix, node) {
+                                if (node === null || node === undefined) return;
+                                if (typeof node === 'object' && !Array.isArray(node)) {
+                                    Object.keys(node).forEach(k => flatten(prefix ? prefix + '.' + k : k, node[k]));
+                                } else {
+                                    rows.push({ key: prefix, value: node });
+                                }
+                            }
+                            flatten('', obj);
+                            if (rows.length) sections.push({ title, rows });
+                        }
+                        // Try common robot_editor fields
+                        if (data.profile_fields)  collectSection('Profile Fields', data.profile_fields);
+                        if (data.robot_params)     collectSection('Robot Params', data.robot_params);
+                        if (data.frames)           collectSection('ROS Frames', data.frames);
+                        if (data.config_files)     collectSection('Config Files', data.config_files);
+                        if (data.motion)           collectSection('Motion', data.motion);
+                        if (data.hardware)         collectSection('Hardware', data.hardware);
+                        // Catch-all for top-level string/number/boolean fields
+                        const special = new Set(['profile_fields','robot_params','frames','config_files','motion','hardware','safety']);
+                        const misc = {};
+                        Object.keys(data).forEach(k => { if (!special.has(k) && typeof data[k] !== 'object') misc[k] = data[k]; });
+                        if (Object.keys(misc).length) collectSection('General', misc);
+
+                        if (!sections.length) {
+                            listEl.innerHTML = '<div class="prm-empty">No editable parameters found.<br>Raw data keys: ' + Object.keys(data).join(', ') + '</div>';
+                            return;
+                        }
+
+                        listEl.innerHTML = sections.map(sec => `
+                            <div class="prm-section-hdr" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+                                ${sec.title} <i class="fas fa-chevron-down" style="opacity:0.5;font-size:9px;"></i>
+                            </div>
+                            <div class="prm-section-body">
+                                ${sec.rows.map(r => {
+                                    const escapedKey = r.key.replace(/"/g, '&quot;');
+                                    const escapedVal = String(r.value === null ? '' : r.value).replace(/"/g, '&quot;');
+                                    return `<div class="prm-param-row" data-key="${escapedKey}">
+                                        <span class="prm-param-key" title="${escapedKey}">${r.key}</span>
+                                        <input class="prm-param-val" type="text" value="${escapedVal}"
+                                            data-original="${escapedVal}"
+                                            oninput="this.classList.add('unsaved')"
+                                            onblur="saveRobotYamlParam(this)"
+                                            onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                                    </div>`;
+                                }).join('')}
+                            </div>`).join('');
+                    }
+
+                    async function saveRobotYamlParam(inputEl) {
+                        if (!inputEl.classList.contains('unsaved')) return;
+                        const key   = inputEl.closest('.prm-param-row').dataset.key;
+                        const value = inputEl.value;
+                        const statEl = document.getElementById('robot-status-text');
+                        if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving ' + key + '…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ key, value })
+                            });
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            inputEl.dataset.original = value;
+                            inputEl.classList.remove('unsaved');
+                            inputEl.classList.add('saved');
+                            setTimeout(() => inputEl.classList.remove('saved'), 1200);
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + key; }
+                        } catch (err) {
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
+                        }
+                    }
+
+                    function filterRobotParams(query) {
+                        const q = (query || '').toLowerCase().trim();
+                        document.querySelectorAll('#robot-param-list .prm-param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
+                            row.classList.toggle('hidden', q !== '' && !text.includes(q));
+                        });
+                    }
+
+                    // ── Topic Mappings ────────────────────────────────────────
+                    let _topicMappingsCache = [];
+
+                    async function loadTopicMappingsForPopup() {
+                        const listEl  = document.getElementById('topic-mapping-list');
+                        const statEl  = document.getElementById('topic-status-text');
+                        if (!listEl) return;
+                        listEl.innerHTML = '<div class="prm-empty">Loading…</div>';
+                        if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Fetching mappings…'; }
+                        try {
+                            const [mappingsResp, topicsResp] = await Promise.all([
+                                fetch('/api/settings/mappings'),
+                                fetch('/api/settings/topics').catch(() => ({ ok: false }))
+                            ]);
+                            if (!mappingsResp.ok) throw new Error('Mappings HTTP ' + mappingsResp.status);
+                            const mappings = await mappingsResp.json();
+                            const topics   = topicsResp.ok ? await topicsResp.json() : [];
+                            _topicMappingsCache = Array.isArray(mappings) ? mappings : (mappings.mappings || Object.entries(mappings).map(([k,v]) => ({ key: k, value: v })));
+                            renderTopicMappingsInPopup(_topicMappingsCache, topics);
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = _topicMappingsCache.length + ' entries – blur a value to save inline'; }
+                        } catch (err) {
+                            listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
+                        }
+                    }
+
+                    function renderTopicMappingsInPopup(mappings, availableTopics) {
+                        const listEl = document.getElementById('topic-mapping-list');
+                        if (!listEl) return;
+                        if (!mappings || !mappings.length) {
+                            listEl.innerHTML = '<div class="prm-empty">No topic mappings found.</div>'; return;
+                        }
+                        const topicSet = new Set(Array.isArray(availableTopics) ? availableTopics.map(t => typeof t === 'string' ? t : t.name || t.topic || '') : []);
+                        listEl.innerHTML = mappings.map((m, idx) => {
+                            const key  = m.key   || m.name  || String(idx);
+                            const val  = m.value || m.topic || m.mapping || '';
+                            const type = (m.type  || '').toLowerCase();
+                            const live = topicSet.has(val) ? '<span title="Live topic" style="color:#4ade80;margin-left:4px;font-size:9px;">●</span>' : '';
+                            return `<div class="prm-param-row" data-type="${type}" data-idx="${idx}">
+                                <span class="prm-param-key" title="${key}">${key}</span>
+                                <span class="prm-topic-type">${type}</span>
+                                <input class="prm-param-val" type="text" value="${val.replace(/"/g,'&quot;')}"
+                                    data-original="${val.replace(/"/g,'&quot;')}" data-idx="${idx}"
+                                    oninput="this.classList.add('unsaved')"
+                                    onblur="saveTopicMappingRow(this)"
+                                    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                                ${live}
+                            </div>`;
+                        }).join('');
+                    }
+
+                    async function saveTopicMappingRow(inputEl) {
+                        if (!inputEl.classList.contains('unsaved')) return;
+                        const idx = parseInt(inputEl.dataset.idx);
+                        if (isNaN(idx) || !_topicMappingsCache[idx]) return;
+                        _topicMappingsCache[idx].value = inputEl.value;
+                        _topicMappingsCache[idx].topic = inputEl.value;
+                        await saveTopicMappingsFromPopup(inputEl);
+                    }
+
+                    async function saveTopicMappingsFromPopup(triggerEl) {
+                        const statEl = document.getElementById('topic-status-text');
+                        if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
+                        try {
+                            const resp = await fetch('/api/settings/mappings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(_topicMappingsCache)
+                            });
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            if (triggerEl) {
+                                triggerEl.dataset.original = triggerEl.value;
+                                triggerEl.classList.remove('unsaved');
+                                triggerEl.classList.add('saved');
+                                setTimeout(() => triggerEl && triggerEl.classList.remove('saved'), 1200);
+                            }
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved'; }
+                        } catch (err) {
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
+                        }
+                    }
+
+                    function filterTopicMappings(query) {
+                        const q    = (query || '').toLowerCase().trim();
+                        const type = (document.getElementById('topic-type-filter')?.value || '').toLowerCase();
+                        document.querySelectorAll('#topic-mapping-list .prm-param-row').forEach(row => {
+                            const matchText = q === '' || row.textContent.toLowerCase().includes(q);
+                            const matchType = type === '' || (row.dataset.type || '').includes(type);
+                            row.classList.toggle('hidden', !(matchText && matchType));
+                        });
+                    }
+
+                    // ── Safety Params ─────────────────────────────────────────
+                    let _safetyParamsCache = {};
+
+                    async function loadSafetyParams() {
+                        const listEl  = document.getElementById('safety-param-list');
+                        const statEl  = document.getElementById('safety-status-text');
+                        if (!listEl) return;
+                        listEl.innerHTML = '<div class="prm-empty">Loading…</div>';
+                        if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Fetching safety parameters…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor');
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            const data = await resp.json();
+                            // Extract safety-related fields – check common paths
+                            const safetyObj = data.safety || data.safety_params || {};
+                            const motionObj = data.motion || {};
+                            _safetyParamsCache = { ...(typeof safetyObj === 'object' ? safetyObj : {}), ...(typeof motionObj === 'object' ? {} : {}) };
+                            // Also pull any top-level keys with 'safety', 'estop', 'obstacle', 'timeout', 'range', 'limit' in name
+                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision'];
+                            Object.keys(data).forEach(k => {
+                                if (typeof data[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
+                                    _safetyParamsCache[k] = data[k];
+                                }
+                            });
+                            if (typeof safetyObj === 'object') Object.assign(_safetyParamsCache, safetyObj);
+                            renderSafetyParams(_safetyParamsCache, data);
+                            const count = Object.keys(_safetyParamsCache).length;
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = count ? count + ' parameters – blur a value to mark changed, then Save' : 'No safety fields found in robot profile'; }
+                        } catch (err) {
+                            listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
+                        }
+                    }
+
+                    function renderSafetyParams(params, fullData) {
+                        const listEl = document.getElementById('safety-param-list');
+                        if (!listEl) return;
+                        const entries = Object.entries(params);
+                        if (!entries.length) {
+                            listEl.innerHTML = `<div class="prm-empty">
+                                No safety fields found in robot profile.<br>
+                                <span style="font-size:10px;color:var(--text-tertiary);">Add safety keys to your robot.yaml to manage them here.</span>
+                            </div>`;
+                            return;
+                        }
+                        listEl.innerHTML = entries.map(([k, v]) => {
+                            const escapedK = k.replace(/"/g, '&quot;');
+                            const escapedV = String(v === null ? '' : v).replace(/"/g, '&quot;');
+                            return `<div class="prm-param-row" data-key="${escapedK}">
+                                <span class="prm-param-key">${k}</span>
+                                <input class="prm-param-val" type="text" value="${escapedV}"
+                                    data-original="${escapedV}"
+                                    oninput="this.classList.add('unsaved')"
+                                    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                            </div>`;
+                        }).join('');
+                    }
+
+                    async function saveSafetyParams() {
+                        const statEl = document.getElementById('safety-status-text');
+                        const unsaved = document.querySelectorAll('#safety-param-list .prm-param-val.unsaved');
+                        if (!unsaved.length) {
+                            if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'No changes to save'; } return;
+                        }
+                        // Collect all changed values
+                        const changes = {};
+                        unsaved.forEach(input => {
+                            const key = input.closest('.prm-param-row').dataset.key;
+                            changes[key] = input.value;
+                            _safetyParamsCache[key] = input.value;
+                        });
+                        if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ safety: changes })
+                            });
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            unsaved.forEach(input => {
+                                input.dataset.original = input.value;
+                                input.classList.remove('unsaved');
+                                input.classList.add('saved');
+                                setTimeout(() => input.classList.remove('saved'), 1200);
+                            });
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + Object.keys(changes).length + ' parameter(s)'; }
+                        } catch (err) {
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
+                        }
+                    }
+
+                    function filterSafetyParams(query) {
+                        const q = (query || '').toLowerCase().trim();
+                        document.querySelectorAll('#safety-param-list .prm-param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
+                            row.classList.toggle('hidden', q !== '' && !text.includes(q));
+                        });
+                    }
+
                     function adoptDevConfigContent() {
                         if (typeof initializeSettingsBuckets === 'function') {
                             initializeSettingsBuckets();
@@ -29083,97 +29565,77 @@
         <div id="recognition-body">
             <aside id="recognition-library">
                 <div class="rcg-library-rail">
-                    <button class="rcg-category-btn active" type="button" data-rcg-category="shelves" onclick="recognitionSetCategory('shelves')" title="Shelf recognition templates">
+                    <button class="rcg-category-btn active" type="button" data-rcg-category="charger" onclick="recognitionSetCategory('charger')" title="Charger recognition files">
+                        <i class="fas fa-plug"></i>
+                        <span>Chgr</span>
+                    </button>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="shelf" onclick="recognitionSetCategory('shelf')" title="Shelf description files">
                         <i class="fas fa-boxes-stacked"></i>
                         <span>Shelf</span>
                     </button>
-                    <button class="rcg-category-btn" type="button" data-rcg-category="pallets" onclick="recognitionSetCategory('pallets')" title="Pallet recognition templates">
+                    <button class="rcg-category-btn" type="button" data-rcg-category="pallet" onclick="recognitionSetCategory('pallet')" title="Pallet recognition files">
                         <i class="fas fa-pallet"></i>
-                        <span>Pallet</span>
+                        <span>Plt</span>
                     </button>
-                    <button class="rcg-category-btn" type="button" data-rcg-category="docks" onclick="recognitionSetCategory('docks')" title="Dock recognition templates">
-                        <i class="fas fa-warehouse"></i>
-                        <span>Dock</span>
-                    </button>
-                    <button class="rcg-category-btn" type="button" data-rcg-category="fixtures" onclick="recognitionSetCategory('fixtures')" title="Fixture recognition templates">
-                        <i class="fas fa-ruler-combined"></i>
-                        <span>Fix</span>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="tag" onclick="recognitionSetCategory('tag')" title="Tag description files">
+                        <i class="fas fa-qrcode"></i>
+                        <span>Tag</span>
                     </button>
                 </div>
                 <div class="rcg-library-panel">
                     <div class="rcg-pane-header">
                         <div>
-                            <div class="rcg-pane-kicker">Recognition Library</div>
-                            <div class="rcg-pane-title">Templates</div>
+                            <div class="rcg-pane-kicker">Recognition Files</div>
+                            <div id="rcg-category-title" class="rcg-pane-title">Charger</div>
                         </div>
                         <div class="rcg-inline-actions">
-                            <button type="button" class="rcg-inline-btn" onclick="recognitionCreateTemplate()" title="New template"><i class="fas fa-plus"></i><span>New</span></button>
-                            <button type="button" class="rcg-inline-btn" onclick="recognitionPasteGeometry()" title="Paste geometry"><i class="fas fa-paste"></i><span>Paste</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionPullAll()" title="Pull all files from robot"><i class="fas fa-download"></i><span>Pull</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionPushAll()" title="Push all files to robot"><i class="fas fa-upload"></i><span>Push</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionCreateTemplate()" title="New file"><i class="fas fa-plus"></i><span>New</span></button>
                         </div>
                     </div>
                     <div class="rcg-search-wrap">
-                        <input id="recognition-library-search" class="rcg-search-input" type="text" placeholder="Search recognition templates" oninput="recognitionSetSearch(this.value)">
+                        <input id="recognition-library-search" class="rcg-search-input" type="text" placeholder="Search recognition files…" oninput="recognitionSetSearch(this.value)">
                     </div>
-                    <div id="recognition-library-content" class="rcg-library-scroll"></div>
+                    <div id="recognition-library-content" class="rcg-library-scroll">
+                        <div class="rcg-empty-state"><div class="rcg-empty-hint">Loading…</div></div>
+                    </div>
+                    <div id="rcg-lib-status" class="rcg-lib-status"></div>
                 </div>
             </aside>
 
             <section id="recognition-workspace">
                 <div class="rcg-stage-header">
                     <div>
-                        <div class="rcg-pane-kicker">Recognition Geometry</div>
-                        <div id="recognition-stage-title" class="rcg-stage-title">Recognition Geometry</div>
+                        <div class="rcg-pane-kicker">Configuration</div>
+                        <div id="recognition-stage-title" class="rcg-stage-title">Select a file</div>
                         <div id="recognition-stage-subtitle" class="rcg-stage-subtitle"></div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                        <div class="rcg-stage-view-group">
-                            <button type="button" class="rcg-stage-chip-btn active" data-rcg-view="top" onclick="recognitionSetStageView('top')">Top</button>
-                            <button type="button" class="rcg-stage-chip-btn" data-rcg-view="side" onclick="recognitionSetStageView('side')">Side</button>
-                            <button type="button" class="rcg-stage-chip-btn" data-rcg-view="iso" onclick="recognitionSetStageView('iso')">Iso</button>
-                        </div>
-                        <div class="rcg-stage-filter-group">
-                            <div class="recognition-toolbar-chip">CAD</div>
-                            <div class="recognition-toolbar-chip">Safe</div>
-                        </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                        <button id="rcg-save-btn" type="button" class="rcg-save-btn" onclick="recognitionSaveActive()" style="display:none;">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                        <button id="rcg-push-btn" type="button" class="rcg-push-btn" onclick="recognitionPushFile()" style="display:none;">
+                            <i class="fas fa-upload"></i> Push
+                        </button>
+                        <button id="rcg-copy-btn" type="button" class="rcg-copy-btn" onclick="recognitionCopyActive()" style="display:none;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button id="rcg-delete-btn" type="button" class="rcg-del-btn" onclick="recognitionDeleteActive()" style="display:none;">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
                 </div>
-                <div id="recognition-stage-shell">
-                    <div class="rcg-tool-palette">
-                        <button type="button" class="rcg-tool-btn active" data-rcg-tool="select" onclick="recognitionSetTool('select')" title="Select and move geometry">
-                            <i class="fas fa-mouse-pointer"></i><span class="rcg-tool-label">Select</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="point" onclick="recognitionSetTool('point')" title="Place anchor points">
-                            <i class="fas fa-dot-circle"></i><span class="rcg-tool-label">Point</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="endpoint" onclick="recognitionSetTool('endpoint')" title="Place required endpoints">
-                            <i class="fas fa-location-dot"></i><span class="rcg-tool-label">Endpoint</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="rectangle" onclick="recognitionSetTool('rectangle')" title="Draw capture rectangles">
-                            <i class="fas fa-vector-square"></i><span class="rcg-tool-label">Rect</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="segment" onclick="recognitionSetTool('segment')" title="Draw span segments">
-                            <i class="fas fa-ruler-horizontal"></i><span class="rcg-tool-label">Span</span>
-                        </button>
-                    </div>
-                    <div id="recognition-stage" tabindex="0">
-                        <svg id="recognition-svg" aria-label="Recognition geometry editor canvas"></svg>
-                        <div id="recognition-empty-state" class="rcg-empty-state">
-                            <div>
-                                <div class="rcg-pane-title">Canvas Ready</div>
-                                <div class="rcg-empty-hint">Use the tool palette to place points, rectangles, spans, and centerlines.</div>
-                            </div>
+                <div id="recognition-form-area">
+                    <div id="recognition-empty-state" class="rcg-empty-state">
+                        <div>
+                            <div class="rcg-pane-title">No File Selected</div>
+                            <div class="rcg-empty-hint">Select a recognition file from the library, or use Pull All to sync from the robot.</div>
                         </div>
                     </div>
-                    <div id="recognition-stage-status" class="rcg-stage-status">Recognition editor ready.</div>
-                    <div class="rcg-view-dock">
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionZoom(0.08)" title="Zoom in"><i class="fas fa-plus"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionZoom(-0.08)" title="Zoom out"><i class="fas fa-minus"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionFitView()" title="Fit canvas"><i class="fas fa-expand-arrows-alt"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleGrid()" title="Toggle grid"><i class="fas fa-th"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleLabels()" title="Toggle labels"><i class="fas fa-tag"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleConstraints()" title="Toggle constraints"><i class="fas fa-link"></i></button>
-                    </div>
+                    <div id="recognition-form-content" style="display:none;flex:1;min-height:0;overflow-y:auto;padding:14px;"></div>
                 </div>
+                <div id="recognition-stage-status" class="rcg-stage-status">Recognition library ready.</div>
             </section>
 
             <aside id="recognition-inspector">
@@ -29181,25 +29643,25 @@
                 <div class="rcg-pane-header">
                     <div>
                         <div class="rcg-pane-kicker">Inspector</div>
-                        <div class="rcg-pane-title">Context</div>
+                        <div class="rcg-pane-title">Guide &amp; Checks</div>
                     </div>
                 </div>
                 <div class="rcg-inspector-tabs">
-                    <button type="button" class="rcg-inspector-tab active" data-rcg-inspector-tab="properties" onclick="recognitionSetInspectorTab('properties')">Properties</button>
-                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="geometry" onclick="recognitionSetInspectorTab('geometry')">Geometry</button>
-                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="validation" onclick="recognitionSetInspectorTab('validation')">Validation</button>
-                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="usage" onclick="recognitionSetInspectorTab('usage')">Usage</button>
+                    <button type="button" class="rcg-inspector-tab active" data-rcg-inspector-tab="usage" onclick="recognitionSetInspectorTab('usage')">Usage</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="validation" onclick="recognitionSetInspectorTab('validation')">Checks</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="properties" onclick="recognitionSetInspectorTab('properties')">Raw</button>
                 </div>
-                <div id="recognition-inspector-content" style="flex:1;min-height:0;"></div>
+                <div id="recognition-inspector-content" style="flex:1;min-height:0;overflow-y:auto;"></div>
             </aside>
         </div>
 
         <div id="recognition-overflow-menu" class="rcg-popover">
-            <button type="button" class="rcg-inline-btn" onclick="recognitionDeleteActive(); recognitionCloseMenus();"><i class="fas fa-trash"></i><span>Delete Template</span></button>
-            <button type="button" class="rcg-inline-btn" onclick="recognitionCopyGeometry(); recognitionCloseMenus();"><i class="fas fa-copy"></i><span>Copy Geometry</span></button>
-            <button type="button" class="rcg-inline-btn" onclick="recognitionFitView(); recognitionCloseMenus();"><i class="fas fa-expand-arrows-alt"></i><span>Fit Canvas</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionDeleteActive(); recognitionCloseMenus();"><i class="fas fa-trash"></i><span>Delete File</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionCopyActive(); recognitionCloseMenus();"><i class="fas fa-copy"></i><span>Duplicate File</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionPullAll(); recognitionCloseMenus();"><i class="fas fa-sync-alt"></i><span>Pull All from Robot</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionPushAll(); recognitionCloseMenus();"><i class="fas fa-upload"></i><span>Push All to Robot</span></button>
         </div>
-        <input id="recognition-import-input" type="file" accept=".json,application/json" style="display:none;">
+        <input id="recognition-import-input" type="file" accept=".json,application/json,.shelf,.tag,.charger" style="display:none;">
     </div>
 
     <div id="device-config-tab" class="tab-content">
