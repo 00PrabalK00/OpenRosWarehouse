@@ -1605,9 +1605,87 @@
         renderRecognition();
     }
 
+    function bindInspectorResizer() {
+        const handle = document.getElementById('recognition-inspector-resizer');
+        const grid = document.getElementById('recognition-body');
+        if (!handle || !grid || handle.dataset.bound === '1') return;
+        handle.dataset.bound = '1';
+
+        const MIN_WIDTH = 200;
+        const MAX_WIDTH = 520;
+        const STORAGE_KEY = 'recognitionInspectorWidth';
+
+        // Restore previously stored width
+        try {
+            const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+            if (!Number.isNaN(saved) && saved >= MIN_WIDTH && saved <= MAX_WIDTH) {
+                grid.style.setProperty('--rcg-inspector-width', saved + 'px');
+            }
+        } catch (_) { /* localStorage may be unavailable */ }
+
+        const readCurrentWidth = () => {
+            const cs = getComputedStyle(grid).getPropertyValue('--rcg-inspector-width').trim();
+            const parsed = parseFloat(cs);
+            return Number.isFinite(parsed) ? parsed : 260;
+        };
+
+        let dragging = false;
+        let startX = 0;
+        let startWidth = 260;
+
+        const onMove = (ev) => {
+            if (!dragging) return;
+            const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            // Drag left -> inspector grows (since it's pinned to the right)
+            const delta = startX - clientX;
+            const nextWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta));
+            grid.style.setProperty('--rcg-inspector-width', nextWidth + 'px');
+        };
+
+        const onEnd = () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('resizing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try {
+                const cs = getComputedStyle(grid).getPropertyValue('--rcg-inspector-width').trim();
+                if (cs) localStorage.setItem(STORAGE_KEY, parseFloat(cs));
+            } catch (_) { /* ignore */ }
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onEnd);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+        };
+
+        const onStart = (ev) => {
+            dragging = true;
+            startX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            startWidth = readCurrentWidth();
+            handle.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+            ev.preventDefault();
+        };
+
+        handle.addEventListener('mousedown', onStart);
+        handle.addEventListener('touchstart', onStart, { passive: false });
+
+        // Double-click the handle to reset to default width
+        handle.addEventListener('dblclick', () => {
+            grid.style.setProperty('--rcg-inspector-width', '260px');
+            try { localStorage.setItem(STORAGE_KEY, 260); } catch (_) { /* ignore */ }
+        });
+    }
+
     function bindDom() {
         if (state.domBound) return;
         state.domBound = true;
+        bindInspectorResizer();
         const stage = getStageElement();
         if (stage) {
             stage.addEventListener('pointerdown', pointerDown);
@@ -1716,6 +1794,8 @@
         const groupEl = document.getElementById(`${prefix}-action-point-group`);
         const shelfConfigEl = document.getElementById(`${prefix}-shelf-config-group`);
         const summaryEl = document.getElementById(`${prefix}-shelf-summary`);
+        const prePointCoordsEl = document.getElementById(`${prefix}-pre-point-coords`);
+        const prePointEnabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
         const zoneType = getActionPointZoneType(prefix);
         const showActionPoint = zoneType === 'action';
         if (groupEl) groupEl.style.display = showActionPoint ? 'block' : 'none';
@@ -1735,6 +1815,10 @@
         }
         if (shelfConfigEl) {
             shelfConfigEl.style.display = pointType === 'shelf' ? 'block' : 'none';
+        }
+        // Pre-point coords visibility follows its toggle state; only relevant for shelf type
+        if (prePointCoordsEl && prePointEnabledEl) {
+            prePointCoordsEl.style.display = (pointType === 'shelf' && prePointEnabledEl.checked) ? 'block' : 'none';
         }
         if (summaryEl) {
             summaryEl.innerHTML = buildActionPointSummary(templateEl ? templateEl.value : '', pointType, Boolean(recognizeEl && recognizeEl.checked));

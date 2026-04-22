@@ -1044,6 +1044,162 @@
         .params-popup-pane { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
         .params-popup-pane.active { display: flex; }
 
+        /* ── Params redesign ───────────────────────── */
+        .prm-search-bar {
+            display: flex; align-items: center; gap: 6px;
+            padding: 7px 10px; border-bottom: 1px solid var(--border-chrome);
+            background: var(--bg-chrome); flex-shrink: 0;
+        }
+        .prm-search-icon { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+        .prm-search-input {
+            flex: 1; background: var(--bg-elevated); border: 1px solid var(--border-chrome);
+            border-radius: 4px; color: var(--text-primary); font-size: 11px;
+            padding: 3px 7px; outline: none; min-width: 0;
+        }
+        .prm-search-input:focus { border-color: var(--accent-normal); }
+        .prm-search-input::placeholder { color: var(--text-tertiary); }
+        .prm-type-filter {
+            background: var(--bg-elevated); border: 1px solid var(--border-chrome);
+            border-radius: 4px; color: var(--text-secondary); font-size: 10px;
+            padding: 3px 5px; outline: none; flex-shrink: 0;
+        }
+        .prm-action-btn {
+            background: var(--bg-elevated); border: 1px solid var(--border-chrome);
+            border-radius: 4px; color: var(--text-secondary); font-size: 10px;
+            padding: 3px 8px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+        .prm-action-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .prm-status-bar {
+            padding: 3px 10px; font-size: 10px; flex-shrink: 0;
+            border-bottom: 1px solid var(--border-chrome); background: var(--bg-panel);
+            color: var(--text-tertiary); min-height: 22px; display: flex; align-items: center;
+        }
+        .prm-param-list { flex: 1; overflow-y: auto; }
+        .prm-section-hdr {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 5px 10px; background: var(--bg-chrome);
+            border-bottom: 1px solid var(--border-chrome); cursor: pointer;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+            text-transform: uppercase; color: var(--text-secondary); user-select: none;
+        }
+        .prm-section-hdr:hover { background: var(--bg-elevated); }
+        .prm-section-body { overflow: hidden; }
+        .prm-param-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-size: 11px;
+        }
+        .prm-param-row.hidden { display: none; }
+        .prm-param-row:hover { background: rgba(255,255,255,0.03); }
+        .prm-param-key { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .prm-param-key .prm-ns { color: var(--text-tertiary); font-size: 9px; }
+        .prm-param-val {
+            background: transparent; border: 1px solid transparent;
+            color: var(--text-primary); font-size: 11px; font-family: monospace;
+            padding: 1px 4px; border-radius: 3px; text-align: right;
+            width: 110px; flex-shrink: 0;
+        }
+        .prm-param-val:focus { background: var(--bg-elevated); border-color: var(--accent-normal); outline: none; }
+        .prm-param-val.unsaved { border-color: #f59e0b !important; }
+        .prm-param-val.saved { border-color: #4ade80; animation: pm-flash 0.4s ease forwards; }
+        @keyframes pm-flash { to { border-color: transparent; } }
+        .prm-topic-type { color: var(--text-tertiary); font-size: 9px; flex-shrink: 0; width: 70px; text-align: right; }
+        .prm-empty {
+            padding: 30px; text-align: center; color: var(--text-tertiary);
+            font-size: 11px; font-style: italic;
+        }
+
+        /* ── Recognition tab ─────────────────────────────────── */
+        #recognition-body { display: flex; height: 100%; overflow: hidden; background: var(--bg-primary); }
+        #recognition-library { display: flex; flex-shrink: 0; width: 240px; min-width: 160px; max-width: 320px; border-right: 1px solid var(--border-heavy); background: var(--bg-panel); flex-direction: row; }
+        .rcg-library-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; width: 44px; border-right: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
+        .rcg-category-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 36px; height: 40px; border: none; border-radius: 5px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 9px; padding: 4px 2px; transition: background 0.15s, color 0.15s; }
+        .rcg-category-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .rcg-category-btn.active { background: var(--accent-normal); color: #fff; }
+        .rcg-category-btn i { font-size: 14px; }
+        .rcg-library-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .rcg-pane-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
+        .rcg-pane-kicker { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 2px; }
+        .rcg-pane-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+        .rcg-stage-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+        .rcg-stage-subtitle { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; }
+        .rcg-inline-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+        .rcg-inline-btn { display: flex; align-items: center; gap: 3px; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 3px 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+        .rcg-inline-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-search-wrap { padding: 6px 8px; border-bottom: 1px solid var(--border-chrome); flex-shrink: 0; }
+        .rcg-search-input { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px; outline: none; }
+        .rcg-search-input:focus { border-color: var(--accent-normal); }
+        .rcg-search-input::placeholder { color: var(--text-tertiary); }
+        .rcg-library-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+        .rcg-lib-status { padding: 4px 8px; font-size: 10px; color: var(--text-tertiary); border-top: 1px solid var(--border-chrome); min-height: 22px; display: flex; align-items: center; flex-shrink: 0; }
+        .rcg-file-row { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; font-size: 11px; transition: background 0.12s; }
+        .rcg-file-row:hover { background: rgba(255,255,255,0.04); }
+        .rcg-file-row.active { background: rgba(99,179,237,0.15); border-left: 2px solid var(--accent-normal); }
+        .rcg-file-icon { font-size: 12px; color: var(--text-tertiary); flex-shrink: 0; width: 14px; text-align: center; }
+        .rcg-file-name { flex: 1; min-width: 0; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rcg-file-sync { font-size: 9px; flex-shrink: 0; }
+        .rcg-file-sync.synced { color: #4ade80; }
+        .rcg-file-sync.unsynced { color: #f59e0b; }
+        .rcg-file-actions { display: flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+        .rcg-file-row:hover .rcg-file-actions { opacity: 1; }
+        .rcg-file-act-btn { background: none; border: none; color: var(--text-tertiary); font-size: 10px; padding: 2px 4px; cursor: pointer; border-radius: 3px; }
+        .rcg-file-act-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        #recognition-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border-heavy); }
+        .rcg-stage-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; flex-wrap: wrap; gap: 6px; }
+        #recognition-form-area { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+        .rcg-stage-status { padding: 3px 10px; font-size: 10px; color: var(--text-tertiary); border-top: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; min-height: 22px; display: flex; align-items: center; }
+        .rcg-save-btn { background: var(--accent-normal); border: none; border-radius: 4px; color: #fff; font-size: 10px; padding: 4px 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .rcg-save-btn:hover { filter: brightness(1.15); }
+        .rcg-push-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 4px 10px; cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .rcg-push-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-copy-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 4px 8px; cursor: pointer; }
+        .rcg-copy-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .rcg-del-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--accent-danger,#fc8181); font-size: 10px; padding: 4px 8px; cursor: pointer; }
+        .rcg-del-btn:hover { background: rgba(252,129,129,0.15); }
+        #recognition-inspector { width: 280px; min-width: 200px; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-panel); position: relative; }
+        .rcg-inspector-resizer { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 5; }
+        .rcg-inspector-resizer:hover { background: var(--accent-normal); }
+        .rcg-inspector-tabs { display: flex; border-bottom: 1px solid var(--border-heavy); flex-shrink: 0; background: var(--bg-chrome); }
+        .rcg-inspector-tab { flex: 1; padding: 5px 6px; border: none; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+        .rcg-inspector-tab:hover { color: var(--text-primary); }
+        .rcg-inspector-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-normal); }
+        .rcg-empty-state { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
+        .rcg-empty-state > div { max-width: 200px; }
+        .rcg-empty-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; font-style: italic; }
+        .rcg-popover { position: absolute; right: 8px; top: 36px; z-index: 200; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 6px; padding: 4px; display: none; flex-direction: column; gap: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 180px; }
+        .rcg-popover.open { display: flex; }
+        .rcg-usage-section { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .rcg-usage-h { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 5px; }
+        .rcg-usage-p { font-size: 10px; color: var(--text-tertiary); line-height: 1.5; margin-bottom: 3px; }
+        .rcg-usage-list { list-style: none; padding: 0; margin: 4px 0; }
+        .rcg-usage-list li { font-size: 10px; color: var(--text-tertiary); padding: 2px 0 2px 12px; position: relative; line-height: 1.5; }
+        .rcg-usage-list li::before { content: '•'; position: absolute; left: 2px; color: var(--accent-normal); }
+        .rcg-val-item { display: flex; align-items: flex-start; gap: 6px; padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .rcg-val-icon { flex-shrink: 0; font-size: 10px; margin-top: 1px; }
+        .rcg-val-text { font-size: 10px; color: var(--text-secondary); }
+        .rcg-val-ok { color: #4ade80; }
+        .rcg-val-warn { color: #f59e0b; }
+        .rcg-val-err { color: #fc8181; }
+        .rcg-form-section { border-bottom: 1px solid var(--border-chrome); padding-bottom: 10px; margin-bottom: 10px; }
+        .rcg-form-section:last-child { border-bottom: none; }
+        .rcg-form-section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); padding: 6px 0 6px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+        .rcg-form-section-title i { color: var(--accent-normal); }
+        .rcg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .rcg-form-row { display: flex; flex-direction: column; gap: 2px; }
+        .rcg-form-row.full { grid-column: 1 / -1; }
+        .rcg-form-label { font-size: 9px; color: var(--text-tertiary); padding-left: 1px; }
+        .rcg-form-input { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 3px; color: var(--text-primary); font-size: 11px; font-family: monospace; padding: 3px 6px; outline: none; width: 100%; }
+        .rcg-form-input:focus { border-color: var(--accent-normal); }
+        .rcg-form-input.unsaved { border-color: #f59e0b; }
+        .rcg-form-input.saved { border-color: #4ade80; }
+        .rcg-form-select { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 3px; color: var(--text-primary); font-size: 11px; padding: 3px 6px; outline: none; width: 100%; }
+        .rcg-form-select:focus { border-color: var(--accent-normal); }
+        .rcg-form-note { font-size: 9px; color: var(--text-tertiary); font-style: italic; margin-top: 1px; grid-column: 1 / -1; }
+        .rcg-form-check-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; color: var(--text-secondary); grid-column: 1 / -1; }
+        .rcg-form-check-row input[type="checkbox"] { accent-color: var(--accent-normal); width: 13px; height: 13px; }
+        .rcg-section-label { padding: 4px 10px 2px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); }
+
         * {
             margin: 0;
             padding: 0;
@@ -2808,8 +2964,16 @@
             box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.1);
         }
 
+        /* Dark-theme every <select> inside the sidebar input-groups (Action,
+           Point Type, Linked Shelf Template, etc.) so they don't fall back to
+           the browser's light default. */
+        .input-group select,
         #zone-action,
-        #ez-action {
+        #ez-action,
+        #zone-point-type,
+        #ez-point-type,
+        #zone-shelf-template,
+        #ez-shelf-template {
             width: 100%;
             padding: 8px 10px;
             border: 1px solid var(--border-primary);
@@ -2818,17 +2982,36 @@
             color: var(--text-primary);
             font-size: 13px;
             transition: all 0.15s ease;
+            /* Force dark form-control chrome (dropdown arrow, scrollbar). */
+            color-scheme: dark;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23a0aec0' d='M2 4l4 4 4-4z'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 28px;
         }
 
+        .input-group select:focus,
         #zone-action:focus,
-        #ez-action:focus {
+        #ez-action:focus,
+        #zone-point-type:focus,
+        #ez-point-type:focus,
+        #zone-shelf-template:focus,
+        #ez-shelf-template:focus {
             outline: none;
             border-color: var(--accent-blue);
             box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.1);
         }
 
+        .input-group select option,
         #zone-action option,
-        #ez-action option {
+        #ez-action option,
+        #zone-point-type option,
+        #ez-point-type option,
+        #zone-shelf-template option,
+        #ez-shelf-template option {
             background: var(--bg-elevated);
             color: var(--text-primary);
         }
@@ -9164,15 +9347,17 @@
             right: 0;
             top: 60px;
             bottom: 0;
-            width: 340px;
+            width: 300px;
             background: var(--bg-panel);
-            border-left: 2px solid var(--border-heavy);
-            padding: 20px;
+            border-left: 1px solid var(--border-heavy);
+            padding: 0;
             overflow-y: auto;
             transform: translateX(100%);
-            transition: transform 0.3s ease;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
             z-index: 1000;
-            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
+            box-shadow: -3px 0 16px rgba(0,0,0,0.35);
+            display: flex;
+            flex-direction: column;
         }
 
         #properties-panel.open {
@@ -9181,85 +9366,124 @@
 
         .properties-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid var(--border-primary);
+            gap: 6px;
+            padding: 8px 10px 7px;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-chrome);
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 5;
         }
 
         .properties-title {
-            font-size: 16px;
+            flex: 1;
+            font-size: 10px;
             font-weight: 700;
-            color: var(--text-primary);
+            color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.06em;
         }
 
         .properties-close-btn {
             background: none;
             border: none;
-            color: var(--text-secondary);
-            font-size: 20px;
+            color: var(--text-tertiary);
+            font-size: 14px;
             cursor: pointer;
-            padding: 4px 8px;
-            transition: color 0.2s;
+            padding: 2px 5px;
+            border-radius: 3px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
         }
 
         .properties-close-btn:hover {
             color: var(--accent-danger);
+            background: rgba(239,68,68,0.12);
+        }
+
+        #properties-content {
+            flex: 1;
+            overflow-y: auto;
         }
 
         .property-group {
-            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .property-group:last-of-type {
+            border-bottom: none;
         }
 
         .property-label {
-            font-size: 11px;
-            color: var(--text-tertiary);
+            font-size: 9px;
+            color: var(--text-field-label);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 6px;
+            letter-spacing: 0.05em;
             font-weight: 600;
+            padding: 5px 10px 1px;
+            opacity: 0.75;
         }
 
         .property-value {
-            font-size: 14px;
+            font-size: 11px;
             color: var(--text-primary);
-            padding: 10px 12px;
-            background: var(--bg-tertiary);
-            border-radius: 6px;
-            border: 1px solid var(--border-primary);
-            font-family: 'Roboto Mono', monospace;
+            padding: 2px 10px 5px;
+            font-family: 'Roboto Mono', 'Courier New', monospace;
+            line-height: 1.45;
+            word-break: break-word;
         }
 
         .property-value code {
-            color: var(--accent-normal);
+            color: var(--accent-blue, #60a5fa);
             font-weight: 600;
+            font-size: 11px;
+        }
+
+        .property-value select {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font-size: 11px;
+            padding: 3px 6px;
+            margin-top: 2px;
         }
 
         .property-actions {
             display: flex;
-            gap: 8px;
-            margin-top: 20px;
+            flex-wrap: wrap;
+            gap: 5px;
+            padding: 8px 10px 10px;
+            border-top: 1px solid var(--border-chrome);
+            margin-top: 4px;
         }
 
         .property-action-btn {
-            flex: 1;
-            padding: 10px;
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 5px 8px;
             border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: opacity 0.15s, transform 0.1s;
             text-transform: uppercase;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
         }
 
+        .property-action-btn:active { transform: scale(0.97); }
+
         .property-action-btn.primary {
-            background: var(--accent-normal);
-            color: white;
+            background: var(--accent-normal, #2563eb);
+            color: #fff;
         }
 
         .property-action-btn.primary:hover {
@@ -12371,6 +12595,38 @@
                                             </label>
                                         </div>
                                         <div id="zone-shelf-summary" class="rcg-action-summary"></div>
+                                        <div class="input-group" style="border-top:1px solid var(--border-chrome,#30363d);margin-top:8px;padding-top:8px;">
+                                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                                <label style="margin:0;display:flex;flex-direction:column;gap:2px;">
+                                                    <span><i class="fas fa-map-pin" style="color:var(--accent-normal,#3b82f6);margin-right:4px;"></i>Pre Point</span>
+                                                    <span style="font-weight:400;font-size:10px;color:var(--text-secondary,#8b949e);">Intermediate waypoint before shelf detection</span>
+                                                </label>
+                                                <label class="path-toggle-switch" style="margin:0 0 0 auto;flex-shrink:0;">
+                                                    <input class="path-toggle-input" type="checkbox" id="zone-pre-point-enabled" onchange="recognitionHandlePrePointToggle('zone')">
+                                                    <span class="path-toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <div id="zone-pre-point-coords" style="display:none;margin-top:6px;">
+                                                <div style="display:flex;gap:6px;margin-bottom:4px;">
+                                                    <div style="flex:1;">
+                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">X (m)</label>
+                                                        <input type="number" id="zone-pre-point-x" step="0.01" placeholder="0.00" style="width:100%;">
+                                                    </div>
+                                                    <div style="flex:1;">
+                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Y (m)</label>
+                                                        <input type="number" id="zone-pre-point-y" step="0.01" placeholder="0.00" style="width:100%;">
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Heading (deg, optional)</label>
+                                                    <input type="number" id="zone-pre-point-theta" step="1" min="-180" max="180" value="0" style="width:100%;">
+                                                </div>
+                                                <div style="margin-top:6px;font-size:10px;color:var(--text-tertiary,#6b7280);display:flex;align-items:center;gap:4px;">
+                                                    <i class="fas fa-route" style="color:var(--accent-normal,#3b82f6);"></i>
+                                                    <span>Path → <strong>Pre Point</strong> → Shelf Detection → Shelf Execution</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="input-group" id="charge-param-group">
                                         <label>Stop Timer (s):</label>
@@ -12558,24 +12814,6 @@
                                                 <span class="path-toggle-slider"></span>
                                             </label>
                                         </div>
-                                    </div>
-
-                                    <div class="path-waypoint-meta" style="margin-top: 10px;">
-                                        Distance Test: create a straight path from the current robot heading, then send it through the normal path-follow confirmation.
-                                    </div>
-                                    <div class="path-draw-actions">
-                                        <button class="path-btn path-btn-neutral" onclick="runDistanceTestPath(1.0)">
-                                            <i class="fas fa-ruler-horizontal"></i>
-                                            <span>Go 1 m</span>
-                                        </button>
-                                        <button class="path-btn path-btn-neutral" onclick="runDistanceTestPath(2.0)">
-                                            <i class="fas fa-ruler-horizontal"></i>
-                                            <span>Go 2 m</span>
-                                        </button>
-                                        <button class="path-btn path-btn-neutral" onclick="runDistanceTestPath(3.0)">
-                                            <i class="fas fa-ruler-horizontal"></i>
-                                            <span>Go 3 m</span>
-                                        </button>
                                     </div>
 
                                     <div class="path-draw-actions">
@@ -13002,8 +13240,9 @@
                 <!-- Properties Panel - Right Side -->
                 <div id="properties-panel">
                     <div class="properties-header">
-                        <div class="properties-title" id="properties-element-title">Element Properties</div>
-                        <button class="properties-close-btn" onclick="closePropertiesPanel()">×</button>
+                        <i class="fas fa-info-circle" style="font-size:10px;color:var(--text-field-label);"></i>
+                        <div class="properties-title" id="properties-element-title">Properties</div>
+                        <button class="properties-close-btn" onclick="closePropertiesPanel()" title="Close">&#215;</button>
                     </div>
                     <div id="properties-content">
                         <!-- Content populated by JavaScript -->
@@ -13414,6 +13653,10 @@
                     let mapUserAdjustedView = false;
                     let editingZone = null;
                     let spaceKeyPressed = false;
+                    // Edit-mode drag state
+                    let draggingZoneOffsetX = 0;
+                    let draggingZoneOffsetY = 0;
+                    let draggingPathWaypointIndex = -1;
 
                     // Zone creation
                     let currentZoneType = 'normal';  // 'normal', 'action', 'charge'
@@ -17628,12 +17871,10 @@
                         if (typeof loadNav2ParameterEditor === 'function') {
                             loadNav2ParameterEditor(true);
                         }
-                        if (typeof loadAvailableTopics === 'function') {
-                            loadAvailableTopics();
-                        }
-                        if (typeof loadCurrentMappings === 'function') {
-                            loadCurrentMappings();
-                        }
+                        // Load data for the new backend-connected tabs
+                        loadRobotYamlParams();
+                        loadTopicMappingsForPopup();
+                        loadSafetyParams();
                     }
                     function closeParamsPopup() {
                         const p = document.getElementById('params-popup');
@@ -17646,33 +17887,23 @@
                         const pane = document.getElementById('params-tab-' + tabName);
                         if (pane) pane.classList.add('active');
                         if (btn) btn.classList.add('active');
-                        if (tabName === 'topic' && typeof updateMappingsTable === 'function') {
-                            updateMappingsTable();
-                        }
+                        if (tabName === 'robot')    loadRobotYamlParams();
+                        if (tabName === 'safety')   loadSafetyParams();
+                        if (tabName === 'topic')    loadTopicMappingsForPopup();
                     }
                     function adoptParamsContent() {
+                        // Nav2 tab: append nav2 editor card BELOW the search bar header rows
                         const nav2Tab = document.getElementById('params-tab-nav2');
-                        const topicTab = document.getElementById('params-tab-topic');
                         const nav2Card = document.getElementById('settings-navigation-nav2-card');
-                        const nav2Ws = document.getElementById('settings-nav2-editor');
-                        const topicsCard = document.getElementById('settings-developer-topics-card');
-                        const topicsDiv = document.querySelector('#settings-topics > div');
-
+                        const nav2Ws   = document.getElementById('settings-nav2-editor');
                         if (nav2Tab) {
-                            if (nav2Card) {
-                                nav2Tab.replaceChildren(nav2Card);
-                            } else if (nav2Ws) {
-                                nav2Tab.replaceChildren(nav2Ws);
-                            }
+                            // Remove any previously adopted child (keep .prm-search-bar & .prm-status-bar)
+                            const adopted = nav2Tab.querySelector(':not(.prm-search-bar):not(.prm-status-bar)');
+                            if (adopted) adopted.remove();
+                            const toAdopt = nav2Card || nav2Ws;
+                            if (toAdopt) nav2Tab.appendChild(toAdopt);
                         }
-
-                        if (topicTab) {
-                            if (topicsCard) {
-                                topicTab.replaceChildren(topicsCard);
-                            } else if (topicsDiv) {
-                                topicTab.replaceChildren(topicsDiv);
-                            }
-                        }
+                        // Topic tab is now self-contained (loadTopicMappingsForPopup handles it)
                     }
 
                     function restoreParamsContent() {
@@ -17681,14 +17912,1051 @@
                         if (navShell && nav2Card && nav2Card.parentElement !== navShell) {
                             navShell.appendChild(nav2Card);
                         }
+                    }
 
-                        const developerCategory = document.getElementById('settings-developer');
-                        const topicsCard = document.getElementById('settings-developer-topics-card');
-                        if (developerCategory && topicsCard && topicsCard.parentElement !== developerCategory) {
-                            developerCategory.insertBefore(topicsCard, developerCategory.firstChild || null);
+                    // ─────────────────────────────────────────────────────────
+                    // Params popup – backend-connected tabs
+                    // ─────────────────────────────────────────────────────────
+
+                    // ── Nav2 search filter ────────────────────────────────────
+                    function filterNav2Params(query) {
+                        const q = (query || '').toLowerCase().trim();
+                        const nav2Tab = document.getElementById('params-tab-nav2');
+                        if (!nav2Tab) return;
+                        // Try to filter rows in the adopted nav2 editor
+                        nav2Tab.querySelectorAll('[data-param-key], .nav2-param-row, .param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
+                            row.classList.toggle('hidden', q !== '' && !text.includes(q));
+                        });
+                        // Also try span/input pairs inside the editor
+                        nav2Tab.querySelectorAll('.param-item, .nav2-item').forEach(item => {
+                            const text = item.textContent.toLowerCase();
+                            item.style.display = (q === '' || text.includes(q)) ? '' : 'none';
+                        });
+                    }
+
+                    async function applyNav2ParamsFromPopup() {
+                        const btn = document.getElementById('nav2-apply-btn');
+                        const statusEl = document.getElementById('nav2-status-text');
+                        const statusBar = document.getElementById('nav2-status-bar');
+                        if (btn) btn.disabled = true;
+                        if (statusBar) statusBar.style.display = 'flex';
+                        if (statusEl) { statusEl.style.color = '#60a5fa'; statusEl.textContent = 'Applying…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/nav2_parameters/apply', { method: 'POST' });
+                            const data = await resp.json().catch(() => ({}));
+                            if (statusEl) {
+                                statusEl.style.color = resp.ok ? '#4ade80' : '#fc8181';
+                                statusEl.textContent = resp.ok ? 'Applied successfully' : (data.error || 'Apply failed');
+                            }
+                        } catch (err) {
+                            if (statusEl) { statusEl.style.color = '#fc8181'; statusEl.textContent = 'Network error: ' + err.message; }
+                        } finally {
+                            if (btn) btn.disabled = false;
                         }
                     }
-                    // ── Device Config tab adoption ────────────────────────────
+
+                    // ── Robot Params (robot_editor) ───────────────────────────
+                    let _robotYamlCache = null;
+
+                    async function loadRobotYamlParams() {
+                        const listEl  = document.getElementById('robot-param-list');
+                        const statEl  = document.getElementById('robot-status-text');
+                        const statBar = document.getElementById('robot-status-bar');
+                        if (!listEl) return;
+                        listEl.innerHTML = '<div class="prm-empty">Loading…</div>';
+                        if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Fetching robot parameters…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor');
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            const data = await resp.json();
+                            _robotYamlCache = data;
+                            renderRobotYamlParams(data);
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Loaded – click a value to edit, blur to save'; }
+                        } catch (err) {
+                            listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
+                        }
+                    }
+
+                    function renderRobotYamlParams(data) {
+                        const listEl = document.getElementById('robot-param-list');
+                        if (!listEl) return;
+                        // Flatten robot editor fields into key→value sections
+                        const sections = [];
+                        function collectSection(title, obj) {
+                            if (!obj || typeof obj !== 'object') return;
+                            const rows = [];
+                            function flatten(prefix, node) {
+                                if (node === null || node === undefined) return;
+                                if (typeof node === 'object' && !Array.isArray(node)) {
+                                    Object.keys(node).forEach(k => flatten(prefix ? prefix + '.' + k : k, node[k]));
+                                } else {
+                                    rows.push({ key: prefix, value: node });
+                                }
+                            }
+                            flatten('', obj);
+                            if (rows.length) sections.push({ title, rows });
+                        }
+                        // Try common robot_editor fields
+                        if (data.profile_fields)  collectSection('Profile Fields', data.profile_fields);
+                        if (data.robot_params)     collectSection('Robot Params', data.robot_params);
+                        if (data.frames)           collectSection('ROS Frames', data.frames);
+                        if (data.config_files)     collectSection('Config Files', data.config_files);
+                        if (data.motion)           collectSection('Motion', data.motion);
+                        if (data.hardware)         collectSection('Hardware', data.hardware);
+                        // Catch-all for top-level string/number/boolean fields
+                        const special = new Set(['profile_fields','robot_params','frames','config_files','motion','hardware','safety']);
+                        const misc = {};
+                        Object.keys(data).forEach(k => { if (!special.has(k) && typeof data[k] !== 'object') misc[k] = data[k]; });
+                        if (Object.keys(misc).length) collectSection('General', misc);
+
+                        if (!sections.length) {
+                            listEl.innerHTML = '<div class="prm-empty">No editable parameters found.<br>Raw data keys: ' + Object.keys(data).join(', ') + '</div>';
+                            return;
+                        }
+
+                        listEl.innerHTML = sections.map(sec => `
+                            <div class="prm-section-hdr" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+                                ${sec.title} <i class="fas fa-chevron-down" style="opacity:0.5;font-size:9px;"></i>
+                            </div>
+                            <div class="prm-section-body">
+                                ${sec.rows.map(r => {
+                                    const escapedKey = r.key.replace(/"/g, '&quot;');
+                                    const escapedVal = String(r.value === null ? '' : r.value).replace(/"/g, '&quot;');
+                                    return `<div class="prm-param-row" data-key="${escapedKey}">
+                                        <span class="prm-param-key" title="${escapedKey}">${r.key}</span>
+                                        <input class="prm-param-val" type="text" value="${escapedVal}"
+                                            data-original="${escapedVal}"
+                                            oninput="this.classList.add('unsaved')"
+                                            onblur="saveRobotYamlParam(this)"
+                                            onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                                    </div>`;
+                                }).join('')}
+                            </div>`).join('');
+                    }
+
+                    async function saveRobotYamlParam(inputEl) {
+                        if (!inputEl.classList.contains('unsaved')) return;
+                        const key   = inputEl.closest('.prm-param-row').dataset.key;
+                        const value = inputEl.value;
+                        const statEl = document.getElementById('robot-status-text');
+                        if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving ' + key + '…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ key, value })
+                            });
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            inputEl.dataset.original = value;
+                            inputEl.classList.remove('unsaved');
+                            inputEl.classList.add('saved');
+                            setTimeout(() => inputEl.classList.remove('saved'), 1200);
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + key; }
+                        } catch (err) {
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
+                        }
+                    }
+
+                    function filterRobotParams(query) {
+                        const q = (query || '').toLowerCase().trim();
+                        document.querySelectorAll('#robot-param-list .prm-param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
+                            row.classList.toggle('hidden', q !== '' && !text.includes(q));
+                        });
+                    }
+
+                    // ── Topic Mappings ────────────────────────────────────────
+                    let _topicMappingsCache = [];
+
+                    async function loadTopicMappingsForPopup() {
+                        const listEl  = document.getElementById('topic-mapping-list');
+                        const statEl  = document.getElementById('topic-status-text');
+                        if (!listEl) return;
+                        listEl.innerHTML = '<div class="prm-empty">Loading…</div>';
+                        if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Fetching mappings…'; }
+                        try {
+                            const [mappingsResp, topicsResp] = await Promise.all([
+                                fetch('/api/settings/mappings'),
+                                fetch('/api/settings/topics').catch(() => ({ ok: false }))
+                            ]);
+                            if (!mappingsResp.ok) throw new Error('Mappings HTTP ' + mappingsResp.status);
+                            const mappings = await mappingsResp.json();
+                            const topics   = topicsResp.ok ? await topicsResp.json() : [];
+                            _topicMappingsCache = Array.isArray(mappings) ? mappings : (mappings.mappings || Object.entries(mappings).map(([k,v]) => ({ key: k, value: v })));
+                            renderTopicMappingsInPopup(_topicMappingsCache, topics);
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = _topicMappingsCache.length + ' entries – blur a value to save inline'; }
+                        } catch (err) {
+                            listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
+                        }
+                    }
+
+                    function renderTopicMappingsInPopup(mappings, availableTopics) {
+                        const listEl = document.getElementById('topic-mapping-list');
+                        if (!listEl) return;
+                        if (!mappings || !mappings.length) {
+                            listEl.innerHTML = '<div class="prm-empty">No topic mappings found.</div>'; return;
+                        }
+                        const topicSet = new Set(Array.isArray(availableTopics) ? availableTopics.map(t => typeof t === 'string' ? t : t.name || t.topic || '') : []);
+                        listEl.innerHTML = mappings.map((m, idx) => {
+                            const key  = m.key   || m.name  || String(idx);
+                            const val  = m.value || m.topic || m.mapping || '';
+                            const type = (m.type  || '').toLowerCase();
+                            const live = topicSet.has(val) ? '<span title="Live topic" style="color:#4ade80;margin-left:4px;font-size:9px;">●</span>' : '';
+                            return `<div class="prm-param-row" data-type="${type}" data-idx="${idx}">
+                                <span class="prm-param-key" title="${key}">${key}</span>
+                                <span class="prm-topic-type">${type}</span>
+                                <input class="prm-param-val" type="text" value="${val.replace(/"/g,'&quot;')}"
+                                    data-original="${val.replace(/"/g,'&quot;')}" data-idx="${idx}"
+                                    oninput="this.classList.add('unsaved')"
+                                    onblur="saveTopicMappingRow(this)"
+                                    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                                ${live}
+                            </div>`;
+                        }).join('');
+                    }
+
+                    async function saveTopicMappingRow(inputEl) {
+                        if (!inputEl.classList.contains('unsaved')) return;
+                        const idx = parseInt(inputEl.dataset.idx);
+                        if (isNaN(idx) || !_topicMappingsCache[idx]) return;
+                        _topicMappingsCache[idx].value = inputEl.value;
+                        _topicMappingsCache[idx].topic = inputEl.value;
+                        await saveTopicMappingsFromPopup(inputEl);
+                    }
+
+                    async function saveTopicMappingsFromPopup(triggerEl) {
+                        const statEl = document.getElementById('topic-status-text');
+                        if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
+                        try {
+                            const resp = await fetch('/api/settings/mappings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(_topicMappingsCache)
+                            });
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            if (triggerEl) {
+                                triggerEl.dataset.original = triggerEl.value;
+                                triggerEl.classList.remove('unsaved');
+                                triggerEl.classList.add('saved');
+                                setTimeout(() => triggerEl && triggerEl.classList.remove('saved'), 1200);
+                            }
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved'; }
+                        } catch (err) {
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
+                        }
+                    }
+
+                    function filterTopicMappings(query) {
+                        const q    = (query || '').toLowerCase().trim();
+                        const type = (document.getElementById('topic-type-filter')?.value || '').toLowerCase();
+                        document.querySelectorAll('#topic-mapping-list .prm-param-row').forEach(row => {
+                            const matchText = q === '' || row.textContent.toLowerCase().includes(q);
+                            const matchType = type === '' || (row.dataset.type || '').includes(type);
+                            row.classList.toggle('hidden', !(matchText && matchType));
+                        });
+                    }
+
+                    // ── Safety Params ─────────────────────────────────────────
+                    let _safetyParamsCache = {};
+
+                    async function loadSafetyParams() {
+                        const listEl  = document.getElementById('safety-param-list');
+                        const statEl  = document.getElementById('safety-status-text');
+                        if (!listEl) return;
+                        listEl.innerHTML = '<div class="prm-empty">Loading…</div>';
+                        if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Fetching safety parameters…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor');
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            const data = await resp.json();
+                            // Extract safety-related fields – check common paths
+                            const safetyObj = data.safety || data.safety_params || {};
+                            const motionObj = data.motion || {};
+                            _safetyParamsCache = { ...(typeof safetyObj === 'object' ? safetyObj : {}), ...(typeof motionObj === 'object' ? {} : {}) };
+                            // Also pull any top-level keys with 'safety', 'estop', 'obstacle', 'timeout', 'range', 'limit' in name
+                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision'];
+                            Object.keys(data).forEach(k => {
+                                if (typeof data[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
+                                    _safetyParamsCache[k] = data[k];
+                                }
+                            });
+                            if (typeof safetyObj === 'object') Object.assign(_safetyParamsCache, safetyObj);
+                            renderSafetyParams(_safetyParamsCache, data);
+                            const count = Object.keys(_safetyParamsCache).length;
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = count ? count + ' parameters – blur a value to mark changed, then Save' : 'No safety fields found in robot profile'; }
+                        } catch (err) {
+                            listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
+                        }
+                    }
+
+                    function renderSafetyParams(params, fullData) {
+                        const listEl = document.getElementById('safety-param-list');
+                        if (!listEl) return;
+                        const entries = Object.entries(params);
+                        if (!entries.length) {
+                            listEl.innerHTML = `<div class="prm-empty">
+                                No safety fields found in robot profile.<br>
+                                <span style="font-size:10px;color:var(--text-tertiary);">Add safety keys to your robot.yaml to manage them here.</span>
+                            </div>`;
+                            return;
+                        }
+                        listEl.innerHTML = entries.map(([k, v]) => {
+                            const escapedK = k.replace(/"/g, '&quot;');
+                            const escapedV = String(v === null ? '' : v).replace(/"/g, '&quot;');
+                            return `<div class="prm-param-row" data-key="${escapedK}">
+                                <span class="prm-param-key">${k}</span>
+                                <input class="prm-param-val" type="text" value="${escapedV}"
+                                    data-original="${escapedV}"
+                                    oninput="this.classList.add('unsaved')"
+                                    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                            </div>`;
+                        }).join('');
+                    }
+
+                    async function saveSafetyParams() {
+                        const statEl = document.getElementById('safety-status-text');
+                        const unsaved = document.querySelectorAll('#safety-param-list .prm-param-val.unsaved');
+                        if (!unsaved.length) {
+                            if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'No changes to save'; } return;
+                        }
+                        // Collect all changed values
+                        const changes = {};
+                        unsaved.forEach(input => {
+                            const key = input.closest('.prm-param-row').dataset.key;
+                            changes[key] = input.value;
+                            _safetyParamsCache[key] = input.value;
+                        });
+                        if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ safety: changes })
+                            });
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            unsaved.forEach(input => {
+                                input.dataset.original = input.value;
+                                input.classList.remove('unsaved');
+                                input.classList.add('saved');
+                                setTimeout(() => input.classList.remove('saved'), 1200);
+                            });
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + Object.keys(changes).length + ' parameter(s)'; }
+                        } catch (err) {
+                            if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
+                        }
+                    }
+
+                    function filterSafetyParams(query) {
+                        const q = (query || '').toLowerCase().trim();
+                        document.querySelectorAll('#safety-param-list .prm-param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
+                            row.classList.toggle('hidden', q !== '' && !text.includes(q));
+                        });
+                    }
+
+                    // ─────────────────────────────────────────────────────────
+                    // Recognition Module – full implementation
+                    // ─────────────────────────────────────────────────────────
+                    const rcgState = { category: 'charger', search: '', activeId: null, templates: [], dirty: false, initialized: false, inspectorTab: 'usage' };
+
+                    // ── Init & load ───────────────────────────────────────────
+                    async function recognitionInit(force = false) {
+                        if (rcgState.initialized && !force) return;
+                        rcgState.initialized = true;
+                        recognitionSetCategory('charger');
+                        await recognitionLoadData({ preserveSelection: false });
+                    }
+
+                    async function recognitionLoadData({ preserveSelection = false } = {}) {
+                        const prevId = preserveSelection ? rcgState.activeId : null;
+                        rcgSetLibStatus('Loading…');
+                        try {
+                            const r = await fetch('/api/recognition/templates');
+                            if (!r.ok) throw new Error('HTTP ' + r.status);
+                            const data = await r.json();
+                            rcgState.templates = data.templates || (Array.isArray(data) ? data : []);
+                            recognitionRenderLibrary();
+                            rcgSetLibStatus(rcgState.templates.length + ' file(s)');
+                            if (prevId) {
+                                const still = rcgState.templates.find(t => rcgTemplateId(t) === prevId);
+                                if (still) recognitionSelectFile(prevId);
+                            }
+                        } catch (err) {
+                            rcgSetLibStatus('Load failed: ' + err.message);
+                            const c = document.getElementById('recognition-library-content');
+                            if (c) c.innerHTML = '<div class="rcg-empty-state"><div class="rcg-empty-hint" style="color:#fc8181;">Failed to load: ' + err.message + '</div></div>';
+                        }
+                    }
+
+                    function rcgTemplateId(t) {
+                        return t.id || ((t.type || t.class || 'unknown') + '/' + (t.name || 'unnamed'));
+                    }
+
+                    function rcgSetLibStatus(msg, color) {
+                        const el = document.getElementById('rcg-lib-status');
+                        if (el) { el.textContent = msg; el.style.color = color || ''; }
+                    }
+
+                    function rcgSetStatus(msg, color) {
+                        const el = document.getElementById('recognition-stage-status');
+                        if (el) { el.textContent = msg; el.style.color = color || ''; }
+                    }
+
+                    // ── Category, search, library render ──────────────────────
+                    function recognitionSetCategory(cat) {
+                        rcgState.category = cat;
+                        document.querySelectorAll('.rcg-category-btn').forEach(b => b.classList.toggle('active', b.dataset.rcgCategory === cat));
+                        const titles = { charger: 'Charger Files', shelf: 'Shelf Files', pallet: 'Pallet / Camera', tag: 'Tag Files' };
+                        const el = document.getElementById('rcg-category-title');
+                        if (el) el.textContent = titles[cat] || cat;
+                        recognitionRenderLibrary();
+                    }
+
+                    function recognitionSetSearch(q) {
+                        rcgState.search = (q || '').toLowerCase().trim();
+                        recognitionRenderLibrary();
+                    }
+
+                    function recognitionRenderLibrary() {
+                        const cont = document.getElementById('recognition-library-content');
+                        if (!cont) return;
+                        const q = rcgState.search;
+                        const cat = rcgState.category;
+                        const typeMap = { charger: ['charger'], shelf: ['shelf'], pallet: ['pallet', 'camera'], tag: ['tag'] };
+                        const types = typeMap[cat] || [cat];
+                        const filtered = rcgState.templates.filter(t => {
+                            const ttype = (t.type || t.class || '').toLowerCase();
+                            const matchType = types.some(ty => ttype.includes(ty));
+                            const name = (t.name || t.id || '').toLowerCase();
+                            const matchSearch = !q || name.includes(q) || ttype.includes(q);
+                            return matchType && matchSearch;
+                        });
+                        if (!filtered.length) {
+                            cont.innerHTML = '<div class="rcg-empty-state"><div class="rcg-empty-hint">No files for this category.<br>Use Pull All to sync from robot.</div></div>';
+                            return;
+                        }
+                        const iconMap = { charger: 'fa-plug', shelf: 'fa-boxes-stacked', pallet: 'fa-pallet', camera: 'fa-camera', tag: 'fa-qrcode' };
+                        cont.innerHTML = filtered.map(t => {
+                            const id = rcgTemplateId(t);
+                            const name = t.name || t.id || 'unnamed';
+                            const ttype = (t.type || t.class || '').toLowerCase();
+                            const iconKey = Object.keys(iconMap).find(k => ttype.includes(k)) || 'shelf';
+                            const synced = t.synced !== false;
+                            const active = rcgState.activeId === id;
+                            const safeId = id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                            return `<div class="rcg-file-row${active ? ' active' : ''}" onclick="recognitionSelectFile('${safeId}')">
+                                <i class="fas ${iconMap[iconKey]} rcg-file-icon"></i>
+                                <span class="rcg-file-name" title="${name}">${name}</span>
+                                <span class="rcg-file-sync ${synced?'synced':'unsynced'}" title="${synced?'Synced':'Not yet pushed'}">${synced?'●':'○'}</span>
+                                <div class="rcg-file-actions">
+                                    <button class="rcg-file-act-btn" title="Push to robot" onclick="event.stopPropagation();recognitionPushFile('${safeId}')"><i class="fas fa-upload"></i></button>
+                                    <button class="rcg-file-act-btn" title="Duplicate" onclick="event.stopPropagation();recognitionDuplicate('${safeId}')"><i class="fas fa-copy"></i></button>
+                                </div>
+                            </div>`;
+                        }).join('');
+                    }
+
+                    // ── Select & display form ─────────────────────────────────
+                    function recognitionSelectFile(id) {
+                        rcgState.activeId = id;
+                        rcgState.dirty = false;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === id);
+                        recognitionRenderLibrary();
+                        if (!tmpl) return;
+                        const titleEl = document.getElementById('recognition-stage-title');
+                        const subtitleEl = document.getElementById('recognition-stage-subtitle');
+                        if (titleEl) titleEl.textContent = tmpl.name || id;
+                        const ttype = (tmpl.type || tmpl.class || '');
+                        if (subtitleEl) subtitleEl.textContent = ttype + (tmpl.robot_type ? ' · ' + tmpl.robot_type : '');
+                        ['rcg-save-btn','rcg-push-btn','rcg-copy-btn','rcg-delete-btn'].forEach(bid => {
+                            const b = document.getElementById(bid); if (b) b.style.display = '';
+                        });
+                        document.getElementById('recognition-empty-state').style.display = 'none';
+                        const fc = document.getElementById('recognition-form-content');
+                        fc.style.display = '';
+                        fc.innerHTML = recognitionBuildForm(tmpl);
+                        recognitionRenderInspector(tmpl);
+                    }
+
+                    // ── Build form by template type ───────────────────────────
+                    function recognitionBuildForm(tmpl) {
+                        const type = (tmpl.type || tmpl.class || '').toLowerCase();
+                        if (type.includes('charger')) return rcgFormCharger(tmpl);
+                        if (type.includes('shelf'))   return rcgFormShelf(tmpl);
+                        if (type.includes('pallet') || type.includes('camera')) return rcgFormPallet(tmpl);
+                        if (type.includes('tag'))     return rcgFormTag(tmpl);
+                        return rcgFormGeneric(tmpl);
+                    }
+
+                    // helper: number input field
+                    function rcgField(key, label, value, note, step) {
+                        const v = value !== undefined && value !== null ? value : '';
+                        return `<div class="rcg-form-row">
+                            <label class="rcg-form-label">${label}</label>
+                            <input class="rcg-form-input" type="number" data-key="${key}" value="${v}" step="${step||'0.001'}" oninput="rcgMarkDirty(this)">
+                            ${note ? `<span class="rcg-form-note">${note}</span>` : ''}
+                        </div>`;
+                    }
+                    function rcgTextField(key, label, value, note) {
+                        const v = String(value !== undefined && value !== null ? value : '').replace(/"/g,'&quot;');
+                        return `<div class="rcg-form-row">
+                            <label class="rcg-form-label">${label}</label>
+                            <input class="rcg-form-input" type="text" data-key="${key}" value="${v}" oninput="rcgMarkDirty(this)">
+                            ${note ? `<span class="rcg-form-note">${note}</span>` : ''}
+                        </div>`;
+                    }
+                    function rcgCheckField(key, label, value, note) {
+                        return `<div class="rcg-form-check-row">
+                            <input type="checkbox" id="rcg-chk-${key}" data-key="${key}" ${value?'checked':''} onchange="rcgMarkDirty(this)">
+                            <label for="rcg-chk-${key}" style="font-size:11px;">${label}</label>
+                            ${note ? `<span class="rcg-form-note" style="margin-left:4px;">${note}</span>` : ''}
+                        </div>`;
+                    }
+                    function rcgSelectField(key, label, value, options) {
+                        const opts = options.map(o => `<option value="${o.value}" ${value===o.value?'selected':''}>${o.label}</option>`).join('');
+                        return `<div class="rcg-form-row full">
+                            <label class="rcg-form-label">${label}</label>
+                            <select class="rcg-form-select" data-key="${key}" onchange="rcgMarkDirty(this)">${opts}</select>
+                        </div>`;
+                    }
+
+                    function rcgMarkDirty(el) {
+                        el.classList.add('unsaved');
+                        rcgState.dirty = true;
+                    }
+
+                    // ── Charger form ──────────────────────────────────────────
+                    function rcgFormCharger(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-robot"></i> Robot Type</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgSelectField('robot_type','Robot Type', t.robot_type||'amb', [{value:'amb',label:'AMB'},{value:'pallet_truck',label:'Pallet Truck'}])}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-ruler-horizontal"></i> Reflective Strip Detection</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('minwidth','Min Width (m)', t.minwidth, 'Min reflective strip width detected by laser')}
+                                    ${rcgField('maxwidth','Max Width (m)', t.maxwidth, 'Max reflective strip width to consider')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Recommended strip width: 15–20 cm. Center height must align with laser plane.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-crosshairs"></i> Electrode Offset (Charger Coordinate System)</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('dx','dx (m)', t.dx, 'x offset of charging electrode from strip center. AMB default: 0.025')}
+                                    ${rcgField('dy','dy (m)', t.dy, 'y offset. Should be 0 — electrode center aligned with strip center')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-toggle-on"></i> Digital Output Control</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('switchDO','Switch DO Port', t.switchDO!==undefined?t.switchDO:-1, 'DO port for charging relay. Set -1 to disable DO control.', '1')}
+                                    ${rcgField('openDODist','Open DO Distance (m)', t.openDODist, 'Distance threshold to activate DO. Use 0 for DI-triggered logic.')}
+                                    ${rcgCheckField('disableByEMC','Disable DO on E-Stop', t.disableByEMC, 'If checked: emergency stop turns off charging DO')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(252,129,129,0.07);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    If switchDO = -1, openDODist and disableByEMC have no effect. Choose openDODist carefully: too large activates relay prematurely; too small may touch charger before activation.
+                                </div>
+                            </div>
+                            ${(t.robot_type || 'amb') === 'pallet_truck' ? `<div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-info-circle"></i> Pallet Truck Specifics</div>
+                                <div class="rcg-form-grid">
+                                    <div class="rcg-form-note full">Min charger spacing: 1.16 m. Max laser–strip distance: 1 m. Entry: forward. Exit: backward. Measure X (electrode-to-strip plane) manually; set dx ≤ X − 0.01.</div>
+                                </div>
+                            </div>` : ''}
+                        </div>`;
+                    }
+
+                    // ── Shelf form ────────────────────────────────────────────
+                    function rcgFormShelf(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-tag"></i> Identity</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgTextField('name','File Name', t.name)}
+                                    ${rcgTextField('type','Type / Model ID', t.type, 'e.g. s0001, s0002')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-ruler-combined"></i> Physical Dimensions</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('width','Leg Width (m)', t.width, 'Outer width of the two shelf legs in entry direction')}
+                                    ${rcgField('length','Leg Length (m)', t.length, 'Outer width of legs perpendicular to entry')}
+                                    ${rcgField('leg_width','Reflective Strip Width (m)', t.leg_width, 'Standard 3M sticker: 0.05 m')}
+                                    ${rcgField('outer_width','Outer Width (m)', t.outer_width, 'Total shelf width including overhangs (must be ≥ width + 5 cm)')}
+                                    ${rcgField('outer_length','Outer Length (m)', t.outer_length, 'Total shelf length. Must be ≥ length + 5 cm to avoid laser noise')}
+                                    ${rcgSelectField('leg_type','Leg Shape', t.leg_type||'cube', [{value:'cube',label:'Cube'},{value:'cylinder',label:'Cylinder'}])}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-route"></i> Entry Depth</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('align_depth','Align Depth (m)', t.align_depth, 'Backward entry: distance from front legs to robot stop position')}
+                                    ${rcgField('anti_align_depth','Anti-Align Depth (m)', t.anti_align_depth, 'Forward entry: stopping distance when robot x differs from shelf x by 180°')}
+                                    ${rcgField('extra_dist','Extra Dist (m)', t.extra_dist, 'Extra width for laser cutout region around shelf legs')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Straight travel = insertion depth + D_GoWithJack_AheadDist. Pre-point must keep laser ≥ 0.5 m from strips. Set ObsExpansion=0 on entry/exit lines.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-boxes-stacked"></i> Shelf Size Requirements</div>
+                                <div class="rcg-form-grid">
+                                    <div class="rcg-form-note full">Inner width must exceed robot max width by ≥ 20 cm (10 cm each side). With follow-up: inner width ≥ robot width + robot length + 20 cm. Strip width must be ≥ 5 cm. Shelf height: not below robot height, not above robot height + max lift stroke.</div>
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    // ── Pallet form ───────────────────────────────────────────
+                    function rcgFormPallet(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-camera"></i> FM830 Camera Configuration</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgTextField('PercipioID','Percipio Camera ID', t.PercipioID, 'Unique ID printed on white label on the camera body. Leave blank if only one camera.')}
+                                    ${rcgCheckField('onlyForPalletDetection','Pallet Detection Only', t.onlyForPalletDetection, 'Check if camera is dedicated to pallet recognition')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Connect FM830 to main controller USB port. If multiple 830 cameras are installed, PercipioID must be specified for each.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-pallet"></i> Pallet Dimensions</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('pallet_width','Pallet Width (m)', t.pallet_width, 'Total outer pallet width')}
+                                    ${rcgField('pallet_height','Support Column Height (m)', t.pallet_height, 'Height of support columns only — excludes connecting structure height')}
+                                    ${rcgField('pocket_width','Pocket Width (m)', t.pocket_width, 'Width of the center opening')}
+                                    ${rcgField('pocket_height','Pocket Height (m)', t.pocket_height, 'Height of the center opening')}
+                                    ${rcgField('pocket_spacing','Middle Leg Width (m)', t.pocket_spacing, 'Width of the middle support leg')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(252,129,129,0.07);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Only symmetric pallets (equal-size left/right openings) are supported. Pallet thickness (height − pocket_height) must be &gt; 3 cm. Angular deviation vs robot: &lt; 20°. Lateral offset: &lt; pallet width. Camera distance: 1–3 m.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-sliders-h"></i> Motion Parameters</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('RecQRCode_AheadDist','Ahead Distance (m)', t.RecQRCode_AheadDist, 'Recognition planning forward distance')}
+                                    ${rcgField('RecQRCode_BackLength','Back Length (m)', t.RecQRCode_BackLength, 'Backward planning distance ≈ odometry center to fork upper switch. Too large: early DI trigger. Too small: DI may not trigger.')}
+                                    ${rcgField('RecQRCode_PathSpeed','Path Speed (m/s)', t.RecQRCode_PathSpeed, 'Speed during recognition path')}
+                                    ${rcgField('RecOnePathRatio','One-Path Ratio (rad)', t.RecOnePathRatio, 'Tangent threshold for generating single recognition path')}
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    // ── Tag form ──────────────────────────────────────────────
+                    function rcgFormTag(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-qrcode"></i> AprilTag Family</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgSelectField('Tagtype','Tag Family', t.Tagtype||'36h11', [
+                                        {value:'16h5',label:'16h5 (30 IDs, longest range, more false positives)'},
+                                        {value:'25h7',label:'25h7 (242 IDs, balanced)'},
+                                        {value:'36h11',label:'36h11 (587 IDs, robust, shortest range)'}
+                                    ])}
+                                    ${rcgField('tagSize','Tag Size (m)', t.tagSize, 'Physical size of one tag. e.g. 0.10 for 10 cm')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Approx max distances at 10 cm tag, f=1075: 16h5 → 3.58 m · 25h7 → 3.07 m · 36h11 → 2.69 m. Tags must be flat, vertical, and correctly oriented.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-ruler-combined"></i> Tag–Shelf Spatial Relationship</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('X_Dis','X_Dis (m)', t.X_Dis, 'x of tag center in shelf coordinate system. Symmetric front mount: negative shelf length')}
+                                    ${rcgField('Y_Dis','Y_Dis (m)', t.Y_Dis, 'y of tag center. Symmetric front mount: 0')}
+                                    ${rcgField('Z_Dis','Z_Dis (m)', t.Z_Dis, 'z = tag center height above ground')}
+                                    ${rcgField('tagDistance','Tag Distance (m)', t.tagDistance, 'Horizontal distance between centers of the two symmetrically placed tags')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-boxes-stacked"></i> Associated Object Dimensions</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('goodsWidth','Goods Width (m)', t.goodsWidth, 'Total width of the target object / shelf')}
+                                    ${rcgField('goodsLength','Goods Length (m)', t.goodsLength, 'Total length of the target object / shelf')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-camera"></i> Camera (RealSense)</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('camera_x','Camera x (m)', t.camera_x, 'Camera position x in robot coordinate system')}
+                                    ${rcgField('camera_y','Camera y (m)', t.camera_y, 'Camera position y in robot coordinate system')}
+                                    ${rcgField('camera_z','Camera z (m)', t.camera_z, 'Camera position z in robot coordinate system')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Connect RealSense via USB 3.0. Select camera type "realsense" in the robot model file and enter position from actual mounting measurement.
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    // ── Generic fallback form ─────────────────────────────────
+                    function rcgFormGeneric(t) {
+                        const skip = new Set(['id','synced']);
+                        const entries = Object.entries(t).filter(([k]) => !skip.has(k));
+                        if (!entries.length) return '<div class="rcg-empty-state"><div class="rcg-empty-hint">No editable fields.</div></div>';
+                        return `<div class="rcg-form-section">
+                            <div class="rcg-form-section-title"><i class="fas fa-sliders-h"></i> Parameters</div>
+                            <div class="rcg-form-grid">
+                                ${entries.map(([k,v]) => typeof v === 'boolean'
+                                    ? rcgCheckField(k, k, v)
+                                    : (typeof v === 'number' ? rcgField(k, k, v) : rcgTextField(k, k, v))
+                                ).join('')}
+                            </div></div>`;
+                    }
+
+                    // ── Save / Push / Delete / Duplicate ─────────────────────
+                    async function recognitionSaveActive() {
+                        if (!rcgState.activeId) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === rcgState.activeId);
+                        if (!tmpl) return;
+                        const fc = document.getElementById('recognition-form-content');
+                        if (!fc) return;
+                        const updated = Object.assign({}, tmpl);
+                        fc.querySelectorAll('[data-key]').forEach(el => {
+                            const key = el.dataset.key;
+                            const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? (el.value !== '' ? parseFloat(el.value) : null) : el.value);
+                            updated[key] = val;
+                        });
+                        rcgSetStatus('Saving…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template: updated })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            Object.assign(tmpl, updated);
+                            rcgState.dirty = false;
+                            fc.querySelectorAll('.unsaved').forEach(e => { e.classList.remove('unsaved'); e.classList.add('saved'); setTimeout(() => e.classList.remove('saved'), 1200); });
+                            rcgSetStatus('Saved successfully', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Save failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionPushFile(id) {
+                        const tid = id || rcgState.activeId;
+                        if (!tid) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === tid);
+                        if (!tmpl) return;
+                        rcgSetStatus('Pushing "' + (tmpl.name || tid) + '" to robot…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/publish', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template: tmpl })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Pushed successfully', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Push failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionPullAll() {
+                        rcgSetLibStatus('Pulling from robot…');
+                        rcgSetStatus('Pulling all recognition files from robot…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/pull_all', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Pull complete', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Pull failed: ' + err.message, '#fc8181');
+                            rcgSetLibStatus('Pull failed');
+                        }
+                    }
+
+                    async function recognitionPushAll() {
+                        rcgSetStatus('Pushing all recognition files to robot…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/push_all', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Push All complete', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Push All failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionDeleteActive() {
+                        if (!rcgState.activeId) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === rcgState.activeId);
+                        const name = tmpl ? tmpl.name : rcgState.activeId;
+                        const confirmed = typeof showConfirm === 'function'
+                            ? await showConfirm('Delete "' + name + '"?', 'Delete', 'Cancel')
+                            : confirm('Delete "' + name + '"?');
+                        if (!confirmed) return;
+                        const tId = tmpl ? tmpl.id || rcgState.activeId : rcgState.activeId;
+                        try {
+                            const r = await fetch('/api/recognition/templates/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template_id: tId })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgState.activeId = null;
+                            ['rcg-save-btn','rcg-push-btn','rcg-copy-btn','rcg-delete-btn'].forEach(bid => {
+                                const b = document.getElementById(bid); if (b) b.style.display = 'none';
+                            });
+                            document.getElementById('recognition-empty-state').style.display = '';
+                            document.getElementById('recognition-form-content').style.display = 'none';
+                            document.getElementById('recognition-stage-title').textContent = 'Select a file';
+                            document.getElementById('recognition-stage-subtitle').textContent = '';
+                            rcgSetStatus('Deleted "' + name + '"', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: false });
+                        } catch (err) {
+                            rcgSetStatus('Delete failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionDuplicate(id) {
+                        const tid = id || rcgState.activeId;
+                        if (!tid) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === tid);
+                        if (!tmpl) return;
+                        const tId = tmpl.id || tid;
+                        rcgSetStatus('Duplicating "' + (tmpl.name || tid) + '"…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/duplicate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template_id: tId })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Duplicated successfully', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: false });
+                        } catch (err) {
+                            rcgSetStatus('Duplicate failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    function recognitionCopyActive() { recognitionDuplicate(rcgState.activeId); }
+
+                    async function recognitionCreateTemplate() {
+                        const cat = rcgState.category;
+                        const typeMap = { charger: 'charger', shelf: 'shelf', pallet: 'pallet', tag: 'tag' };
+                        const type = typeMap[cat] || cat;
+                        const defaultsMap = {
+                            charger: { class:'charger', robot_type:'amb', minwidth:0.05, maxwidth:0.30, dx:0.025, dy:0.0, switchDO:-1, openDODist:0.0, disableByEMC:false },
+                            shelf:   { class:'shelf', type:'s_new', width:0.8, length:0.6, leg_width:0.05, align_depth:0.39, anti_align_depth:0.27, outer_width:0.86, outer_length:0.9, extra_dist:0.1, leg_type:'cube' },
+                            pallet:  { class:'pallet', PercipioID:'', onlyForPalletDetection:false, pallet_width:1.0, pallet_height:0.15, pocket_width:0.45, pocket_height:0.12, pocket_spacing:0.10 },
+                            tag:     { class:'tag', Tagtype:'36h11', tagSize:0.10, X_Dis:-0.5, Y_Dis:0.0, Z_Dis:0.35, tagDistance:0.3, goodsWidth:0.8, goodsLength:0.6, camera_x:0.1, camera_y:0.0, camera_z:0.3 }
+                        };
+                        const newName = prompt('Enter name for new ' + type + ' file:', type + '_new');
+                        if (!newName) return;
+                        const tmpl = Object.assign({ name: newName }, defaultsMap[cat] || { class: type });
+                        rcgSetStatus('Creating "' + newName + '"…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template: tmpl })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Created "' + newName + '"', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: false });
+                            const newId = rcgState.templates.find(t => t.name === newName);
+                            if (newId) recognitionSelectFile(rcgTemplateId(newId));
+                        } catch (err) {
+                            rcgSetStatus('Create failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    // ── Inspector tabs ────────────────────────────────────────
+                    function recognitionSetInspectorTab(tab) {
+                        rcgState.inspectorTab = tab;
+                        document.querySelectorAll('.rcg-inspector-tab').forEach(b => b.classList.toggle('active', b.dataset.rcgInspectorTab === tab));
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === rcgState.activeId);
+                        recognitionRenderInspector(tmpl);
+                    }
+
+                    function recognitionRenderInspector(tmpl) {
+                        const cont = document.getElementById('recognition-inspector-content');
+                        if (!cont) return;
+                        const tab = rcgState.inspectorTab;
+                        if (tab === 'raw' || tab === 'properties') { cont.innerHTML = rcgInspectorRaw(tmpl); return; }
+                        if (tab === 'validation') { cont.innerHTML = rcgInspectorValidation(tmpl); return; }
+                        cont.innerHTML = rcgInspectorUsage(tmpl);
+                    }
+
+                    function rcgInspectorRaw(tmpl) {
+                        if (!tmpl) return '<div class="rcg-usage-section"><p class="rcg-usage-p">No file selected.</p></div>';
+                        const skip = new Set(['synced']);
+                        const entries = Object.entries(tmpl).filter(([k]) => !skip.has(k));
+                        return entries.map(([k,v]) => `<div class="rcg-val-item"><span class="rcg-val-text" style="color:var(--text-tertiary);width:100px;flex-shrink:0;">${k}</span><span class="rcg-val-text">${String(v)}</span></div>`).join('');
+                    }
+
+                    function rcgInspectorValidation(tmpl) {
+                        if (!tmpl) return '<div class="rcg-usage-section"><p class="rcg-usage-p">No file selected.</p></div>';
+                        const checks = [];
+                        const type = (tmpl.type || tmpl.class || '').toLowerCase();
+                        const ok = (msg) => checks.push(`<div class="rcg-val-item"><i class="fas fa-check-circle rcg-val-icon rcg-val-ok"></i><span class="rcg-val-text">${msg}</span></div>`);
+                        const warn = (msg) => checks.push(`<div class="rcg-val-item"><i class="fas fa-exclamation-triangle rcg-val-icon rcg-val-warn"></i><span class="rcg-val-text">${msg}</span></div>`);
+                        const err = (msg) => checks.push(`<div class="rcg-val-item"><i class="fas fa-times-circle rcg-val-icon rcg-val-err"></i><span class="rcg-val-text">${msg}</span></div>`);
+                        if (type.includes('charger')) {
+                            tmpl.minwidth > 0 ? ok('minwidth is set') : err('minwidth must be > 0');
+                            tmpl.maxwidth > tmpl.minwidth ? ok('maxwidth > minwidth') : err('maxwidth must be > minwidth');
+                            Math.abs(tmpl.dy || 0) < 0.01 ? ok('dy near 0 (centered electrode)') : warn('dy ≠ 0: electrode not centered on strip');
+                            tmpl.switchDO === -1 ? ok('DO control disabled (switchDO = -1)') : (tmpl.openDODist > 0 ? ok('openDODist configured') : warn('openDODist = 0: using DI logic'));
+                        }
+                        if (type.includes('shelf')) {
+                            tmpl.leg_width >= 0.05 ? ok('Reflective strip width ≥ 5 cm') : err('Strip width must be ≥ 5 cm (0.05 m)');
+                            (tmpl.outer_length || 0) >= (tmpl.length || 0) + 0.05 ? ok('outer_length ≥ length + 5 cm') : warn('outer_length should be ≥ length + 5 cm to avoid laser noise');
+                            (tmpl.outer_width || 0) >= (tmpl.width || 0) ? ok('outer_width ≥ width') : warn('outer_width should be ≥ width');
+                            tmpl.align_depth > 0 ? ok('align_depth configured') : warn('align_depth = 0: robot may not insert properly');
+                        }
+                        if (type.includes('pallet')) {
+                            const thickness = (tmpl.pallet_height || 0) - (tmpl.pocket_height || 0);
+                            thickness > 0.03 ? ok('Pallet thickness > 3 cm') : err('Pallet thickness (height − pocket_height) must be > 3 cm');
+                            tmpl.PercipioID ? ok('PercipioID specified') : warn('PercipioID empty — OK if only one camera installed');
+                        }
+                        if (type.includes('tag')) {
+                            tmpl.tagSize > 0 ? ok('tagSize set') : err('tagSize must be > 0');
+                            tmpl.tagSize >= 0.05 ? ok('tagSize ≥ 5 cm (recommended)') : warn('tagSize < 5 cm may reduce max recognition distance');
+                            tmpl.Tagtype ? ok('Tag family: ' + tmpl.Tagtype) : warn('Tag family not set');
+                            Math.abs(tmpl.Y_Dis || 0) < 0.01 ? ok('Y_Dis = 0 (symmetric mount)') : warn('Y_Dis ≠ 0: check tag placement');
+                        }
+                        if (!checks.length) ok('No specific checks for this type');
+                        return checks.join('');
+                    }
+
+                    function rcgInspectorUsage(tmpl) {
+                        const type = tmpl ? (tmpl.type || tmpl.class || '').toLowerCase() : '';
+                        if (type.includes('charger')) return rcgUsageCharger();
+                        if (type.includes('shelf'))   return rcgUsageShelf();
+                        if (type.includes('pallet') || type.includes('camera')) return rcgUsagePallet();
+                        if (type.includes('tag'))     return rcgUsageTag();
+                        return rcgUsageDefault();
+                    }
+
+                    function rcgUsageCharger() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Installation Methods</div>
+                            <ul class="rcg-usage-list"><li>Against a wall (temporary, no fixing required)</li><li>Floor-fixed with expansion bolts (recommended)</li></ul>
+                            <p class="rcg-usage-p">Charger must be reliably fixed. Robot and charger must be on the same plane.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Reflective Strip Requirements</div>
+                            <ul class="rcg-usage-list"><li>Width: 15–20 cm recommended</li><li>Height: ≥ 5 cm</li><li>Strip center height ≈ robot laser height from ground</li></ul>
+                            <p class="rcg-usage-p">If no strip exists, recognition cannot be used — only fixed-position path charging.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">AMB Setup Workflow</div>
+                            <ul class="rcg-usage-list"><li>Build map, scan charger into map</li><li>Manually drive robot to charger at 0.02 m/s (set ManualBlock=false)</li><li>Insert until Roboshop shows positive battery current</li><li>Right-click robot → Mark Special Workstation → CP point</li><li>Drive back ~1 m → right-click → LM point</li><li>Connect LM→CP: forward, path nav; CP→LM: backward, path nav</li><li>Set LM→CP and CP→LM as straight line</li><li>Select amb.charger as CP recognition file</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Common Mistakes</div>
+                            <ul class="rcg-usage-list"><li>Pre point too far from charger</li><li>Pre point not directly in front of CP</li><li>LM→CP path not a straight line</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pallet Truck Notes</div>
+                            <ul class="rcg-usage-list"><li>Min charger spacing: 1.16 m</li><li>Max laser–strip distance: 1 m</li><li>dx: measure X (electrode to strip plane in charging position), set dx ≤ X − 0.01</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsageShelf() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Shelf Design Rules</div>
+                            <ul class="rcg-usage-list"><li>Four legs forming a rectangle; robot enters from positive-x side</li><li>5 cm wide 3M Diamond Grade reflective strips on front two legs</li><li>Strip midpoints must coincide with shelf center (within tolerance)</li><li>Inner width ≥ robot width + 20 cm (10 cm clearance each side)</li><li>With follow-up: inner width ≥ robot width + robot length + 20 cm</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pre-Recognition Placement</div>
+                            <ul class="rcg-usage-list"><li>Distance from shelf front legs to pre-point: &lt; 2 m</li><li>Angle: robot→strip angle &lt; 10°</li><li>Shelf vs AGV angle: &lt; 20°</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Task Configuration</div>
+                            <ul class="rcg-usage-list"><li>AP type: ActionPoint, execution object: jack</li><li>Set ObsExpansion=0 on entry/exit lines</li><li>Pre-point: laser ≥ 0.5 m from shelf strips</li><li>Load/Unload/Wait tasks control post-arrival action</li><li>Recognize=true: detects shelf position and plans entry</li><li>Recognize=false: fixed open-loop path to AP</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Jack Types</div>
+                            <ul class="rcg-usage-list"><li>0: no lifting module</li><li>1: lifting, no follow-up motion</li><li>2: Kiva-style, with follow-up rotation</li><li>3: user-defined (no status verification)</li><li>4: traction lift (lift → move under → calibrate)</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsagePallet() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">FM830 Camera</div>
+                            <ul class="rcg-usage-list"><li>Connect to USB port on main controller</li><li>If multiple cameras: set PercipioID from white label on camera body</li><li>Check onlyForPalletDetection if dedicated to pallet use</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pallet Requirements</div>
+                            <ul class="rcg-usage-list"><li>Only symmetric pallets (equal left/right openings)</li><li>Thickness (pallet_height − pocket_height) must be &gt; 3 cm</li><li>Angular deviation vs robot: &lt; 20°</li><li>Lateral offset ≤ pallet width</li><li>Camera distance: 1–3 m</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pallet_height Note</div>
+                            <p class="rcg-usage-p">pallet_height = support column height only. It does NOT include the height of horizontal connecting structure between columns.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Motion Parameters</div>
+                            <ul class="rcg-usage-list"><li>RecQRCode_AheadDist: planning forward distance</li><li>RecQRCode_BackLength: ≈ odometry center to fork upper switch. Too large: DI triggers early. Too small: DI may not trigger.</li><li>RecQRCode_PathSpeed: speed on recognition path</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsageTag() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Tag Families</div>
+                            <ul class="rcg-usage-list"><li>16h5: 30 IDs, longest range, more false positives</li><li>25h7: 242 IDs, balanced</li><li>36h11: 587 IDs, most robust, shortest range</li></ul>
+                            <p class="rcg-usage-p">Max distance ≈ f × tagSize / (minPixels × moduleSize). At 10 cm, f=1075: 16h5→3.58 m, 25h7→3.07 m, 36h11→2.69 m.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Tag Placement</div>
+                            <ul class="rcg-usage-list"><li>Paste two tags symmetrically on the front of the target</li><li>Tags must be flat, vertical, correctly oriented</li><li>Number/ID side should face downward horizontally</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Coordinate System</div>
+                            <ul class="rcg-usage-list"><li>X_Dis, Y_Dis, Z_Dis: tag center position in shelf coordinate system</li><li>Symmetric front mount: X_Dis = −shelf_length, Y_Dis = 0, Z_Dis = tag center height from ground</li><li>tagDistance: horizontal distance between the two tag centers</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">RealSense Camera</div>
+                            <ul class="rcg-usage-list"><li>Connect via USB 3.0 to SRC core controller</li><li>Add camera in robot model file, type "realsense"</li><li>Enter camera_x/y/z from actual mounting position</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Accuracy (within 2 m, good lighting)</div>
+                            <ul class="rcg-usage-list"><li>Vertical: &lt; 2 cm</li><li>Horizontal: &lt; 1.5 cm</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsageDefault() {
+                        return `<div class="rcg-usage-section"><p class="rcg-usage-p">Select a recognition file from the library to view its usage guide and parameter checks.</p></div>`;
+                    }
+
+                    // ── Stubs for compat ──────────────────────────────────────
+                    function recognitionSetTool(t) {}
+                    function recognitionZoom(d) {}
+                    function recognitionFitView() {}
+                    function recognitionToggleGrid() {}
+                    function recognitionToggleLabels() {}
+                    function recognitionToggleConstraints() {}
+                    function recognitionSetStageView(v) {}
+                    function recognitionPasteGeometry() {}
+                    function recognitionCopyGeometry() {}
+                    function recognitionCloseMenus() {
+                        const m = document.getElementById('recognition-overflow-menu');
+                        if (m) m.classList.remove('open');
+                    }
+
                     function adoptDevConfigContent() {
                         if (typeof initializeSettingsBuckets === 'function') {
                             initializeSettingsBuckets();
@@ -23952,6 +25220,43 @@
                             }
                         }
 
+                        // ── Edit mode: drag existing zones ──────────────────
+                        if (e.button === 0 && editModeEnabled && !pathFollowingActive) {
+                            const rect = canvas.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const y = e.clientY - rect.top;
+                            const [wx, wy] = pixelToWorld(x, y);
+                            // Hit-test against zones (generous 0.5m radius in edit mode)
+                            for (const [name, zone] of Object.entries(zones)) {
+                                if (!zone.position) continue;
+                                const [zx, zy] = worldToPixel(zone.position.x, zone.position.y);
+                                if (Math.hypot(x - zx, y - zy) <= 28) {
+                                    editingZone = name;
+                                    draggingZoneOffsetX = wx - zone.position.x;
+                                    draggingZoneOffsetY = wy - zone.position.y;
+                                    isDragging = true;
+                                    canvas.style.cursor = 'grabbing';
+                                    e.preventDefault();
+                                    return;
+                                }
+                            }
+                            // Hit-test drawn-path waypoints in edit mode (paths map mode)
+                            if (currentMapMode === 'paths' && Array.isArray(drawnPath) && !isDrawingPath) {
+                                const normalizedPath = normalizePathPoints(drawnPath);
+                                for (let i = 0; i < normalizedPath.length; i++) {
+                                    const pt = normalizedPath[i];
+                                    const [px, py] = worldToPixel(pt.x, pt.y);
+                                    if (Math.hypot(x - px, y - py) <= 20) {
+                                        draggingPathWaypointIndex = i;
+                                        isDragging = true;
+                                        canvas.style.cursor = 'grabbing';
+                                        e.preventDefault();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
                         if (e.button === 2 || e.ctrlKey) { // Right click or Ctrl+click
                             mapUserAdjustedView = true;
                             followRobotViewEnabled = false;
@@ -24150,6 +25455,24 @@
                         }
 
                         if (isDragging) {
+                            // Edit-mode: move dragged zone
+                            if (editingZone && zones[editingZone] && !(dragStartX !== undefined && !editingZone)) {
+                                const [wx2, wy2] = pixelToWorld(x, y);
+                                zones[editingZone].position.x = wx2 - draggingZoneOffsetX;
+                                zones[editingZone].position.y = wy2 - draggingZoneOffsetY;
+                                drawMap();
+                                return;
+                            }
+                            // Edit-mode: move dragged path waypoint
+                            if (draggingPathWaypointIndex >= 0 && Array.isArray(drawnPath) && draggingPathWaypointIndex < drawnPath.length) {
+                                const [wx2, wy2] = pixelToWorld(x, y);
+                                const pt = { ...(drawnPath[draggingPathWaypointIndex] || {}) };
+                                pt.x = wx2;
+                                pt.y = wy2;
+                                drawnPath[draggingPathWaypointIndex] = pt;
+                                drawMap();
+                                return;
+                            }
                             offsetX = e.clientX - dragStartX;
                             offsetY = e.clientY - dragStartY;
                             drawMap();
@@ -24209,6 +25532,25 @@
                                 canvas.style.cursor = 'pointer';
                             }
                         }
+                        // Edit-mode: show grab cursor when hovering a draggable zone or waypoint
+                        if (editModeEnabled && !isDragging && !pathFollowingActive) {
+                            const [hwx, hwy] = pixelToWorld(x, y);
+                            let onZone = false;
+                            for (const [, zone] of Object.entries(zones)) {
+                                if (!zone.position) continue;
+                                const [zx, zy] = worldToPixel(zone.position.x, zone.position.y);
+                                if (Math.hypot(x - zx, y - zy) <= 28) { onZone = true; break; }
+                            }
+                            let onWpt = false;
+                            if (currentMapMode === 'paths' && Array.isArray(drawnPath) && !isDrawingPath) {
+                                const np = normalizePathPoints(drawnPath);
+                                for (let i = 0; i < np.length; i++) {
+                                    const [px, py] = worldToPixel(np[i].x, np[i].y);
+                                    if (Math.hypot(x - px, y - py) <= 20) { onWpt = true; break; }
+                                }
+                            }
+                            if (onZone || onWpt) canvas.style.cursor = 'grab';
+                        }
                     }
 
                     function onMouseUp(e) {
@@ -24217,12 +25559,25 @@
                             draggingPathCurveHandleIndex = -1;
                             updatePathUI();
                         }
+                        // Save edited zone on drag-release (edit mode zone drag)
+                        if (editingZone && isDragging && draggingZoneOffsetX !== undefined) {
+                            saveEditedZone(editingZone);
+                            editingZone = null;
+                        }
+                        // Save moved path waypoint on drag-release
+                        if (draggingPathWaypointIndex >= 0 && isDragging) {
+                            draggingPathWaypointIndex = -1;
+                            updatePathUI();
+                            drawMap();
+                        }
                         if (editingZone && isDragging) {
                             // Save the edited zone position
                             saveEditedZone(editingZone);
                             editingZone = null;
                         }
                         isDragging = false;
+                        draggingZoneOffsetX = 0;
+                        draggingZoneOffsetY = 0;
                         updateCursor();
                     }
 
@@ -24571,6 +25926,11 @@
                         const pointType = String(actionPointConfig.point_type || 'generic').trim().toLowerCase() || 'generic';
                         const shelfTemplateId = String(actionPointConfig.template_id || '').trim();
                         const shelfRecognize = Boolean(actionPointConfig.recognize);
+                        const prePointCfg = (actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object') ? actionPointConfig.pre_point : null;
+                        const prePointEnabled = Boolean(prePointCfg);
+                        const prePointX = prePointCfg ? Number(prePointCfg.x || 0).toFixed(4) : '';
+                        const prePointY = prePointCfg ? Number(prePointCfg.y || 0).toFixed(4) : '';
+                        const prePointTheta = prePointCfg ? Number(prePointCfg.theta !== undefined ? prePointCfg.theta * 180 / Math.PI : 0).toFixed(1) : '0';
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
                         const posY = (zone.position && zone.position.y !== undefined) ? zone.position.y : 0;
                         const headingDeg = getZoneHeadingDegrees(zone);
@@ -24639,6 +25999,38 @@
                             </label>
                         </div>
                         <div id="ez-shelf-summary" class="rcg-action-summary"></div>
+                        <div style="border-top:1px solid #30363d;margin-top:10px;padding-top:10px;">
+                            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+                                <div>
+                                    <div style="${labelStyle}margin:0 0 2px;"><i class="fas fa-map-pin" style="color:#3b82f6;margin-right:4px;"></i>Pre Point</div>
+                                    <div style="font-size:10px;color:#8b949e;font-weight:400;">Intermediate waypoint before shelf detection begins</div>
+                                </div>
+                                <label class="path-toggle-switch" style="margin:0;flex-shrink:0;">
+                                    <input class="path-toggle-input" type="checkbox" id="ez-pre-point-enabled" ${prePointEnabled ? 'checked' : ''} onchange="recognitionHandlePrePointToggle('ez')">
+                                    <span class="path-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div id="ez-pre-point-coords" style="display:${prePointEnabled ? 'block' : 'none'};">
+                                <div style="display:flex;gap:10px;margin-bottom:8px;">
+                                    <div style="flex:1;">
+                                        <label style="${labelStyle}">X (m)</label>
+                                        <input type="number" id="ez-pre-point-x" value="${prePointX}" step="0.01" style="${inputStyle}">
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="${labelStyle}">Y (m)</label>
+                                        <input type="number" id="ez-pre-point-y" value="${prePointY}" step="0.01" style="${inputStyle}">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="${labelStyle}">Heading (deg)</label>
+                                    <input type="number" id="ez-pre-point-theta" value="${prePointTheta}" step="1" min="-180" max="180" style="${inputStyle}">
+                                </div>
+                                <div style="margin-top:8px;font-size:10px;color:#8b949e;display:flex;align-items:center;gap:4px;">
+                                    <i class="fas fa-route" style="color:#3b82f6;"></i>
+                                    <span>Path → <strong style="color:#e6edf3;">Pre Point</strong> → Shelf Detection → Shelf Execution</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div id="ez-charge-group" style="${rowStyle}">
                         <label style="${labelStyle}">Stop Timer (s)</label>
@@ -26064,7 +27456,7 @@
                             setMapSelection('', '');
                         }
 
-                        title.textContent = elementType.toUpperCase() + ' PROPERTIES';
+                        title.textContent = elementType === 'zone' ? 'Zone' : elementType === 'path' ? 'Path' : elementType === 'filter' ? 'Filter Rule' : 'Properties';
 
                         let html = '';
 
@@ -26146,7 +27538,7 @@
                                             <option value="bi"${settings?.direction==='bi'?' selected':''}>&#8644; Bidirectional</option>
                                             <option value="reverse"${settings?.direction==='reverse'?' selected':''}>&#8592; Reverse</option>
                                         </select>
-                                        <button id="path-prop-save-direction" class="property-action-btn primary" style="margin-top:6px;width:100%;font-size:10px;">SAVE DIRECTION</button>
+                                        <button id="path-prop-save-direction" class="property-action-btn primary" style="margin-top:6px;width:100%;font-size:10px;"><i class="fas fa-save"></i> Save Direction</button>
                                     </div>
                                 </div>
                                 ` : ''}
@@ -26167,14 +27559,14 @@
                                 <div class="property-actions">
                                     ${source === 'current'
                                     ? `
-                                        <button id="path-prop-follow-current" class="property-action-btn primary">FOLLOW</button>
-                                        <button id="path-prop-save-current" class="property-action-btn primary">SAVE</button>
-                                        <button id="path-prop-clear-current" class="property-action-btn danger">CLEAR</button>
+                                        <button id="path-prop-follow-current" class="property-action-btn primary"><i class="fas fa-play"></i> Follow</button>
+                                        <button id="path-prop-save-current" class="property-action-btn primary"><i class="fas fa-save"></i> Save</button>
+                                        <button id="path-prop-clear-current" class="property-action-btn danger"><i class="fas fa-trash"></i> Clear</button>
                                     `
                                     : `
-                                        <button id="path-prop-load-saved" class="property-action-btn primary">LOAD</button>
-                                        <button id="path-prop-follow-saved" class="property-action-btn primary">FOLLOW</button>
-                                        <button id="path-prop-delete-saved" class="property-action-btn danger">DELETE</button>
+                                        <button id="path-prop-load-saved" class="property-action-btn primary"><i class="fas fa-upload"></i> Load</button>
+                                        <button id="path-prop-follow-saved" class="property-action-btn primary"><i class="fas fa-play"></i> Follow</button>
+                                        <button id="path-prop-delete-saved" class="property-action-btn danger"><i class="fas fa-trash"></i> Del</button>
                                     `}
                                 </div>
                             `;
@@ -26269,16 +27661,16 @@
                             html += `
                                 <div class="property-actions">
                                     <button class="property-action-btn primary" onclick="editZoneParameters('${elementName}', zones['${elementName}'])">
-                                        EDIT
+                                        <i class="fas fa-edit"></i> Edit
                                     </button>
                                     <button class="property-action-btn primary" onclick="goToZone('${elementName}'); closePropertiesPanel();">
-                                        GO TO
+                                        <i class="fas fa-crosshairs"></i> Go
                                     </button>
                                     <button class="property-action-btn primary" onclick="addZoneToCurrentPath('${elementName}'); closePropertiesPanel();">
-                                        ADD TO PATH
+                                        <i class="fas fa-route"></i> To Path
                                     </button>
                                     <button class="property-action-btn danger" onclick="if(confirm('Delete zone ${elementName}?')) { deleteZone('${elementName}'); closePropertiesPanel(); }">
-                                        DELETE
+                                        <i class="fas fa-trash"></i> Del
                                     </button>
                                 </div>
                             `;
@@ -26311,7 +27703,7 @@
                             html += `
                                 <div class="property-actions">
                                     <button class="property-action-btn danger" onclick="deleteFilterAtIndex(${filter.index}); closePropertiesPanel();">
-                                        DELETE RULE
+                                        <i class="fas fa-trash"></i> Delete Rule
                                     </button>
                                 </div>
                             `;
@@ -28816,30 +30208,56 @@
         </div>
         <div class="params-popup-body">
             <div id="params-tab-nav2" class="params-popup-pane active">
-                <!-- #robot-editor-builder-workspace adopted here by adoptParamsContent() -->
+                <!-- Nav2 search overlay header -->
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="nav2-param-search" class="prm-search-input" placeholder="Search Nav2 parameters…" oninput="filterNav2Params(this.value)">
+                    <button class="prm-action-btn" id="nav2-apply-btn" title="Apply to robot" onclick="applyNav2ParamsFromPopup()">
+                        <i class="fas fa-sync-alt"></i> Apply
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="nav2-status-bar" style="display:none;">
+                    <span id="nav2-status-text">Idle</span>
+                </div>
+                <!-- #settings-navigation-nav2-card adopted here -->
             </div>
             <div id="params-tab-robot" class="params-popup-pane">
-                <div class="settings-general-shell" style="padding:14px; overflow-y:auto; height:100%;">
-                    <div class="settings-card">
-                        <div class="settings-card-header"><h4 class="settings-card-title">ROS Frames</h4></div>
-                        <div class="form-row">
-                            <div class="form-group"><label>Map Frame</label><input type="text" id="sensor-frame-map-input" value="map" placeholder="map" class="settings-input"></div>
-                            <div class="form-group"><label>Odom Frame</label><input type="text" id="sensor-frame-odom-input" value="odom" placeholder="odom" class="settings-input"></div>
-                            <div class="form-group"><label>Lidar Frame</label><input type="text" id="sensor-frame-lidar-input" value="base_scan" placeholder="base_scan" class="settings-input"></div>
-                            <div class="form-group"><label>Camera Frame</label><input type="text" id="sensor-frame-camera-input" value="camera_link" placeholder="camera_link" class="settings-input"></div>
-                        </div>
-                    </div>
-                    <div class="settings-card" style="margin-top:12px;">
-                        <div class="settings-card-header"><h4 class="settings-card-title">Config Files</h4></div>
-                        <div class="form-row">
-                            <div class="form-group" style="flex:2;"><label>URDF Source</label><input type="text" id="robot-urdf-source-input" value="" placeholder="package://.../robot.urdf.xacro" class="settings-input"></div>
-                            <div class="form-group" style="flex:2;"><label>Nav2 Params File</label><input type="text" id="robot-nav2-params-input" value="" placeholder="/path/to/nav2_params.yaml" class="settings-input"></div>
-                        </div>
-                    </div>
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="robot-param-search" class="prm-search-input" placeholder="Search robot parameters…" oninput="filterRobotParams(this.value)">
+                    <button class="prm-action-btn" id="robot-reload-btn" onclick="loadRobotYamlParams()" title="Reload from backend">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="robot-status-bar">
+                    <span id="robot-status-text" style="color:var(--text-tertiary);">Loading…</span>
+                </div>
+                <div id="robot-param-list" class="prm-param-list">
+                    <div class="prm-empty">Loading robot parameters…</div>
                 </div>
             </div>
             <div id="params-tab-topic" class="params-popup-pane">
-                <!-- #settings-topics inner content adopted here by adoptParamsContent() -->
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="topic-param-search" class="prm-search-input" placeholder="Search topics, services, endpoints…" oninput="filterTopicMappings(this.value)">
+                    <select id="topic-type-filter" class="prm-type-filter" onchange="filterTopicMappings(document.getElementById('topic-param-search').value)">
+                        <option value="">All</option>
+                        <option value="topic">Topics</option>
+                        <option value="service">Services</option>
+                        <option value="endpoint">Endpoints</option>
+                        <option value="publisher">Publishers</option>
+                        <option value="subscriber">Subscribers</option>
+                    </select>
+                    <button class="prm-action-btn" onclick="saveTopicMappingsFromPopup()" title="Save mappings">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="topic-status-bar">
+                    <span id="topic-status-text" style="color:var(--text-tertiary);">Loading…</span>
+                </div>
+                <div id="topic-mapping-list" class="prm-param-list" style="font-size:11px;">
+                    <div class="prm-empty">Loading topic configuration…</div>
+                </div>
             </div>
             <div id="params-tab-controls" class="params-popup-pane">
                 <div class="settings-general-shell" style="padding:14px; overflow-y:auto; height:100%;">
@@ -28893,18 +30311,18 @@
                 </div>
             </div>
             <div id="params-tab-safety" class="params-popup-pane">
-                <div class="settings-general-shell" style="padding:14px; overflow-y:auto; height:100%;">
-                    <div class="settings-card">
-                        <div class="settings-card-header"><h4 class="settings-card-title">Safety Parameters</h4></div>
-                        <div class="settings-item">
-                            <label>Emergency Stop Timeout (s)</label>
-                            <input type="number" value="30" class="settings-input">
-                        </div>
-                        <div class="settings-item">
-                            <label>Obstacle Detection Range (m)</label>
-                            <input type="number" value="2.0" step="0.1" class="settings-input">
-                        </div>
-                    </div>
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="safety-param-search" class="prm-search-input" placeholder="Search safety parameters…" oninput="filterSafetyParams(this.value)">
+                    <button class="prm-action-btn" id="safety-save-btn" onclick="saveSafetyParams()" title="Save to backend">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="safety-status-bar">
+                    <span id="safety-status-text" style="color:var(--text-tertiary);">Loading…</span>
+                </div>
+                <div id="safety-param-list" class="prm-param-list">
+                    <div class="prm-empty">Loading safety parameters…</div>
                 </div>
             </div>
         </div>
@@ -28915,122 +30333,103 @@
         <div id="recognition-body">
             <aside id="recognition-library">
                 <div class="rcg-library-rail">
-                    <button class="rcg-category-btn active" type="button" data-rcg-category="shelves" onclick="recognitionSetCategory('shelves')" title="Shelf recognition templates">
+                    <button class="rcg-category-btn active" type="button" data-rcg-category="charger" onclick="recognitionSetCategory('charger')" title="Charger recognition files">
+                        <i class="fas fa-plug"></i>
+                        <span>Chgr</span>
+                    </button>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="shelf" onclick="recognitionSetCategory('shelf')" title="Shelf description files">
                         <i class="fas fa-boxes-stacked"></i>
                         <span>Shelf</span>
                     </button>
-                    <button class="rcg-category-btn" type="button" data-rcg-category="pallets" onclick="recognitionSetCategory('pallets')" title="Pallet recognition templates">
+                    <button class="rcg-category-btn" type="button" data-rcg-category="pallet" onclick="recognitionSetCategory('pallet')" title="Pallet recognition files">
                         <i class="fas fa-pallet"></i>
-                        <span>Pallet</span>
+                        <span>Plt</span>
                     </button>
-                    <button class="rcg-category-btn" type="button" data-rcg-category="docks" onclick="recognitionSetCategory('docks')" title="Dock recognition templates">
-                        <i class="fas fa-warehouse"></i>
-                        <span>Dock</span>
-                    </button>
-                    <button class="rcg-category-btn" type="button" data-rcg-category="fixtures" onclick="recognitionSetCategory('fixtures')" title="Fixture recognition templates">
-                        <i class="fas fa-ruler-combined"></i>
-                        <span>Fix</span>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="tag" onclick="recognitionSetCategory('tag')" title="Tag description files">
+                        <i class="fas fa-qrcode"></i>
+                        <span>Tag</span>
                     </button>
                 </div>
                 <div class="rcg-library-panel">
                     <div class="rcg-pane-header">
                         <div>
-                            <div class="rcg-pane-kicker">Recognition Library</div>
-                            <div class="rcg-pane-title">Templates</div>
+                            <div class="rcg-pane-kicker">Recognition Files</div>
+                            <div id="rcg-category-title" class="rcg-pane-title">Charger</div>
                         </div>
                         <div class="rcg-inline-actions">
-                            <button type="button" class="rcg-inline-btn" onclick="recognitionCreateTemplate()" title="New template"><i class="fas fa-plus"></i><span>New</span></button>
-                            <button type="button" class="rcg-inline-btn" onclick="recognitionPasteGeometry()" title="Paste geometry"><i class="fas fa-paste"></i><span>Paste</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionPullAll()" title="Pull all files from robot"><i class="fas fa-download"></i><span>Pull</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionPushAll()" title="Push all files to robot"><i class="fas fa-upload"></i><span>Push</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionCreateTemplate()" title="New file"><i class="fas fa-plus"></i><span>New</span></button>
                         </div>
                     </div>
                     <div class="rcg-search-wrap">
-                        <input id="recognition-library-search" class="rcg-search-input" type="text" placeholder="Search recognition templates" oninput="recognitionSetSearch(this.value)">
+                        <input id="recognition-library-search" class="rcg-search-input" type="text" placeholder="Search recognition files…" oninput="recognitionSetSearch(this.value)">
                     </div>
-                    <div id="recognition-library-content" class="rcg-library-scroll"></div>
+                    <div id="recognition-library-content" class="rcg-library-scroll">
+                        <div class="rcg-empty-state"><div class="rcg-empty-hint">Loading…</div></div>
+                    </div>
+                    <div id="rcg-lib-status" class="rcg-lib-status"></div>
                 </div>
             </aside>
 
             <section id="recognition-workspace">
                 <div class="rcg-stage-header">
                     <div>
-                        <div class="rcg-pane-kicker">Recognition Geometry</div>
-                        <div id="recognition-stage-title" class="rcg-stage-title">Recognition Geometry</div>
+                        <div class="rcg-pane-kicker">Configuration</div>
+                        <div id="recognition-stage-title" class="rcg-stage-title">Select a file</div>
                         <div id="recognition-stage-subtitle" class="rcg-stage-subtitle"></div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                        <div class="rcg-stage-view-group">
-                            <button type="button" class="rcg-stage-chip-btn active" data-rcg-view="top" onclick="recognitionSetStageView('top')">Top</button>
-                            <button type="button" class="rcg-stage-chip-btn" data-rcg-view="side" onclick="recognitionSetStageView('side')">Side</button>
-                            <button type="button" class="rcg-stage-chip-btn" data-rcg-view="iso" onclick="recognitionSetStageView('iso')">Iso</button>
-                        </div>
-                        <div class="rcg-stage-filter-group">
-                            <div class="recognition-toolbar-chip">CAD</div>
-                            <div class="recognition-toolbar-chip">Safe</div>
-                        </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                        <button id="rcg-save-btn" type="button" class="rcg-save-btn" onclick="recognitionSaveActive()" style="display:none;">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                        <button id="rcg-push-btn" type="button" class="rcg-push-btn" onclick="recognitionPushFile()" style="display:none;">
+                            <i class="fas fa-upload"></i> Push
+                        </button>
+                        <button id="rcg-copy-btn" type="button" class="rcg-copy-btn" onclick="recognitionCopyActive()" style="display:none;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button id="rcg-delete-btn" type="button" class="rcg-del-btn" onclick="recognitionDeleteActive()" style="display:none;">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
                 </div>
-                <div id="recognition-stage-shell">
-                    <div class="rcg-tool-palette">
-                        <button type="button" class="rcg-tool-btn active" data-rcg-tool="select" onclick="recognitionSetTool('select')" title="Select and move geometry">
-                            <i class="fas fa-mouse-pointer"></i><span class="rcg-tool-label">Select</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="point" onclick="recognitionSetTool('point')" title="Place anchor points">
-                            <i class="fas fa-dot-circle"></i><span class="rcg-tool-label">Point</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="endpoint" onclick="recognitionSetTool('endpoint')" title="Place required endpoints">
-                            <i class="fas fa-location-dot"></i><span class="rcg-tool-label">Endpoint</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="rectangle" onclick="recognitionSetTool('rectangle')" title="Draw capture rectangles">
-                            <i class="fas fa-vector-square"></i><span class="rcg-tool-label">Rect</span>
-                        </button>
-                        <button type="button" class="rcg-tool-btn" data-rcg-tool="segment" onclick="recognitionSetTool('segment')" title="Draw span segments">
-                            <i class="fas fa-ruler-horizontal"></i><span class="rcg-tool-label">Span</span>
-                        </button>
-                    </div>
-                    <div id="recognition-stage" tabindex="0">
-                        <svg id="recognition-svg" aria-label="Recognition geometry editor canvas"></svg>
-                        <div id="recognition-empty-state" class="rcg-empty-state">
-                            <div>
-                                <div class="rcg-pane-title">Canvas Ready</div>
-                                <div class="rcg-empty-hint">Use the tool palette to place points, rectangles, spans, and centerlines.</div>
-                            </div>
+                <div id="recognition-form-area">
+                    <div id="recognition-empty-state" class="rcg-empty-state">
+                        <div>
+                            <div class="rcg-pane-title">No File Selected</div>
+                            <div class="rcg-empty-hint">Select a recognition file from the library, or use Pull All to sync from the robot.</div>
                         </div>
                     </div>
-                    <div id="recognition-stage-status" class="rcg-stage-status">Recognition editor ready.</div>
-                    <div class="rcg-view-dock">
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionZoom(0.08)" title="Zoom in"><i class="fas fa-plus"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionZoom(-0.08)" title="Zoom out"><i class="fas fa-minus"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionFitView()" title="Fit canvas"><i class="fas fa-expand-arrows-alt"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleGrid()" title="Toggle grid"><i class="fas fa-th"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleLabels()" title="Toggle labels"><i class="fas fa-tag"></i></button>
-                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleConstraints()" title="Toggle constraints"><i class="fas fa-link"></i></button>
-                    </div>
+                    <div id="recognition-form-content" style="display:none;flex:1;min-height:0;overflow-y:auto;padding:14px;"></div>
                 </div>
+                <div id="recognition-stage-status" class="rcg-stage-status">Recognition library ready.</div>
             </section>
 
             <aside id="recognition-inspector">
+                <div class="rcg-inspector-resizer" id="recognition-inspector-resizer" title="Drag to resize inspector"></div>
                 <div class="rcg-pane-header">
                     <div>
                         <div class="rcg-pane-kicker">Inspector</div>
-                        <div class="rcg-pane-title">Context</div>
+                        <div class="rcg-pane-title">Guide &amp; Checks</div>
                     </div>
                 </div>
                 <div class="rcg-inspector-tabs">
-                    <button type="button" class="rcg-inspector-tab active" data-rcg-inspector-tab="properties" onclick="recognitionSetInspectorTab('properties')">Properties</button>
-                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="geometry" onclick="recognitionSetInspectorTab('geometry')">Geometry</button>
-                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="validation" onclick="recognitionSetInspectorTab('validation')">Validation</button>
-                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="usage" onclick="recognitionSetInspectorTab('usage')">Usage</button>
+                    <button type="button" class="rcg-inspector-tab active" data-rcg-inspector-tab="usage" onclick="recognitionSetInspectorTab('usage')">Usage</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="validation" onclick="recognitionSetInspectorTab('validation')">Checks</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="properties" onclick="recognitionSetInspectorTab('properties')">Raw</button>
                 </div>
-                <div id="recognition-inspector-content" style="flex:1;min-height:0;"></div>
+                <div id="recognition-inspector-content" style="flex:1;min-height:0;overflow-y:auto;"></div>
             </aside>
         </div>
 
         <div id="recognition-overflow-menu" class="rcg-popover">
-            <button type="button" class="rcg-inline-btn" onclick="recognitionDeleteActive(); recognitionCloseMenus();"><i class="fas fa-trash"></i><span>Delete Template</span></button>
-            <button type="button" class="rcg-inline-btn" onclick="recognitionCopyGeometry(); recognitionCloseMenus();"><i class="fas fa-copy"></i><span>Copy Geometry</span></button>
-            <button type="button" class="rcg-inline-btn" onclick="recognitionFitView(); recognitionCloseMenus();"><i class="fas fa-expand-arrows-alt"></i><span>Fit Canvas</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionDeleteActive(); recognitionCloseMenus();"><i class="fas fa-trash"></i><span>Delete File</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionCopyActive(); recognitionCloseMenus();"><i class="fas fa-copy"></i><span>Duplicate File</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionPullAll(); recognitionCloseMenus();"><i class="fas fa-sync-alt"></i><span>Pull All from Robot</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionPushAll(); recognitionCloseMenus();"><i class="fas fa-upload"></i><span>Push All to Robot</span></button>
         </div>
-        <input id="recognition-import-input" type="file" accept=".json,application/json" style="display:none;">
+        <input id="recognition-import-input" type="file" accept=".json,application/json,.shelf,.tag,.charger" style="display:none;">
     </div>
 
     <div id="device-config-tab" class="tab-content">

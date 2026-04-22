@@ -10,12 +10,19 @@
  *   border-radius range : 3-6px
  * ================================================================ */
 
-/* ── Top-bar template card (shown when inside recognition tab) ── */
+/* ── Top-bar controls (template card, New, Save, Validate, Publish, ...) ──
+ * Hidden by default; shown as a flex row when the recognition tab is active.
+ * The active state is toggled on <body> by switchTab() in index.html. */
 #recognition-top-controls {
     display: none;
     align-items: center;
     gap: 4px;
     min-width: 0;
+    flex-wrap: wrap;
+}
+
+body.recognition-tab-active #recognition-top-controls {
+    display: inline-flex;
 }
 
 #recognition-top-controls .recognition-template-card {
@@ -727,11 +734,40 @@
 
 /* ── Inspector (right) ────────────────────────────────────────── */
 #recognition-inspector {
+    position: relative;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--border-primary, #2d3748);
     background: var(--bg-secondary, #161b26);
     overflow: hidden;
+    min-height: 0;
+}
+
+/* Drag handle on the inspector's left edge — mirrors #sidebar-resizer */
+.rcg-inspector-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 6px;
+    transform: translateX(-3px);
+    cursor: col-resize;
+    background: transparent;
+    z-index: 20;
+    transition: background 0.14s ease;
+}
+
+.rcg-inspector-resizer:hover,
+.rcg-inspector-resizer.resizing {
+    background: rgba(66, 153, 225, 0.32);
+}
+
+/* When the inspector is torn down to <900px by the responsive rules, the
+   handle has nothing to drag — hide it. */
+@media (max-width: 900px) {
+    .rcg-inspector-resizer {
+        display: none;
+    }
 }
 
 .rcg-inspector-tabs {
