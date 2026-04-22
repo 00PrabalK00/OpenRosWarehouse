@@ -554,6 +554,10 @@ def save_zone():
         speed=float(data.get('speed', 0.5)),
         action=str(data.get('action', '')),
         charge_duration=float(data.get('charge_duration', 0.0) or 0.0),
+        point_type=str(data.get('point_type', 'generic')),
+        template_id=str(data.get('template_id', data.get('shelf_template_id', ''))),
+        recognize=_as_bool(data.get('recognize', data.get('shelf_detection_on', False)), default=False),
+        action_point_notes=str(data.get('action_point_notes', '')),
     )
     return _status(result, fail_code=503)
 
@@ -626,8 +630,95 @@ def update_zone_params():
         speed=float(data.get('speed', 0.5)),
         action=str(data.get('action', '')),
         charge_duration=float(data.get('charge_duration', 0.0) or 0.0),
+        point_type=str(data.get('point_type', 'generic')),
+        template_id=str(data.get('template_id', data.get('shelf_template_id', ''))),
+        recognize=_as_bool(data.get('recognize', data.get('shelf_detection_on', False)), default=False),
+        action_point_notes=str(data.get('action_point_notes', '')),
     )
     return _status(result, fail_code=503)
+
+
+@app.route('/api/recognition/templates', methods=['GET'])
+def get_recognition_templates():
+    node, err = _node()
+    if err:
+        return err
+
+    result = node.list_recognition_templates()
+    return _status(result, fail_code=503)
+
+
+@app.route('/api/recognition/templates/save', methods=['POST'])
+def save_recognition_template():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    result = node.save_recognition_template(data.get('template', data))
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/recognition/templates/validate', methods=['POST'])
+def validate_recognition_template():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    result = node.validate_recognition_template(data.get('template', data))
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/recognition/templates/publish', methods=['POST'])
+def publish_recognition_template():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    result = node.publish_recognition_template(data.get('template', data))
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/recognition/templates/duplicate', methods=['POST'])
+def duplicate_recognition_template():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    template_id = str(data.get('template_id', '') or '').strip()
+    if not template_id:
+        return jsonify({'ok': False, 'message': 'template_id is required'}), 400
+
+    result = node.duplicate_recognition_template(template_id)
+    return _status(result, fail_code=404)
+
+
+@app.route('/api/recognition/templates/delete', methods=['POST'])
+def delete_recognition_template():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    template_id = str(data.get('template_id', '') or '').strip()
+    if not template_id:
+        return jsonify({'ok': False, 'message': 'template_id is required'}), 400
+
+    result = node.delete_recognition_template(template_id)
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/recognition/templates/export/<template_id>', methods=['GET'])
+def export_recognition_template(template_id):
+    node, err = _node()
+    if err:
+        return err
+
+    result = node.export_recognition_template(template_id)
+    return _status(result, fail_code=404)
 
 
 @app.route('/api/path/follow', methods=['POST'])

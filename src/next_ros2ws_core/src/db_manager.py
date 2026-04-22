@@ -172,6 +172,36 @@ class DatabaseManager:
                 )
             ''')
 
+            # Recognition template assets
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS recognition_templates (
+                    template_id TEXT PRIMARY KEY,
+                    family_key TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    geometry_type TEXT NOT NULL,
+                    version INTEGER DEFAULT 1,
+                    status TEXT DEFAULT 'draft',
+                    parent_template_id TEXT DEFAULT '',
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Shelf-aware action point metadata keyed by zone/action-point name
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS action_point_configs (
+                    zone_name TEXT PRIMARY KEY,
+                    point_type TEXT NOT NULL DEFAULT 'generic',
+                    template_id TEXT DEFAULT '',
+                    action_id TEXT DEFAULT '',
+                    recognize INTEGER DEFAULT 0,
+                    payload TEXT DEFAULT '{}',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS schema_meta (
                     key TEXT PRIMARY KEY,
@@ -189,6 +219,9 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_paths_name ON paths(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_layouts_name ON layouts(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_robot_profiles_robot_id ON robot_profiles(robot_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_recognition_templates_family ON recognition_templates(family_key, version DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_recognition_templates_category ON recognition_templates(category, status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_action_point_configs_template ON action_point_configs(template_id)')
             
             conn.commit()
 
@@ -907,6 +940,184 @@ class DatabaseManager:
             )
             conn.commit()
             return True
+
+    # ==================== Recognition Template Persistence ====================
+
+    def get_recognition_templates(self) -> Dict[str, Dict[str, Any]]:
+        """Get all persisted recognition templates keyed by template_id."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                SELECT *
+                FROM recognition_templates
+                ORDER BY
+                    category ASC,
+                    family_key ASC,
+                    version DESC,
+                    updated_at DESC,
+                    template_id ASC
+                '''
+            )
+            rows = cursor.fetchall()
+
+            templates: Dict[str, Dict[str, Any]] = {}
+            for row in rows:
+                template_id = str(row['template_id'] or '').strip()
+                if not template_id:
+                    continue
+                payload_raw = row['payload']
+                try:
+                    payload = json.loads(payload_raw) if isinstance(payload_raw, str) else {}
+                except Exception:
+                    payload = {}
+                if not isinstance(payload, dict):
+                    payload = {}
+                payload.update({
+                    'template_id': template_id,
+                    'family_key': str(row['family_key'] or '').strip(),
+                    'name': str(row['name'] or '').strip(),
+                    'category': str(row['category'] or '').strip(),
+                    'geometry_type': str(row['geometry_type'] or '').strip(),
+                    'version': self._safe_int(row['version'], 1),
+                    'status': str(row['status'] or 'draft').strip(),
+                    'parent_template_id': str(row['parent_template_id'] or '').strip(),
+                    'created_at': str(row['created_at'] or ''),
+                    'updated_at': str(row['updated_at'] or ''),
+                })
+                templates[template_id] = payload
+            return templates
+
+    def save_recognition_template(self, template_id: str, payload: Dict[str, Any]) -> bool:
+        """Save or update one recognition template payload."""
+        target_template_id = str(template_id or '').strip()
+        if not target_template_id:
+            return False
+
+        template_payload = payload if isinstance(payload, dict) else {}
+        family_key = str(template_payload.get('family_key', target_template_id) or '').strip() or target_template_id
+        name = str(template_payload.get('name', target_template_id) or '').strip() or target_template_id
+        category = str(template_payload.get('category', 'shelves') or 'shelves').strip().lower()
+        geometry_type = str(template_payload.get('geometry_type', 'recognition') or 'recognition').strip().lower()
+        status = str(template_payload.get('status', 'draft') or 'draft').strip().lower()
+        if status not in {'draft', 'published', 'deprecated'}:
+            status = 'draft'
+        version = max(1, self._safe_int(template_payload.get('version', 1), 1))
+        parent_template_id = str(template_payload.get('parent_template_id', '') or '').strip()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                INSERT OR REPLACE INTO recognition_templates (
+                    template_id, family_key, name, category, geometry_type,
+                    version, status, parent_template_id, payload, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''',
+                (
+                    target_template_id,
+                    family_key,
+                    name,
+                    category,
+                    geometry_type,
+                    version,
+                    status,
+                    parent_template_id,
+                    json.dumps(template_payload),
+                ),
+            )
+            conn.commit()
+            return True
+
+    def delete_recognition_template(self, template_id: str) -> bool:
+        """Delete one recognition template payload."""
+        target_template_id = str(template_id or '').strip()
+        if not target_template_id:
+            return False
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM recognition_templates WHERE template_id = ?', (target_template_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_action_point_configs(self) -> Dict[str, Dict[str, Any]]:
+        """Get persisted action point config payloads keyed by zone_name."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                SELECT *
+                FROM action_point_configs
+                ORDER BY zone_name ASC
+                '''
+            )
+            rows = cursor.fetchall()
+
+            configs: Dict[str, Dict[str, Any]] = {}
+            for row in rows:
+                zone_name = str(row['zone_name'] or '').strip()
+                if not zone_name:
+                    continue
+                payload_raw = row['payload']
+                try:
+                    payload = json.loads(payload_raw) if isinstance(payload_raw, str) else {}
+                except Exception:
+                    payload = {}
+                if not isinstance(payload, dict):
+                    payload = {}
+                payload.update({
+                    'zone_name': zone_name,
+                    'point_type': str(row['point_type'] or 'generic').strip().lower() or 'generic',
+                    'template_id': str(row['template_id'] or '').strip(),
+                    'action_id': str(row['action_id'] or '').strip(),
+                    'recognize': bool(row['recognize']),
+                    'updated_at': str(row['updated_at'] or ''),
+                })
+                configs[zone_name] = payload
+            return configs
+
+    def save_action_point_config(self, zone_name: str, payload: Dict[str, Any]) -> bool:
+        """Save or update one action point config payload."""
+        target_zone_name = str(zone_name or '').strip()
+        if not target_zone_name:
+            return False
+
+        config_payload = payload if isinstance(payload, dict) else {}
+        point_type = str(config_payload.get('point_type', 'generic') or 'generic').strip().lower()
+        template_id = str(config_payload.get('template_id', '') or '').strip()
+        action_id = str(config_payload.get('action_id', config_payload.get('action', '')) or '').strip()
+        recognize = 1 if bool(config_payload.get('recognize', False)) else 0
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                INSERT OR REPLACE INTO action_point_configs (
+                    zone_name, point_type, template_id, action_id, recognize, payload, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''',
+                (
+                    target_zone_name,
+                    point_type or 'generic',
+                    template_id,
+                    action_id,
+                    recognize,
+                    json.dumps(config_payload),
+                ),
+            )
+            conn.commit()
+            return True
+
+    def delete_action_point_config(self, zone_name: str) -> bool:
+        """Delete one action point config by zone name."""
+        target_zone_name = str(zone_name or '').strip()
+        if not target_zone_name:
+            return False
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM action_point_configs WHERE zone_name = ?', (target_zone_name,))
+            conn.commit()
+            return cursor.rowcount > 0
     
     # ==================== Utility Methods ====================
     

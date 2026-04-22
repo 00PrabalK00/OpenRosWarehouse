@@ -11804,6 +11804,7 @@
         .dc-insp-empty i { font-size: 26px; opacity: 0.35; }
         .dc-insp-empty-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
     </style>
+    <link rel="stylesheet" href="/static/dev_recognition.css">
 </head>
 
 <body id="app-shell" data-mode="operate" data-user-page="{{ '1' if user_page else '0' }}">
@@ -11831,6 +11832,9 @@
                 </button>
                 <button class="header-icon-btn header-tab-btn" data-tab-header-btn="device-config" onclick="switchTab('device-config')" title="Device Config">
                     <i class="fas fa-microchip"></i>
+                </button>
+                <button class="header-icon-btn header-tab-btn" data-tab-header-btn="recognition" onclick="switchTab('recognition')" title="Recognition">
+                    <i class="fas fa-eye"></i>
                 </button>
                 <button class="header-icon-btn header-tab-btn" data-tab-header-btn="settings" onclick="switchTab('settings')" title="Settings">
                     <i class="fas fa-cog"></i>
@@ -11997,6 +12001,40 @@
                     <i class="fas fa-ellipsis-v"></i>
                 </button>
                 <span class="mctrl-btn device-config-status" id="dc-toolbar-status" title="Device config status">Ready</span>
+            </div>
+            <div id="recognition-top-controls" class="navigator-top-controls">
+                <button class="mctrl-btn recognition-template-card" id="recognition-toolbar-card" type="button" onclick="recognitionSetInspectorTab('properties')" title="Active recognition template">
+                    <i class="fas fa-eye"></i>
+                    <div class="recognition-toolbar-card-meta">
+                        <span class="recognition-toolbar-card-title">Recognition Library</span>
+                        <span class="recognition-toolbar-card-sub">No template selected</span>
+                    </div>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="recognitionCreateTemplate()" title="Create a new recognition template">
+                    <i class="fas fa-plus"></i><span>NEW</span>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="recognitionDuplicateActive()" title="Duplicate the active recognition template">
+                    <i class="fas fa-clone"></i><span>DUPLICATE</span>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="recognitionSaveDraft()" title="Save current recognition draft">
+                    <i class="fas fa-save"></i><span>SAVE DRAFT</span>
+                </button>
+                <button class="mctrl-btn recognition-primary" type="button" onclick="recognitionValidateActive()" title="Validate the active recognition template">
+                    <i class="fas fa-check-circle"></i><span>VALIDATE</span>
+                </button>
+                <button class="mctrl-btn recognition-success" type="button" onclick="recognitionPublishActive()" title="Publish the active recognition template">
+                    <i class="fas fa-rocket"></i><span>PUBLISH</span>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="recognitionExportActive()" title="Export the active recognition template as JSON">
+                    <i class="fas fa-download"></i><span>EXPORT</span>
+                </button>
+                <button class="mctrl-btn" type="button" onclick="recognitionTriggerImport()" title="Import recognition template JSON">
+                    <i class="fas fa-file-import"></i><span>IMPORT</span>
+                </button>
+                <button class="mctrl-btn" id="recognition-more-btn" type="button" onclick="recognitionToggleOverflowMenu(event)" title="More actions">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <span class="mctrl-btn device-config-status" id="recognition-toolbar-status" title="Recognition status">Recognition library ready</span>
             </div>
         </div>
 
@@ -12307,6 +12345,32 @@
                                         <select id="zone-action">
                                             <option value="">No actions configured</option>
                                         </select>
+                                    </div>
+                                    <div class="input-group" id="zone-action-point-group" style="display: none;">
+                                        <label>Point Type:</label>
+                                        <select id="zone-point-type" onchange="recognitionHandleActionPointTypeChange('zone')">
+                                            <option value="generic">Generic</option>
+                                            <option value="shelf">Shelf</option>
+                                            <option value="pallet">Pallet</option>
+                                            <option value="dock">Dock</option>
+                                            <option value="fixture">Fixture</option>
+                                        </select>
+                                    </div>
+                                    <div id="zone-shelf-config-group" style="display:none;">
+                                        <div class="input-group">
+                                            <label>Linked Shelf Template:</label>
+                                            <select id="zone-shelf-template" onchange="recognitionHandleActionPointTemplateChange('zone')">
+                                                <option value="">Select shelf template</option>
+                                            </select>
+                                        </div>
+                                        <div class="input-group" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                                            <label style="margin:0;">Shelf Detection On:</label>
+                                            <label class="path-toggle-switch" style="margin:0 0 0 auto;">
+                                                <input class="path-toggle-input" type="checkbox" id="zone-shelf-recognize" onchange="recognitionHandleActionPointTemplateChange('zone')">
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div id="zone-shelf-summary" class="rcg-action-summary"></div>
                                     </div>
                                     <div class="input-group" id="charge-param-group">
                                         <label>Stop Timer (s):</label>
@@ -13353,6 +13417,7 @@
 
                     // Zone creation
                     let currentZoneType = 'normal';  // 'normal', 'action', 'charge'
+                    window.currentZoneType = currentZoneType;
                     let settingOrientation = false;  // Track if we're in orientation drag mode
                     let orientationStartX = 0;
                     let orientationStartY = 0;
@@ -20353,6 +20418,9 @@
                             .then(data => {
                                 zones = data.zones || {};
                                 updateZoneList();
+                                if (typeof recognitionLoadData === 'function' && window.recognitionState && window.recognitionState.initialized) {
+                                    recognitionLoadData({ preserveSelection: true });
+                                }
                                 if (followRobotViewEnabled && robotPose && mapData) {
                                     centerViewOnRobotPose();
                                 }
@@ -24253,6 +24321,9 @@
                         const y = parseFloat(document.getElementById('zone-y').value);
                         const theta = parseFloat(document.getElementById('zone-theta').value) || 0;
                         const speed = parseFloat(document.getElementById('zone-speed').value) || 0.5;
+                        const actionPointConfig = (typeof recognitionGetActionPointPayloadFromForm === 'function')
+                            ? recognitionGetActionPointPayloadFromForm('zone')
+                            : { point_type: 'generic', template_id: '', recognize: false };
 
                         if (!name) {
                             zoneStepDone[2] = false;
@@ -24272,6 +24343,11 @@
                             return;
                         }
 
+                        if (currentZoneType === 'action' && actionPointConfig.point_type === 'shelf' && !actionPointConfig.template_id) {
+                            showZoneFormStatus('Select a shelf template for shelf-aware action points', 'error');
+                            return;
+                        }
+
                         const zoneData = {
                             name,
                             x,
@@ -24283,6 +24359,9 @@
                                 0,
                                 parseFloat(document.getElementById('zone-charge-duration')?.value) || 0
                             ),
+                            point_type: actionPointConfig.point_type,
+                            template_id: actionPointConfig.template_id,
+                            recognize: actionPointConfig.recognize,
                         };
 
                         // Add type-specific parameters
@@ -24482,10 +24561,16 @@
 
                     function editZoneParameters(name, zone) {
                         const metadata = zone.metadata || {};
+                        const actionPointConfig = (zone.action_point_config && typeof zone.action_point_config === 'object')
+                            ? zone.action_point_config
+                            : ((metadata.action_point && typeof metadata.action_point === 'object') ? metadata.action_point : {});
                         const zoneType = resolveZoneType(zone);
                         const speed = metadata.speed || zone.speed || 0.5;
                         const action = metadata.action || zone.action || '';
                         const chargeDuration = metadata.charge_duration || zone.charge_duration || 0;
+                        const pointType = String(actionPointConfig.point_type || 'generic').trim().toLowerCase() || 'generic';
+                        const shelfTemplateId = String(actionPointConfig.template_id || '').trim();
+                        const shelfRecognize = Boolean(actionPointConfig.recognize);
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
                         const posY = (zone.position && zone.position.y !== undefined) ? zone.position.y : 0;
                         const headingDeg = getZoneHeadingDegrees(zone);
@@ -24531,6 +24616,30 @@
                         <label style="${labelStyle}">Action</label>
                         <select id="ez-action" data-selected-action="${action}" style="${inputStyle}"></select>
                     </div>
+                    <div id="ez-action-point-group" style="${rowStyle}display:${zoneType==='action'?'block':'none'};">
+                        <label style="${labelStyle}">Point Type</label>
+                        <select id="ez-point-type" style="${inputStyle}" onchange="recognitionHandleActionPointTypeChange('ez')">
+                            <option value="generic"${pointType==='generic'?' selected':''}>Generic</option>
+                            <option value="shelf"${pointType==='shelf'?' selected':''}>Shelf</option>
+                            <option value="pallet"${pointType==='pallet'?' selected':''}>Pallet</option>
+                            <option value="dock"${pointType==='dock'?' selected':''}>Dock</option>
+                            <option value="fixture"${pointType==='fixture'?' selected':''}>Fixture</option>
+                        </select>
+                    </div>
+                    <div id="ez-shelf-config-group" style="${rowStyle}display:${zoneType==='action' && pointType==='shelf' ? 'block' : 'none'};">
+                        <label style="${labelStyle}">Linked Shelf Template</label>
+                        <select id="ez-shelf-template" style="${inputStyle}" onchange="recognitionHandleActionPointTemplateChange('ez')">
+                            <option value="">Select shelf template</option>
+                        </select>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;">
+                            <label style="${labelStyle}margin:0;">Shelf Detection On</label>
+                            <label class="path-toggle-switch" style="margin:0 0 0 auto;">
+                                <input class="path-toggle-input" type="checkbox" id="ez-shelf-recognize" ${shelfRecognize ? 'checked' : ''} onchange="recognitionHandleActionPointTemplateChange('ez')">
+                                <span class="path-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div id="ez-shelf-summary" class="rcg-action-summary"></div>
+                    </div>
                     <div id="ez-charge-group" style="${rowStyle}">
                         <label style="${labelStyle}">Stop Timer (s)</label>
                         <input type="number" id="ez-charge-duration" value="${chargeDuration}" step="1" min="0" style="${inputStyle}">
@@ -24549,10 +24658,17 @@
                                     const newHeadingDeg= parseFloat(document.getElementById('ez-heading').value);
                                     const newSpeed     = parseFloat(document.getElementById('ez-speed').value);
                                     const newAction    = String(document.getElementById('ez-action').value || '').trim();
+                                    const actionPointPayload = (typeof recognitionGetActionPointPayloadFromForm === 'function')
+                                        ? recognitionGetActionPointPayloadFromForm('ez')
+                                        : { point_type: 'generic', template_id: '', recognize: false };
                                     const newCharge    = parseFloat(document.getElementById('ez-charge-duration').value);
 
                                     if (!newName) { showStatus('Zone name cannot be empty', 'error'); return; }
                                     if (isNaN(newX) || isNaN(newY)) { showStatus('Invalid coordinates', 'error'); return; }
+                                    if (newType === 'action' && actionPointPayload.point_type === 'shelf' && !actionPointPayload.template_id) {
+                                        showStatus('Select a shelf template for shelf-aware action points', 'error');
+                                        return;
+                                    }
 
                                     const newThetaRad = newHeadingDeg * Math.PI / 180.0;
                                     closeNotification();
@@ -24566,6 +24682,9 @@
                                         speed: newSpeed,
                                         action: newType === 'action' ? newAction : '',
                                         charge_duration: Math.max(0, Number.isFinite(newCharge) ? newCharge : 0),
+                                        point_type: actionPointPayload.point_type,
+                                        template_id: actionPointPayload.template_id,
+                                        recognize: actionPointPayload.recognize,
                                     };
 
                                     const saveZonePayload = async (overwrite = false) => {
@@ -24640,6 +24759,14 @@
                             const typeSelect = document.getElementById('ez-type');
                             if (typeSelect) typeSelect.addEventListener('change', editZoneTypeChange);
                             refreshZoneActionOptionsUI();
+                            if (typeof recognitionRefreshActionPointForm === 'function') {
+                                recognitionRefreshActionPointForm('ez');
+                                const templateSelect = document.getElementById('ez-shelf-template');
+                                if (templateSelect && shelfTemplateId) {
+                                    templateSelect.value = shelfTemplateId;
+                                }
+                                recognitionRefreshActionPointForm('ez');
+                            }
                         }, 80);
                     }
 
@@ -24647,6 +24774,9 @@
                         const t = (document.getElementById('ez-type') || {}).value;
                         const ag = document.getElementById('ez-action-group');
                         if (ag) ag.style.display = t === 'action' ? 'block' : 'none';
+                        if (typeof recognitionRefreshActionPointForm === 'function') {
+                            recognitionRefreshActionPointForm('ez');
+                        }
                     }
 
                     function saveZoneParameters(name, type, speed, action, chargeDuration) {
@@ -25879,6 +26009,7 @@
                     // Zone type selection
                     function setZoneType(type) {
                         currentZoneType = type;
+                        window.currentZoneType = currentZoneType;
                         document.querySelectorAll('.zone-type-btn').forEach(btn => btn.classList.remove('active'));
                         document.getElementById('zone-type-' + type).classList.add('active');
 
@@ -25897,6 +26028,9 @@
                             }
                         } else {
                             actionGroup.style.display = 'none';
+                        }
+                        if (typeof recognitionRefreshActionPointForm === 'function') {
+                            recognitionRefreshActionPointForm('zone');
                         }
                     }
 
@@ -26085,6 +26219,42 @@
                                         <div class="property-value"><code>${metadata.action || zone.action}</code></div>
                                     </div>
                                 `;
+                            }
+
+                            const actionPointConfig = (zone.action_point_config && typeof zone.action_point_config === 'object')
+                                ? zone.action_point_config
+                                : ((metadata.action_point && typeof metadata.action_point === 'object') ? metadata.action_point : null);
+                            if (zoneType === 'action' && actionPointConfig) {
+                                const pointType = String(actionPointConfig.point_type || 'generic').trim().toLowerCase();
+                                const templateSummary = actionPointConfig.template_summary && typeof actionPointConfig.template_summary === 'object'
+                                    ? actionPointConfig.template_summary
+                                    : null;
+                                const warningText = Array.isArray(actionPointConfig.warnings) && actionPointConfig.warnings.length
+                                    ? `<div style="margin-top:6px;color:#fbbf24;">${escapeHtml(actionPointConfig.warnings.join(' '))}</div>`
+                                    : '';
+                                html += `
+                                    <div class="property-group">
+                                        <div class="property-label">Point Type</div>
+                                        <div class="property-value">${escapeHtml(pointType || 'generic')}</div>
+                                    </div>
+                                `;
+                                if (pointType === 'shelf') {
+                                    html += `
+                                        <div class="property-group">
+                                            <div class="property-label">Linked Shelf Template</div>
+                                            <div class="property-value">
+                                                ${templateSummary
+                                                    ? `<code>${escapeHtml(templateSummary.name || templateSummary.template_id || 'Template')}</code><br><span style="color:var(--text-tertiary);">${escapeHtml(templateSummary.geometry_type || 'profile')} · v${Number(templateSummary.version || 1)} · ${escapeHtml(templateSummary.status || 'draft')}</span>`
+                                                    : '<span style="color:#fca5a5;">Missing template</span>'}
+                                                ${warningText}
+                                            </div>
+                                        </div>
+                                        <div class="property-group">
+                                            <div class="property-label">Shelf Detection</div>
+                                            <div class="property-value">${actionPointConfig.recognize ? 'On' : 'Off'}</div>
+                                        </div>
+                                    `;
+                                }
                             }
 
                             if ((metadata.charge_duration || zone.charge_duration)) {
@@ -28741,6 +28911,128 @@
     </div>
 
     <!-- ── Device Config Tab ───────────────────────────────── -->
+    <div id="recognition-tab" class="tab-content">
+        <div id="recognition-body">
+            <aside id="recognition-library">
+                <div class="rcg-library-rail">
+                    <button class="rcg-category-btn active" type="button" data-rcg-category="shelves" onclick="recognitionSetCategory('shelves')" title="Shelf recognition templates">
+                        <i class="fas fa-boxes-stacked"></i>
+                        <span>Shelf</span>
+                    </button>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="pallets" onclick="recognitionSetCategory('pallets')" title="Pallet recognition templates">
+                        <i class="fas fa-pallet"></i>
+                        <span>Pallet</span>
+                    </button>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="docks" onclick="recognitionSetCategory('docks')" title="Dock recognition templates">
+                        <i class="fas fa-warehouse"></i>
+                        <span>Dock</span>
+                    </button>
+                    <button class="rcg-category-btn" type="button" data-rcg-category="fixtures" onclick="recognitionSetCategory('fixtures')" title="Fixture recognition templates">
+                        <i class="fas fa-ruler-combined"></i>
+                        <span>Fix</span>
+                    </button>
+                </div>
+                <div class="rcg-library-panel">
+                    <div class="rcg-pane-header">
+                        <div>
+                            <div class="rcg-pane-kicker">Recognition Library</div>
+                            <div class="rcg-pane-title">Templates</div>
+                        </div>
+                        <div class="rcg-inline-actions">
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionCreateTemplate()" title="New template"><i class="fas fa-plus"></i><span>New</span></button>
+                            <button type="button" class="rcg-inline-btn" onclick="recognitionPasteGeometry()" title="Paste geometry"><i class="fas fa-paste"></i><span>Paste</span></button>
+                        </div>
+                    </div>
+                    <div class="rcg-search-wrap">
+                        <input id="recognition-library-search" class="rcg-search-input" type="text" placeholder="Search recognition templates" oninput="recognitionSetSearch(this.value)">
+                    </div>
+                    <div id="recognition-library-content" class="rcg-library-scroll"></div>
+                </div>
+            </aside>
+
+            <section id="recognition-workspace">
+                <div class="rcg-stage-header">
+                    <div>
+                        <div class="rcg-pane-kicker">Recognition Geometry</div>
+                        <div id="recognition-stage-title" class="rcg-stage-title">Recognition Geometry</div>
+                        <div id="recognition-stage-subtitle" class="rcg-stage-subtitle"></div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <div class="rcg-stage-view-group">
+                            <button type="button" class="rcg-stage-chip-btn active" data-rcg-view="top" onclick="recognitionSetStageView('top')">Top</button>
+                            <button type="button" class="rcg-stage-chip-btn" data-rcg-view="side" onclick="recognitionSetStageView('side')">Side</button>
+                            <button type="button" class="rcg-stage-chip-btn" data-rcg-view="iso" onclick="recognitionSetStageView('iso')">Iso</button>
+                        </div>
+                        <div class="rcg-stage-filter-group">
+                            <div class="recognition-toolbar-chip">CAD</div>
+                            <div class="recognition-toolbar-chip">Safe</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="recognition-stage-shell">
+                    <div class="rcg-tool-palette">
+                        <button type="button" class="rcg-tool-btn active" data-rcg-tool="select" onclick="recognitionSetTool('select')" title="Select and move geometry">
+                            <i class="fas fa-mouse-pointer"></i><span class="rcg-tool-label">Select</span>
+                        </button>
+                        <button type="button" class="rcg-tool-btn" data-rcg-tool="point" onclick="recognitionSetTool('point')" title="Place anchor points">
+                            <i class="fas fa-dot-circle"></i><span class="rcg-tool-label">Point</span>
+                        </button>
+                        <button type="button" class="rcg-tool-btn" data-rcg-tool="endpoint" onclick="recognitionSetTool('endpoint')" title="Place required endpoints">
+                            <i class="fas fa-location-dot"></i><span class="rcg-tool-label">Endpoint</span>
+                        </button>
+                        <button type="button" class="rcg-tool-btn" data-rcg-tool="rectangle" onclick="recognitionSetTool('rectangle')" title="Draw capture rectangles">
+                            <i class="fas fa-vector-square"></i><span class="rcg-tool-label">Rect</span>
+                        </button>
+                        <button type="button" class="rcg-tool-btn" data-rcg-tool="segment" onclick="recognitionSetTool('segment')" title="Draw span segments">
+                            <i class="fas fa-ruler-horizontal"></i><span class="rcg-tool-label">Span</span>
+                        </button>
+                    </div>
+                    <div id="recognition-stage" tabindex="0">
+                        <svg id="recognition-svg" aria-label="Recognition geometry editor canvas"></svg>
+                        <div id="recognition-empty-state" class="rcg-empty-state">
+                            <div>
+                                <div class="rcg-pane-title">Canvas Ready</div>
+                                <div class="rcg-empty-hint">Use the tool palette to place points, rectangles, spans, and centerlines.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="recognition-stage-status" class="rcg-stage-status">Recognition editor ready.</div>
+                    <div class="rcg-view-dock">
+                        <button type="button" class="rcg-tool-btn" onclick="recognitionZoom(0.08)" title="Zoom in"><i class="fas fa-plus"></i></button>
+                        <button type="button" class="rcg-tool-btn" onclick="recognitionZoom(-0.08)" title="Zoom out"><i class="fas fa-minus"></i></button>
+                        <button type="button" class="rcg-tool-btn" onclick="recognitionFitView()" title="Fit canvas"><i class="fas fa-expand-arrows-alt"></i></button>
+                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleGrid()" title="Toggle grid"><i class="fas fa-th"></i></button>
+                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleLabels()" title="Toggle labels"><i class="fas fa-tag"></i></button>
+                        <button type="button" class="rcg-tool-btn" onclick="recognitionToggleConstraints()" title="Toggle constraints"><i class="fas fa-link"></i></button>
+                    </div>
+                </div>
+            </section>
+
+            <aside id="recognition-inspector">
+                <div class="rcg-pane-header">
+                    <div>
+                        <div class="rcg-pane-kicker">Inspector</div>
+                        <div class="rcg-pane-title">Context</div>
+                    </div>
+                </div>
+                <div class="rcg-inspector-tabs">
+                    <button type="button" class="rcg-inspector-tab active" data-rcg-inspector-tab="properties" onclick="recognitionSetInspectorTab('properties')">Properties</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="geometry" onclick="recognitionSetInspectorTab('geometry')">Geometry</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="validation" onclick="recognitionSetInspectorTab('validation')">Validation</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="usage" onclick="recognitionSetInspectorTab('usage')">Usage</button>
+                </div>
+                <div id="recognition-inspector-content" style="flex:1;min-height:0;"></div>
+            </aside>
+        </div>
+
+        <div id="recognition-overflow-menu" class="rcg-popover">
+            <button type="button" class="rcg-inline-btn" onclick="recognitionDeleteActive(); recognitionCloseMenus();"><i class="fas fa-trash"></i><span>Delete Template</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionCopyGeometry(); recognitionCloseMenus();"><i class="fas fa-copy"></i><span>Copy Geometry</span></button>
+            <button type="button" class="rcg-inline-btn" onclick="recognitionFitView(); recognitionCloseMenus();"><i class="fas fa-expand-arrows-alt"></i><span>Fit Canvas</span></button>
+        </div>
+        <input id="recognition-import-input" type="file" accept=".json,application/json" style="display:none;">
+    </div>
+
     <div id="device-config-tab" class="tab-content">
 
         <!-- ══ COMMAND BAR ══════════════════════════════════════ -->
@@ -28963,6 +29255,7 @@
 
             document.body.classList.toggle('editor-tab-active', tabName === 'editor');
             document.body.classList.toggle('device-config-tab-active', tabName === 'device-config');
+            document.body.classList.toggle('recognition-tab-active', tabName === 'recognition');
 
             // Deactivate all tab-button elements (legacy nav)
             document.querySelectorAll('.tab-button').forEach(btn => {
@@ -28982,6 +29275,10 @@
             const deviceConfigControls = document.getElementById('device-config-top-controls');
             if (deviceConfigControls) {
                 deviceConfigControls.style.display = (tabName === 'device-config') ? '' : 'none';
+            }
+            const recognitionControls = document.getElementById('recognition-top-controls');
+            if (recognitionControls) {
+                recognitionControls.style.display = (tabName === 'recognition') ? '' : 'none';
             }
 
             // Show selected tab
@@ -29017,6 +29314,10 @@
                     if (typeof adoptDevConfigContent === 'function') adoptDevConfigContent();
                     if (typeof focusDeviceConfigSection === 'function') focusDeviceConfigSection('visual');
                 }
+            }
+
+            if (tabName === 'recognition' && typeof recognitionInit === 'function') {
+                recognitionInit(false);
             }
         }
 
@@ -36566,6 +36867,7 @@
         </div>
     </div>
 
+    <script src="/static/dev_recognition.js"></script>
 </body>
 
 </html>
