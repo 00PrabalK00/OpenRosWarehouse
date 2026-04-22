@@ -753,6 +753,17 @@ class ShelfGeometricRefinerNode(Node):
         self.declare_parameter('max_pose_residual_accept_m', 0.06)
         self.declare_parameter('max_model_error_accept_m', 0.12)
         self.declare_parameter('scan_max_age_sec', 0.40)
+        # Proximity guard: if the rough shelf center is closer than this the
+        # robot is already inside or directly under the shelf (scanner sees
+        # back legs).  Skip the whole paper pipeline in that case and reset
+        # the temporal tracker so stale back-leg stability does not carry
+        # forward after the robot exits.
+        self.declare_parameter('min_rough_pose_distance_m', 0.40)
+        # Yaw sanity check: reject refinement if the NLS result deviates
+        # more than this from the detector's reported yaw.  Prevents the
+        # solver from converging on the 180°-flipped pose when back legs are
+        # the only visible targets.
+        self.declare_parameter('max_refined_yaw_delta_deg', 45.0)
 
         # Temporal stability
         self.declare_parameter('temporal_window_size', 8)
@@ -855,6 +866,27 @@ class ShelfGeometricRefinerNode(Node):
         rough_cy = float(center_pose.get('y', 0.0))
         rough_yaw = float(center_pose.get('yaw', 0.0))
 
+        # Proximity guard: if the rough shelf centre is too close to the
+        # robot origin the robot is already inside (or right under) the
+        # shelf.  The scanner will see the back legs, not the front ones; the
+        # paper pipeline would validate and NLS-refine those back-leg points
+        # with high confidence, boost candidate_stability_score, and strip
+        # front_midpoint from center_pose — all of which poisons the docking
+        # plan for any subsequent approach.  Skip the whole pipeline here and
+        # hard-reset the temporal tracker so that back-leg observations do not
+        # contribute to temporal stability when the robot exits again.
+        rough_dist = math.hypot(rough_cx, rough_cy)
+        min_dist = float(self._p['min_rough_pose_distance_m'])
+        if rough_dist < min_dist:
+            self._tracker.reset()
+            self._last_refined = None
+            out = self._annotate_no_refinement(
+                out,
+                f'shelf_too_close ({rough_dist:.2f} m < {min_dist:.2f} m)',
+            )
+            self._publish(out)
+            return
+
         # Check scan freshness.
         scan_age = time.monotonic() - self._latest_scan_stamp
         max_age = float(self._p['scan_max_age_sec'])
@@ -905,6 +937,21 @@ class ShelfGeometricRefinerNode(Node):
             self._publish(out)
             return
 
+        # Yaw sanity check: if the NLS solution is more than
+        # max_refined_yaw_delta_deg away from the detector's yaw the solver
+        # converged on the wrong orientation (e.g. 180° flip when only back
+        # legs were visible).  Reject rather than propagate a flipped heading.
+        yaw_delta = abs(_norm_angle(refined.yaw - rough_yaw))
+        max_yaw_delta = math.radians(float(self._p['max_refined_yaw_delta_deg']))
+        if yaw_delta > max_yaw_delta:
+            out = self._annotate_no_refinement(
+                out,
+                f'refinement_rejected (yaw_delta={math.degrees(yaw_delta):.1f}° '
+                f'> {math.degrees(max_yaw_delta):.1f}°)',
+            )
+            self._publish(out)
+            return
+
         # Temporal tracking.
         self._tracker.add(refined.cx, refined.cy, refined.yaw, time.monotonic())
         tol_pos = float(self._p['temporal_pos_tol_m'])
@@ -918,6 +965,15 @@ class ShelfGeometricRefinerNode(Node):
             'yaw': refined.yaw,
             'frame_id': center_pose.get('frame_id', 'base_link'),
         }
+        # Carry through the original detector geometry fields so that any
+        # code using center_pose as a fallback when committed_target_pose is
+        # transiently invalid (e.g. _current_shelf_opening_pose) can still
+        # read front_midpoint, widths and depth.  We keep the detector's
+        # values because they reference the front legs seen at detection time;
+        # the refiner only improves the (cx, cy, yaw) of the shelf centre.
+        for _gk in ('front_midpoint', 'back_midpoint', 'front_width', 'back_width', 'depth'):
+            if _gk in center_pose:
+                refined_pose_dict[_gk] = center_pose[_gk]
         out['center_pose'] = refined_pose_dict
 
         # Add refinement metadata fields.
