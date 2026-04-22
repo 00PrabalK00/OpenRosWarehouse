@@ -1794,6 +1794,8 @@
         const groupEl = document.getElementById(`${prefix}-action-point-group`);
         const shelfConfigEl = document.getElementById(`${prefix}-shelf-config-group`);
         const summaryEl = document.getElementById(`${prefix}-shelf-summary`);
+        const prePointCoordsEl = document.getElementById(`${prefix}-pre-point-coords`);
+        const prePointEnabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
         const zoneType = getActionPointZoneType(prefix);
         const showActionPoint = zoneType === 'action';
         if (groupEl) groupEl.style.display = showActionPoint ? 'block' : 'none';
@@ -1813,6 +1815,10 @@
         }
         if (shelfConfigEl) {
             shelfConfigEl.style.display = pointType === 'shelf' ? 'block' : 'none';
+        }
+        // Pre-point coords visibility follows its toggle state; only relevant for shelf type
+        if (prePointCoordsEl && prePointEnabledEl) {
+            prePointCoordsEl.style.display = (pointType === 'shelf' && prePointEnabledEl.checked) ? 'block' : 'none';
         }
         if (summaryEl) {
             summaryEl.innerHTML = buildActionPointSummary(templateEl ? templateEl.value : '', pointType, Boolean(recognizeEl && recognizeEl.checked));

@@ -721,6 +721,63 @@ def export_recognition_template(template_id):
     return _status(result, fail_code=404)
 
 
+@app.route('/api/recognition/templates/pull_all', methods=['POST'])
+def pull_all_recognition_templates():
+    """Pull all recognition files from the robot to the local store."""
+    node, err = _node()
+    if err:
+        return err
+
+    if hasattr(node, 'pull_all_recognition_templates'):
+        result = node.pull_all_recognition_templates()
+    elif hasattr(node, 'sync_recognition_templates'):
+        result = node.sync_recognition_templates(direction='pull')
+    else:
+        # Fallback: list templates (acts as a refresh from whatever source is available)
+        result = node.list_recognition_templates()
+        if isinstance(result, dict):
+            result = dict(result)
+            result.setdefault('message', 'Pull triggered (list refreshed)')
+    return _status(result, fail_code=503)
+
+
+@app.route('/api/recognition/templates/push_all', methods=['POST'])
+def push_all_recognition_templates():
+    """Push all recognition files from local store to the robot."""
+    node, err = _node()
+    if err:
+        return err
+
+    if hasattr(node, 'push_all_recognition_templates'):
+        result = node.push_all_recognition_templates()
+    elif hasattr(node, 'sync_recognition_templates'):
+        result = node.sync_recognition_templates(direction='push')
+    else:
+        # Fallback: attempt to publish each known template
+        list_result = node.list_recognition_templates()
+        templates = []
+        if isinstance(list_result, dict):
+            templates = list_result.get('templates', list_result.get('items', []))
+        elif isinstance(list_result, list):
+            templates = list_result
+        pushed = 0
+        errors = []
+        for tmpl in templates:
+            try:
+                r = node.publish_recognition_template(tmpl)
+                if isinstance(r, dict) and r.get('ok'):
+                    pushed += 1
+                else:
+                    errors.append(str(tmpl.get('name', tmpl.get('id', '?'))))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(str(exc))
+        if errors:
+            result = {'ok': False, 'message': 'Pushed ' + str(pushed) + ', failed: ' + ', '.join(errors)}
+        else:
+            result = {'ok': True, 'message': 'Pushed ' + str(pushed) + ' template(s)'}
+    return _status(result, fail_code=503)
+
+
 @app.route('/api/path/follow', methods=['POST'])
 def follow_path():
     node, err = _node()

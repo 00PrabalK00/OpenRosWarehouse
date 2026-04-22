@@ -12595,6 +12595,38 @@
                                             </label>
                                         </div>
                                         <div id="zone-shelf-summary" class="rcg-action-summary"></div>
+                                        <div class="input-group" style="border-top:1px solid var(--border-chrome,#30363d);margin-top:8px;padding-top:8px;">
+                                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                                                <label style="margin:0;display:flex;flex-direction:column;gap:2px;">
+                                                    <span><i class="fas fa-map-pin" style="color:var(--accent-normal,#3b82f6);margin-right:4px;"></i>Pre Point</span>
+                                                    <span style="font-weight:400;font-size:10px;color:var(--text-secondary,#8b949e);">Intermediate waypoint before shelf detection</span>
+                                                </label>
+                                                <label class="path-toggle-switch" style="margin:0 0 0 auto;flex-shrink:0;">
+                                                    <input class="path-toggle-input" type="checkbox" id="zone-pre-point-enabled" onchange="recognitionHandlePrePointToggle('zone')">
+                                                    <span class="path-toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <div id="zone-pre-point-coords" style="display:none;margin-top:6px;">
+                                                <div style="display:flex;gap:6px;margin-bottom:4px;">
+                                                    <div style="flex:1;">
+                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">X (m)</label>
+                                                        <input type="number" id="zone-pre-point-x" step="0.01" placeholder="0.00" style="width:100%;">
+                                                    </div>
+                                                    <div style="flex:1;">
+                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Y (m)</label>
+                                                        <input type="number" id="zone-pre-point-y" step="0.01" placeholder="0.00" style="width:100%;">
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Heading (deg, optional)</label>
+                                                    <input type="number" id="zone-pre-point-theta" step="1" min="-180" max="180" value="0" style="width:100%;">
+                                                </div>
+                                                <div style="margin-top:6px;font-size:10px;color:var(--text-tertiary,#6b7280);display:flex;align-items:center;gap:4px;">
+                                                    <i class="fas fa-route" style="color:var(--accent-normal,#3b82f6);"></i>
+                                                    <span>Path → <strong>Pre Point</strong> → Shelf Detection → Shelf Execution</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="input-group" id="charge-param-group">
                                         <label>Stop Timer (s):</label>
@@ -18224,6 +18256,705 @@
                             const text = row.textContent.toLowerCase();
                             row.classList.toggle('hidden', q !== '' && !text.includes(q));
                         });
+                    }
+
+                    // ─────────────────────────────────────────────────────────
+                    // Recognition Module – full implementation
+                    // ─────────────────────────────────────────────────────────
+                    const rcgState = { category: 'charger', search: '', activeId: null, templates: [], dirty: false, initialized: false, inspectorTab: 'usage' };
+
+                    // ── Init & load ───────────────────────────────────────────
+                    async function recognitionInit(force = false) {
+                        if (rcgState.initialized && !force) return;
+                        rcgState.initialized = true;
+                        recognitionSetCategory('charger');
+                        await recognitionLoadData({ preserveSelection: false });
+                    }
+
+                    async function recognitionLoadData({ preserveSelection = false } = {}) {
+                        const prevId = preserveSelection ? rcgState.activeId : null;
+                        rcgSetLibStatus('Loading…');
+                        try {
+                            const r = await fetch('/api/recognition/templates');
+                            if (!r.ok) throw new Error('HTTP ' + r.status);
+                            const data = await r.json();
+                            rcgState.templates = data.templates || (Array.isArray(data) ? data : []);
+                            recognitionRenderLibrary();
+                            rcgSetLibStatus(rcgState.templates.length + ' file(s)');
+                            if (prevId) {
+                                const still = rcgState.templates.find(t => rcgTemplateId(t) === prevId);
+                                if (still) recognitionSelectFile(prevId);
+                            }
+                        } catch (err) {
+                            rcgSetLibStatus('Load failed: ' + err.message);
+                            const c = document.getElementById('recognition-library-content');
+                            if (c) c.innerHTML = '<div class="rcg-empty-state"><div class="rcg-empty-hint" style="color:#fc8181;">Failed to load: ' + err.message + '</div></div>';
+                        }
+                    }
+
+                    function rcgTemplateId(t) {
+                        return t.id || ((t.type || t.class || 'unknown') + '/' + (t.name || 'unnamed'));
+                    }
+
+                    function rcgSetLibStatus(msg, color) {
+                        const el = document.getElementById('rcg-lib-status');
+                        if (el) { el.textContent = msg; el.style.color = color || ''; }
+                    }
+
+                    function rcgSetStatus(msg, color) {
+                        const el = document.getElementById('recognition-stage-status');
+                        if (el) { el.textContent = msg; el.style.color = color || ''; }
+                    }
+
+                    // ── Category, search, library render ──────────────────────
+                    function recognitionSetCategory(cat) {
+                        rcgState.category = cat;
+                        document.querySelectorAll('.rcg-category-btn').forEach(b => b.classList.toggle('active', b.dataset.rcgCategory === cat));
+                        const titles = { charger: 'Charger Files', shelf: 'Shelf Files', pallet: 'Pallet / Camera', tag: 'Tag Files' };
+                        const el = document.getElementById('rcg-category-title');
+                        if (el) el.textContent = titles[cat] || cat;
+                        recognitionRenderLibrary();
+                    }
+
+                    function recognitionSetSearch(q) {
+                        rcgState.search = (q || '').toLowerCase().trim();
+                        recognitionRenderLibrary();
+                    }
+
+                    function recognitionRenderLibrary() {
+                        const cont = document.getElementById('recognition-library-content');
+                        if (!cont) return;
+                        const q = rcgState.search;
+                        const cat = rcgState.category;
+                        const typeMap = { charger: ['charger'], shelf: ['shelf'], pallet: ['pallet', 'camera'], tag: ['tag'] };
+                        const types = typeMap[cat] || [cat];
+                        const filtered = rcgState.templates.filter(t => {
+                            const ttype = (t.type || t.class || '').toLowerCase();
+                            const matchType = types.some(ty => ttype.includes(ty));
+                            const name = (t.name || t.id || '').toLowerCase();
+                            const matchSearch = !q || name.includes(q) || ttype.includes(q);
+                            return matchType && matchSearch;
+                        });
+                        if (!filtered.length) {
+                            cont.innerHTML = '<div class="rcg-empty-state"><div class="rcg-empty-hint">No files for this category.<br>Use Pull All to sync from robot.</div></div>';
+                            return;
+                        }
+                        const iconMap = { charger: 'fa-plug', shelf: 'fa-boxes-stacked', pallet: 'fa-pallet', camera: 'fa-camera', tag: 'fa-qrcode' };
+                        cont.innerHTML = filtered.map(t => {
+                            const id = rcgTemplateId(t);
+                            const name = t.name || t.id || 'unnamed';
+                            const ttype = (t.type || t.class || '').toLowerCase();
+                            const iconKey = Object.keys(iconMap).find(k => ttype.includes(k)) || 'shelf';
+                            const synced = t.synced !== false;
+                            const active = rcgState.activeId === id;
+                            const safeId = id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                            return `<div class="rcg-file-row${active ? ' active' : ''}" onclick="recognitionSelectFile('${safeId}')">
+                                <i class="fas ${iconMap[iconKey]} rcg-file-icon"></i>
+                                <span class="rcg-file-name" title="${name}">${name}</span>
+                                <span class="rcg-file-sync ${synced?'synced':'unsynced'}" title="${synced?'Synced':'Not yet pushed'}">${synced?'●':'○'}</span>
+                                <div class="rcg-file-actions">
+                                    <button class="rcg-file-act-btn" title="Push to robot" onclick="event.stopPropagation();recognitionPushFile('${safeId}')"><i class="fas fa-upload"></i></button>
+                                    <button class="rcg-file-act-btn" title="Duplicate" onclick="event.stopPropagation();recognitionDuplicate('${safeId}')"><i class="fas fa-copy"></i></button>
+                                </div>
+                            </div>`;
+                        }).join('');
+                    }
+
+                    // ── Select & display form ─────────────────────────────────
+                    function recognitionSelectFile(id) {
+                        rcgState.activeId = id;
+                        rcgState.dirty = false;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === id);
+                        recognitionRenderLibrary();
+                        if (!tmpl) return;
+                        const titleEl = document.getElementById('recognition-stage-title');
+                        const subtitleEl = document.getElementById('recognition-stage-subtitle');
+                        if (titleEl) titleEl.textContent = tmpl.name || id;
+                        const ttype = (tmpl.type || tmpl.class || '');
+                        if (subtitleEl) subtitleEl.textContent = ttype + (tmpl.robot_type ? ' · ' + tmpl.robot_type : '');
+                        ['rcg-save-btn','rcg-push-btn','rcg-copy-btn','rcg-delete-btn'].forEach(bid => {
+                            const b = document.getElementById(bid); if (b) b.style.display = '';
+                        });
+                        document.getElementById('recognition-empty-state').style.display = 'none';
+                        const fc = document.getElementById('recognition-form-content');
+                        fc.style.display = '';
+                        fc.innerHTML = recognitionBuildForm(tmpl);
+                        recognitionRenderInspector(tmpl);
+                    }
+
+                    // ── Build form by template type ───────────────────────────
+                    function recognitionBuildForm(tmpl) {
+                        const type = (tmpl.type || tmpl.class || '').toLowerCase();
+                        if (type.includes('charger')) return rcgFormCharger(tmpl);
+                        if (type.includes('shelf'))   return rcgFormShelf(tmpl);
+                        if (type.includes('pallet') || type.includes('camera')) return rcgFormPallet(tmpl);
+                        if (type.includes('tag'))     return rcgFormTag(tmpl);
+                        return rcgFormGeneric(tmpl);
+                    }
+
+                    // helper: number input field
+                    function rcgField(key, label, value, note, step) {
+                        const v = value !== undefined && value !== null ? value : '';
+                        return `<div class="rcg-form-row">
+                            <label class="rcg-form-label">${label}</label>
+                            <input class="rcg-form-input" type="number" data-key="${key}" value="${v}" step="${step||'0.001'}" oninput="rcgMarkDirty(this)">
+                            ${note ? `<span class="rcg-form-note">${note}</span>` : ''}
+                        </div>`;
+                    }
+                    function rcgTextField(key, label, value, note) {
+                        const v = String(value !== undefined && value !== null ? value : '').replace(/"/g,'&quot;');
+                        return `<div class="rcg-form-row">
+                            <label class="rcg-form-label">${label}</label>
+                            <input class="rcg-form-input" type="text" data-key="${key}" value="${v}" oninput="rcgMarkDirty(this)">
+                            ${note ? `<span class="rcg-form-note">${note}</span>` : ''}
+                        </div>`;
+                    }
+                    function rcgCheckField(key, label, value, note) {
+                        return `<div class="rcg-form-check-row">
+                            <input type="checkbox" id="rcg-chk-${key}" data-key="${key}" ${value?'checked':''} onchange="rcgMarkDirty(this)">
+                            <label for="rcg-chk-${key}" style="font-size:11px;">${label}</label>
+                            ${note ? `<span class="rcg-form-note" style="margin-left:4px;">${note}</span>` : ''}
+                        </div>`;
+                    }
+                    function rcgSelectField(key, label, value, options) {
+                        const opts = options.map(o => `<option value="${o.value}" ${value===o.value?'selected':''}>${o.label}</option>`).join('');
+                        return `<div class="rcg-form-row full">
+                            <label class="rcg-form-label">${label}</label>
+                            <select class="rcg-form-select" data-key="${key}" onchange="rcgMarkDirty(this)">${opts}</select>
+                        </div>`;
+                    }
+
+                    function rcgMarkDirty(el) {
+                        el.classList.add('unsaved');
+                        rcgState.dirty = true;
+                    }
+
+                    // ── Charger form ──────────────────────────────────────────
+                    function rcgFormCharger(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-robot"></i> Robot Type</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgSelectField('robot_type','Robot Type', t.robot_type||'amb', [{value:'amb',label:'AMB'},{value:'pallet_truck',label:'Pallet Truck'}])}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-ruler-horizontal"></i> Reflective Strip Detection</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('minwidth','Min Width (m)', t.minwidth, 'Min reflective strip width detected by laser')}
+                                    ${rcgField('maxwidth','Max Width (m)', t.maxwidth, 'Max reflective strip width to consider')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Recommended strip width: 15–20 cm. Center height must align with laser plane.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-crosshairs"></i> Electrode Offset (Charger Coordinate System)</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('dx','dx (m)', t.dx, 'x offset of charging electrode from strip center. AMB default: 0.025')}
+                                    ${rcgField('dy','dy (m)', t.dy, 'y offset. Should be 0 — electrode center aligned with strip center')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-toggle-on"></i> Digital Output Control</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('switchDO','Switch DO Port', t.switchDO!==undefined?t.switchDO:-1, 'DO port for charging relay. Set -1 to disable DO control.', '1')}
+                                    ${rcgField('openDODist','Open DO Distance (m)', t.openDODist, 'Distance threshold to activate DO. Use 0 for DI-triggered logic.')}
+                                    ${rcgCheckField('disableByEMC','Disable DO on E-Stop', t.disableByEMC, 'If checked: emergency stop turns off charging DO')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(252,129,129,0.07);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    If switchDO = -1, openDODist and disableByEMC have no effect. Choose openDODist carefully: too large activates relay prematurely; too small may touch charger before activation.
+                                </div>
+                            </div>
+                            ${(t.robot_type || 'amb') === 'pallet_truck' ? `<div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-info-circle"></i> Pallet Truck Specifics</div>
+                                <div class="rcg-form-grid">
+                                    <div class="rcg-form-note full">Min charger spacing: 1.16 m. Max laser–strip distance: 1 m. Entry: forward. Exit: backward. Measure X (electrode-to-strip plane) manually; set dx ≤ X − 0.01.</div>
+                                </div>
+                            </div>` : ''}
+                        </div>`;
+                    }
+
+                    // ── Shelf form ────────────────────────────────────────────
+                    function rcgFormShelf(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-tag"></i> Identity</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgTextField('name','File Name', t.name)}
+                                    ${rcgTextField('type','Type / Model ID', t.type, 'e.g. s0001, s0002')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-ruler-combined"></i> Physical Dimensions</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('width','Leg Width (m)', t.width, 'Outer width of the two shelf legs in entry direction')}
+                                    ${rcgField('length','Leg Length (m)', t.length, 'Outer width of legs perpendicular to entry')}
+                                    ${rcgField('leg_width','Reflective Strip Width (m)', t.leg_width, 'Standard 3M sticker: 0.05 m')}
+                                    ${rcgField('outer_width','Outer Width (m)', t.outer_width, 'Total shelf width including overhangs (must be ≥ width + 5 cm)')}
+                                    ${rcgField('outer_length','Outer Length (m)', t.outer_length, 'Total shelf length. Must be ≥ length + 5 cm to avoid laser noise')}
+                                    ${rcgSelectField('leg_type','Leg Shape', t.leg_type||'cube', [{value:'cube',label:'Cube'},{value:'cylinder',label:'Cylinder'}])}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-route"></i> Entry Depth</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('align_depth','Align Depth (m)', t.align_depth, 'Backward entry: distance from front legs to robot stop position')}
+                                    ${rcgField('anti_align_depth','Anti-Align Depth (m)', t.anti_align_depth, 'Forward entry: stopping distance when robot x differs from shelf x by 180°')}
+                                    ${rcgField('extra_dist','Extra Dist (m)', t.extra_dist, 'Extra width for laser cutout region around shelf legs')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Straight travel = insertion depth + D_GoWithJack_AheadDist. Pre-point must keep laser ≥ 0.5 m from strips. Set ObsExpansion=0 on entry/exit lines.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-boxes-stacked"></i> Shelf Size Requirements</div>
+                                <div class="rcg-form-grid">
+                                    <div class="rcg-form-note full">Inner width must exceed robot max width by ≥ 20 cm (10 cm each side). With follow-up: inner width ≥ robot width + robot length + 20 cm. Strip width must be ≥ 5 cm. Shelf height: not below robot height, not above robot height + max lift stroke.</div>
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    // ── Pallet form ───────────────────────────────────────────
+                    function rcgFormPallet(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-camera"></i> FM830 Camera Configuration</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgTextField('PercipioID','Percipio Camera ID', t.PercipioID, 'Unique ID printed on white label on the camera body. Leave blank if only one camera.')}
+                                    ${rcgCheckField('onlyForPalletDetection','Pallet Detection Only', t.onlyForPalletDetection, 'Check if camera is dedicated to pallet recognition')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Connect FM830 to main controller USB port. If multiple 830 cameras are installed, PercipioID must be specified for each.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-pallet"></i> Pallet Dimensions</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('pallet_width','Pallet Width (m)', t.pallet_width, 'Total outer pallet width')}
+                                    ${rcgField('pallet_height','Support Column Height (m)', t.pallet_height, 'Height of support columns only — excludes connecting structure height')}
+                                    ${rcgField('pocket_width','Pocket Width (m)', t.pocket_width, 'Width of the center opening')}
+                                    ${rcgField('pocket_height','Pocket Height (m)', t.pocket_height, 'Height of the center opening')}
+                                    ${rcgField('pocket_spacing','Middle Leg Width (m)', t.pocket_spacing, 'Width of the middle support leg')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(252,129,129,0.07);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Only symmetric pallets (equal-size left/right openings) are supported. Pallet thickness (height − pocket_height) must be &gt; 3 cm. Angular deviation vs robot: &lt; 20°. Lateral offset: &lt; pallet width. Camera distance: 1–3 m.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-sliders-h"></i> Motion Parameters</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('RecQRCode_AheadDist','Ahead Distance (m)', t.RecQRCode_AheadDist, 'Recognition planning forward distance')}
+                                    ${rcgField('RecQRCode_BackLength','Back Length (m)', t.RecQRCode_BackLength, 'Backward planning distance ≈ odometry center to fork upper switch. Too large: early DI trigger. Too small: DI may not trigger.')}
+                                    ${rcgField('RecQRCode_PathSpeed','Path Speed (m/s)', t.RecQRCode_PathSpeed, 'Speed during recognition path')}
+                                    ${rcgField('RecOnePathRatio','One-Path Ratio (rad)', t.RecOnePathRatio, 'Tangent threshold for generating single recognition path')}
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    // ── Tag form ──────────────────────────────────────────────
+                    function rcgFormTag(t) {
+                        return `<div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-qrcode"></i> AprilTag Family</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgSelectField('Tagtype','Tag Family', t.Tagtype||'36h11', [
+                                        {value:'16h5',label:'16h5 (30 IDs, longest range, more false positives)'},
+                                        {value:'25h7',label:'25h7 (242 IDs, balanced)'},
+                                        {value:'36h11',label:'36h11 (587 IDs, robust, shortest range)'}
+                                    ])}
+                                    ${rcgField('tagSize','Tag Size (m)', t.tagSize, 'Physical size of one tag. e.g. 0.10 for 10 cm')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Approx max distances at 10 cm tag, f=1075: 16h5 → 3.58 m · 25h7 → 3.07 m · 36h11 → 2.69 m. Tags must be flat, vertical, and correctly oriented.
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-ruler-combined"></i> Tag–Shelf Spatial Relationship</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('X_Dis','X_Dis (m)', t.X_Dis, 'x of tag center in shelf coordinate system. Symmetric front mount: negative shelf length')}
+                                    ${rcgField('Y_Dis','Y_Dis (m)', t.Y_Dis, 'y of tag center. Symmetric front mount: 0')}
+                                    ${rcgField('Z_Dis','Z_Dis (m)', t.Z_Dis, 'z = tag center height above ground')}
+                                    ${rcgField('tagDistance','Tag Distance (m)', t.tagDistance, 'Horizontal distance between centers of the two symmetrically placed tags')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-boxes-stacked"></i> Associated Object Dimensions</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('goodsWidth','Goods Width (m)', t.goodsWidth, 'Total width of the target object / shelf')}
+                                    ${rcgField('goodsLength','Goods Length (m)', t.goodsLength, 'Total length of the target object / shelf')}
+                                </div>
+                            </div>
+                            <div class="rcg-form-section">
+                                <div class="rcg-form-section-title"><i class="fas fa-camera"></i> Camera (RealSense)</div>
+                                <div class="rcg-form-grid">
+                                    ${rcgField('camera_x','Camera x (m)', t.camera_x, 'Camera position x in robot coordinate system')}
+                                    ${rcgField('camera_y','Camera y (m)', t.camera_y, 'Camera position y in robot coordinate system')}
+                                    ${rcgField('camera_z','Camera z (m)', t.camera_z, 'Camera position z in robot coordinate system')}
+                                </div>
+                                <div style="margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:4px;font-size:10px;color:var(--text-tertiary);">
+                                    Connect RealSense via USB 3.0. Select camera type "realsense" in the robot model file and enter position from actual mounting measurement.
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    // ── Generic fallback form ─────────────────────────────────
+                    function rcgFormGeneric(t) {
+                        const skip = new Set(['id','synced']);
+                        const entries = Object.entries(t).filter(([k]) => !skip.has(k));
+                        if (!entries.length) return '<div class="rcg-empty-state"><div class="rcg-empty-hint">No editable fields.</div></div>';
+                        return `<div class="rcg-form-section">
+                            <div class="rcg-form-section-title"><i class="fas fa-sliders-h"></i> Parameters</div>
+                            <div class="rcg-form-grid">
+                                ${entries.map(([k,v]) => typeof v === 'boolean'
+                                    ? rcgCheckField(k, k, v)
+                                    : (typeof v === 'number' ? rcgField(k, k, v) : rcgTextField(k, k, v))
+                                ).join('')}
+                            </div></div>`;
+                    }
+
+                    // ── Save / Push / Delete / Duplicate ─────────────────────
+                    async function recognitionSaveActive() {
+                        if (!rcgState.activeId) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === rcgState.activeId);
+                        if (!tmpl) return;
+                        const fc = document.getElementById('recognition-form-content');
+                        if (!fc) return;
+                        const updated = Object.assign({}, tmpl);
+                        fc.querySelectorAll('[data-key]').forEach(el => {
+                            const key = el.dataset.key;
+                            const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? (el.value !== '' ? parseFloat(el.value) : null) : el.value);
+                            updated[key] = val;
+                        });
+                        rcgSetStatus('Saving…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template: updated })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            Object.assign(tmpl, updated);
+                            rcgState.dirty = false;
+                            fc.querySelectorAll('.unsaved').forEach(e => { e.classList.remove('unsaved'); e.classList.add('saved'); setTimeout(() => e.classList.remove('saved'), 1200); });
+                            rcgSetStatus('Saved successfully', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Save failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionPushFile(id) {
+                        const tid = id || rcgState.activeId;
+                        if (!tid) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === tid);
+                        if (!tmpl) return;
+                        rcgSetStatus('Pushing "' + (tmpl.name || tid) + '" to robot…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/publish', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template: tmpl })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Pushed successfully', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Push failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionPullAll() {
+                        rcgSetLibStatus('Pulling from robot…');
+                        rcgSetStatus('Pulling all recognition files from robot…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/pull_all', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Pull complete', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Pull failed: ' + err.message, '#fc8181');
+                            rcgSetLibStatus('Pull failed');
+                        }
+                    }
+
+                    async function recognitionPushAll() {
+                        rcgSetStatus('Pushing all recognition files to robot…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/push_all', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Push All complete', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: true });
+                        } catch (err) {
+                            rcgSetStatus('Push All failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionDeleteActive() {
+                        if (!rcgState.activeId) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === rcgState.activeId);
+                        const name = tmpl ? tmpl.name : rcgState.activeId;
+                        const confirmed = typeof showConfirm === 'function'
+                            ? await showConfirm('Delete "' + name + '"?', 'Delete', 'Cancel')
+                            : confirm('Delete "' + name + '"?');
+                        if (!confirmed) return;
+                        const tId = tmpl ? tmpl.id || rcgState.activeId : rcgState.activeId;
+                        try {
+                            const r = await fetch('/api/recognition/templates/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template_id: tId })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgState.activeId = null;
+                            ['rcg-save-btn','rcg-push-btn','rcg-copy-btn','rcg-delete-btn'].forEach(bid => {
+                                const b = document.getElementById(bid); if (b) b.style.display = 'none';
+                            });
+                            document.getElementById('recognition-empty-state').style.display = '';
+                            document.getElementById('recognition-form-content').style.display = 'none';
+                            document.getElementById('recognition-stage-title').textContent = 'Select a file';
+                            document.getElementById('recognition-stage-subtitle').textContent = '';
+                            rcgSetStatus('Deleted "' + name + '"', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: false });
+                        } catch (err) {
+                            rcgSetStatus('Delete failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    async function recognitionDuplicate(id) {
+                        const tid = id || rcgState.activeId;
+                        if (!tid) return;
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === tid);
+                        if (!tmpl) return;
+                        const tId = tmpl.id || tid;
+                        rcgSetStatus('Duplicating "' + (tmpl.name || tid) + '"…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/duplicate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template_id: tId })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Duplicated successfully', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: false });
+                        } catch (err) {
+                            rcgSetStatus('Duplicate failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    function recognitionCopyActive() { recognitionDuplicate(rcgState.activeId); }
+
+                    async function recognitionCreateTemplate() {
+                        const cat = rcgState.category;
+                        const typeMap = { charger: 'charger', shelf: 'shelf', pallet: 'pallet', tag: 'tag' };
+                        const type = typeMap[cat] || cat;
+                        const defaultsMap = {
+                            charger: { class:'charger', robot_type:'amb', minwidth:0.05, maxwidth:0.30, dx:0.025, dy:0.0, switchDO:-1, openDODist:0.0, disableByEMC:false },
+                            shelf:   { class:'shelf', type:'s_new', width:0.8, length:0.6, leg_width:0.05, align_depth:0.39, anti_align_depth:0.27, outer_width:0.86, outer_length:0.9, extra_dist:0.1, leg_type:'cube' },
+                            pallet:  { class:'pallet', PercipioID:'', onlyForPalletDetection:false, pallet_width:1.0, pallet_height:0.15, pocket_width:0.45, pocket_height:0.12, pocket_spacing:0.10 },
+                            tag:     { class:'tag', Tagtype:'36h11', tagSize:0.10, X_Dis:-0.5, Y_Dis:0.0, Z_Dis:0.35, tagDistance:0.3, goodsWidth:0.8, goodsLength:0.6, camera_x:0.1, camera_y:0.0, camera_z:0.3 }
+                        };
+                        const newName = prompt('Enter name for new ' + type + ' file:', type + '_new');
+                        if (!newName) return;
+                        const tmpl = Object.assign({ name: newName }, defaultsMap[cat] || { class: type });
+                        rcgSetStatus('Creating "' + newName + '"…');
+                        try {
+                            const r = await fetch('/api/recognition/templates/save', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template: tmpl })
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) throw new Error(data.message || 'HTTP ' + r.status);
+                            rcgSetStatus('Created "' + newName + '"', '#4ade80');
+                            await recognitionLoadData({ preserveSelection: false });
+                            const newId = rcgState.templates.find(t => t.name === newName);
+                            if (newId) recognitionSelectFile(rcgTemplateId(newId));
+                        } catch (err) {
+                            rcgSetStatus('Create failed: ' + err.message, '#fc8181');
+                        }
+                    }
+
+                    // ── Inspector tabs ────────────────────────────────────────
+                    function recognitionSetInspectorTab(tab) {
+                        rcgState.inspectorTab = tab;
+                        document.querySelectorAll('.rcg-inspector-tab').forEach(b => b.classList.toggle('active', b.dataset.rcgInspectorTab === tab));
+                        const tmpl = rcgState.templates.find(t => rcgTemplateId(t) === rcgState.activeId);
+                        recognitionRenderInspector(tmpl);
+                    }
+
+                    function recognitionRenderInspector(tmpl) {
+                        const cont = document.getElementById('recognition-inspector-content');
+                        if (!cont) return;
+                        const tab = rcgState.inspectorTab;
+                        if (tab === 'raw' || tab === 'properties') { cont.innerHTML = rcgInspectorRaw(tmpl); return; }
+                        if (tab === 'validation') { cont.innerHTML = rcgInspectorValidation(tmpl); return; }
+                        cont.innerHTML = rcgInspectorUsage(tmpl);
+                    }
+
+                    function rcgInspectorRaw(tmpl) {
+                        if (!tmpl) return '<div class="rcg-usage-section"><p class="rcg-usage-p">No file selected.</p></div>';
+                        const skip = new Set(['synced']);
+                        const entries = Object.entries(tmpl).filter(([k]) => !skip.has(k));
+                        return entries.map(([k,v]) => `<div class="rcg-val-item"><span class="rcg-val-text" style="color:var(--text-tertiary);width:100px;flex-shrink:0;">${k}</span><span class="rcg-val-text">${String(v)}</span></div>`).join('');
+                    }
+
+                    function rcgInspectorValidation(tmpl) {
+                        if (!tmpl) return '<div class="rcg-usage-section"><p class="rcg-usage-p">No file selected.</p></div>';
+                        const checks = [];
+                        const type = (tmpl.type || tmpl.class || '').toLowerCase();
+                        const ok = (msg) => checks.push(`<div class="rcg-val-item"><i class="fas fa-check-circle rcg-val-icon rcg-val-ok"></i><span class="rcg-val-text">${msg}</span></div>`);
+                        const warn = (msg) => checks.push(`<div class="rcg-val-item"><i class="fas fa-exclamation-triangle rcg-val-icon rcg-val-warn"></i><span class="rcg-val-text">${msg}</span></div>`);
+                        const err = (msg) => checks.push(`<div class="rcg-val-item"><i class="fas fa-times-circle rcg-val-icon rcg-val-err"></i><span class="rcg-val-text">${msg}</span></div>`);
+                        if (type.includes('charger')) {
+                            tmpl.minwidth > 0 ? ok('minwidth is set') : err('minwidth must be > 0');
+                            tmpl.maxwidth > tmpl.minwidth ? ok('maxwidth > minwidth') : err('maxwidth must be > minwidth');
+                            Math.abs(tmpl.dy || 0) < 0.01 ? ok('dy near 0 (centered electrode)') : warn('dy ≠ 0: electrode not centered on strip');
+                            tmpl.switchDO === -1 ? ok('DO control disabled (switchDO = -1)') : (tmpl.openDODist > 0 ? ok('openDODist configured') : warn('openDODist = 0: using DI logic'));
+                        }
+                        if (type.includes('shelf')) {
+                            tmpl.leg_width >= 0.05 ? ok('Reflective strip width ≥ 5 cm') : err('Strip width must be ≥ 5 cm (0.05 m)');
+                            (tmpl.outer_length || 0) >= (tmpl.length || 0) + 0.05 ? ok('outer_length ≥ length + 5 cm') : warn('outer_length should be ≥ length + 5 cm to avoid laser noise');
+                            (tmpl.outer_width || 0) >= (tmpl.width || 0) ? ok('outer_width ≥ width') : warn('outer_width should be ≥ width');
+                            tmpl.align_depth > 0 ? ok('align_depth configured') : warn('align_depth = 0: robot may not insert properly');
+                        }
+                        if (type.includes('pallet')) {
+                            const thickness = (tmpl.pallet_height || 0) - (tmpl.pocket_height || 0);
+                            thickness > 0.03 ? ok('Pallet thickness > 3 cm') : err('Pallet thickness (height − pocket_height) must be > 3 cm');
+                            tmpl.PercipioID ? ok('PercipioID specified') : warn('PercipioID empty — OK if only one camera installed');
+                        }
+                        if (type.includes('tag')) {
+                            tmpl.tagSize > 0 ? ok('tagSize set') : err('tagSize must be > 0');
+                            tmpl.tagSize >= 0.05 ? ok('tagSize ≥ 5 cm (recommended)') : warn('tagSize < 5 cm may reduce max recognition distance');
+                            tmpl.Tagtype ? ok('Tag family: ' + tmpl.Tagtype) : warn('Tag family not set');
+                            Math.abs(tmpl.Y_Dis || 0) < 0.01 ? ok('Y_Dis = 0 (symmetric mount)') : warn('Y_Dis ≠ 0: check tag placement');
+                        }
+                        if (!checks.length) ok('No specific checks for this type');
+                        return checks.join('');
+                    }
+
+                    function rcgInspectorUsage(tmpl) {
+                        const type = tmpl ? (tmpl.type || tmpl.class || '').toLowerCase() : '';
+                        if (type.includes('charger')) return rcgUsageCharger();
+                        if (type.includes('shelf'))   return rcgUsageShelf();
+                        if (type.includes('pallet') || type.includes('camera')) return rcgUsagePallet();
+                        if (type.includes('tag'))     return rcgUsageTag();
+                        return rcgUsageDefault();
+                    }
+
+                    function rcgUsageCharger() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Installation Methods</div>
+                            <ul class="rcg-usage-list"><li>Against a wall (temporary, no fixing required)</li><li>Floor-fixed with expansion bolts (recommended)</li></ul>
+                            <p class="rcg-usage-p">Charger must be reliably fixed. Robot and charger must be on the same plane.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Reflective Strip Requirements</div>
+                            <ul class="rcg-usage-list"><li>Width: 15–20 cm recommended</li><li>Height: ≥ 5 cm</li><li>Strip center height ≈ robot laser height from ground</li></ul>
+                            <p class="rcg-usage-p">If no strip exists, recognition cannot be used — only fixed-position path charging.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">AMB Setup Workflow</div>
+                            <ul class="rcg-usage-list"><li>Build map, scan charger into map</li><li>Manually drive robot to charger at 0.02 m/s (set ManualBlock=false)</li><li>Insert until Roboshop shows positive battery current</li><li>Right-click robot → Mark Special Workstation → CP point</li><li>Drive back ~1 m → right-click → LM point</li><li>Connect LM→CP: forward, path nav; CP→LM: backward, path nav</li><li>Set LM→CP and CP→LM as straight line</li><li>Select amb.charger as CP recognition file</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Common Mistakes</div>
+                            <ul class="rcg-usage-list"><li>Pre point too far from charger</li><li>Pre point not directly in front of CP</li><li>LM→CP path not a straight line</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pallet Truck Notes</div>
+                            <ul class="rcg-usage-list"><li>Min charger spacing: 1.16 m</li><li>Max laser–strip distance: 1 m</li><li>dx: measure X (electrode to strip plane in charging position), set dx ≤ X − 0.01</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsageShelf() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Shelf Design Rules</div>
+                            <ul class="rcg-usage-list"><li>Four legs forming a rectangle; robot enters from positive-x side</li><li>5 cm wide 3M Diamond Grade reflective strips on front two legs</li><li>Strip midpoints must coincide with shelf center (within tolerance)</li><li>Inner width ≥ robot width + 20 cm (10 cm clearance each side)</li><li>With follow-up: inner width ≥ robot width + robot length + 20 cm</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pre-Recognition Placement</div>
+                            <ul class="rcg-usage-list"><li>Distance from shelf front legs to pre-point: &lt; 2 m</li><li>Angle: robot→strip angle &lt; 10°</li><li>Shelf vs AGV angle: &lt; 20°</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Task Configuration</div>
+                            <ul class="rcg-usage-list"><li>AP type: ActionPoint, execution object: jack</li><li>Set ObsExpansion=0 on entry/exit lines</li><li>Pre-point: laser ≥ 0.5 m from shelf strips</li><li>Load/Unload/Wait tasks control post-arrival action</li><li>Recognize=true: detects shelf position and plans entry</li><li>Recognize=false: fixed open-loop path to AP</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Jack Types</div>
+                            <ul class="rcg-usage-list"><li>0: no lifting module</li><li>1: lifting, no follow-up motion</li><li>2: Kiva-style, with follow-up rotation</li><li>3: user-defined (no status verification)</li><li>4: traction lift (lift → move under → calibrate)</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsagePallet() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">FM830 Camera</div>
+                            <ul class="rcg-usage-list"><li>Connect to USB port on main controller</li><li>If multiple cameras: set PercipioID from white label on camera body</li><li>Check onlyForPalletDetection if dedicated to pallet use</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pallet Requirements</div>
+                            <ul class="rcg-usage-list"><li>Only symmetric pallets (equal left/right openings)</li><li>Thickness (pallet_height − pocket_height) must be &gt; 3 cm</li><li>Angular deviation vs robot: &lt; 20°</li><li>Lateral offset ≤ pallet width</li><li>Camera distance: 1–3 m</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Pallet_height Note</div>
+                            <p class="rcg-usage-p">pallet_height = support column height only. It does NOT include the height of horizontal connecting structure between columns.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Motion Parameters</div>
+                            <ul class="rcg-usage-list"><li>RecQRCode_AheadDist: planning forward distance</li><li>RecQRCode_BackLength: ≈ odometry center to fork upper switch. Too large: DI triggers early. Too small: DI may not trigger.</li><li>RecQRCode_PathSpeed: speed on recognition path</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsageTag() {
+                        return `<div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Tag Families</div>
+                            <ul class="rcg-usage-list"><li>16h5: 30 IDs, longest range, more false positives</li><li>25h7: 242 IDs, balanced</li><li>36h11: 587 IDs, most robust, shortest range</li></ul>
+                            <p class="rcg-usage-p">Max distance ≈ f × tagSize / (minPixels × moduleSize). At 10 cm, f=1075: 16h5→3.58 m, 25h7→3.07 m, 36h11→2.69 m.</p>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Tag Placement</div>
+                            <ul class="rcg-usage-list"><li>Paste two tags symmetrically on the front of the target</li><li>Tags must be flat, vertical, correctly oriented</li><li>Number/ID side should face downward horizontally</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Coordinate System</div>
+                            <ul class="rcg-usage-list"><li>X_Dis, Y_Dis, Z_Dis: tag center position in shelf coordinate system</li><li>Symmetric front mount: X_Dis = −shelf_length, Y_Dis = 0, Z_Dis = tag center height from ground</li><li>tagDistance: horizontal distance between the two tag centers</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">RealSense Camera</div>
+                            <ul class="rcg-usage-list"><li>Connect via USB 3.0 to SRC core controller</li><li>Add camera in robot model file, type "realsense"</li><li>Enter camera_x/y/z from actual mounting position</li></ul>
+                        </div>
+                        <div class="rcg-usage-section">
+                            <div class="rcg-usage-h">Accuracy (within 2 m, good lighting)</div>
+                            <ul class="rcg-usage-list"><li>Vertical: &lt; 2 cm</li><li>Horizontal: &lt; 1.5 cm</li></ul>
+                        </div>`;
+                    }
+
+                    function rcgUsageDefault() {
+                        return `<div class="rcg-usage-section"><p class="rcg-usage-p">Select a recognition file from the library to view its usage guide and parameter checks.</p></div>`;
+                    }
+
+                    // ── Stubs for compat ──────────────────────────────────────
+                    function recognitionSetTool(t) {}
+                    function recognitionZoom(d) {}
+                    function recognitionFitView() {}
+                    function recognitionToggleGrid() {}
+                    function recognitionToggleLabels() {}
+                    function recognitionToggleConstraints() {}
+                    function recognitionSetStageView(v) {}
+                    function recognitionPasteGeometry() {}
+                    function recognitionCopyGeometry() {}
+                    function recognitionCloseMenus() {
+                        const m = document.getElementById('recognition-overflow-menu');
+                        if (m) m.classList.remove('open');
                     }
 
                     function adoptDevConfigContent() {
@@ -25195,6 +25926,11 @@
                         const pointType = String(actionPointConfig.point_type || 'generic').trim().toLowerCase() || 'generic';
                         const shelfTemplateId = String(actionPointConfig.template_id || '').trim();
                         const shelfRecognize = Boolean(actionPointConfig.recognize);
+                        const prePointCfg = (actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object') ? actionPointConfig.pre_point : null;
+                        const prePointEnabled = Boolean(prePointCfg);
+                        const prePointX = prePointCfg ? Number(prePointCfg.x || 0).toFixed(4) : '';
+                        const prePointY = prePointCfg ? Number(prePointCfg.y || 0).toFixed(4) : '';
+                        const prePointTheta = prePointCfg ? Number(prePointCfg.theta !== undefined ? prePointCfg.theta * 180 / Math.PI : 0).toFixed(1) : '0';
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
                         const posY = (zone.position && zone.position.y !== undefined) ? zone.position.y : 0;
                         const headingDeg = getZoneHeadingDegrees(zone);
@@ -25263,6 +25999,38 @@
                             </label>
                         </div>
                         <div id="ez-shelf-summary" class="rcg-action-summary"></div>
+                        <div style="border-top:1px solid #30363d;margin-top:10px;padding-top:10px;">
+                            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
+                                <div>
+                                    <div style="${labelStyle}margin:0 0 2px;"><i class="fas fa-map-pin" style="color:#3b82f6;margin-right:4px;"></i>Pre Point</div>
+                                    <div style="font-size:10px;color:#8b949e;font-weight:400;">Intermediate waypoint before shelf detection begins</div>
+                                </div>
+                                <label class="path-toggle-switch" style="margin:0;flex-shrink:0;">
+                                    <input class="path-toggle-input" type="checkbox" id="ez-pre-point-enabled" ${prePointEnabled ? 'checked' : ''} onchange="recognitionHandlePrePointToggle('ez')">
+                                    <span class="path-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div id="ez-pre-point-coords" style="display:${prePointEnabled ? 'block' : 'none'};">
+                                <div style="display:flex;gap:10px;margin-bottom:8px;">
+                                    <div style="flex:1;">
+                                        <label style="${labelStyle}">X (m)</label>
+                                        <input type="number" id="ez-pre-point-x" value="${prePointX}" step="0.01" style="${inputStyle}">
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="${labelStyle}">Y (m)</label>
+                                        <input type="number" id="ez-pre-point-y" value="${prePointY}" step="0.01" style="${inputStyle}">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="${labelStyle}">Heading (deg)</label>
+                                    <input type="number" id="ez-pre-point-theta" value="${prePointTheta}" step="1" min="-180" max="180" style="${inputStyle}">
+                                </div>
+                                <div style="margin-top:8px;font-size:10px;color:#8b949e;display:flex;align-items:center;gap:4px;">
+                                    <i class="fas fa-route" style="color:#3b82f6;"></i>
+                                    <span>Path → <strong style="color:#e6edf3;">Pre Point</strong> → Shelf Detection → Shelf Execution</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div id="ez-charge-group" style="${rowStyle}">
                         <label style="${labelStyle}">Stop Timer (s)</label>
