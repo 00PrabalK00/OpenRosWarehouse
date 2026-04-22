@@ -2808,8 +2808,16 @@
             box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.1);
         }
 
+        /* Dark-theme every <select> inside the sidebar input-groups (Action,
+           Point Type, Linked Shelf Template, etc.) so they don't fall back to
+           the browser's light default. */
+        .input-group select,
         #zone-action,
-        #ez-action {
+        #ez-action,
+        #zone-point-type,
+        #ez-point-type,
+        #zone-shelf-template,
+        #ez-shelf-template {
             width: 100%;
             padding: 8px 10px;
             border: 1px solid var(--border-primary);
@@ -2818,17 +2826,36 @@
             color: var(--text-primary);
             font-size: 13px;
             transition: all 0.15s ease;
+            /* Force dark form-control chrome (dropdown arrow, scrollbar). */
+            color-scheme: dark;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23a0aec0' d='M2 4l4 4 4-4z'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 28px;
         }
 
+        .input-group select:focus,
         #zone-action:focus,
-        #ez-action:focus {
+        #ez-action:focus,
+        #zone-point-type:focus,
+        #ez-point-type:focus,
+        #zone-shelf-template:focus,
+        #ez-shelf-template:focus {
             outline: none;
             border-color: var(--accent-blue);
             box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.1);
         }
 
+        .input-group select option,
         #zone-action option,
-        #ez-action option {
+        #ez-action option,
+        #zone-point-type option,
+        #ez-point-type option,
+        #zone-shelf-template option,
+        #ez-shelf-template option {
             background: var(--bg-elevated);
             color: var(--text-primary);
         }
@@ -9164,15 +9191,17 @@
             right: 0;
             top: 60px;
             bottom: 0;
-            width: 340px;
+            width: 300px;
             background: var(--bg-panel);
-            border-left: 2px solid var(--border-heavy);
-            padding: 20px;
+            border-left: 1px solid var(--border-heavy);
+            padding: 0;
             overflow-y: auto;
             transform: translateX(100%);
-            transition: transform 0.3s ease;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
             z-index: 1000;
-            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
+            box-shadow: -3px 0 16px rgba(0,0,0,0.35);
+            display: flex;
+            flex-direction: column;
         }
 
         #properties-panel.open {
@@ -9181,85 +9210,124 @@
 
         .properties-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid var(--border-primary);
+            gap: 6px;
+            padding: 8px 10px 7px;
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-chrome);
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 5;
         }
 
         .properties-title {
-            font-size: 16px;
+            flex: 1;
+            font-size: 10px;
             font-weight: 700;
-            color: var(--text-primary);
+            color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.06em;
         }
 
         .properties-close-btn {
             background: none;
             border: none;
-            color: var(--text-secondary);
-            font-size: 20px;
+            color: var(--text-tertiary);
+            font-size: 14px;
             cursor: pointer;
-            padding: 4px 8px;
-            transition: color 0.2s;
+            padding: 2px 5px;
+            border-radius: 3px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
         }
 
         .properties-close-btn:hover {
             color: var(--accent-danger);
+            background: rgba(239,68,68,0.12);
+        }
+
+        #properties-content {
+            flex: 1;
+            overflow-y: auto;
         }
 
         .property-group {
-            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .property-group:last-of-type {
+            border-bottom: none;
         }
 
         .property-label {
-            font-size: 11px;
-            color: var(--text-tertiary);
+            font-size: 9px;
+            color: var(--text-field-label);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 6px;
+            letter-spacing: 0.05em;
             font-weight: 600;
+            padding: 5px 10px 1px;
+            opacity: 0.75;
         }
 
         .property-value {
-            font-size: 14px;
+            font-size: 11px;
             color: var(--text-primary);
-            padding: 10px 12px;
-            background: var(--bg-tertiary);
-            border-radius: 6px;
-            border: 1px solid var(--border-primary);
-            font-family: 'Roboto Mono', monospace;
+            padding: 2px 10px 5px;
+            font-family: 'Roboto Mono', 'Courier New', monospace;
+            line-height: 1.45;
+            word-break: break-word;
         }
 
         .property-value code {
-            color: var(--accent-normal);
+            color: var(--accent-blue, #60a5fa);
             font-weight: 600;
+            font-size: 11px;
+        }
+
+        .property-value select {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font-size: 11px;
+            padding: 3px 6px;
+            margin-top: 2px;
         }
 
         .property-actions {
             display: flex;
-            gap: 8px;
-            margin-top: 20px;
+            flex-wrap: wrap;
+            gap: 5px;
+            padding: 8px 10px 10px;
+            border-top: 1px solid var(--border-chrome);
+            margin-top: 4px;
         }
 
         .property-action-btn {
-            flex: 1;
-            padding: 10px;
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 5px 8px;
             border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: opacity 0.15s, transform 0.1s;
             text-transform: uppercase;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
         }
 
+        .property-action-btn:active { transform: scale(0.97); }
+
         .property-action-btn.primary {
-            background: var(--accent-normal);
-            color: white;
+            background: var(--accent-normal, #2563eb);
+            color: #fff;
         }
 
         .property-action-btn.primary:hover {
@@ -12560,24 +12628,6 @@
                                         </div>
                                     </div>
 
-                                    <div class="path-waypoint-meta" style="margin-top: 10px;">
-                                        Distance Test: create a straight path from the current robot heading, then send it through the normal path-follow confirmation.
-                                    </div>
-                                    <div class="path-draw-actions">
-                                        <button class="path-btn path-btn-neutral" onclick="runDistanceTestPath(1.0)">
-                                            <i class="fas fa-ruler-horizontal"></i>
-                                            <span>Go 1 m</span>
-                                        </button>
-                                        <button class="path-btn path-btn-neutral" onclick="runDistanceTestPath(2.0)">
-                                            <i class="fas fa-ruler-horizontal"></i>
-                                            <span>Go 2 m</span>
-                                        </button>
-                                        <button class="path-btn path-btn-neutral" onclick="runDistanceTestPath(3.0)">
-                                            <i class="fas fa-ruler-horizontal"></i>
-                                            <span>Go 3 m</span>
-                                        </button>
-                                    </div>
-
                                     <div class="path-draw-actions">
                                         <button class="path-btn path-btn-secondary" onclick="sendDrawnPath()">
                                             <i class="fas fa-route"></i>
@@ -13002,8 +13052,9 @@
                 <!-- Properties Panel - Right Side -->
                 <div id="properties-panel">
                     <div class="properties-header">
-                        <div class="properties-title" id="properties-element-title">Element Properties</div>
-                        <button class="properties-close-btn" onclick="closePropertiesPanel()">×</button>
+                        <i class="fas fa-info-circle" style="font-size:10px;color:var(--text-field-label);"></i>
+                        <div class="properties-title" id="properties-element-title">Properties</div>
+                        <button class="properties-close-btn" onclick="closePropertiesPanel()" title="Close">&#215;</button>
                     </div>
                     <div id="properties-content">
                         <!-- Content populated by JavaScript -->
@@ -13414,6 +13465,10 @@
                     let mapUserAdjustedView = false;
                     let editingZone = null;
                     let spaceKeyPressed = false;
+                    // Edit-mode drag state
+                    let draggingZoneOffsetX = 0;
+                    let draggingZoneOffsetY = 0;
+                    let draggingPathWaypointIndex = -1;
 
                     // Zone creation
                     let currentZoneType = 'normal';  // 'normal', 'action', 'charge'
@@ -23952,6 +24007,43 @@
                             }
                         }
 
+                        // ── Edit mode: drag existing zones ──────────────────
+                        if (e.button === 0 && editModeEnabled && !pathFollowingActive) {
+                            const rect = canvas.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const y = e.clientY - rect.top;
+                            const [wx, wy] = pixelToWorld(x, y);
+                            // Hit-test against zones (generous 0.5m radius in edit mode)
+                            for (const [name, zone] of Object.entries(zones)) {
+                                if (!zone.position) continue;
+                                const [zx, zy] = worldToPixel(zone.position.x, zone.position.y);
+                                if (Math.hypot(x - zx, y - zy) <= 28) {
+                                    editingZone = name;
+                                    draggingZoneOffsetX = wx - zone.position.x;
+                                    draggingZoneOffsetY = wy - zone.position.y;
+                                    isDragging = true;
+                                    canvas.style.cursor = 'grabbing';
+                                    e.preventDefault();
+                                    return;
+                                }
+                            }
+                            // Hit-test drawn-path waypoints in edit mode (paths map mode)
+                            if (currentMapMode === 'paths' && Array.isArray(drawnPath) && !isDrawingPath) {
+                                const normalizedPath = normalizePathPoints(drawnPath);
+                                for (let i = 0; i < normalizedPath.length; i++) {
+                                    const pt = normalizedPath[i];
+                                    const [px, py] = worldToPixel(pt.x, pt.y);
+                                    if (Math.hypot(x - px, y - py) <= 20) {
+                                        draggingPathWaypointIndex = i;
+                                        isDragging = true;
+                                        canvas.style.cursor = 'grabbing';
+                                        e.preventDefault();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
                         if (e.button === 2 || e.ctrlKey) { // Right click or Ctrl+click
                             mapUserAdjustedView = true;
                             followRobotViewEnabled = false;
@@ -24150,6 +24242,24 @@
                         }
 
                         if (isDragging) {
+                            // Edit-mode: move dragged zone
+                            if (editingZone && zones[editingZone] && !(dragStartX !== undefined && !editingZone)) {
+                                const [wx2, wy2] = pixelToWorld(x, y);
+                                zones[editingZone].position.x = wx2 - draggingZoneOffsetX;
+                                zones[editingZone].position.y = wy2 - draggingZoneOffsetY;
+                                drawMap();
+                                return;
+                            }
+                            // Edit-mode: move dragged path waypoint
+                            if (draggingPathWaypointIndex >= 0 && Array.isArray(drawnPath) && draggingPathWaypointIndex < drawnPath.length) {
+                                const [wx2, wy2] = pixelToWorld(x, y);
+                                const pt = { ...(drawnPath[draggingPathWaypointIndex] || {}) };
+                                pt.x = wx2;
+                                pt.y = wy2;
+                                drawnPath[draggingPathWaypointIndex] = pt;
+                                drawMap();
+                                return;
+                            }
                             offsetX = e.clientX - dragStartX;
                             offsetY = e.clientY - dragStartY;
                             drawMap();
@@ -24209,6 +24319,25 @@
                                 canvas.style.cursor = 'pointer';
                             }
                         }
+                        // Edit-mode: show grab cursor when hovering a draggable zone or waypoint
+                        if (editModeEnabled && !isDragging && !pathFollowingActive) {
+                            const [hwx, hwy] = pixelToWorld(x, y);
+                            let onZone = false;
+                            for (const [, zone] of Object.entries(zones)) {
+                                if (!zone.position) continue;
+                                const [zx, zy] = worldToPixel(zone.position.x, zone.position.y);
+                                if (Math.hypot(x - zx, y - zy) <= 28) { onZone = true; break; }
+                            }
+                            let onWpt = false;
+                            if (currentMapMode === 'paths' && Array.isArray(drawnPath) && !isDrawingPath) {
+                                const np = normalizePathPoints(drawnPath);
+                                for (let i = 0; i < np.length; i++) {
+                                    const [px, py] = worldToPixel(np[i].x, np[i].y);
+                                    if (Math.hypot(x - px, y - py) <= 20) { onWpt = true; break; }
+                                }
+                            }
+                            if (onZone || onWpt) canvas.style.cursor = 'grab';
+                        }
                     }
 
                     function onMouseUp(e) {
@@ -24217,12 +24346,25 @@
                             draggingPathCurveHandleIndex = -1;
                             updatePathUI();
                         }
+                        // Save edited zone on drag-release (edit mode zone drag)
+                        if (editingZone && isDragging && draggingZoneOffsetX !== undefined) {
+                            saveEditedZone(editingZone);
+                            editingZone = null;
+                        }
+                        // Save moved path waypoint on drag-release
+                        if (draggingPathWaypointIndex >= 0 && isDragging) {
+                            draggingPathWaypointIndex = -1;
+                            updatePathUI();
+                            drawMap();
+                        }
                         if (editingZone && isDragging) {
                             // Save the edited zone position
                             saveEditedZone(editingZone);
                             editingZone = null;
                         }
                         isDragging = false;
+                        draggingZoneOffsetX = 0;
+                        draggingZoneOffsetY = 0;
                         updateCursor();
                     }
 
@@ -26064,7 +26206,7 @@
                             setMapSelection('', '');
                         }
 
-                        title.textContent = elementType.toUpperCase() + ' PROPERTIES';
+                        title.textContent = elementType === 'zone' ? 'Zone' : elementType === 'path' ? 'Path' : elementType === 'filter' ? 'Filter Rule' : 'Properties';
 
                         let html = '';
 
@@ -26146,7 +26288,7 @@
                                             <option value="bi"${settings?.direction==='bi'?' selected':''}>&#8644; Bidirectional</option>
                                             <option value="reverse"${settings?.direction==='reverse'?' selected':''}>&#8592; Reverse</option>
                                         </select>
-                                        <button id="path-prop-save-direction" class="property-action-btn primary" style="margin-top:6px;width:100%;font-size:10px;">SAVE DIRECTION</button>
+                                        <button id="path-prop-save-direction" class="property-action-btn primary" style="margin-top:6px;width:100%;font-size:10px;"><i class="fas fa-save"></i> Save Direction</button>
                                     </div>
                                 </div>
                                 ` : ''}
@@ -26167,14 +26309,14 @@
                                 <div class="property-actions">
                                     ${source === 'current'
                                     ? `
-                                        <button id="path-prop-follow-current" class="property-action-btn primary">FOLLOW</button>
-                                        <button id="path-prop-save-current" class="property-action-btn primary">SAVE</button>
-                                        <button id="path-prop-clear-current" class="property-action-btn danger">CLEAR</button>
+                                        <button id="path-prop-follow-current" class="property-action-btn primary"><i class="fas fa-play"></i> Follow</button>
+                                        <button id="path-prop-save-current" class="property-action-btn primary"><i class="fas fa-save"></i> Save</button>
+                                        <button id="path-prop-clear-current" class="property-action-btn danger"><i class="fas fa-trash"></i> Clear</button>
                                     `
                                     : `
-                                        <button id="path-prop-load-saved" class="property-action-btn primary">LOAD</button>
-                                        <button id="path-prop-follow-saved" class="property-action-btn primary">FOLLOW</button>
-                                        <button id="path-prop-delete-saved" class="property-action-btn danger">DELETE</button>
+                                        <button id="path-prop-load-saved" class="property-action-btn primary"><i class="fas fa-upload"></i> Load</button>
+                                        <button id="path-prop-follow-saved" class="property-action-btn primary"><i class="fas fa-play"></i> Follow</button>
+                                        <button id="path-prop-delete-saved" class="property-action-btn danger"><i class="fas fa-trash"></i> Del</button>
                                     `}
                                 </div>
                             `;
@@ -26269,16 +26411,16 @@
                             html += `
                                 <div class="property-actions">
                                     <button class="property-action-btn primary" onclick="editZoneParameters('${elementName}', zones['${elementName}'])">
-                                        EDIT
+                                        <i class="fas fa-edit"></i> Edit
                                     </button>
                                     <button class="property-action-btn primary" onclick="goToZone('${elementName}'); closePropertiesPanel();">
-                                        GO TO
+                                        <i class="fas fa-crosshairs"></i> Go
                                     </button>
                                     <button class="property-action-btn primary" onclick="addZoneToCurrentPath('${elementName}'); closePropertiesPanel();">
-                                        ADD TO PATH
+                                        <i class="fas fa-route"></i> To Path
                                     </button>
                                     <button class="property-action-btn danger" onclick="if(confirm('Delete zone ${elementName}?')) { deleteZone('${elementName}'); closePropertiesPanel(); }">
-                                        DELETE
+                                        <i class="fas fa-trash"></i> Del
                                     </button>
                                 </div>
                             `;
@@ -26311,7 +26453,7 @@
                             html += `
                                 <div class="property-actions">
                                     <button class="property-action-btn danger" onclick="deleteFilterAtIndex(${filter.index}); closePropertiesPanel();">
-                                        DELETE RULE
+                                        <i class="fas fa-trash"></i> Delete Rule
                                     </button>
                                 </div>
                             `;
@@ -28816,30 +28958,56 @@
         </div>
         <div class="params-popup-body">
             <div id="params-tab-nav2" class="params-popup-pane active">
-                <!-- #robot-editor-builder-workspace adopted here by adoptParamsContent() -->
+                <!-- Nav2 search overlay header -->
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="nav2-param-search" class="prm-search-input" placeholder="Search Nav2 parameters…" oninput="filterNav2Params(this.value)">
+                    <button class="prm-action-btn" id="nav2-apply-btn" title="Apply to robot" onclick="applyNav2ParamsFromPopup()">
+                        <i class="fas fa-sync-alt"></i> Apply
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="nav2-status-bar" style="display:none;">
+                    <span id="nav2-status-text">Idle</span>
+                </div>
+                <!-- #settings-navigation-nav2-card adopted here -->
             </div>
             <div id="params-tab-robot" class="params-popup-pane">
-                <div class="settings-general-shell" style="padding:14px; overflow-y:auto; height:100%;">
-                    <div class="settings-card">
-                        <div class="settings-card-header"><h4 class="settings-card-title">ROS Frames</h4></div>
-                        <div class="form-row">
-                            <div class="form-group"><label>Map Frame</label><input type="text" id="sensor-frame-map-input" value="map" placeholder="map" class="settings-input"></div>
-                            <div class="form-group"><label>Odom Frame</label><input type="text" id="sensor-frame-odom-input" value="odom" placeholder="odom" class="settings-input"></div>
-                            <div class="form-group"><label>Lidar Frame</label><input type="text" id="sensor-frame-lidar-input" value="base_scan" placeholder="base_scan" class="settings-input"></div>
-                            <div class="form-group"><label>Camera Frame</label><input type="text" id="sensor-frame-camera-input" value="camera_link" placeholder="camera_link" class="settings-input"></div>
-                        </div>
-                    </div>
-                    <div class="settings-card" style="margin-top:12px;">
-                        <div class="settings-card-header"><h4 class="settings-card-title">Config Files</h4></div>
-                        <div class="form-row">
-                            <div class="form-group" style="flex:2;"><label>URDF Source</label><input type="text" id="robot-urdf-source-input" value="" placeholder="package://.../robot.urdf.xacro" class="settings-input"></div>
-                            <div class="form-group" style="flex:2;"><label>Nav2 Params File</label><input type="text" id="robot-nav2-params-input" value="" placeholder="/path/to/nav2_params.yaml" class="settings-input"></div>
-                        </div>
-                    </div>
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="robot-param-search" class="prm-search-input" placeholder="Search robot parameters…" oninput="filterRobotParams(this.value)">
+                    <button class="prm-action-btn" id="robot-reload-btn" onclick="loadRobotYamlParams()" title="Reload from backend">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="robot-status-bar">
+                    <span id="robot-status-text" style="color:var(--text-tertiary);">Loading…</span>
+                </div>
+                <div id="robot-param-list" class="prm-param-list">
+                    <div class="prm-empty">Loading robot parameters…</div>
                 </div>
             </div>
             <div id="params-tab-topic" class="params-popup-pane">
-                <!-- #settings-topics inner content adopted here by adoptParamsContent() -->
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="topic-param-search" class="prm-search-input" placeholder="Search topics, services, endpoints…" oninput="filterTopicMappings(this.value)">
+                    <select id="topic-type-filter" class="prm-type-filter" onchange="filterTopicMappings(document.getElementById('topic-param-search').value)">
+                        <option value="">All</option>
+                        <option value="topic">Topics</option>
+                        <option value="service">Services</option>
+                        <option value="endpoint">Endpoints</option>
+                        <option value="publisher">Publishers</option>
+                        <option value="subscriber">Subscribers</option>
+                    </select>
+                    <button class="prm-action-btn" onclick="saveTopicMappingsFromPopup()" title="Save mappings">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="topic-status-bar">
+                    <span id="topic-status-text" style="color:var(--text-tertiary);">Loading…</span>
+                </div>
+                <div id="topic-mapping-list" class="prm-param-list" style="font-size:11px;">
+                    <div class="prm-empty">Loading topic configuration…</div>
+                </div>
             </div>
             <div id="params-tab-controls" class="params-popup-pane">
                 <div class="settings-general-shell" style="padding:14px; overflow-y:auto; height:100%;">
@@ -28893,18 +29061,18 @@
                 </div>
             </div>
             <div id="params-tab-safety" class="params-popup-pane">
-                <div class="settings-general-shell" style="padding:14px; overflow-y:auto; height:100%;">
-                    <div class="settings-card">
-                        <div class="settings-card-header"><h4 class="settings-card-title">Safety Parameters</h4></div>
-                        <div class="settings-item">
-                            <label>Emergency Stop Timeout (s)</label>
-                            <input type="number" value="30" class="settings-input">
-                        </div>
-                        <div class="settings-item">
-                            <label>Obstacle Detection Range (m)</label>
-                            <input type="number" value="2.0" step="0.1" class="settings-input">
-                        </div>
-                    </div>
+                <div class="prm-search-bar">
+                    <i class="fas fa-search prm-search-icon"></i>
+                    <input type="text" id="safety-param-search" class="prm-search-input" placeholder="Search safety parameters…" oninput="filterSafetyParams(this.value)">
+                    <button class="prm-action-btn" id="safety-save-btn" onclick="saveSafetyParams()" title="Save to backend">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                </div>
+                <div class="prm-status-bar" id="safety-status-bar">
+                    <span id="safety-status-text" style="color:var(--text-tertiary);">Loading…</span>
+                </div>
+                <div id="safety-param-list" class="prm-param-list">
+                    <div class="prm-empty">Loading safety parameters…</div>
                 </div>
             </div>
         </div>
@@ -29009,6 +29177,7 @@
             </section>
 
             <aside id="recognition-inspector">
+                <div class="rcg-inspector-resizer" id="recognition-inspector-resizer" title="Drag to resize inspector"></div>
                 <div class="rcg-pane-header">
                     <div>
                         <div class="rcg-pane-kicker">Inspector</div>
