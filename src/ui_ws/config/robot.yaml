@@ -313,6 +313,53 @@ zone_manager:
 
 
 # ---------------------------------------------------------------
+# SHELF GEOMETRIC REFINER + VALIDATOR
+# Staged geometric pipeline (Zhao et al. 2024).
+# Sits after shelf_detector, before zone_manager.
+# zone_manager reads /shelf/refined_status_json (output topic).
+# ---------------------------------------------------------------
+shelf_geometric_refiner:
+  ros__parameters:
+    # Topics
+    input_status_topic  : /shelf/status_json
+    output_status_topic : /shelf/refined_status_json
+    scan_topic          : /scan
+    base_frame          : base_link
+
+    # Shelf physical model (L = depth, W = opening width)
+    # Tune to match your physical shelf dimensions.
+    shelf_model_length_m         : 0.90   # m  depth of shelf (L)
+    shelf_model_width_m          : 0.71   # m  opening width (W)  ← matches log "width=0.71m"
+    shelf_model_leg_h_m          : 0.04   # m  reflector leg size along shelf axis
+    shelf_model_leg_w_m          : 0.04   # m  reflector leg size across shelf axis
+    shelf_model_leg_is_circular  : false  # true for round tubes
+
+    # Stage B — ROI and clustering
+    roi_radius_m          : 0.75   # m  local window around rough pose
+    cluster_adj_dist_m    : 0.10   # m  max gap between adjacent scan points in same cluster
+    cluster_min_points    : 2      # min returns per leg cluster
+    cluster_max_extent_m  : 0.20   # m  max spatial extent of one leg cluster
+    trailing_min_beta_deg : 15.0   # deg  trailing-point filter threshold (paper eq. 1)
+
+    # Stage C/D — geometric + model tolerance
+    model_length_tolerance_m : 0.18   # m  allowed error on L measurement
+    model_width_tolerance_m  : 0.18   # m  allowed error on W measurement
+    min_legs_for_validation  : 3      # 3 = right-triangle fallback, 4 = full rectangle
+
+    # Refinement acceptance (reject outlier NLS solutions)
+    max_pose_residual_accept_m  : 0.06   # m  maximum RMS residual of shelf-pose NLS
+    max_model_error_accept_m    : 0.12   # m  maximum total L+W model fit error
+
+    # Input data freshness
+    scan_max_age_sec : 0.40   # s  discard cached scan older than this
+
+    # Temporal stability (Stage G repeated-recognition)
+    temporal_window_size  : 8      # number of recent poses to keep
+    temporal_pos_tol_m    : 0.025  # m  position consistency window
+    temporal_yaw_tol_deg  : 3.0    # deg  heading consistency window
+
+
+# ---------------------------------------------------------------
 # STACK MANAGER — navigation / SLAM process lifecycle
 # ---------------------------------------------------------------
 stack_manager:
