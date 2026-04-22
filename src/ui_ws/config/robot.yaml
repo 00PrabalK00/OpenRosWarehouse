@@ -197,6 +197,7 @@ zone_manager:
     goal_pose_handoff_local_insert_max_turn : 0.55           # rad/s  keep insertion steering controlled
     goal_pose_handoff_local_insert_bearing_gain : 2.2        # steer toward shelf centerline
     goal_pose_handoff_local_insert_final_heading_gain : 0.60 # keep body aligned to shelf heading
+    goal_pose_handoff_local_insert_lateral_gain : 0.7        # how hard controller steers to null lateral error during straight-in (lower = straighter path, more residual offset; higher = more centered, more diagonal)
     goal_pose_handoff_local_insert_heading_tolerance : 0.08  # rad  final heading acceptance
     goal_pose_handoff_local_insert_prealign_heading_tolerance : 0.06  # rad before forward creep begins
     goal_pose_handoff_local_insert_realign_heading_tolerance : 0.35   # rad  only fall back to re-align if error gets clearly worse

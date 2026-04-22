@@ -378,6 +378,13 @@ def editor():
     return render_template('map_editor.html')
 
 
+@app.route('/device-config')
+def device_config():
+    if _dev_auth_required() and not _dev_unlocked():
+        return redirect('/dev')
+    return render_template('device_config.html')
+
+
 @app.route('/api/map')
 def get_map():
     node, err = _node()

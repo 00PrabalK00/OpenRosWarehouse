@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Config — NEXT Robotics</title>
+  <link rel="icon" href="/static/next_logo.png" type="image/png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ══════════════════════════════════════════════════════════════
+       NEXT ROBOTICS — Device Config v3
+       Inherits exact design DNA from NEXT home page shell
+       Three-zone layout: mode-rail | canvas workspace | inspector
+    ══════════════════════════════════════════════════════════════ */
+    :root {
+      /* Shared tokens — identical to home page */
+      --bg-primary:           #0a0e14;
+      --bg-secondary:         #121720;
+      --bg-tertiary:          #1a202c;
+      --bg-elevated:          #232933;
+      --bg-chrome:            #1B1F27;
+      --bg-canvas:            #13161D;
+      --bg-inspector:         #191D26;
+      --bg-panel:             #1c2432;
+      --border-chrome:        #252B38;
+      --border-primary:       #2d3748;
+      --border-secondary:     #3d4a5c;
+      --text-primary:         #e2e8f0;
+      --text-secondary:       #a0aec0;
+      --text-tertiary:        #718096;
+      --text-field-label:     #6B7794;
+      --text-field-value:     #C5CDD9;
+      --selected-blue:        #2669C8;
+      --selected-blue-dim:    rgba(38,105,200,0.14);
+      --accent-blue:          #4299e1;
+      --accent-success:       #48bb78;
+      --accent-warning:       #ed8936;
+      --accent-critical:      #fc8181;
+      --fault-red:            #C42B2B;
+      --caution-amber:        #A85400;
+      --healthy-green:        #1D7A43;
+      --shadow-md:            0 4px 6px rgba(0,0,0,0.7);
+      --shadow-lg:            0 10px 20px rgba(0,0,0,0.8);
+
+      /* Layout tokens */
+      --header-h:     36px;
+      --cmdbar-h:     44px;
+      --rail-w:       52px;
+      --inspector-w:  292px;
+      --statusbar-h:  28px;
+
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; background: var(--bg-primary); color: var(--text-primary); }
+
+    /* ── Typography helpers ─────────────────────────────────────── */
+    .t-label   { font-size: 9px;  font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-field-label); line-height: 1; }
+    .t-value   { font-size: 11px; color: var(--text-field-value); font-family: 'Roboto Mono', monospace; }
+    .t-title   { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+    .t-caption { font-size: 10px; color: var(--text-tertiary); }
+    .mono      { font-family: 'Roboto Mono', monospace; }
+
+    /* ── Button primitives — exact home-page style ──────────────── */
+    button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      height: 26px; padding: 0 10px; border-radius: 3px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+      border: 1px solid var(--border-chrome); background: var(--bg-elevated);
+      color: var(--text-secondary); transition: background 0.12s, color 0.12s, border-color 0.12s;
+      flex-shrink: 0;
+    }
+    .btn i { font-size: 10px; }
+    .btn:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); border-color: var(--border-secondary); }
+    .btn.btn-primary { background: var(--selected-blue-dim); border-color: var(--selected-blue); color: var(--accent-blue); }
+    .btn.btn-primary:hover { background: rgba(38,105,200,0.24); }
+    .btn.btn-success { background: rgba(29,122,67,0.18); border-color: rgba(72,187,120,0.45); color: #68d391; }
+    .btn.btn-success:hover { background: rgba(29,122,67,0.28); }
+    .btn.btn-danger  { background: rgba(196,43,43,0.14); border-color: rgba(252,129,129,0.35); color: #fc8181; }
+    .btn.btn-icon    { width: 28px; height: 28px; padding: 0; }
+    .btn.active      { background: var(--selected-blue-dim); border-color: var(--selected-blue); color: var(--accent-blue); }
+
+    /* ── App Shell ──────────────────────────────────────────────── */
+    #app-shell {
+      width: 100vw; height: 100vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       1. GLOBAL HEADER — identical to home page
+    ══════════════════════════════════════════════════════════════ */
+    #global-header {
+      height: var(--header-h); flex-shrink: 0;
+      background: var(--bg-chrome); border-bottom: 1px solid var(--border-chrome);
+      display: flex; align-items: center; gap: 0; padding: 0 8px; z-index: 200;
+    }
+    .hdr-brand {
+      display: flex; align-items: center; gap: 6px;
+      padding-right: 10px; border-right: 1px solid var(--border-chrome);
+      margin-right: 8px; flex-shrink: 0;
+    }
+    .hdr-brand-logo {
+      width: 20px; height: 20px; border-radius: 3px;
+      background: var(--selected-blue); display: flex; align-items: center; justify-content: center;
+    }
+    .hdr-brand-logo i { font-size: 10px; color: #fff; }
+    .hdr-brand-title  { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: var(--text-primary); }
+    .hdr-brand-sub    { font-size: 9px; color: var(--text-tertiary); letter-spacing: 0.05em; text-transform: uppercase; }
+    .hdr-robot-chip {
+      display: flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: 3px; border: 1px solid var(--border-chrome);
+      background: var(--bg-canvas); font-size: 10px; font-weight: 600;
+      color: var(--text-secondary); margin-right: 8px;
+    }
+    .hdr-robot-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-success); flex-shrink: 0; }
+    .hdr-center {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .hdr-page-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 10px; border-radius: 3px; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      background: var(--selected-blue-dim); color: var(--selected-blue);
+      border: 1px solid rgba(38,105,200,0.4);
+    }
+    .hdr-right {
+      display: flex; align-items: center; gap: 5px;
+      padding-left: 8px; border-left: 1px solid var(--border-chrome);
+    }
+    .hdr-icon-btn {
+      width: 28px; height: 28px; border-radius: 3px; border: 1px solid transparent;
+      color: var(--text-tertiary); font-size: 12px; transition: color 0.12s, background 0.12s;
+    }
+    .hdr-icon-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+    .hdr-estop {
+      height: 26px; padding: 0 12px; border-radius: 3px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      background: rgba(196,43,43,0.18); border: 1px solid rgba(196,43,43,0.4); color: #fc8181;
+    }
+    .hdr-estop:hover { background: rgba(196,43,43,0.3); }
+
+    /* ══════════════════════════════════════════════════════════════
+       2. COMMAND BAR — single action row, no stacking
+    ══════════════════════════════════════════════════════════════ */
+    #cmd-bar {
+      height: var(--cmdbar-h); flex-shrink: 0;
+      background: var(--bg-chrome); border-bottom: 1px solid var(--border-chrome);
+      display: flex; align-items: center; gap: 0; padding: 0; z-index: 100;
+    }
+
+    /* Profile card — left anchor */
+    .cmdbar-profile {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 14px 0 12px; height: 100%;
+      border-right: 1px solid var(--border-chrome); flex-shrink: 0;
+      min-width: 220px;
+    }
+    .profile-icon {
+      width: 30px; height: 30px; border-radius: 5px; flex-shrink: 0;
+      background: var(--selected-blue-dim); border: 1px solid rgba(38,105,200,0.3);
+      display: flex; align-items: center; justify-content: center; color: var(--accent-blue); font-size: 13px;
+    }
+    .profile-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .profile-name { font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .profile-sub  { display: flex; align-items: center; gap: 6px; }
+    .profile-ver  { font-size: 9px; color: var(--text-tertiary); font-family: 'Roboto Mono', monospace; }
+    .profile-state-chip {
+      font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 1px 5px; border-radius: 2px;
+    }
+    .profile-state-chip.draft     { background: rgba(168,84,0,0.2); border: 1px solid rgba(237,137,54,0.35); color: #ed8936; }
+    .profile-state-chip.published { background: rgba(29,122,67,0.2); border: 1px solid rgba(72,187,120,0.35); color: #48bb78; }
+
+    /* Validation summary chip */
+    .cmdbar-validation {
+      display: flex; align-items: center; gap: 6px; padding: 0 12px; flex-shrink: 0;
+      border-right: 1px solid var(--border-chrome); height: 100%;
+    }
+    .val-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border-radius: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .val-chip.error   { background: rgba(196,43,43,0.15); border: 1px solid rgba(252,129,129,0.3); color: #fc8181; }
+    .val-chip.warn    { background: rgba(168,84,0,0.15);  border: 1px solid rgba(237,137,54,0.3);  color: #ed8936; }
+    .val-chip.ok      { background: rgba(29,122,67,0.15); border: 1px solid rgba(72,187,120,0.3);  color: #48bb78; }
+    .val-chip i       { font-size: 8px; }
+
+    /* Spacer */
+    .cmdbar-spacer { flex: 1; }
+
+    /* Action buttons */
+    .cmdbar-actions {
+      display: flex; align-items: center; gap: 4px; padding: 0 10px;
+      height: 100%; flex-shrink: 0;
+    }
+    .cmdbar-more-btn {
+      width: 28px; height: 26px; padding: 0; font-size: 13px;
+      border-radius: 3px; border: 1px solid var(--border-chrome);
+      background: var(--bg-elevated); color: var(--text-tertiary);
+    }
+    .cmdbar-more-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+
+    /* ══════════════════════════════════════════════════════════════
+       3. MAIN VIEWPORT — rail | canvas | inspector
+    ══════════════════════════════════════════════════════════════ */
+    #main-viewport {
+      flex: 1; display: flex; overflow: hidden;
+    }
+
+    /* ── Mode Rail ──────────────────────────────────────────────── */
+    #mode-rail {
+      width: var(--rail-w); min-width: var(--rail-w); flex-shrink: 0;
+      background: var(--bg-chrome); border-right: 1px solid var(--border-chrome);
+      display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 1px;
+      z-index: 50; overflow: hidden;
+    }
+    .rail-btn {
+      position: relative; width: 40px; height: 44px;
+      border: none; border-radius: 5px; background: transparent;
+      color: var(--text-tertiary); cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      font-size: 14px; padding: 4px;
+      transition: background 0.14s, color 0.14s;
+    }
+    .rail-btn:hover  { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+    .rail-btn.active { background: var(--selected-blue-dim); color: var(--selected-blue); }
+    .rail-btn.active::before {
+      content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
+      width: 3px; background: var(--selected-blue); border-radius: 0 2px 2px 0;
+    }
+    .rail-label {
+      font-size: 7px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      line-height: 1; text-align: center;
+    }
+    .rail-sep { width: 26px; height: 1px; background: var(--border-chrome); margin: 3px 0; flex-shrink: 0; }
+    .rail-spacer { flex: 1; }
+
+    /* ── Canvas Workspace ───────────────────────────────────────── */
+    #canvas-workspace {
+      flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+      position: relative; background: var(--bg-canvas);
+    }
+
+    /* Canvas header band */
+    #canvas-header {
+      height: 38px; flex-shrink: 0;
+      background: var(--bg-chrome); border-bottom: 1px solid var(--border-chrome);
+      display: flex; align-items: center; padding: 0 12px; gap: 10px;
+    }
+    .cvs-hdr-view-label { font-size: 10px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.04em; }
+    .cvs-hdr-sep { width: 1px; height: 18px; background: var(--border-chrome); flex-shrink: 0; }
+    .cvs-hdr-profile { font-size: 10px; color: var(--text-tertiary); }
+    .cvs-spacer { flex: 1; }
+
+    /* Issue chip on canvas header */
+    .cvs-issue-chip {
+      display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+      padding: 2px 8px; border-radius: 2px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .cvs-issue-chip.has-errors { background: rgba(196,43,43,0.15); border: 1px solid rgba(252,129,129,0.3); color: #fc8181; }
+    .cvs-issue-chip.has-warns  { background: rgba(168,84,0,0.15);  border: 1px solid rgba(237,137,54,0.3);  color: #ed8936; }
+    .cvs-issue-chip.all-ok     { background: rgba(29,122,67,0.15); border: 1px solid rgba(72,187,120,0.3);  color: #48bb78; }
+    .cvs-issue-chip i { font-size: 8px; }
+
+    /* View toggle pills in canvas header */
+    .cvs-view-toggle {
+      display: flex; align-items: center; gap: 1px;
+      background: var(--bg-canvas); border: 1px solid var(--border-chrome); border-radius: 4px; padding: 2px;
+    }
+    .cvs-view-btn {
+      height: 24px; padding: 0 10px; border-radius: 2px; border: none; background: transparent;
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text-tertiary); cursor: pointer; transition: background 0.12s, color 0.12s;
+    }
+    .cvs-view-btn.active { background: var(--bg-elevated); color: var(--text-primary); }
+
+    /* Robot canvas draw area */
+    #robot-canvas-area {
+      flex: 1; min-height: 0; position: relative; overflow: hidden;
+    }
+
+    /* Grid background */
+    #robot-canvas-area::before {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(45,55,72,0.25) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(45,55,72,0.25) 1px, transparent 1px),
+        linear-gradient(rgba(45,55,72,0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(45,55,72,0.1) 1px, transparent 1px);
+      background-size: 80px 80px, 80px 80px, 20px 20px, 20px 20px;
+    }
+
+    /* Robot SVG canvas — center the robot drawing */
+    #robot-svg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      overflow: visible;
+    }
+
+    /* Floating view controls cluster — bottom right, like map controls on home page */
+    #view-controls {
+      position: absolute; right: 14px; bottom: 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      z-index: 20;
+    }
+    .vc-btn {
+      width: 32px; height: 32px; border-radius: 4px;
+      background: var(--bg-chrome); border: 1px solid var(--border-chrome); color: var(--text-secondary);
+      display: flex; align-items: center; justify-content: center; font-size: 13px;
+      cursor: pointer; transition: background 0.12s, color 0.12s;
+    }
+    .vc-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .vc-btn.active { background: var(--selected-blue-dim); border-color: var(--selected-blue); color: var(--accent-blue); }
+    .vc-sep { width: 20px; height: 1px; background: var(--border-chrome); }
+
+    /* Scale ruler bottom-left */
+    #canvas-ruler {
+      position: absolute; left: 14px; bottom: 18px;
+      display: flex; align-items: center; gap: 5px; pointer-events: none; z-index: 10;
+    }
+    .ruler-bar { height: 4px; background: var(--text-tertiary); border-radius: 2px; }
+    .ruler-label { font-size: 9px; color: var(--text-tertiary); font-family: 'Roboto Mono', monospace; }
+
+    /* Issue markers on canvas (small inline indicators) */
+    .issue-marker {
+      position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 8px; font-weight: 700; cursor: pointer;
+      z-index: 30; transition: transform 0.12s;
+    }
+    .issue-marker:hover { transform: scale(1.2); }
+    .issue-marker.error { background: rgba(196,43,43,0.85); border: 1px solid #fc8181; color: #fff; }
+    .issue-marker.warn  { background: rgba(168,84,0,0.85);  border: 1px solid #ed8936; color: #fff; }
+
+    /* ── Inspector Panel (right side) ──────────────────────────── */
+    #inspector {
+      width: var(--inspector-w); min-width: var(--inspector-w); flex-shrink: 0;
+      background: var(--bg-inspector); border-left: 1px solid var(--border-chrome);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* Inspector header */
+    .insp-header {
+      height: 38px; flex-shrink: 0;
+      background: var(--bg-elevated); border-bottom: 1px solid var(--border-chrome);
+      display: flex; align-items: center; padding: 0 10px; gap: 8px;
+    }
+    .insp-header-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); flex: 1; }
+    .insp-mode-badge {
+      font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 1px 5px; border-radius: 2px;
+      background: var(--selected-blue-dim); color: var(--selected-blue);
+      border: 1px solid rgba(38,105,200,0.35);
+    }
+
+    /* Inspector tabs */
+    .insp-tabs {
+      display: flex; align-items: stretch; flex-shrink: 0;
+      background: var(--bg-elevated); border-bottom: 1px solid var(--border-chrome);
+    }
+    .insp-tab {
+      flex: 1; height: 32px; border: none; background: transparent;
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-tertiary); cursor: pointer;
+      border-bottom: 2px solid transparent; transition: color 0.14s, border-color 0.14s;
+    }
+    .insp-tab:hover { color: var(--text-secondary); }
+    .insp-tab.active { color: var(--selected-blue); border-bottom-color: var(--selected-blue); }
+
+    /* Tab panes */
+    .insp-pane { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
+    .insp-pane.active { display: flex; }
+    .insp-pane::-webkit-scrollbar { width: 5px; }
+    .insp-pane::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 3px; }
+
+    /* ── Inspector content primitives ───────────────────────────── */
+    /* Section divider */
+    .insp-section {
+      padding: 5px 10px 3px; flex-shrink: 0;
+      background: var(--bg-elevated); border-bottom: 1px solid var(--border-chrome);
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-secondary); position: sticky; top: 0; z-index: 3;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .insp-collapse-btn {
+      width: 18px; height: 14px; border: none; background: transparent; color: var(--text-field-label);
+      font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Property row */
+    .prop-row {
+      display: flex; align-items: center; padding: 4px 10px; gap: 8px;
+      min-height: 28px; border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .prop-row:last-child { border-bottom: none; }
+    .prop-lbl {
+      flex: 0 0 88px; font-size: 10px; color: var(--text-field-label);
+      text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .prop-val {
+      flex: 1; font-size: 11px; color: var(--text-field-value);
+      font-family: 'Roboto Mono', monospace; overflow: hidden; text-overflow: ellipsis;
+    }
+    .prop-input {
+      flex: 1; font-size: 11px; color: var(--text-primary);
+      background: var(--bg-canvas); border: 1px solid var(--border-chrome);
+      border-radius: 3px; padding: 2px 6px; font-family: 'Roboto Mono', monospace;
+      height: 24px; min-width: 0;
+    }
+    .prop-input:focus { border-color: var(--selected-blue); outline: none; }
+    .prop-select {
+      flex: 1; font-size: 10px; color: var(--text-primary);
+      background: var(--bg-canvas); border: 1px solid var(--border-chrome);
+      border-radius: 3px; padding: 2px 6px; height: 24px; min-width: 0;
+    }
+    .prop-select:focus { border-color: var(--selected-blue); outline: none; }
+
+    /* Overview stat block */
+    .overview-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+      background: var(--border-chrome); border: 1px solid var(--border-chrome); border-radius: 4px;
+      margin: 8px 10px;
+    }
+    .ov-cell {
+      padding: 8px 10px; background: var(--bg-canvas); display: flex; flex-direction: column; gap: 3px;
+    }
+    .ov-lbl { font-size: 9px; color: var(--text-field-label); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .ov-val { font-size: 13px; font-weight: 700; color: var(--text-primary); font-family: 'Roboto Mono', monospace; }
+
+    /* Quick actions row in overview */
+    .overview-actions { padding: 4px 10px 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+
+    /* Hierarchy tree */
+    .tree-node {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px; cursor: pointer; min-height: 28px;
+      border-bottom: 1px solid rgba(255,255,255,0.025);
+      transition: background 0.1s;
+    }
+    .tree-node:hover { background: rgba(255,255,255,0.04); }
+    .tree-node.selected { background: var(--selected-blue-dim); }
+    .tree-node.selected .tree-node-name { color: var(--accent-blue); }
+    .tree-node-indent { flex-shrink: 0; display: flex; align-items: center; }
+    .tree-node-expand {
+      width: 14px; height: 14px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 8px; color: var(--text-tertiary); cursor: pointer;
+    }
+    .tree-node-icon { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; width: 14px; text-align: center; }
+    .tree-node-name { font-size: 11px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-node-badge {
+      font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 2px; flex-shrink: 0;
+      background: var(--bg-elevated); color: var(--text-field-label);
+      border: 1px solid var(--border-chrome);
+    }
+    .tree-node-badge.joint   { color: #7dd3fc; border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.08); }
+    .tree-node-badge.sensor  { color: #c084fc; border-color: rgba(192,132,252,0.3); background: rgba(192,132,252,0.08); }
+    .tree-node-badge.wheel   { color: #86efac; border-color: rgba(134,239,172,0.3); background: rgba(134,239,172,0.08); }
+    .tree-node-badge.caster  { color: #fde68a; border-color: rgba(253,230,138,0.3); background: rgba(253,230,138,0.08); }
+
+    /* Validation issue list */
+    .val-category-hdr {
+      padding: 6px 10px 4px; font-size: 8px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-field-label);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .val-issue {
+      display: flex; gap: 8px; padding: 7px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.035); cursor: pointer;
+      transition: background 0.1s;
+    }
+    .val-issue:hover { background: rgba(255,255,255,0.04); }
+    .val-issue-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .val-issue-dot.error { background: #fc8181; }
+    .val-issue-dot.warn  { background: #ed8936; }
+    .val-issue-dot.pass  { background: #48bb78; }
+    .val-issue-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .val-issue-title { font-size: 11px; color: var(--text-secondary); }
+    .val-issue-detail { font-size: 10px; color: var(--text-tertiary); line-height: 1.4; }
+    .val-issue-fix { font-size: 10px; color: var(--accent-blue); margin-top: 2px; }
+    .val-issue-component {
+      flex-shrink: 0; align-self: flex-start; margin-top: 1px;
+      font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 2px;
+      background: var(--bg-elevated); border: 1px solid var(--border-chrome); color: var(--text-field-label);
+    }
+
+    /* Health summary bar */
+    .val-summary-bar {
+      display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+      background: var(--bg-elevated); border-bottom: 1px solid var(--border-chrome); flex-shrink: 0;
+    }
+    .val-health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .val-health-label { font-size: 10px; font-weight: 700; color: var(--text-secondary); flex: 1; }
+    .val-count { font-size: 10px; font-family: 'Roboto Mono', monospace; color: var(--text-tertiary); }
+    .val-count.red { color: #fc8181; }
+    .val-count.amber { color: #ed8936; }
+    .val-count.green { color: #48bb78; }
+
+    /* ══════════════════════════════════════════════════════════════
+       4. STATUS BAR — identical to home page
+    ══════════════════════════════════════════════════════════════ */
+    #status-bar {
+      height: var(--statusbar-h); flex-shrink: 0;
+      background: var(--bg-chrome); border-top: 1px solid var(--border-chrome);
+      display: flex; align-items: center; overflow: hidden;
+      font-family: 'Roboto Mono', monospace; font-size: 10px; z-index: 200;
+    }
+    .bseg {
+      display: flex; align-items: center; gap: 5px;
+      padding: 0 9px; height: 100%; border-right: 1px solid var(--border-chrome);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .bseg:last-child { border-right: none; }
+    .bseg-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .bseg-dot.ok     { background: var(--accent-success); }
+    .bseg-dot.warn   { background: var(--accent-warning); animation: pulse-warn 2s infinite; }
+    .bseg-dot.off    { background: var(--text-tertiary); }
+    .bseg-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-field-label); }
+    .bseg-val { color: var(--text-primary); font-weight: 600; }
+    .bseg-spacer { flex: 1; }
+
+    @keyframes pulse-warn {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       5. ROBOT CANVAS — SVG geometry
+    ══════════════════════════════════════════════════════════════ */
+    /* Robot body parts drawn with SVG / CSS shapes inside robot-svg */
+    .robot-body-outline {
+      fill: rgba(38,105,200,0.06); stroke: rgba(66,153,225,0.55); stroke-width: 1.5;
+    }
+    .robot-chassis {
+      fill: rgba(35,41,51,0.9); stroke: rgba(74,85,104,0.6); stroke-width: 1;
+    }
+    .robot-wheel {
+      fill: rgba(20,20,28,0.95); stroke: rgba(86,154,86,0.7); stroke-width: 1.5;
+    }
+    .robot-caster {
+      fill: rgba(25,29,38,0.9); stroke: rgba(113,128,150,0.5); stroke-width: 1;
+    }
+    .robot-sensor-lidar {
+      fill: rgba(192,132,252,0.12); stroke: rgba(192,132,252,0.6); stroke-width: 1.5;
+    }
+    .robot-sensor-camera {
+      fill: rgba(125,211,252,0.1); stroke: rgba(125,211,252,0.55); stroke-width: 1.2;
+    }
+    .robot-fov-arc {
+      fill: none; stroke: rgba(192,132,252,0.25); stroke-width: 1;
+      stroke-dasharray: 4 3;
+    }
+    .robot-camera-fov {
+      fill: rgba(125,211,252,0.06); stroke: rgba(125,211,252,0.2); stroke-width: 1;
+    }
+    .robot-safety-zone {
+      fill: rgba(237,137,54,0.05); stroke: rgba(237,137,54,0.3); stroke-width: 1;
+      stroke-dasharray: 5 4;
+    }
+    .robot-origin-cross line {
+      stroke: rgba(66,153,225,0.5); stroke-width: 1;
+    }
+    .robot-frame-dot {
+      fill: rgba(66,153,225,0.7); r: 2.5;
+    }
+    .robot-axis-x { stroke: rgba(252,129,129,0.7); stroke-width: 1.5; }
+    .robot-axis-y { stroke: rgba(134,239,172,0.7); stroke-width: 1.5; }
+
+    /* Labels on canvas — subtle and non-blocking */
+    .canvas-label {
+      fill: var(--text-tertiary); font-size: 9px; font-family: 'Roboto Mono', monospace;
+      pointer-events: none;
+    }
+    .canvas-label-highlight { fill: var(--accent-blue); }
+
+    /* Selected geometry highlight */
+    .selected-highlight { stroke: var(--accent-blue) !important; stroke-width: 2 !important; filter: drop-shadow(0 0 4px rgba(66,153,225,0.5)); }
+
+    /* ══════════════════════════════════════════════════════════════
+       6. OVERFLOW MENU (secondary actions)
+    ══════════════════════════════════════════════════════════════ */
+    #overflow-menu {
+      position: fixed; z-index: 9100;
+      background: var(--bg-chrome); border: 1px solid var(--border-chrome);
+      border-radius: 5px; min-width: 196px; padding: 4px 0;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      display: none; flex-direction: column;
+    }
+    #overflow-menu.open { display: flex; }
+    .om-item {
+      display: flex; align-items: center; gap: 9px; padding: 7px 12px;
+      font-size: 11px; font-weight: 500; color: var(--text-secondary);
+      border: none; background: transparent; cursor: pointer; text-align: left; width: 100%;
+      transition: background 0.1s;
+    }
+    .om-item:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+    .om-item i { font-size: 11px; width: 14px; color: var(--text-field-label); flex-shrink: 0; }
+    .om-item.danger { color: #fc8181; }
+    .om-item.danger i { color: #fc8181; }
+    .om-sep { height: 1px; background: var(--border-chrome); margin: 3px 0; }
+    .om-hdr { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-field-label); padding: 5px 12px 3px; }
+
+    /* ══════════════════════════════════════════════════════════════
+       7. PROFILE SELECTOR DROPDOWN
+    ══════════════════════════════════════════════════════════════ */
+    #profile-dropdown {
+      position: fixed; z-index: 9100;
+      background: var(--bg-chrome); border: 1px solid var(--border-chrome);
+      border-radius: 5px; min-width: 240px; padding: 0;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      display: none; flex-direction: column;
+    }
+    #profile-dropdown.open { display: flex; }
+    .pd-hdr {
+      padding: 8px 12px; border-bottom: 1px solid var(--border-chrome);
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-field-label); flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .pd-list { max-height: 280px; overflow-y: auto; }
+    .pd-item {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+      border: none; background: transparent; cursor: pointer; width: 100%;
+      text-align: left; border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .pd-item:hover { background: rgba(255,255,255,0.06); }
+    .pd-item.active { background: var(--selected-blue-dim); }
+    .pd-item-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .pd-item-meta { flex: 1; min-width: 0; }
+    .pd-item-name { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+    .pd-item-ver  { font-size: 9px; color: var(--text-tertiary); font-family: 'Roboto Mono', monospace; }
+    .pd-footer {
+      padding: 6px 8px; border-top: 1px solid var(--border-chrome);
+      display: flex; gap: 4px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       MISC UTILITIES
+    ══════════════════════════════════════════════════════════════ */
+    .insp-empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 32px 20px; gap: 10px; text-align: center; color: var(--text-tertiary); opacity: 0.7;
+    }
+    .insp-empty i { font-size: 26px; opacity: 0.35; }
+    .insp-empty-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .insp-empty-sub { font-size: 10px; line-height: 1.5; }
+
+    .tag { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 2px; }
+    .tag-blue   { background: rgba(66,153,225,0.15); border: 1px solid rgba(66,153,225,0.3); color: #7dd3fc; }
+    .tag-green  { background: rgba(72,187,120,0.15); border: 1px solid rgba(72,187,120,0.3); color: #68d391; }
+    .tag-amber  { background: rgba(237,137,54,0.15); border: 1px solid rgba(237,137,54,0.3); color: #ed8936; }
+    .tag-purple { background: rgba(192,132,252,0.15); border: 1px solid rgba(192,132,252,0.3); color: #c084fc; }
+    .tag-gray   { background: rgba(113,128,150,0.15); border: 1px solid rgba(113,128,150,0.3); color: #a0aec0; }
+
+    /* Scrollbar thinning */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 3px; }
+
+    /* Overlay backdrop */
+    #modal-backdrop {
+      position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.55);
+      display: none;
+    }
+    #modal-backdrop.open { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell">
+
+  <!-- ══════════════════════════════════════════════════════════════
+       GLOBAL HEADER
+  ══════════════════════════════════════════════════════════════ -->
+  <header id="global-header">
+    <!-- Brand -->
+    <div class="hdr-brand">
+      <div class="hdr-brand-logo"><i class="fas fa-robot"></i></div>
+      <div>
+        <div class="hdr-brand-title">NEXT</div>
+      </div>
+    </div>
+
+    <!-- Robot identity chip -->
+    <div class="hdr-robot-chip">
+      <div class="hdr-robot-dot"></div>
+      UGV-01
+    </div>
+
+    <!-- Center — page mode pill -->
+    <div class="hdr-center">
+      <div class="hdr-page-pill"><i class="fas fa-sliders"></i> Device Config</div>
+    </div>
+
+    <!-- Right controls -->
+    <div class="hdr-right">
+      <button class="hdr-icon-btn btn-icon" title="Notifications"><i class="fas fa-bell"></i></button>
+      <button class="hdr-icon-btn btn-icon" title="Help"><i class="fas fa-question-circle"></i></button>
+      <button class="hdr-icon-btn btn-icon" title="Home" onclick="window.location='/'"><i class="fas fa-home"></i></button>
+      <button class="hdr-estop" onclick="handleEstop()"><i class="fas fa-stop-circle"></i> E-STOP</button>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       COMMAND BAR — Profile card + single action row
+  ══════════════════════════════════════════════════════════════ -->
+  <div id="cmd-bar">
+    <!-- Active profile card -->
+    <div class="cmdbar-profile" style="cursor:pointer" onclick="toggleProfileDropdown(event)">
+      <div class="profile-icon"><i class="fas fa-cube"></i></div>
+      <div class="profile-meta">
+        <div class="profile-name">UGV-01 Standard</div>
+        <div class="profile-sub">
+          <span class="profile-ver">v2.4.1</span>
+          <span class="profile-state-chip draft">Draft</span>
+          <span class="t-caption" style="color:var(--text-tertiary)">· saved 3m ago</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Validation summary -->
+    <div class="cmdbar-validation">
+      <span class="t-label" style="margin-right:2px;">Issues</span>
+      <span class="val-chip error" title="2 errors" onclick="openInspectorTab('validation')"><i class="fas fa-times-circle"></i> 2</span>
+      <span class="val-chip warn"  title="5 warnings" onclick="openInspectorTab('validation')"><i class="fas fa-exclamation-triangle"></i> 5</span>
+    </div>
+
+    <div class="cmdbar-spacer"></div>
+
+    <!-- Primary actions -->
+    <div class="cmdbar-actions">
+      <button class="btn" onclick="handleImportUrdf()"><i class="fas fa-file-import"></i> Import URDF</button>
+      <button class="btn" onclick="handleSaveDraft()"><i class="fas fa-save"></i> Save Draft</button>
+      <button class="btn btn-primary" onclick="handleValidate()"><i class="fas fa-check-circle"></i> Validate</button>
+      <button class="btn" onclick="handleExport()"><i class="fas fa-download"></i> Export</button>
+      <button class="btn btn-success" onclick="handlePublish()"><i class="fas fa-rocket"></i> Publish</button>
+      <!-- Secondary overflow -->
+      <button class="cmdbar-more-btn" onclick="toggleOverflowMenu(event)" title="More actions"><i class="fas fa-ellipsis-v"></i></button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN VIEWPORT — three zones
+  ══════════════════════════════════════════════════════════════ -->
+  <div id="main-viewport">
+
+    <!-- ── Mode Rail ──────────────────────────────────────────── -->
+    <nav id="mode-rail">
+      <button class="rail-btn active" data-mode="structure" onclick="setMode('structure')" title="Structure">
+        <i class="fas fa-sitemap"></i>
+        <span class="rail-label">Structure</span>
+      </button>
+      <button class="rail-btn" data-mode="sensors" onclick="setMode('sensors')" title="Sensors">
+        <i class="fas fa-broadcast-tower"></i>
+        <span class="rail-label">Sensors</span>
+      </button>
+      <button class="rail-btn" data-mode="motion" onclick="setMode('motion')" title="Motion">
+        <i class="fas fa-tachometer-alt"></i>
+        <span class="rail-label">Motion</span>
+      </button>
+      <div class="rail-sep"></div>
+      <button class="rail-btn" data-mode="safety" onclick="setMode('safety')" title="Safety">
+        <i class="fas fa-shield-alt"></i>
+        <span class="rail-label">Safety</span>
+      </button>
+      <button class="rail-btn" data-mode="diagnostics" onclick="setMode('diagnostics')" title="Diagnostics">
+        <i class="fas fa-stethoscope"></i>
+        <span class="rail-label">Diagn.</span>
+      </button>
+      <div class="rail-spacer"></div>
+      <div class="rail-sep"></div>
+      <button class="rail-btn" title="Settings" onclick="setMode('settings')">
+        <i class="fas fa-cog"></i>
+        <span class="rail-label">Settings</span>
+      </button>
+    </nav>
+
+    <!-- ── Robot Canvas Workspace ──────────────────────────────── -->
+    <div id="canvas-workspace">
+      <!-- Canvas header strip -->
+      <div id="canvas-header">
+        <span class="cvs-hdr-view-label" id="canvas-view-label">Top View</span>
+        <div class="cvs-hdr-sep"></div>
+        <span class="cvs-hdr-profile">UGV-01 Standard · v2.4.1</span>
+        <div class="cvs-hdr-sep"></div>
+
+        <!-- View toggle -->
+        <div class="cvs-view-toggle">
+          <button class="cvs-view-btn active" onclick="setCanvasView('top', this)">Top</button>
+          <button class="cvs-view-btn" onclick="setCanvasView('side', this)">Side</button>
+          <button class="cvs-view-btn" onclick="setCanvasView('iso', this)">Iso</button>
+        </div>
+
+        <!-- Visual layer toggles -->
+        <button class="btn" style="height:24px;padding:0 8px;font-size:9px;margin-left:4px;" id="toggle-collision" onclick="toggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
+        <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-sensors" onclick="toggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
+        <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-safety" onclick="toggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
+
+        <div class="cvs-spacer"></div>
+
+        <!-- Canvas issues chip -->
+        <span class="cvs-issue-chip has-errors" onclick="openInspectorTab('validation')" title="2 errors, 5 warnings">
+          <i class="fas fa-times-circle"></i> 2 errors &nbsp;·&nbsp; <i class="fas fa-exclamation-triangle"></i> 5 warn
+        </span>
+      </div>
+
+      <!-- Robot drawing area -->
+      <div id="robot-canvas-area" onclick="handleCanvasClick(event)">
+
+        <!-- Robot SVG drawing — top view -->
+        <svg id="robot-svg" viewBox="-300 -250 600 500" xmlns="http://www.w3.org/2000/svg" id="robot-svg-el">
+
+          <!-- Safety zone (outermost, dashed) -->
+          <ellipse class="robot-safety-zone" cx="0" cy="0" rx="190" ry="165"/>
+
+          <!-- Sensor FOV arcs -->
+          <!-- Lidar FOV (360°) -->
+          <circle class="robot-fov-arc" cx="0" cy="0" r="150"/>
+          <!-- Front camera FOV cone -->
+          <path class="robot-camera-fov" d="M 0,0 L -70,-160 A 150,150 0 0,1 70,-160 Z" opacity="0.6"/>
+
+          <!-- Collision cylinder (footprint) -->
+          <ellipse fill="none" stroke="rgba(237,137,54,0.3)" stroke-width="1" stroke-dasharray="3,3" cx="0" cy="0" rx="128" ry="108"/>
+
+          <!-- Chassis body -->
+          <rect class="robot-chassis" x="-88" y="-72" width="176" height="144" rx="12"/>
+          <!-- Top direction indicator -->
+          <polygon fill="rgba(66,153,225,0.2)" stroke="rgba(66,153,225,0.5)" stroke-width="1"
+                   points="0,-68  14,-52  -14,-52"/>
+
+          <!-- Drivetrain: left wheels -->
+          <rect class="robot-wheel" x="-108" y="-60" width="24" height="48" rx="4" data-part="wheel_left_front"/>
+          <rect class="robot-wheel" x="-108" y="12"  width="24" height="48" rx="4" data-part="wheel_left_rear"/>
+          <!-- Drivetrain: right wheels -->
+          <rect class="robot-wheel" x="84" y="-60" width="24" height="48" rx="4" data-part="wheel_right_front"/>
+          <rect class="robot-wheel" x="84" y="12"  width="24" height="48" rx="4" data-part="wheel_right_rear"/>
+
+          <!-- Casters front/rear -->
+          <circle class="robot-caster" cx="0" cy="-82" r="12" data-part="caster_front"/>
+          <circle class="robot-caster" cx="0" cy="82"  r="12" data-part="caster_rear"/>
+
+          <!-- LiDAR sensor (top center) -->
+          <circle class="robot-sensor-lidar" cx="0" cy="-25" r="15" data-part="lidar_main"/>
+          <circle fill="rgba(192,132,252,0.7)" cx="0" cy="-25" r="5"/>
+
+          <!-- Camera sensor (front) -->
+          <rect class="robot-sensor-camera" x="-12" y="-74" width="24" height="14" rx="3" data-part="camera_front"/>
+
+          <!-- Origin cross + axes -->
+          <g class="robot-origin-cross">
+            <line x1="-20" y1="0" x2="20" y2="0" stroke="rgba(66,153,225,0.35)" stroke-width="1"/>
+            <line x1="0" y1="-20" x2="0" y2="20" stroke="rgba(66,153,225,0.35)" stroke-width="1"/>
+          </g>
+          <!-- Axis arrows -->
+          <line x1="0" y1="0" x2="36" y2="0" class="robot-axis-x" marker-end="url(#arrow-x)"/>
+          <line x1="0" y1="0" x2="0" y2="-36" class="robot-axis-y" marker-end="url(#arrow-y)"/>
+
+          <!-- Joint frame dots -->
+          <circle class="robot-frame-dot" cx="-96" cy="-36"/>
+          <circle class="robot-frame-dot" cx="-96" cy="36"/>
+          <circle class="robot-frame-dot" cx="96" cy="-36"/>
+          <circle class="robot-frame-dot" cx="96" cy="36"/>
+
+          <!-- Canvas labels -->
+          <text class="canvas-label" x="4" y="16">X</text>
+          <text class="canvas-label" x="16" y="-26">Y</text>
+          <text class="canvas-label" x="-100" y="-68" text-anchor="middle">FL</text>
+          <text class="canvas-label" x="-100" y="68" text-anchor="middle">RL</text>
+          <text class="canvas-label" x="104" y="-68" text-anchor="middle">FR</text>
+          <text class="canvas-label" x="104" y="68" text-anchor="middle">RR</text>
+          <text class="canvas-label" x="22" y="-22">lidar</text>
+          <text class="canvas-label" x="14" y="-80">cam</text>
+
+          <!-- Arrowhead markers -->
+          <defs>
+            <marker id="arrow-x" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L6,3 z" fill="rgba(252,129,129,0.7)"/>
+            </marker>
+            <marker id="arrow-y" markerWidth="6" markerHeight="6" refX="3" refY="0" orient="auto">
+              <path d="M0,6 L6,6 L3,0 z" fill="rgba(134,239,172,0.7)"/>
+            </marker>
+          </defs>
+
+          <!-- Issue marker — wheel_left_front -->
+          <g transform="translate(-112, -90)" onclick="selectAndShowIssue('wheel_left_front')" style="cursor:pointer;">
+            <circle r="9" fill="rgba(196,43,43,0.85)" stroke="#fc8181" stroke-width="1"/>
+            <text x="0" y="3.5" text-anchor="middle" fill="white" font-size="8" font-weight="700">!</text>
+          </g>
+
+          <!-- Issue marker — lidar_main (warning) -->
+          <g transform="translate(20, -44)" onclick="selectAndShowIssue('lidar_main')" style="cursor:pointer;">
+            <circle r="9" fill="rgba(168,84,0,0.85)" stroke="#ed8936" stroke-width="1"/>
+            <text x="0" y="3.5" text-anchor="middle" fill="white" font-size="8" font-weight="700">!</text>
+          </g>
+
+        </svg>
+
+        <!-- Floating view controls — bottom right -->
+        <div id="view-controls">
+          <button class="vc-btn" onclick="canvasZoomIn()" title="Zoom in"><i class="fas fa-plus"></i></button>
+          <button class="vc-btn" onclick="canvasZoomOut()" title="Zoom out"><i class="fas fa-minus"></i></button>
+          <div class="vc-sep"></div>
+          <button class="vc-btn" onclick="canvasFit()" title="Fit to view"><i class="fas fa-expand-arrows-alt"></i></button>
+          <div class="vc-sep"></div>
+          <button class="vc-btn active" id="vc-grid" onclick="toggleGrid(this)" title="Toggle grid"><i class="fas fa-th"></i></button>
+          <button class="vc-btn" id="vc-labels" onclick="toggleLabels(this)" title="Toggle labels"><i class="fas fa-tag"></i></button>
+        </div>
+
+        <!-- Canvas ruler -->
+        <div id="canvas-ruler">
+          <div class="ruler-bar" style="width:80px;"></div>
+          <span class="ruler-label">0.5 m</span>
+        </div>
+
+      </div><!-- #robot-canvas-area -->
+    </div><!-- #canvas-workspace -->
+
+    <!-- ── Inspector Panel ─────────────────────────────────────── -->
+    <aside id="inspector">
+      <div class="insp-header">
+        <span class="insp-header-title" id="insp-header-title">Inspector</span>
+        <span class="insp-mode-badge" id="insp-mode-badge">Structure</span>
+      </div>
+
+      <div class="insp-tabs">
+        <button class="insp-tab active" data-tab="properties" onclick="openInspectorTab('properties')">Properties</button>
+        <button class="insp-tab" data-tab="hierarchy" onclick="openInspectorTab('hierarchy')">Hierarchy</button>
+        <button class="insp-tab" data-tab="validation" onclick="openInspectorTab('validation')">Validation</button>
+      </div>
+
+      <!-- ── PROPERTIES TAB ───────────────────────────────────── -->
+      <div class="insp-pane active" id="pane-properties">
+
+        <!-- Overview state shown when nothing selected -->
+        <div id="overview-state">
+          <!-- Robot overview -->
+          <div style="padding: 10px 10px 4px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:13px;font-weight:700;color:var(--text-primary);">UGV-01 Standard</span>
+              <span class="tag tag-amber">Draft</span>
+            </div>
+            <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">Profile v2.4.1 · Last saved 3 min ago</div>
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;">
+              <span class="val-chip error"><i class="fas fa-times-circle"></i> 2 errors</span>
+              <span class="val-chip warn"><i class="fas fa-exclamation-triangle"></i> 5 warnings</span>
+            </div>
+          </div>
+
+          <!-- Dimension stats grid -->
+          <div class="overview-grid">
+            <div class="ov-cell">
+              <span class="ov-lbl">Length</span>
+              <span class="ov-val">0.622 m</span>
+            </div>
+            <div class="ov-cell">
+              <span class="ov-lbl">Width</span>
+              <span class="ov-val">0.481 m</span>
+            </div>
+            <div class="ov-cell">
+              <span class="ov-lbl">Height</span>
+              <span class="ov-val">0.285 m</span>
+            </div>
+            <div class="ov-cell">
+              <span class="ov-lbl">Mass</span>
+              <span class="ov-val">18.4 kg</span>
+            </div>
+            <div class="ov-cell">
+              <span class="ov-lbl">Frames</span>
+              <span class="ov-val">14</span>
+            </div>
+            <div class="ov-cell">
+              <span class="ov-lbl">Sensors</span>
+              <span class="ov-val">4</span>
+            </div>
+          </div>
+
+          <!-- Quick actions -->
+          <div class="overview-actions">
+            <button class="btn btn-primary" onclick="handleImportUrdf()"><i class="fas fa-file-import"></i> Import URDF</button>
+            <button class="btn" onclick="handleValidate()"><i class="fas fa-check-circle"></i> Validate</button>
+          </div>
+
+          <!-- Base Link section -->
+          <div class="insp-section">Base Link</div>
+          <div class="prop-row">
+            <span class="prop-lbl">Name</span>
+            <span class="prop-val">base_link</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-lbl">Base Frame</span>
+            <span class="prop-val">base_footprint</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-lbl">Joint Type</span>
+            <span class="prop-val">fixed</span>
+          </div>
+
+          <!-- Footprint section -->
+          <div class="insp-section">Footprint</div>
+          <div class="prop-row">
+            <span class="prop-lbl">Shape</span>
+            <span class="prop-val">circle</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-lbl">Radius</span>
+            <span class="prop-val mono">0.300 m</span>
+          </div>
+          <div class="prop-row">
+            <span class="prop-lbl">Padding</span>
+            <span class="prop-val mono">0.010 m</span>
+          </div>
+        </div><!-- #overview-state -->
+
+        <!-- Detail editor shown when a part is selected -->
+        <div id="detail-state" style="display:none;">
+          <!-- Populated by JS when a component is selected -->
+        </div>
+
+      </div><!-- #pane-properties -->
+
+      <!-- ── HIERARCHY TAB ────────────────────────────────────── -->
+      <div class="insp-pane" id="pane-hierarchy">
+        <!-- Search -->
+        <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;">
+          <input class="prop-input" style="width:100%;flex:none;" placeholder="Filter links…" oninput="filterHierarchy(this.value)">
+        </div>
+
+        <!-- Tree -->
+        <div id="hierarchy-tree" style="flex:1;overflow-y:auto;">
+
+          <!-- base_footprint -->
+          <div class="tree-node" data-link="base_footprint" onclick="selectLink('base_footprint')">
+            <span class="tree-node-expand"><i class="fas fa-chevron-down"></i></span>
+            <span class="tree-node-icon" style="color:var(--accent-blue);"><i class="fas fa-crosshairs"></i></span>
+            <span class="tree-node-name">base_footprint</span>
+            <span class="tree-node-badge">root</span>
+          </div>
+
+          <!-- base_link (child of base_footprint) -->
+          <div class="tree-node" data-link="base_link" onclick="selectLink('base_link')" style="padding-left:24px;">
+            <span class="tree-node-expand"><i class="fas fa-chevron-down"></i></span>
+            <span class="tree-node-icon"><i class="fas fa-cube"></i></span>
+            <span class="tree-node-name">base_link</span>
+            <span class="tree-node-badge">chassis</span>
+          </div>
+
+          <!-- Wheels -->
+          <div class="tree-node" data-link="wheel_left_front" onclick="selectLink('wheel_left_front')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
+            <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
+            <span class="tree-node-name">wheel_left_front</span>
+            <span class="tree-node-badge wheel">wheel</span>
+          </div>
+          <div class="tree-node" data-link="wheel_right_front" onclick="selectLink('wheel_right_front')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
+            <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
+            <span class="tree-node-name">wheel_right_front</span>
+            <span class="tree-node-badge wheel">wheel</span>
+          </div>
+          <div class="tree-node" data-link="wheel_left_rear" onclick="selectLink('wheel_left_rear')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
+            <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
+            <span class="tree-node-name">wheel_left_rear</span>
+            <span class="tree-node-badge wheel">wheel</span>
+          </div>
+          <div class="tree-node" data-link="wheel_right_rear" onclick="selectLink('wheel_right_rear')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
+            <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
+            <span class="tree-node-name">wheel_right_rear</span>
+            <span class="tree-node-badge wheel">wheel</span>
+          </div>
+
+          <!-- Casters -->
+          <div class="tree-node" data-link="caster_front" onclick="selectLink('caster_front')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i></i></span>
+            <span class="tree-node-icon" style="color:#fde68a;"><i class="fas fa-circle"></i></span>
+            <span class="tree-node-name">caster_front</span>
+            <span class="tree-node-badge caster">caster</span>
+          </div>
+          <div class="tree-node" data-link="caster_rear" onclick="selectLink('caster_rear')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i></i></span>
+            <span class="tree-node-icon" style="color:#fde68a;"><i class="fas fa-circle"></i></span>
+            <span class="tree-node-name">caster_rear</span>
+            <span class="tree-node-badge caster">caster</span>
+          </div>
+
+          <!-- Sensors -->
+          <div class="tree-node" data-link="lidar_main" onclick="selectLink('lidar_main')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i></i></span>
+            <span class="tree-node-icon" style="color:#c084fc;"><i class="fas fa-broadcast-tower"></i></span>
+            <span class="tree-node-name">lidar_main</span>
+            <span class="tree-node-badge sensor">sensor</span>
+          </div>
+          <div class="tree-node" data-link="camera_front" onclick="selectLink('camera_front')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i></i></span>
+            <span class="tree-node-icon" style="color:#7dd3fc;"><i class="fas fa-video"></i></span>
+            <span class="tree-node-name">camera_front</span>
+            <span class="tree-node-badge sensor">sensor</span>
+          </div>
+          <div class="tree-node" data-link="imu_link" onclick="selectLink('imu_link')" style="padding-left:38px;">
+            <span class="tree-node-expand" style="opacity:0;"><i></i></span>
+            <span class="tree-node-icon" style="color:#7dd3fc;"><i class="fas fa-microchip"></i></span>
+            <span class="tree-node-name">imu_link</span>
+            <span class="tree-node-badge sensor">sensor</span>
+          </div>
+
+        </div><!-- #hierarchy-tree -->
+      </div><!-- #pane-hierarchy -->
+
+      <!-- ── VALIDATION TAB ────────────────────────────────────── -->
+      <div class="insp-pane" id="pane-validation">
+
+        <!-- Health summary -->
+        <div class="val-summary-bar">
+          <div class="val-health-dot" style="background:var(--accent-critical);"></div>
+          <span class="val-health-label">2 Errors · 5 Warnings · 18 Passed</span>
+        </div>
+
+        <!-- Category: Geometry -->
+        <div class="val-category-hdr">
+          Geometry
+          <span><span class="val-count red">1 error</span> · <span class="val-count amber">2 warn</span></span>
+        </div>
+
+        <div class="val-issue" onclick="selectAndShowIssue('wheel_left_front')">
+          <div class="val-issue-dot error"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">Wheel radius mismatch</div>
+            <div class="val-issue-detail">wheel_left_front radius (0.08 m) does not match URDF origin z-offset (0.095 m). Transforms may be incorrect at runtime.</div>
+            <div class="val-issue-fix"><i class="fas fa-wrench" style="font-size:9px;"></i> Set radius to 0.095 m or adjust joint origin</div>
+          </div>
+          <span class="val-issue-component">wheel_left_front</span>
+        </div>
+
+        <div class="val-issue" onclick="selectLink('wheel_left_rear')">
+          <div class="val-issue-dot warn"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">Wheel axle symmetry</div>
+            <div class="val-issue-detail">Left and right rear wheel y-offsets differ by 2 mm. May cause slight drift in straight-line motion.</div>
+            <div class="val-issue-fix"><i class="fas fa-wrench" style="font-size:9px;"></i> Mirror y-offset: ±0.2205 m</div>
+          </div>
+          <span class="val-issue-component">wheel_left_rear</span>
+        </div>
+
+        <div class="val-issue">
+          <div class="val-issue-dot warn"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">Caster inertia undefined</div>
+            <div class="val-issue-detail">caster_front has no inertia element. Dynamics simulation will be inaccurate.</div>
+            <div class="val-issue-fix"><i class="fas fa-wrench" style="font-size:9px;"></i> Add inertia block to caster link</div>
+          </div>
+          <span class="val-issue-component">caster_front</span>
+        </div>
+
+        <!-- Category: Kinematics -->
+        <div class="val-category-hdr">
+          Kinematics
+          <span><span class="val-count amber">1 warn</span></span>
+        </div>
+
+        <div class="val-issue">
+          <div class="val-issue-dot warn"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">Wheelbase not matched</div>
+            <div class="val-issue-detail">Configured wheelbase (0.308 m) does not match diff-drive controller parameter wheel_separation (0.298 m).</div>
+            <div class="val-issue-fix"><i class="fas fa-wrench" style="font-size:9px;"></i> Set wheel_separation = 0.308 m in nav2 params</div>
+          </div>
+          <span class="val-issue-component">base_link</span>
+        </div>
+
+        <!-- Category: Sensor Coverage -->
+        <div class="val-category-hdr">
+          Sensor Coverage
+          <span><span class="val-count red">1 error</span> · <span class="val-count amber">2 warn</span></span>
+        </div>
+
+        <div class="val-issue" onclick="selectAndShowIssue('lidar_main')">
+          <div class="val-issue-dot error"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">LiDAR topic not remapped</div>
+            <div class="val-issue-detail">lidar_main scan topic is /scan but costmap expects /lidar/scan. Navigation may fail to receive obstacle data.</div>
+            <div class="val-issue-fix"><i class="fas fa-wrench" style="font-size:9px;"></i> Add topic remapping in robot launch file</div>
+          </div>
+          <span class="val-issue-component">lidar_main</span>
+        </div>
+
+        <div class="val-issue">
+          <div class="val-issue-dot warn"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">Rear blind spot</div>
+            <div class="val-issue-detail">No sensor coverage within 30° rear arc (180°–210°). Consider adding rear ultrasonic or second camera.</div>
+          </div>
+          <span class="val-issue-component">coverage</span>
+        </div>
+
+        <div class="val-issue">
+          <div class="val-issue-dot warn"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title">Camera FOV clipped by chassis</div>
+            <div class="val-issue-detail">camera_front FOV overlaps chassis geometry below 5° tilt. Effective range reduced to 2.8 m.</div>
+          </div>
+          <span class="val-issue-component">camera_front</span>
+        </div>
+
+        <!-- Category: Naming -->
+        <div class="val-category-hdr">
+          Naming
+          <span style="color:var(--accent-success);font-size:9px;font-weight:700;">✓ 5 passed</span>
+        </div>
+
+        <div class="val-issue" style="cursor:default;opacity:0.65;">
+          <div class="val-issue-dot pass"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title" style="color:var(--text-tertiary);">All frame names are valid REP-105</div>
+          </div>
+          <span class="val-issue-component" style="color:var(--accent-success);border-color:rgba(72,187,120,0.3);background:rgba(29,122,67,0.1);">pass</span>
+        </div>
+
+        <div class="val-issue" style="cursor:default;opacity:0.65;">
+          <div class="val-issue-dot pass"></div>
+          <div class="val-issue-body">
+            <div class="val-issue-title" style="color:var(--text-tertiary);">Joint names match driver expectations</div>
+          </div>
+          <span class="val-issue-component" style="color:var(--accent-success);border-color:rgba(72,187,120,0.3);background:rgba(29,122,67,0.1);">pass</span>
+        </div>
+
+      </div><!-- #pane-validation -->
+
+    </aside><!-- #inspector -->
+
+  </div><!-- #main-viewport -->
+
+  <!-- ══════════════════════════════════════════════════════════════
+       STATUS BAR — identical to home page
+  ══════════════════════════════════════════════════════════════ -->
+  <div id="status-bar">
+    <div class="bseg">
+      <div class="bseg-dot ok"></div>
+      <span class="bseg-lbl">ROS</span>
+      <span class="bseg-val">Connected</span>
+    </div>
+    <div class="bseg">
+      <div class="bseg-dot ok"></div>
+      <span class="bseg-lbl">Battery</span>
+      <span class="bseg-val">84 %</span>
+    </div>
+    <div class="bseg">
+      <div class="bseg-dot ok"></div>
+      <span class="bseg-lbl">Mode</span>
+      <span class="bseg-val">Config</span>
+    </div>
+    <div class="bseg">
+      <div class="bseg-dot warn"></div>
+      <span class="bseg-lbl">Localization</span>
+      <span class="bseg-val">Degraded</span>
+    </div>
+    <div class="bseg">
+      <span class="bseg-lbl">Speed</span>
+      <span class="bseg-val">0.00 m/s</span>
+    </div>
+    <div class="bseg">
+      <div class="bseg-dot ok"></div>
+      <span class="bseg-lbl">Robot State</span>
+      <span class="bseg-val">Idle</span>
+    </div>
+    <div class="bseg">
+      <div class="bseg-dot ok"></div>
+      <span class="bseg-lbl">Stack</span>
+      <span class="bseg-val">Nav2 Active</span>
+    </div>
+    <div class="bseg-spacer"></div>
+    <div class="bseg" style="border-left:1px solid var(--border-chrome);border-right:none;">
+      <span class="bseg-lbl" style="color:var(--accent-warning);">2 ERRORS</span>
+      <span class="bseg-val" style="color:var(--accent-warning);">Not safe to publish</span>
+    </div>
+  </div>
+
+</div><!-- #app-shell -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     OVERLAY MENUS
+══════════════════════════════════════════════════════════════ -->
+<div id="modal-backdrop" onclick="closeAllMenus()"></div>
+
+<!-- Overflow (secondary actions) menu -->
+<div id="overflow-menu">
+  <div class="om-hdr">Profile Actions</div>
+  <button class="om-item" onclick="handleDuplicateProfile()"><i class="fas fa-copy"></i> Duplicate Profile</button>
+  <button class="om-item" onclick="handleCompareRevisions()"><i class="fas fa-code-branch"></i> Compare Revisions</button>
+  <button class="om-item" onclick="handleRestoreDefaults()"><i class="fas fa-undo"></i> Restore Defaults</button>
+  <div class="om-sep"></div>
+  <div class="om-hdr">File</div>
+  <button class="om-item" onclick="handleExportUrdf()"><i class="fas fa-file-export"></i> Export URDF</button>
+  <button class="om-item" onclick="handleExportJson()"><i class="fas fa-file-code"></i> Export JSON</button>
+  <div class="om-sep"></div>
+  <button class="om-item danger" onclick="handleDeleteProfile()"><i class="fas fa-trash"></i> Delete Profile</button>
+</div>
+
+<!-- Profile selector dropdown -->
+<div id="profile-dropdown">
+  <div class="pd-hdr">
+    Robot Profiles
+    <button class="btn" style="height:20px;padding:0 8px;font-size:9px;" onclick="handleNewProfile()"><i class="fas fa-plus"></i> New</button>
+  </div>
+  <div class="pd-list">
+    <button class="pd-item active" onclick="selectProfile('ugv01-standard')">
+      <div class="pd-item-dot" style="background:var(--accent-blue);"></div>
+      <div class="pd-item-meta">
+        <div class="pd-item-name">UGV-01 Standard</div>
+        <div class="pd-item-ver">v2.4.1 · Draft</div>
+      </div>
+    </button>
+    <button class="pd-item" onclick="selectProfile('ugv01-shelf')">
+      <div class="pd-item-dot" style="background:var(--accent-success);"></div>
+      <div class="pd-item-meta">
+        <div class="pd-item-name">UGV-01 Shelf Picker</div>
+        <div class="pd-item-ver">v1.9.0 · Published</div>
+      </div>
+    </button>
+    <button class="pd-item" onclick="selectProfile('ugv01-outdoor')">
+      <div class="pd-item-dot" style="background:var(--text-tertiary);"></div>
+      <div class="pd-item-meta">
+        <div class="pd-item-name">UGV-01 Outdoor</div>
+        <div class="pd-item-ver">v0.3.0 · Draft</div>
+      </div>
+    </button>
+  </div>
+  <div class="pd-footer">
+    <button class="btn" style="flex:1;" onclick="handleManageProfiles()"><i class="fas fa-list"></i> Manage All</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     JAVASCRIPT — interaction logic
+══════════════════════════════════════════════════════════════ -->
+<script>
+/* ─── State ───────────────────────────────────────────────── */
+const DC = {
+  mode: 'structure',
+  canvasView: 'top',
+  selectedLink: null,
+  layers: { collision: false, sensors: true, safety: true },
+  zoom: 1.0,
+  gridVisible: true,
+  labelsVisible: true,
+};
+
+/* ─── Mode Rail ───────────────────────────────────────────── */
+function setMode(mode) {
+  DC.mode = mode;
+  document.querySelectorAll('.rail-btn[data-mode]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  const badge = document.getElementById('insp-mode-badge');
+  if (badge) badge.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+/* ─── Inspector tabs ──────────────────────────────────────── */
+function openInspectorTab(tab) {
+  document.querySelectorAll('.insp-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  document.querySelectorAll('.insp-pane').forEach(p => {
+    p.classList.toggle('active', p.id === 'pane-' + tab);
+  });
+}
+
+/* ─── Canvas view ─────────────────────────────────────────── */
+function setCanvasView(view, btn) {
+  DC.canvasView = view;
+  document.querySelectorAll('.cvs-view-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const lbl = document.getElementById('canvas-view-label');
+  const names = { top: 'Top View', side: 'Side View', iso: 'Isometric' };
+  if (lbl) lbl.textContent = names[view] || view;
+  // In a real implementation, re-render the SVG here.
+}
+
+/* ─── Layer toggles ───────────────────────────────────────── */
+function toggleLayer(layer, btn) {
+  DC.layers[layer] = !DC.layers[layer];
+  btn.classList.toggle('active', DC.layers[layer]);
+  // In real code: show/hide SVG layer groups here.
+}
+
+/* ─── Zoom controls ───────────────────────────────────────── */
+const SVG_VIEWBOX_W = 600, SVG_VIEWBOX_H = 500;
+let svgScale = 1.0;
+
+function applySvgScale() {
+  const svg = document.getElementById('robot-svg');
+  if (!svg) return;
+  const hw = (SVG_VIEWBOX_W / 2) / svgScale;
+  const hh = (SVG_VIEWBOX_H / 2) / svgScale;
+  svg.setAttribute('viewBox', `${-hw} ${-hh} ${hw * 2} ${hh * 2}`);
+}
+function canvasZoomIn()  { svgScale = Math.min(svgScale * 1.2, 8); applySvgScale(); }
+function canvasZoomOut() { svgScale = Math.max(svgScale / 1.2, 0.3); applySvgScale(); }
+function canvasFit()     { svgScale = 1.0; applySvgScale(); }
+
+function toggleGrid(btn) {
+  DC.gridVisible = !DC.gridVisible;
+  btn.classList.toggle('active', DC.gridVisible);
+  document.getElementById('robot-canvas-area').style.backgroundImage = DC.gridVisible ? '' : 'none';
+}
+function toggleLabels(btn) {
+  DC.labelsVisible = !DC.labelsVisible;
+  btn.classList.toggle('active', DC.labelsVisible);
+  document.querySelectorAll('.canvas-label').forEach(el => {
+    el.style.display = DC.labelsVisible ? '' : 'none';
+  });
+}
+
+/* Mouse wheel zoom on canvas */
+document.getElementById('robot-canvas-area').addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) canvasZoomIn(); else canvasZoomOut();
+}, { passive: false });
+
+/* ─── Part selection ──────────────────────────────────────── */
+const PART_DATA = {
+  wheel_left_front: {
+    type: 'wheel',
+    parentFrame: 'base_link',
+    jointType: 'continuous',
+    radius: '0.095 m',
+    width: '0.040 m',
+    axle: 'Y',
+    offset: '[-0.196, 0.220, -0.080]',
+    driveParam: 'left_front_motor',
+    hasError: true,
+    issue: 'Wheel radius mismatch — see Validation tab',
+  },
+  wheel_right_front: {
+    type: 'wheel',
+    parentFrame: 'base_link',
+    jointType: 'continuous',
+    radius: '0.095 m',
+    width: '0.040 m',
+    axle: 'Y',
+    offset: '[0.196, 0.220, -0.080]',
+    driveParam: 'right_front_motor',
+    hasError: false,
+  },
+  wheel_left_rear: {
+    type: 'wheel',
+    parentFrame: 'base_link',
+    jointType: 'continuous',
+    radius: '0.095 m',
+    width: '0.040 m',
+    axle: 'Y',
+    offset: '[-0.196, -0.220, -0.080]',
+    driveParam: 'left_rear_motor',
+    hasError: false,
+    issue: 'Axle symmetry warning — see Validation tab',
+    isWarn: true,
+  },
+  wheel_right_rear: {
+    type: 'wheel',
+    parentFrame: 'base_link',
+    jointType: 'continuous',
+    radius: '0.095 m',
+    width: '0.040 m',
+    axle: 'Y',
+    offset: '[0.196, -0.220, -0.080]',
+    driveParam: 'right_rear_motor',
+    hasError: false,
+  },
+  caster_front: {
+    type: 'caster',
+    parentFrame: 'base_link',
+    jointType: 'fixed',
+    radius: '0.030 m',
+    offset: '[0.000, 0.270, -0.060]',
+    hasError: false,
+    isWarn: true,
+    issue: 'Inertia undefined — see Validation tab',
+  },
+  caster_rear: {
+    type: 'caster',
+    parentFrame: 'base_link',
+    jointType: 'fixed',
+    radius: '0.030 m',
+    offset: '[0.000, -0.270, -0.060]',
+    hasError: false,
+  },
+  lidar_main: {
+    type: 'sensor',
+    sensorType: 'LiDAR',
+    parentFrame: 'base_link',
+    mountFrame: 'lidar_link',
+    position: '[0.000, 0.000, 0.180]',
+    range: '25.0 m',
+    fov: '360°',
+    role: 'obstacle_detection',
+    topic: '/scan',
+    hasError: true,
+    issue: 'Topic not remapped — see Validation tab',
+  },
+  camera_front: {
+    type: 'sensor',
+    sensorType: 'Camera',
+    parentFrame: 'base_link',
+    mountFrame: 'camera_link',
+    position: '[0.000, 0.200, 0.200]',
+    range: '6.0 m',
+    fov: '84°',
+    role: 'navigation',
+    topic: '/camera/image_raw',
+    hasError: false,
+    isWarn: true,
+    issue: 'FOV clipped by chassis — see Validation tab',
+  },
+  imu_link: {
+    type: 'sensor',
+    sensorType: 'IMU',
+    parentFrame: 'base_link',
+    mountFrame: 'imu_link',
+    position: '[0.000, 0.000, 0.060]',
+    role: 'odometry',
+    topic: '/imu/data',
+    hasError: false,
+  },
+  base_link: {
+    type: 'chassis',
+    parentFrame: 'base_footprint',
+    jointType: 'fixed',
+    dimensions: '[0.622, 0.481, 0.285]',
+    mass: '18.4 kg',
+    offset: '[0.000, 0.000, 0.1425]',
+    hasError: false,
+  },
+  base_footprint: {
+    type: 'root',
+    jointType: 'virtual',
+    hasError: false,
+  },
+};
+
+function selectLink(linkName) {
+  DC.selectedLink = linkName;
+
+  // Highlight tree node
+  document.querySelectorAll('.tree-node').forEach(n => {
+    n.classList.toggle('selected', n.dataset.link === linkName);
+  });
+
+  // Highlight SVG geometry
+  document.querySelectorAll('[data-part]').forEach(el => {
+    el.classList.remove('selected-highlight');
+  });
+  const svgEl = document.querySelector(`[data-part="${linkName}"]`);
+  if (svgEl) svgEl.classList.add('selected-highlight');
+
+  // Populate inspector detail state
+  showDetailEditor(linkName);
+}
+
+function handleCanvasClick(e) {
+  const target = e.target.closest('[data-part]');
+  if (target) {
+    selectLink(target.dataset.part);
+  }
+}
+
+function selectAndShowIssue(partName) {
+  selectLink(partName);
+  openInspectorTab('validation');
+}
+
+/* ─── Detail editor ───────────────────────────────────────── */
+function showDetailEditor(linkName) {
+  const data = PART_DATA[linkName];
+  if (!data) return;
+
+  const overview = document.getElementById('overview-state');
+  const detail   = document.getElementById('detail-state');
+  if (overview) overview.style.display = 'none';
+  if (detail)   { detail.style.display = ''; detail.innerHTML = buildDetailHTML(linkName, data); }
+
+  // Update inspector header
+  const title = document.getElementById('insp-header-title');
+  if (title) title.textContent = linkName;
+
+  openInspectorTab('properties');
+}
+
+function showOverview() {
+  DC.selectedLink = null;
+  document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('selected'));
+  document.querySelectorAll('[data-part]').forEach(el => el.classList.remove('selected-highlight'));
+  const overview = document.getElementById('overview-state');
+  const detail   = document.getElementById('detail-state');
+  if (overview) overview.style.display = '';
+  if (detail)   detail.style.display = 'none';
+  const title = document.getElementById('insp-header-title');
+  if (title) title.textContent = 'Inspector';
+}
+
+function buildDetailHTML(name, d) {
+  const issueBar = (d.hasError || d.isWarn) ? `
+    <div style="margin:8px 10px 0;padding:6px 9px;border-radius:3px;
+      background:${d.hasError ? 'rgba(196,43,43,0.1)' : 'rgba(168,84,0,0.1)'};
+      border:1px solid ${d.hasError ? 'rgba(252,129,129,0.25)' : 'rgba(237,137,54,0.25)'};
+      display:flex;align-items:center;gap:6px;cursor:pointer;"
+      onclick="openInspectorTab('validation')">
+      <i class="fas fa-${d.hasError ? 'times-circle' : 'exclamation-triangle'}"
+         style="font-size:10px;color:${d.hasError ? '#fc8181' : '#ed8936'};flex-shrink:0;"></i>
+      <span style="font-size:10px;color:${d.hasError ? '#fc8181' : '#ed8936'};">${d.issue}</span>
+    </div>` : '';
+
+  let sections = '';
+
+  if (d.type === 'wheel') {
+    sections = `
+      <div class="insp-section">Geometry</div>
+      ${propRow('Radius', d.radius, true)}
+      ${propRow('Width',  d.width,  true)}
+      ${propRow('Axle',   d.axle)}
+      <div class="insp-section">Joint</div>
+      ${propRow('Joint Type', d.jointType)}
+      ${propRow('Parent Frame', d.parentFrame)}
+      ${propRow('Offset XYZ', d.offset, true)}
+      <div class="insp-section">Drive</div>
+      ${propRow('Motor ID', d.driveParam)}
+    `;
+  } else if (d.type === 'caster') {
+    sections = `
+      <div class="insp-section">Geometry</div>
+      ${propRow('Radius', d.radius, true)}
+      <div class="insp-section">Joint</div>
+      ${propRow('Joint Type', d.jointType)}
+      ${propRow('Parent Frame', d.parentFrame)}
+      ${propRow('Offset XYZ', d.offset, true)}
+    `;
+  } else if (d.type === 'sensor') {
+    sections = `
+      <div class="insp-section">Sensor</div>
+      ${propRow('Type', d.sensorType)}
+      ${propRow('Role', d.role)}
+      ${propRow('Topic', d.topic)}
+      <div class="insp-section">Mount</div>
+      ${propRow('Parent Frame', d.parentFrame)}
+      ${propRow('Mount Frame', d.mountFrame)}
+      ${propRow('Position', d.position, true)}
+      <div class="insp-section">Specs</div>
+      ${d.range ? propRow('Range', d.range, true) : ''}
+      ${d.fov   ? propRow('FOV',   d.fov,   true) : ''}
+    `;
+  } else if (d.type === 'chassis') {
+    sections = `
+      <div class="insp-section">Geometry</div>
+      ${propRow('Dimensions', d.dimensions, true)}
+      ${propRow('Mass', d.mass, true)}
+      <div class="insp-section">Frame</div>
+      ${propRow('Parent Frame', d.parentFrame)}
+      ${propRow('Joint Type', d.jointType)}
+      ${propRow('Origin', d.offset, true)}
+    `;
+  } else {
+    sections = `
+      <div class="insp-section">Frame</div>
+      ${propRow('Type', d.type)}
+      ${propRow('Joint Type', d.jointType)}
+    `;
+  }
+
+  return `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 10px 6px;">
+      <span style="font-size:12px;font-weight:700;color:var(--text-primary);">${name}</span>
+      <span class="tag ${tagClass(d.type)}">${d.type}</span>
+      ${d.hasError ? `<span class="val-chip error" style="margin-left:auto;"><i class="fas fa-times-circle"></i> error</span>` : ''}
+      ${(!d.hasError && d.isWarn) ? `<span class="val-chip warn" style="margin-left:auto;"><i class="fas fa-exclamation-triangle"></i> warn</span>` : ''}
+    </div>
+    ${issueBar}
+    ${sections}
+    <div style="padding:8px 10px;border-top:1px solid var(--border-chrome);margin-top:4px;display:flex;gap:5px;flex-wrap:wrap;">
+      <button class="btn btn-primary" style="flex:1;" onclick="handleApplyChanges('${name}')"><i class="fas fa-check"></i> Apply</button>
+      <button class="btn" onclick="showOverview()"><i class="fas fa-arrow-left"></i> Back</button>
+    </div>
+  `;
+}
+
+function propRow(label, value, mono=false) {
+  return `<div class="prop-row">
+    <span class="prop-lbl">${label}</span>
+    <span class="prop-val${mono ? ' mono' : ''}">${value}</span>
+  </div>`;
+}
+
+function tagClass(type) {
+  const map = { wheel: 'tag-green', sensor: 'tag-purple', caster: 'tag-amber', chassis: 'tag-blue', root: 'tag-gray' };
+  return map[type] || 'tag-gray';
+}
+
+/* ─── Profile dropdown ────────────────────────────────────── */
+function toggleProfileDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('profile-dropdown');
+  const rect = e.currentTarget.getBoundingClientRect();
+  dd.style.left = rect.left + 'px';
+  dd.style.top  = (rect.bottom + 4) + 'px';
+  dd.classList.toggle('open');
+  document.getElementById('modal-backdrop').classList.toggle('open', dd.classList.contains('open'));
+}
+
+function selectProfile(id) {
+  closeAllMenus();
+  console.log('Select profile:', id);
+  // In real implementation: load profile data, redraw canvas.
+}
+
+/* ─── Overflow menu ───────────────────────────────────────── */
+function toggleOverflowMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('overflow-menu');
+  const rect = e.currentTarget.getBoundingClientRect();
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  menu.style.top   = (rect.bottom + 4) + 'px';
+  menu.classList.toggle('open');
+  document.getElementById('modal-backdrop').classList.toggle('open', menu.classList.contains('open'));
+}
+
+function closeAllMenus() {
+  document.getElementById('overflow-menu').classList.remove('open');
+  document.getElementById('profile-dropdown').classList.remove('open');
+  document.getElementById('modal-backdrop').classList.remove('open');
+}
+
+/* ─── Hierarchy filter ────────────────────────────────────── */
+function filterHierarchy(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('#hierarchy-tree .tree-node').forEach(node => {
+    const name = (node.dataset.link || '').toLowerCase();
+    node.style.display = (!q || name.includes(q)) ? '' : 'none';
+  });
+}
+
+/* ─── Action stubs ────────────────────────────────────────── */
+function handleEstop()            { alert('EMERGENCY STOP triggered'); }
+function handleImportUrdf()       { console.log('Import URDF'); closeAllMenus(); }
+function handleSaveDraft()        { console.log('Save Draft'); }
+function handleValidate()         { openInspectorTab('validation'); }
+function handleExport()           { console.log('Export'); }
+function handlePublish()          { console.log('Publish — check errors first'); }
+function handleApplyChanges(n)    { console.log('Apply changes to', n); showOverview(); }
+function handleDuplicateProfile() { closeAllMenus(); console.log('Duplicate profile'); }
+function handleCompareRevisions() { closeAllMenus(); console.log('Compare revisions'); }
+function handleRestoreDefaults()  { closeAllMenus(); console.log('Restore defaults'); }
+function handleExportUrdf()       { closeAllMenus(); console.log('Export URDF'); }
+function handleExportJson()       { closeAllMenus(); console.log('Export JSON'); }
+function handleDeleteProfile()    { closeAllMenus(); if (confirm('Delete this profile?')) console.log('Deleted'); }
+function handleNewProfile()       { closeAllMenus(); console.log('New profile'); }
+function handleManageProfiles()   { closeAllMenus(); console.log('Manage profiles'); }
+
+/* ─── Close menus on outside click ───────────────────────── */
+document.addEventListener('click', e => {
+  const menu   = document.getElementById('overflow-menu');
+  const profdd = document.getElementById('profile-dropdown');
+  if (!menu.contains(e.target) && !profdd.contains(e.target)) {
+    menu.classList.remove('open');
+    profdd.classList.remove('open');
+    document.getElementById('modal-backdrop').classList.remove('open');
+  }
+});
+
+/* ─── Make canvas interactive (pointer cursor on parts) ───── */
+document.querySelectorAll('[data-part]').forEach(el => {
+  el.style.cursor = 'pointer';
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    selectLink(el.getAttribute('data-part'));
+  });
+});
+
+/* ─── Canvas click on empty area deselects ────────────────── */
+document.getElementById('robot-canvas-area').addEventListener('click', e => {
+  if (!e.target.closest('[data-part]') && !e.target.closest('g[onclick]')) {
+    showOverview();
+  }
+});
+</script>
+</body>
+</html>
