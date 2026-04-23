@@ -8428,12 +8428,26 @@ class RosBridge(Node):
                 )
                 node['paths'].add(path_id)
 
-            for pair_idx in range(len(poi_indices) - 1):
+            loop_type = str(settings.get('loop_type', 'none') or 'none').strip().lower()
+            pair_count = len(poi_indices) - 1
+            if loop_type == 'closed' and len(poi_indices) > 1:
+                pair_count = len(poi_indices)
+
+            for pair_idx in range(pair_count):
                 start_idx, start_zone = poi_indices[pair_idx]
-                end_idx, end_zone = poi_indices[pair_idx + 1]
+                end_idx, end_zone = poi_indices[(pair_idx + 1) % len(poi_indices)]
                 if start_zone == end_zone:
                     continue
-                geometry = self._slice_path_points(points, start_idx, end_idx)
+                if end_idx >= start_idx:
+                    geometry = self._slice_path_points(points, start_idx, end_idx)
+                else:
+                    # Closed directed paths wrap from the last POI through the
+                    # end of the saved path and back to the first POI.  Without
+                    # this edge A* can be forced into unrelated alternate paths.
+                    geometry = (
+                        [dict(point) for point in points[start_idx:]]
+                        + [dict(point) for point in points[:end_idx + 1]]
+                    )
                 cost = 0.0
                 for geo_idx in range(1, len(geometry)):
                     cost += self._path_point_distance(geometry[geo_idx - 1], geometry[geo_idx])
@@ -8511,11 +8525,22 @@ class RosBridge(Node):
         *,
         selected_path: str = '',
         current_poi: str = '',
+        goal_poi: str = '',
     ) -> Tuple[str, str]:
         explicit = str(current_poi or '').strip()
         nodes = graph.get('nodes', {})
         if explicit:
             if explicit in nodes:
+                destination = str(goal_poi or '').strip()
+                if destination and explicit != destination:
+                    _route_edges, route_err = self._a_star_path_mode(
+                        graph,
+                        start_poi=explicit,
+                        goal_poi=destination,
+                        selected_path=selected_path,
+                    )
+                    if route_err:
+                        return '', route_err
                 return explicit, 'current_poi'
             return '', f'Current POI "{explicit}" is not in the path graph'
 
@@ -8530,19 +8555,34 @@ class RosBridge(Node):
             return '', 'Robot pose is invalid; cannot enter selected path'
 
         selected = str(selected_path or '').strip()
-        best_name = ''
-        best_dist = float('inf')
+        candidates: List[Tuple[float, str]] = []
         for zone_name, node in nodes.items():
             node_paths = node.get('paths', set())
             if selected and selected not in node_paths:
                 continue
             dist = math.hypot(float(node.get('x', 0.0)) - robot_x, float(node.get('y', 0.0)) - robot_y)
-            if dist < best_dist:
-                best_name = str(zone_name)
-                best_dist = dist
-        if not best_name:
+            candidates.append((dist, str(zone_name)))
+
+        if not candidates:
             return '', f'No valid POI found on selected path "{selected}"'
-        return best_name, f'nearest_poi:{best_dist:.2f}m'
+
+        destination = str(goal_poi or '').strip()
+        blocked_reasons: List[str] = []
+        for dist, zone_name in sorted(candidates, key=lambda item: item[0]):
+            if destination and zone_name != destination:
+                _route_edges, route_err = self._a_star_path_mode(
+                    graph,
+                    start_poi=zone_name,
+                    goal_poi=destination,
+                    selected_path=selected_path,
+                )
+                if route_err:
+                    blocked_reasons.append(f'{zone_name}: {route_err}')
+                    continue
+            return zone_name, f'nearest_directed_poi:{dist:.2f}m'
+
+        reason = blocked_reasons[0] if blocked_reasons else f'No directed route to "{destination}"'
+        return '', reason
 
     def _a_star_path_mode(
         self,
@@ -8592,12 +8632,13 @@ class RosBridge(Node):
 
             for edge in edges.get(zone_name, []):
                 edge_path = str(edge.get('path', '') or '')
-                if selected and allowed_context and edge_path not in allowed_context:
-                    # Shared POIs are graph-level transition points. If this POI belongs
-                    # to both the current context and the edge path, the transition is legal.
-                    memberships = set(nodes.get(zone_name, {}).get('paths', set()))
-                    if edge_path not in memberships:
-                        continue
+                if selected and edge_path != selected:
+                    # A selected path is a corridor, not a hint.  Cross-path
+                    # routing is only allowed when the user explicitly chooses
+                    # all connected paths, otherwise A* can appear to violate
+                    # the selected path's direction by jumping to a shorter
+                    # directed edge on another path at a shared POI.
+                    continue
                 next_zone = str(edge.get('to', '') or '')
                 if not next_zone:
                     continue
@@ -8658,6 +8699,7 @@ class RosBridge(Node):
             graph,
             selected_path=selected_path,
             current_poi=current_poi,
+            goal_poi=destination,
         )
         if not start_poi:
             return self._ok(False, start_reason)

@@ -3832,7 +3832,7 @@ class ZoneManager(Node):
     ) -> Tuple[Optional[bool], str]:
         frame_id = str(plan.final_pose.frame_id or 'map') or 'map'
         final_pose = self._shelf_pose2d_to_pose_stamped(plan.final_pose)
-        timeout_sec = self._optional_timeout_parameter(
+        configured_timeout_sec = self._optional_timeout_parameter(
             self.goal_pose_handoff_local_insert_timeout_sec,
             minimum=1.0,
         )
@@ -3860,6 +3860,27 @@ class ZoneManager(Node):
                 insert_speed = min(insert_speed, max(0.02, float(max_speed_cap)))
             except Exception:
                 pass
+        expected_depth_m = max(
+            float(self.goal_pose_handoff_local_insert_distance),
+            float(committed_frame.expected_insertion_depth_m),
+            self._distance_to_waypoint_pair(robot_pose, final_pose),
+        )
+        timeout_sec = float(configured_timeout_sec)
+        if configured_timeout_sec > 0.0:
+            # The configured timeout is a safety cap, but it must still be long
+            # enough for the actual shelf depth and the commanded straight-in
+            # speed.  A 0.92 m shelf at 0.05 m/s needs ~18.4 s before any
+            # steering slowdown, so a fixed 15 s cap can abort a healthy insert.
+            dynamic_timeout_sec = (
+                expected_depth_m / max(0.02, float(insert_speed) * 0.75)
+            ) + 5.0
+            timeout_sec = max(float(configured_timeout_sec), float(dynamic_timeout_sec))
+            if timeout_sec > float(configured_timeout_sec) + 1e-6:
+                self.get_logger().info(
+                    f'Shelf insertion "{target_label}" timeout extended from '
+                    f'{float(configured_timeout_sec):.2f}s to {timeout_sec:.2f}s '
+                    f'for depth={expected_depth_m:.2f}m speed={float(insert_speed):.2f}m/s.'
+                )
         controller = FrozenInsertionController(
             FrozenInsertionControllerConfig(
                 insert_speed_mps=float(insert_speed),
@@ -3869,9 +3890,9 @@ class ZoneManager(Node):
                     min(
                         max(
                             float(self.goal_pose_handoff_local_insert_distance) * 0.35,
-                            float(committed_frame.expected_insertion_depth_m) * 0.30,
+                            expected_depth_m * 0.30,
                         ),
-                        max(0.05, float(committed_frame.expected_insertion_depth_m)),
+                        max(0.05, expected_depth_m),
                     ),
                 ),
                 stop_distance_m=max(
@@ -6655,6 +6676,7 @@ class ZoneManager(Node):
             enable_receipt_before = float(self.latest_shelf_status_receipt_monotonic or 0.0)
 
             # Load template constraints and push to detector before enabling
+            self._active_shelf_template_depth_m = None
             template_id = str(ap_cfg.get('template_id', '') or '').strip()
             if template_id:
                 try:
@@ -6671,7 +6693,8 @@ class ZoneManager(Node):
                 else:
                     self.get_logger().warn(
                         f'SHELF_CHECK: template "{template_id}" not found for waypoint '
-                        f'{waypoint_index + 1}/{total}; detector will use existing defaults'
+                        f'{waypoint_index + 1}/{total}; detector will use existing defaults '
+                        f'and no template depth fallback'
                     )
 
             _publish_feedback(
@@ -6739,19 +6762,26 @@ class ZoneManager(Node):
                 if not candidate_ready:
                     self.get_logger().info(
                         f'FollowPath shelf check: no shelf candidate from "{scan_location_label}" '
-                        f'for waypoint {waypoint_index + 1}/{total}; continuing'
+                        f'for waypoint {waypoint_index + 1}/{total}; '
+                        f'{"requesting path replan" if path_mode_destination_poi else "stopping shelf flow"}'
                     )
                     if path_mode_destination_poi:
+                        replan_from_label = scan_location_label or target_label
                         result.success = False
                         result.completed = int(max(0, completed_count))
                         result.message = (
-                            f'PATH_MODE_REPLAN_FROM:{target_label}:'
+                            f'PATH_MODE_REPLAN_FROM:{replan_from_label}:'
                             f'destination={path_mode_destination_poi}:'
                             f'path={path_mode_selected_path}:'
                             f'shelf_not_detected'
                         )
                         goal_handle.abort()
                         return terminal_error, False
+                    if recognize_via_config:
+                        return (
+                            f'SHELF_CHECK shelf not detected from "{scan_location_label}" '
+                            f'for action point "{target_label}"; zone action was not run'
+                        ), False
                     _publish_feedback(
                         waypoint_index,
                         f'SHELF_CHECK: no shelf detected from "{scan_location_label}"; continuing',
@@ -7444,6 +7474,16 @@ class ZoneManager(Node):
                         goal_handle.abort()
                         return result
                     actioned_indices.add(target_idx)
+                elif shelf_pre_point_flow:
+                    result.success = False
+                    result.completed = int(max(0, completed_count))
+                    result.message = (
+                        f'Shelf action point "{zone_name_at}" was scanned from pre-point '
+                        f'"{pre_point_name}" but shelf insertion did not complete; '
+                        f'skipping zone action'
+                    )
+                    goal_handle.abort()
+                    return result
 
                 # Phase 5: optional POI action after move/align/stop timer/shelf check.
                 zone_action_id = normalize_action_id(zone_meta_at.get('action', ''))
