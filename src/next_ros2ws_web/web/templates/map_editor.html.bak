@@ -453,1478 +453,273 @@
             margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
             white-space: nowrap; border: 0;
         }
-
-        /* ================================================================
-           Map Editor v2 shell — project bar | rail | tools | canvas | inspector
-           ================================================================ */
-        #map-editor-shell {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            min-height: 100vh;
-            overflow: hidden;
-            background:
-                radial-gradient(circle at top left, rgba(38, 105, 200, 0.12), transparent 24%),
-                linear-gradient(180deg, #0b1017 0%, #0a0e14 100%);
-        }
-
-        #map-editor-shell .project-bar {
-            position: relative;
-            z-index: 30;
-            height: 60px;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 14px;
-            padding: 0 14px;
-            background: rgba(20, 26, 36, 0.96);
-            border-bottom: 1px solid var(--border-chrome);
-            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
-            backdrop-filter: blur(8px);
-        }
-
-        #map-editor-shell .project-ident,
-        #map-editor-shell .project-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            min-width: 0;
-        }
-
-        #map-editor-shell .project-ident {
-            flex: 1;
-        }
-
-        #map-editor-shell .project-brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            min-width: 0;
-        }
-
-        #map-editor-shell .project-brand-mark {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 44px;
-            height: 30px;
-            padding: 0 10px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, rgba(38, 105, 200, 0.9), rgba(41, 148, 225, 0.8));
-            color: #f8fbff;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
-        }
-
-        #map-editor-shell .project-brand-copy {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            gap: 2px;
-        }
-
-        #map-editor-shell .project-title {
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .project-subtitle {
-            font-size: 10px;
-            color: var(--text-tertiary);
-            letter-spacing: 0.04em;
-        }
-
-        #map-editor-shell .layout-chip {
-            height: 30px;
-            padding: 0 11px;
-            border-radius: 999px;
-            background: rgba(23, 31, 44, 0.88);
-            border-color: rgba(49, 62, 82, 0.92);
-            color: var(--text-primary);
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
-        }
-
-        #map-editor-shell .project-actions {
-            justify-content: flex-end;
-            flex-wrap: nowrap;
-        }
-
-        #map-editor-shell .top-action-btn {
-            height: 32px;
-            padding: 0 11px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 6px;
-            background: rgba(30, 37, 48, 0.92);
-            color: var(--text-secondary);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-            white-space: nowrap;
-        }
-
-        #map-editor-shell .top-action-btn:hover {
-            background: rgba(255,255,255,0.07);
-            color: var(--text-primary);
-            border-color: var(--border-secondary);
-        }
-
-        #map-editor-shell .top-action-btn.primary {
-            background: rgba(38, 105, 200, 0.16);
-            border-color: rgba(38, 105, 200, 0.42);
-            color: #9ec6ff;
-        }
-
-        #map-editor-shell .top-action-btn.primary:hover {
-            background: rgba(38, 105, 200, 0.24);
-        }
-
-        #map-editor-shell .top-action-btn.icon-only {
-            width: 32px;
-            padding: 0;
-        }
-
-        #map-editor-shell .top-action-btn.compact {
-            width: 100%;
-            justify-content: flex-start;
-        }
-
-        #map-editor-shell .top-action-btn:disabled {
-            opacity: 0.35;
-            cursor: not-allowed;
-        }
-
-        #map-editor-shell .zoom-toolbar {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 10px;
-            background: rgba(14, 20, 29, 0.84);
-        }
-
-        #map-editor-shell .zoom-readout {
-            min-width: 56px;
-            height: 24px;
-            border-radius: 6px;
-            background: rgba(11, 15, 21, 0.9);
-        }
-
-        #map-editor-shell .editor-popover {
-            top: 68px;
-            right: 14px;
-            left: auto;
-            width: 360px;
-            padding: 12px;
-            grid-template-columns: 1fr;
-            gap: 12px;
-            border-radius: 14px;
-            background: rgba(10, 14, 20, 0.98);
-        }
-
-        #map-editor-shell .popover-stack {
-            display: grid;
-            gap: 12px;
-        }
-
-        #map-editor-shell .popover-card {
-            display: grid;
-            gap: 10px;
-            padding: 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(40, 52, 68, 0.9);
-            background: rgba(20, 27, 37, 0.8);
-        }
-
-        #map-editor-shell .popover-title {
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .popover-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        #map-editor-shell .popover-row-spread {
-            align-items: flex-start;
-            justify-content: space-between;
-        }
-
-        #map-editor-shell .popover-column {
-            display: grid;
-            gap: 8px;
-            min-width: 140px;
-        }
-
-        #map-editor-shell .workspace-grid {
-            flex: 1;
-            min-height: 0;
-            display: grid;
-            grid-template-columns: 58px 286px minmax(0, 1fr) 318px;
-            overflow: hidden;
-        }
-
-        #map-editor-shell .mode-rail {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            padding: 10px 0;
-            background: rgba(24, 30, 39, 0.95);
-            border-right: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .mode-rail-btn {
-            position: relative;
-            width: 42px;
-            height: 46px;
-            border: none;
-            border-radius: 8px;
-            background: transparent;
-            color: var(--text-tertiary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 3px;
-            cursor: pointer;
-            transition: background 0.14s ease, color 0.14s ease;
-        }
-
-        #map-editor-shell .mode-rail-btn:hover {
-            background: rgba(255,255,255,0.06);
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .mode-rail-btn.active {
-            background: rgba(38, 105, 200, 0.16);
-            color: #9ec6ff;
-        }
-
-        #map-editor-shell .mode-rail-btn.active::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 6px;
-            bottom: 6px;
-            width: 3px;
-            border-radius: 0 2px 2px 0;
-            background: var(--selected-blue);
-        }
-
-        #map-editor-shell .mode-rail-label {
-            font-size: 7px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            line-height: 1;
-        }
-
-        #map-editor-shell .mode-rail-sep {
-            width: 28px;
-            height: 1px;
-            margin: 4px 0;
-            background: var(--border-chrome);
-        }
-
-        #map-editor-shell .tool-sidebar {
-            min-width: 0;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            background: rgba(20, 27, 37, 0.9);
-            border-right: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .sidebar-panel {
-            display: none;
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            padding: 16px;
-            gap: 14px;
-        }
-
-        #map-editor-shell .sidebar-panel.active-panel {
-            display: flex;
-            flex-direction: column;
-        }
-
-        #map-editor-shell .sidebar-panel::-webkit-scrollbar,
-        #map-editor-shell .insp-pane::-webkit-scrollbar {
-            width: 5px;
-        }
-
-        #map-editor-shell .sidebar-panel::-webkit-scrollbar-thumb,
-        #map-editor-shell .insp-pane::-webkit-scrollbar-thumb {
-            background: var(--border-chrome);
-            border-radius: 999px;
-        }
-
-        #map-editor-shell .sidebar-panel-header {
-            display: grid;
-            gap: 4px;
-        }
-
-        #map-editor-shell .sidebar-panel-eyebrow {
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-field-label);
-        }
-
-        #map-editor-shell .sidebar-panel-header h2 {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .sidebar-panel-header p {
-            font-size: 11px;
-            line-height: 1.5;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .sidebar-card {
-            display: grid;
-            gap: 12px;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: linear-gradient(180deg, rgba(24, 32, 43, 0.9), rgba(16, 22, 31, 0.9));
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-        }
-
-        #map-editor-shell .sidebar-card-title {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .sidebar-tool-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-        }
-
-        #map-editor-shell .sidebar-tool-grid .tool-btn,
-        #map-editor-shell .sidebar-tool-grid .editor-action-btn {
-            width: 100%;
-            min-width: 0;
-            height: 54px;
-            border-radius: 8px;
-            gap: 4px;
-            background: rgba(32, 39, 50, 0.92);
-        }
-
-        #map-editor-shell .sidebar-tool-grid .tool-btn i,
-        #map-editor-shell .sidebar-tool-grid .editor-action-btn i {
-            font-size: 12px;
-        }
-
-        #map-editor-shell .tool-lbl {
-            font-size: 8px;
-        }
-
-        #map-editor-shell .sidebar-range-label {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .sidebar-range {
-            width: 100%;
-            accent-color: var(--selected-blue);
-        }
-
-        #map-editor-shell .sidebar-range-value {
-            min-width: 28px;
-            text-align: right;
-            font-family: 'Roboto Mono', Consolas, Monaco, monospace;
-            color: var(--text-field-value);
-        }
-
-        #map-editor-shell .sidebar-note {
-            font-size: 11px;
-            line-height: 1.5;
-            color: var(--text-tertiary);
-        }
-
-        #map-editor-shell .sidebar-action-btn {
-            height: 34px;
-            padding: 0 10px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 8px;
-            background: rgba(31, 38, 48, 0.94);
-            color: var(--text-primary);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            font-size: 11px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        #map-editor-shell .sidebar-action-btn.danger {
-            color: #f3b6b6;
-            border-color: rgba(185, 70, 70, 0.38);
-            background: rgba(91, 24, 24, 0.4);
-        }
-
-        #map-editor-shell .sidebar-toggle-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-        }
-
-        #map-editor-shell .layer-toggle {
-            height: 34px;
-            padding: 0 10px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 8px;
-            background: rgba(31, 38, 48, 0.92);
-            color: var(--text-secondary);
-            display: inline-flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 8px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-        }
-
-        #map-editor-shell .layer-toggle:hover {
-            background: rgba(255,255,255,0.07);
-            color: var(--text-primary);
-            border-color: var(--border-secondary);
-        }
-
-        #map-editor-shell .layer-toggle.active {
-            background: rgba(38, 105, 200, 0.14);
-            color: #9ec6ff;
-            border-color: rgba(38, 105, 200, 0.44);
-        }
-
-        #map-editor-shell .sidebar-list {
-            display: grid;
-            gap: 8px;
-        }
-
-        #map-editor-shell .sidebar-list-empty {
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px dashed rgba(54, 67, 88, 0.88);
-            background: rgba(15, 20, 28, 0.7);
-            font-size: 11px;
-            color: var(--text-tertiary);
-        }
-
-        #map-editor-shell .sidebar-list-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 10px 11px;
-            border-radius: 9px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: rgba(17, 23, 32, 0.88);
-            color: inherit;
-            cursor: pointer;
-            text-align: left;
-            transition: background 0.14s ease, border-color 0.14s ease;
-        }
-
-        #map-editor-shell .sidebar-list-item:hover {
-            background: rgba(255,255,255,0.05);
-            border-color: rgba(61, 74, 92, 0.98);
-        }
-
-        #map-editor-shell .sidebar-list-item.active {
-            background: rgba(38, 105, 200, 0.14);
-            border-color: rgba(38, 105, 200, 0.42);
-        }
-
-        #map-editor-shell .sidebar-list-item-main {
-            display: grid;
-            gap: 3px;
-            min-width: 0;
-        }
-
-        #map-editor-shell .sidebar-list-item-title {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        #map-editor-shell .sidebar-list-item-sub {
-            font-size: 10px;
-            color: var(--text-tertiary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        #map-editor-shell .sidebar-badge {
-            flex-shrink: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 58px;
-            height: 22px;
-            padding: 0 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: rgba(31, 38, 48, 0.92);
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .canvas-stage {
-            min-width: 0;
-            min-height: 0;
-            display: flex;
-            flex-direction: column;
-            background: linear-gradient(180deg, rgba(18, 23, 32, 0.55), rgba(10, 14, 20, 0.94));
-        }
-
-        #map-editor-shell .canvas-stage-header {
-            height: 44px;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 0 14px;
-            background: rgba(24, 30, 39, 0.82);
-            border-bottom: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .canvas-stage-titlegroup {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
-        }
-
-        #map-editor-shell .canvas-stage-title {
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .canvas-stage-subtitle {
-            font-size: 10px;
-            color: var(--text-tertiary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        #map-editor-shell .canvas-stage-chiprow {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        #map-editor-shell .context-chip {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            height: 24px;
-            padding: 0 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(40, 52, 68, 0.9);
-            background: rgba(16, 22, 31, 0.9);
-            font-size: 10px;
-            color: var(--text-secondary);
-            white-space: nowrap;
-        }
-
-        #map-editor-shell .canvas-wrap {
-            flex: 1;
-            min-height: 0;
-            padding: 16px;
-            background:
-                linear-gradient(rgba(20, 26, 35, 0.95), rgba(20, 26, 35, 0.95)),
-                radial-gradient(circle at center, rgba(34, 53, 82, 0.3), transparent 60%);
-        }
-
-        #map-editor-shell #editor {
-            width: 100%;
-            height: 100%;
-            border-radius: 14px;
-            border-color: rgba(37, 43, 56, 0.98);
-            background:
-                linear-gradient(rgba(17, 22, 31, 0.96), rgba(17, 22, 31, 0.96)),
-                linear-gradient(90deg, rgba(64, 90, 122, 0.08) 1px, transparent 1px),
-                linear-gradient(rgba(64, 90, 122, 0.08) 1px, transparent 1px);
-            background-size: auto, 80px 80px, 80px 80px;
-            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.38);
-        }
-
-        #map-editor-shell #inspector {
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            background: rgba(20, 27, 37, 0.94);
-            border-left: 1px solid var(--border-chrome);
-            overflow: hidden;
-        }
-
-        #map-editor-shell .insp-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 14px;
-            border-bottom: 1px solid var(--border-chrome);
-            background: rgba(24, 30, 39, 0.8);
-        }
-
-        #map-editor-shell .insp-header-title {
-            flex: 1;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .insp-mode-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            height: 22px;
-            padding: 0 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(38, 105, 200, 0.34);
-            background: rgba(38, 105, 200, 0.14);
-            color: #9ec6ff;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-        }
-
-        #map-editor-shell .insp-tabs {
-            display: flex;
-            align-items: center;
-            padding: 0 14px;
-            border-bottom: 1px solid var(--border-chrome);
-            gap: 14px;
-        }
-
-        #map-editor-shell .insp-tab {
-            height: 36px;
-            border: none;
-            background: transparent;
-            color: var(--text-tertiary);
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            border-bottom: 2px solid transparent;
-            cursor: pointer;
-        }
-
-        #map-editor-shell .insp-tab.active {
-            color: #9ec6ff;
-            border-bottom-color: var(--selected-blue);
-        }
-
-        #map-editor-shell .insp-pane {
-            display: none;
-            flex: 1;
-            overflow-y: auto;
-            padding: 14px;
-        }
-
-        #map-editor-shell .insp-pane.active {
-            display: block;
-        }
-
-        #map-editor-shell .insp-card {
-            display: grid;
-            gap: 10px;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: linear-gradient(180deg, rgba(24, 32, 43, 0.9), rgba(16, 22, 31, 0.9));
-            margin-bottom: 12px;
-        }
-
-        #map-editor-shell .insp-card:last-child {
-            margin-bottom: 0;
-        }
-
-        #map-editor-shell .insp-section {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .prop-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            min-height: 28px;
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(40, 52, 68, 0.68);
-        }
-
-        #map-editor-shell .prop-row:last-child {
-            border-bottom: none;
-        }
-
-        #map-editor-shell .prop-lbl {
-            font-size: 11px;
-            color: var(--text-tertiary);
-        }
-
-        #map-editor-shell .prop-val {
-            font-size: 11px;
-            color: var(--text-primary);
-            text-align: right;
-        }
-
-        #map-editor-shell .prop-val.mono,
-        #map-editor-shell .prop-input,
-        #map-editor-shell .prop-select,
-        #map-editor-shell .prop-textarea {
-            font-family: 'Roboto Mono', Consolas, Monaco, monospace;
-        }
-
-        #map-editor-shell .prop-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-        }
-
-        #map-editor-shell .prop-field {
-            display: grid;
-            gap: 5px;
-        }
-
-        #map-editor-shell .prop-field-label {
-            font-size: 10px;
-            color: var(--text-tertiary);
-        }
-
-        #map-editor-shell .prop-input,
-        #map-editor-shell .prop-select,
-        #map-editor-shell .prop-textarea {
-            width: 100%;
-            min-width: 0;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            border-radius: 8px;
-            background: rgba(13, 18, 26, 0.9);
-            color: var(--text-primary);
-            padding: 8px 10px;
-            font-size: 11px;
-        }
-
-        #map-editor-shell .prop-textarea {
-            min-height: 84px;
-            resize: vertical;
-            font-family: inherit;
-        }
-
-        #map-editor-shell .prop-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        #map-editor-shell .insp-action-btn {
-            height: 32px;
-            padding: 0 10px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 8px;
-            background: rgba(31, 38, 48, 0.94);
-            color: var(--text-primary);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            cursor: pointer;
-        }
-
-        #map-editor-shell .insp-action-btn.primary {
-            background: rgba(38, 105, 200, 0.16);
-            border-color: rgba(38, 105, 200, 0.42);
-            color: #9ec6ff;
-        }
-
-        #map-editor-shell .insp-action-btn.danger {
-            background: rgba(91, 24, 24, 0.4);
-            border-color: rgba(185, 70, 70, 0.38);
-            color: #f3b6b6;
-        }
-
-        #map-editor-shell .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-        }
-
-        #map-editor-shell .metric-cell {
-            display: grid;
-            gap: 4px;
-            padding: 10px;
-            border-radius: 10px;
-            border: 1px solid rgba(40, 52, 68, 0.88);
-            background: rgba(13, 18, 26, 0.86);
-        }
-
-        #map-editor-shell .metric-label {
-            font-size: 9px;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: var(--text-field-label);
-        }
-
-        #map-editor-shell .metric-value {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .insp-empty {
-            display: grid;
-            gap: 10px;
-            place-items: center;
-            text-align: center;
-            padding: 18px 14px;
-            border-radius: 12px;
-            border: 1px dashed rgba(54, 67, 88, 0.9);
-            background: rgba(14, 20, 29, 0.72);
-            color: var(--text-tertiary);
-        }
-
-        #map-editor-shell .insp-empty i {
-            font-size: 24px;
-            opacity: 0.4;
-        }
-
-        #map-editor-shell .bottom-status-bar {
-            height: 34px;
-            flex-shrink: 0;
-            display: flex;
-            align-items: stretch;
-            gap: 0;
-            background: rgba(20, 26, 36, 0.98);
-            border-top: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .status-segment {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-            padding: 0 12px;
-            border-right: 1px solid rgba(37, 43, 56, 0.88);
-        }
-
-        #map-editor-shell .status-primary {
-            flex: 1;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .status-label {
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: var(--text-field-label);
-        }
-
-        #map-editor-shell .status-value,
-        #map-editor-shell #status {
-            font-size: 10px;
-            color: var(--text-secondary);
-            font-family: 'Roboto Mono', Consolas, Monaco, monospace;
-            white-space: nowrap;
-        }
-
-        #map-editor-shell .status-primary#status {
-            color: var(--text-primary);
-        }
-
-        @media (max-width: 1280px) {
-            #map-editor-shell .workspace-grid {
-                grid-template-columns: 58px 248px minmax(0, 1fr) 288px;
-            }
-        }
-
-        @media (max-width: 1080px) {
-            #map-editor-shell .workspace-grid {
-                grid-template-columns: 58px minmax(0, 1fr);
-                grid-template-rows: auto minmax(320px, 1fr) auto;
-            }
-
-            #map-editor-shell .tool-sidebar {
-                grid-column: 2;
-                grid-row: 1;
-                border-right: none;
-                border-bottom: 1px solid var(--border-chrome);
-                max-height: 320px;
-            }
-
-            #map-editor-shell .canvas-stage {
-                grid-column: 2;
-                grid-row: 2;
-            }
-
-            #map-editor-shell #inspector {
-                grid-column: 2;
-                grid-row: 3;
-                border-left: none;
-                border-top: 1px solid var(--border-chrome);
-                min-height: 280px;
-            }
-        }
-
-        @media (max-width: 840px) {
-            #map-editor-shell .project-bar {
-                height: auto;
-                padding-top: 10px;
-                padding-bottom: 10px;
-                flex-wrap: wrap;
-            }
-
-            #map-editor-shell .project-ident,
-            #map-editor-shell .project-actions {
-                width: 100%;
-            }
-
-            #map-editor-shell .project-actions {
-                flex-wrap: wrap;
-                justify-content: flex-start;
-            }
-
-            #map-editor-shell .bottom-status-bar {
-                flex-wrap: wrap;
-                height: auto;
-            }
-
-            #map-editor-shell .status-segment {
-                min-height: 32px;
-            }
-
-            #map-editor-shell .sidebar-tool-grid,
-            #map-editor-shell .sidebar-toggle-grid,
-            #map-editor-shell .prop-grid,
-            #map-editor-shell .metrics-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 640px) {
-            #map-editor-shell .workspace-grid {
-                grid-template-columns: 1fr;
-            }
-
-            #map-editor-shell .mode-rail {
-                flex-direction: row;
-                justify-content: flex-start;
-                overflow-x: auto;
-                padding: 8px;
-                border-right: none;
-                border-bottom: 1px solid var(--border-chrome);
-            }
-
-            #map-editor-shell .mode-rail-sep {
-                width: 1px;
-                height: 28px;
-                margin: 0 4px;
-            }
-
-            #map-editor-shell .tool-sidebar,
-            #map-editor-shell .canvas-stage,
-            #map-editor-shell #inspector {
-                grid-column: 1;
-            }
-        }
     </style>
 </head>
 
 <body>
-    <div class="editor-root" id="map-editor-shell">
-        <header class="project-bar">
-            <div class="project-ident">
-                <div class="project-brand">
-                    <div class="project-brand-mark">NEXT</div>
-                    <div class="project-brand-copy">
-                        <span class="project-title">Map Editor</span>
-                        <span class="project-subtitle">Factory layout authoring</span>
-                    </div>
-                </div>
-                <span id="layout-chip" class="layout-chip" title="Active map">active_map</span>
+    <div class="editor-root">
+        <header class="toolbar" id="toolbar">
+
+            <div class="mode-switch" role="tablist" aria-label="Editor modes">
+                <button class="mode-pill active" data-editor-mode="draw" type="button">Draw</button>
+                <button class="mode-pill" data-editor-mode="zones" type="button">Zones</button>
+                <button class="mode-pill" data-editor-mode="view" type="button">View</button>
+                <button class="mode-pill" data-editor-mode="waypoints" type="button">Waypoints</button>
+                <button class="mode-pill" data-editor-mode="dotted" type="button">Dotted</button>
             </div>
 
-            <div class="project-actions">
-                <button class="top-action-btn" id="undo-btn" title="Undo last change">
-                    <i class="fas fa-rotate-left"></i>
-                    <span>Undo</span>
-                </button>
-                <button class="top-action-btn" id="redo-btn" title="Redo last undone change">
-                    <i class="fas fa-rotate-right"></i>
-                    <span>Redo</span>
-                </button>
-                <button class="top-action-btn primary" id="save-permanent-btn" title="Save map to disk">
-                    <i class="fas fa-floppy-disk"></i>
-                    <span class="save-lbl">Save</span>
-                </button>
-
-                <div class="zoom-toolbar">
-                    <button class="top-action-btn icon-only" id="map-zoom-out-btn" title="Zoom out">
-                        <i class="fas fa-magnifying-glass-minus"></i>
+            <!-- ── DRAW TOOLS ────────────────────────────────────── -->
+            <div class="ctx-section active-panel" data-mode-panel="draw">
+                <div class="ctx-section-lbl">Draw</div>
+                <div class="ctx-section-row">
+                    <button class="tool-btn active" data-tool="add" title="Paint obstacles (brush)">
+                        <i class="fas fa-pen"></i>
+                        <span class="tool-lbl">Add</span>
                     </button>
-                    <span class="zoom-readout" id="zoom-readout">100%</span>
-                    <button class="top-action-btn icon-only" id="map-zoom-in-btn" title="Zoom in">
-                        <i class="fas fa-magnifying-glass-plus"></i>
+                    <button class="tool-btn" data-tool="erase" title="Erase obstacles">
+                        <i class="fas fa-eraser"></i>
+                        <span class="tool-lbl">Erase</span>
                     </button>
-                    <button class="top-action-btn" id="map-zoom-reset-btn" title="Fit map to viewport">
-                        <i class="fas fa-expand-arrows-alt"></i>
-                        <span>Fit</span>
+                    <button class="tool-btn" data-tool="wall_line" title="Draw wall line — click start then end point (renders as dots in Dotted View)">
+                        <i class="fas fa-ruler"></i>
+                        <span class="tool-lbl">Wall Line</span>
+                    </button>
+                    <button class="tool-btn" data-tool="move_zone" title="Move selected zone">
+                        <i class="fas fa-up-down-left-right"></i>
+                        <span class="tool-lbl">Move</span>
+                    </button>
+                    <button class="tool-btn" data-tool="rotate_zone" title="Rotate selected zone">
+                        <i class="fas fa-rotate"></i>
+                        <span class="tool-lbl">Rotate</span>
                     </button>
                 </div>
+            </div>
 
-                <button class="top-action-btn icon-only" id="editor-settings-toggle" title="Global editor settings">
-                    <i class="fas fa-gear"></i>
-                </button>
+            <!-- ── ZONES & PATHS ──────────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="zones">
+                <div class="ctx-section-lbl">Zones &amp; Paths</div>
+                <div class="ctx-section-row">
+                    <button class="tool-btn zone-nogo" data-tool="nogo" title="Paint No-Go zone (robot excluded area)">
+                        <i class="fas fa-ban"></i>
+                        <span class="tool-lbl">No-Go</span>
+                    </button>
+                    <button class="tool-btn zone-slow" data-tool="slow" title="Paint Slow zone (speed-limited corridor)">
+                        <i class="fas fa-person-walking"></i>
+                        <span class="tool-lbl">Slow</span>
+                    </button>
+                    <button class="tool-btn zone-restrict" data-tool="restricted" title="Paint Restricted zone (authorised personnel only)">
+                        <i class="fas fa-lock"></i>
+                        <span class="tool-lbl">Restrict</span>
+                    </button>
+                    <button class="tool-btn path-tool" data-tool="add_path" title="Create navigation path between zones">
+                        <i class="fas fa-route"></i>
+                        <span class="tool-lbl">Path</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── MAP / ORIGIN ───────────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="view">
+                <div class="ctx-section-lbl">Map</div>
+                <div class="ctx-section-row">
+                    <button class="tool-btn" id="move-origin-toggle" title="Drag to reposition map origin">
+                        <i class="fas fa-crosshairs"></i>
+                        <span class="tool-lbl">Origin</span>
+                    </button>
+                    <span id="layout-chip" class="layout-chip" title="Active map">active_map</span>
+                </div>
+            </div>
+
+            <!-- ── EDIT ───────────────────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="view">
+                <div class="ctx-section-lbl">Edit</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="undo-btn" title="Undo last stroke">
+                        <i class="fas fa-rotate-left"></i>
+                        <span class="tool-lbl">Undo</span>
+                    </button>
+                    <button class="editor-action-btn danger" id="clear-obstacles-btn" title="Clear all painted obstacles" onclick="if(!confirm('Clear all obstacles from map?'))return;">
+                        <i class="fas fa-trash-can"></i>
+                        <span class="tool-lbl">Clear</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── VIEW ──────────────────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="view">
+                <div class="ctx-section-lbl">View</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="pan-btn" data-tool="pan" title="Drag to pan map view">
+                        <i class="fas fa-hand"></i>
+                        <span class="tool-lbl">Pan</span>
+                    </button>
+                    <button class="editor-action-btn" id="map-zoom-out-btn" title="Zoom out">
+                        <i class="fas fa-magnifying-glass-minus"></i>
+                        <span class="tool-lbl">Zoom −</span>
+                    </button>
+                    <span class="zoom-readout" id="zoom-readout">100%</span>
+                    <button class="editor-action-btn" id="map-zoom-in-btn" title="Zoom in">
+                        <i class="fas fa-magnifying-glass-plus"></i>
+                        <span class="tool-lbl">Zoom +</span>
+                    </button>
+                    <button class="editor-action-btn" id="map-zoom-reset-btn" title="Reset zoom to 100%">
+                        <i class="fas fa-house"></i>
+                        <span class="tool-lbl">Reset</span>
+                    </button>
+                    <button class="editor-action-btn" id="grid-toggle-btn" title="Toggle metric grid overlay">
+                        <i class="fas fa-border-all"></i>
+                        <span class="tool-lbl">Grid</span>
+                    </button>
+                    <button class="editor-action-btn" id="measure-btn" data-tool="measure" title="Measure distance on map">
+                        <i class="fas fa-ruler-horizontal"></i>
+                        <span class="tool-lbl">Measure</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── OVERLAYS ───────────────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="view">
+                <div class="ctx-section-lbl">Overlays</div>
+                <div class="ctx-section-row">
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="zones" title="Toggle zone outlines">
+                        <i class="fas fa-draw-polygon"></i>
+                        <span class="tool-lbl">Zones</span>
+                    </button>
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="paths" title="Toggle path lines">
+                        <i class="fas fa-route"></i>
+                        <span class="tool-lbl">Paths</span>
+                    </button>
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="robot" title="Toggle robot position">
+                        <i class="fas fa-robot"></i>
+                        <span class="tool-lbl">Robot</span>
+                    </button>
+                    <button class="overlay-btn toolbar-overlay active" data-overlay="axes" title="Toggle coordinate axes">
+                        <i class="fas fa-plus"></i>
+                        <span class="tool-lbl">Axes</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── DOTTED MAP EDITOR ─────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="dotted">
+                <div class="ctx-section-lbl">Dotted Map</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn tinted-info" id="dotted-view-btn" title="Toggle dotted map view and editor">
+                        <i class="fas fa-th-large"></i>
+                        <span class="tool-lbl">Dotted Edit</span>
+                    </button>
+                    <button class="editor-action-btn" id="dot-place-robot-btn" data-tool="set_robot_pose" title="Place the robot pose on the map with heading" style="display:none">
+                        <i class="fas fa-location-crosshairs"></i>
+                        <span class="tool-lbl">Place Bot</span>
+                    </button>
+                    <button class="editor-action-btn" id="dot-auto-reloc-btn" title="Run Auto Reloc against the current map" style="display:none">
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        <span class="tool-lbl">Reloc</span>
+                    </button>
+                    <button class="editor-action-btn" id="dot-refresh-btn" title="Refresh the dotted map render" style="display:none">
+                        <i class="fas fa-sync-alt"></i>
+                        <span class="tool-lbl">Refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── WAYPOINTS ──────────────────────────────────────── -->
+            <div class="ctx-section" data-mode-panel="waypoints">
+                <div class="ctx-section-lbl">Waypoints</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="add-waypoint-btn" data-tool="add_waypoint" title="Place a named waypoint / docking station">
+                        <i class="fas fa-map-pin"></i>
+                        <span class="tool-lbl">Waypoint</span>
+                    </button>
+                    <button class="editor-action-btn" id="add-dock-btn" data-tool="add_dock" title="Place a robot docking/charging station">
+                        <i class="fas fa-plug"></i>
+                        <span class="tool-lbl">Dock</span>
+                    </button>
+                    <button class="editor-action-btn" id="add-queue-btn" data-tool="add_queue" title="Mark a queue / staging area">
+                        <i class="fas fa-list-ol"></i>
+                        <span class="tool-lbl">Queue</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── FILE ──────────────────────────────────────────── -->
+            <div class="ctx-section">
+                <div class="ctx-section-lbl">File</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn primary" id="save-permanent-btn" title="Save map to disk">
+                        <i class="fas fa-floppy-disk"></i>
+                        <span class="tool-lbl save-lbl">Save</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── SETTINGS (right-aligned) ──────────────────────── -->
+            <div class="ctx-section" style="margin-left:auto; border-right:none;">
+                <div class="ctx-section-lbl">Adjust</div>
+                <div class="ctx-section-row">
+                    <button class="editor-action-btn" id="editor-settings-toggle" title="Map shift, brush size &amp; overlay settings">
+                        <i class="fas fa-sliders"></i>
+                        <span class="tool-lbl">Settings</span>
+                    </button>
+                </div>
             </div>
 
             <div id="editor-settings-popover" class="editor-popover" hidden>
                 <div class="popover-stack">
-                    <div class="popover-card">
-                        <div class="popover-title">Map Transform</div>
-                        <div class="popover-row">
-                            <button class="step-btn active" data-shift-step="0.05" title="5 cm">5 cm</button>
-                            <button class="step-btn" data-shift-step="0.10" title="10 cm">10 cm</button>
-                            <button class="step-btn" data-shift-step="0.25" title="25 cm">25 cm</button>
+                    <div class="popover-block popover-row">
+                        <button class="step-btn active" data-shift-step="0.05" title="5cm">5</button>
+                        <button class="step-btn" data-shift-step="0.10" title="10cm">10</button>
+                        <button class="step-btn" data-shift-step="0.25" title="25cm">25</button>
+                        <div class="nudge-grid" aria-label="Map shift controls">
+                            <span></span>
+                            <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0.05" title="Shift Up">▲</button>
+                            <span></span>
+                            <button class="nudge-btn" data-shift-dx="-0.05" data-shift-dy="0" title="Shift Left">◀</button>
+                            <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0" title="Center">•</button>
+                            <button class="nudge-btn" data-shift-dx="0.05" data-shift-dy="0" title="Shift Right">▶</button>
+                            <span></span>
+                            <button class="nudge-btn" data-shift-dx="0" data-shift-dy="-0.05" title="Shift Down">▼</button>
+                            <span></span>
                         </div>
-                        <div class="popover-row popover-row-spread">
-                            <div class="nudge-grid" aria-label="Map shift controls">
-                                <span></span>
-                                <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0.05" title="Shift Up">▲</button>
-                                <span></span>
-                                <button class="nudge-btn" data-shift-dx="-0.05" data-shift-dy="0" title="Shift Left">◀</button>
-                                <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0" title="Center">•</button>
-                                <button class="nudge-btn" data-shift-dx="0.05" data-shift-dy="0" title="Shift Right">▶</button>
-                                <span></span>
-                                <button class="nudge-btn" data-shift-dx="0" data-shift-dy="-0.05" title="Shift Down">▼</button>
-                                <span></span>
-                            </div>
-                            <div class="popover-column">
-                                <button class="top-action-btn compact" data-yaw-delta="-2" title="Rotate map left">
-                                    <i class="fas fa-rotate-left"></i>
-                                    <span>Rotate -2°</span>
-                                </button>
-                                <button class="top-action-btn compact" data-yaw-delta="2" title="Rotate map right">
-                                    <i class="fas fa-rotate-right"></i>
-                                    <span>Rotate +2°</span>
-                                </button>
-                                <button class="top-action-btn compact" id="origin-reset" title="Reset origin transform">
-                                    <i class="fas fa-location-crosshairs"></i>
-                                    <span>Reset Origin</span>
-                                </button>
-                            </div>
-                        </div>
+                        <button class="nudge-btn" data-yaw-delta="-2" title="Rotate Left">⟲</button>
+                        <button class="nudge-btn" data-yaw-delta="2" title="Rotate Right">⟳</button>
+                        <button class="nudge-btn" id="origin-reset" title="Recenter">⌖</button>
                     </div>
 
-                    <div class="popover-card">
-                        <div class="popover-title">Origin</div>
-                        <div id="origin-readout" class="origin-readout">x: 0.000 | y: 0.000 | yaw: 0.00°</div>
-                        <label class="sr-only" for="origin-x">Shift X</label>
-                        <input id="origin-x" type="number" step="0.01" value="0" class="sr-only">
-                        <label class="sr-only" for="origin-y">Shift Y</label>
-                        <input id="origin-y" type="number" step="0.01" value="0" class="sr-only">
-                        <label class="sr-only" for="origin-yaw">Map Yaw</label>
-                        <input id="origin-yaw" type="number" step="0.01" value="0" class="sr-only">
+                    <div class="popover-block popover-row">
+                        <label class="brush-label" for="brush">◍</label>
+                        <input id="brush" type="range" min="2" max="60" value="14">
+                        <span id="brush-value" class="brush-value">14</span>
+                        <button class="overlay-btn active" data-overlay="zones" aria-label="Zones" title="Zones">▦</button>
+                        <button class="overlay-btn active" data-overlay="paths" aria-label="Paths" title="Paths">⤳</button>
+                        <button class="overlay-btn active" data-overlay="robot" aria-label="Robot" title="Robot">◉</button>
+                        <button class="overlay-btn active" data-overlay="axes" aria-label="Axes" title="Axes">╋</button>
                     </div>
+
+                    <div class="popover-block popover-row">
+                        <label class="brush-label" for="wall-line-width">↔</label>
+                        <input id="wall-line-width" type="range" min="1" max="30" value="1">
+                        <span id="wall-line-width-value" class="brush-value">1</span>
+                        <span style="font-size:12px; color:var(--text-secondary); min-width:58px;">Wall px</span>
+                    </div>
+                </div>
+
+                <div class="popover-block">
+                    <div id="origin-readout" class="origin-readout">x: 0.000 | y: 0.000 | yaw: 0.00°</div>
+                    <label class="sr-only" for="origin-x">Shift X</label>
+                    <input id="origin-x" type="number" step="0.01" value="0" class="sr-only">
+                    <label class="sr-only" for="origin-y">Shift Y</label>
+                    <input id="origin-y" type="number" step="0.01" value="0" class="sr-only">
+                    <label class="sr-only" for="origin-yaw">Map Yaw</label>
+                    <input id="origin-yaw" type="number" step="0.01" value="0" class="sr-only">
                 </div>
             </div>
         </header>
 
-        <div class="workspace-grid">
-            <nav class="mode-rail" aria-label="Editor modes">
-                <button class="mode-rail-btn active" data-editor-mode="draw" type="button" title="Draw mode">
-                    <i class="fas fa-pen"></i>
-                    <span class="mode-rail-label">Draw</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="zones" type="button" title="Zones mode">
-                    <i class="fas fa-draw-polygon"></i>
-                    <span class="mode-rail-label">Zones</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="paths" type="button" title="Paths mode">
-                    <i class="fas fa-route"></i>
-                    <span class="mode-rail-label">Paths</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="waypoints" type="button" title="Waypoints mode">
-                    <i class="fas fa-location-dot"></i>
-                    <span class="mode-rail-label">Points</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="dotted" type="button" title="Dotted map mode">
-                    <i class="fas fa-th-large"></i>
-                    <span class="mode-rail-label">Dotted</span>
-                </button>
-                <div class="mode-rail-sep"></div>
-                <button class="mode-rail-btn" data-editor-mode="view" type="button" title="View and measure mode">
-                    <i class="fas fa-layer-group"></i>
-                    <span class="mode-rail-label">View</span>
-                </button>
-            </nav>
-
-            <aside class="tool-sidebar">
-                <section class="sidebar-panel active-panel" data-mode-panel="draw">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Draw</h2>
-                        <p>Paint the occupancy map, erase noise, and reshape walls.</p>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn active" data-tool="add" title="Paint obstacles">
-                                <i class="fas fa-pen"></i>
-                                <span class="tool-lbl">Add</span>
-                            </button>
-                            <button class="tool-btn" data-tool="erase" title="Erase obstacles">
-                                <i class="fas fa-eraser"></i>
-                                <span class="tool-lbl">Erase</span>
-                            </button>
-                            <button class="tool-btn" data-tool="wall_line" title="Draw wall line">
-                                <i class="fas fa-ruler"></i>
-                                <span class="tool-lbl">Wall</span>
-                            </button>
-                            <button class="tool-btn" data-tool="move_zone" title="Move selected zone">
-                                <i class="fas fa-up-down-left-right"></i>
-                                <span class="tool-lbl">Move</span>
-                            </button>
-                            <button class="tool-btn" data-tool="rotate_zone" title="Rotate selected zone">
-                                <i class="fas fa-rotate"></i>
-                                <span class="tool-lbl">Rotate</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Tool Settings</div>
-                        <label class="sidebar-range-label" for="brush">
-                            <span>Brush Size</span>
-                            <span id="brush-value" class="sidebar-range-value">14</span>
-                        </label>
-                        <input id="brush" class="sidebar-range" type="range" min="2" max="60" value="14">
-
-                        <label class="sidebar-range-label" for="wall-line-width">
-                            <span>Wall Thickness</span>
-                            <span id="wall-line-width-value" class="sidebar-range-value">1</span>
-                        </label>
-                        <input id="wall-line-width" class="sidebar-range" type="range" min="1" max="30" value="1">
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Map Actions</div>
-                        <button class="sidebar-action-btn danger" id="clear-obstacles-btn" title="Clear all painted obstacles" onclick="if(!confirm('Clear all obstacles from map?'))return;">
-                            <i class="fas fa-trash-can"></i>
-                            <span>Clear Painted Obstacles</span>
-                        </button>
-                        <div class="sidebar-note" id="draw-selection-summary">No object selected.</div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="zones">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Zones</h2>
-                        <p>Create navigation constraints and operational areas.</p>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Zone Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn zone-nogo" data-tool="nogo" title="Place no-go zone">
-                                <i class="fas fa-ban"></i>
-                                <span class="tool-lbl">No-Go</span>
-                            </button>
-                            <button class="tool-btn zone-slow" data-tool="slow" title="Place slow zone">
-                                <i class="fas fa-person-walking"></i>
-                                <span class="tool-lbl">Slow</span>
-                            </button>
-                            <button class="tool-btn zone-restrict" data-tool="restricted" title="Place restricted zone">
-                                <i class="fas fa-lock"></i>
-                                <span class="tool-lbl">Restrict</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Placed Zones</div>
-                        <div class="sidebar-list" id="zones-list"></div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="paths">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Paths</h2>
-                        <p>Link zones together and inspect saved route geometry.</p>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Path Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn path-tool" data-tool="add_path" title="Create path between two zones">
-                                <i class="fas fa-route"></i>
-                                <span class="tool-lbl">Add Path</span>
-                            </button>
-                        </div>
-                        <div class="sidebar-note">Click a start zone, then an end zone to create or overwrite a route.</div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Saved Paths</div>
-                        <div class="sidebar-list" id="paths-list"></div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="waypoints">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Waypoints</h2>
-                        <p>Place destinations, docking stations, and queue markers.</p>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Waypoint Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="editor-action-btn" id="add-waypoint-btn" data-tool="add_waypoint" title="Place waypoint">
-                                <i class="fas fa-map-pin"></i>
-                                <span class="tool-lbl">Waypoint</span>
-                            </button>
-                            <button class="editor-action-btn" id="add-dock-btn" data-tool="add_dock" title="Place dock">
-                                <i class="fas fa-plug"></i>
-                                <span class="tool-lbl">Dock</span>
-                            </button>
-                            <button class="editor-action-btn" id="add-queue-btn" data-tool="add_queue" title="Place queue marker">
-                                <i class="fas fa-list-ol"></i>
-                                <span class="tool-lbl">Queue</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Action Points</div>
-                        <div class="sidebar-list" id="waypoints-list"></div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="dotted">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Dotted Map</h2>
-                        <p>Edit the dotted render, place the robot, and preview live scan alignment.</p>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Session</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="editor-action-btn tinted-info" id="dotted-view-btn" title="Toggle dotted map view and editor">
-                                <i class="fas fa-th-large"></i>
-                                <span class="tool-lbl">Edit View</span>
-                            </button>
-                            <button class="tool-btn" data-tool="add" title="Draw dotted wall segment">
-                                <i class="fas fa-pen"></i>
-                                <span class="tool-lbl">Wall</span>
-                            </button>
-                            <button class="tool-btn" data-tool="erase" title="Erase nearest dotted segment">
-                                <i class="fas fa-eraser"></i>
-                                <span class="tool-lbl">Erase</span>
-                            </button>
-                            <button class="editor-action-btn" id="dot-place-robot-btn" data-tool="set_robot_pose" title="Place the robot pose on the map with heading" style="display:none">
-                                <i class="fas fa-location-crosshairs"></i>
-                                <span class="tool-lbl">Place Bot</span>
-                            </button>
-                            <button class="editor-action-btn" id="dot-auto-reloc-btn" title="Run Auto Reloc against the current map" style="display:none">
-                                <i class="fas fa-wand-magic-sparkles"></i>
-                                <span class="tool-lbl">Reloc</span>
-                            </button>
-                            <button class="editor-action-btn" id="dot-refresh-btn" title="Refresh the dotted map render" style="display:none">
-                                <i class="fas fa-sync-alt"></i>
-                                <span class="tool-lbl">Refresh</span>
-                            </button>
-                        </div>
-                        <div class="sidebar-note" id="dotted-session-meta">Dotted overlay is currently off.</div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="view">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>View &amp; Measure</h2>
-                        <p>Inspect objects, pan the canvas, and control visual layers.</p>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Navigation</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn active" data-tool="inspect" title="Inspect and select geometry">
-                                <i class="fas fa-arrow-pointer"></i>
-                                <span class="tool-lbl">Inspect</span>
-                            </button>
-                            <button class="editor-action-btn" id="pan-btn" data-tool="pan" title="Drag to pan map view">
-                                <i class="fas fa-hand"></i>
-                                <span class="tool-lbl">Pan</span>
-                            </button>
-                            <button class="editor-action-btn" id="measure-btn" data-tool="measure" title="Measure distance on map">
-                                <i class="fas fa-ruler-horizontal"></i>
-                                <span class="tool-lbl">Measure</span>
-                            </button>
-                            <button class="tool-btn" id="move-origin-toggle" title="Drag to reposition map origin">
-                                <i class="fas fa-crosshairs"></i>
-                                <span class="tool-lbl">Origin</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Layers</div>
-                        <div class="sidebar-toggle-grid">
-                            <button class="layer-toggle" id="grid-toggle-btn" data-grid-toggle="true" title="Toggle metric grid overlay">
-                                <i class="fas fa-border-all"></i>
-                                <span>Grid</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="zones" title="Toggle zone outlines">
-                                <i class="fas fa-draw-polygon"></i>
-                                <span>Zones</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="paths" title="Toggle path lines">
-                                <i class="fas fa-route"></i>
-                                <span>Paths</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="robot" title="Toggle robot position">
-                                <i class="fas fa-robot"></i>
-                                <span>Robot</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="axes" title="Toggle coordinate axes">
-                                <i class="fas fa-plus"></i>
-                                <span>Axes</span>
-                            </button>
-                        </div>
-                    </div>
-                </section>
-            </aside>
-
-            <section class="canvas-stage">
-                <div class="canvas-stage-header">
-                    <div class="canvas-stage-titlegroup">
-                        <span class="canvas-stage-title" id="canvas-mode-title">Draw</span>
-                        <span class="canvas-stage-subtitle" id="canvas-mode-subtitle">Obstacle brush enabled</span>
-                    </div>
-                    <div class="canvas-stage-chiprow">
-                        <span class="context-chip" id="canvas-selection-chip">No selection</span>
-                        <span class="context-chip" id="canvas-layer-chip">4 overlays visible</span>
-                    </div>
-                </div>
-
-                <main class="canvas-wrap">
-                    <canvas id="editor"></canvas>
-                </main>
-            </section>
-
-            <aside id="inspector">
-                <div class="insp-header">
-                    <span class="insp-header-title" id="insp-header-title">Map Overview</span>
-                    <span class="insp-mode-badge" id="insp-mode-badge">Draw</span>
-                </div>
-
-                <div class="insp-tabs">
-                    <button class="insp-tab active" data-inspector-tab="properties" type="button">Properties</button>
-                    <button class="insp-tab" data-inspector-tab="layers" type="button">Layers</button>
-                    <button class="insp-tab" data-inspector-tab="guide" type="button">Guide</button>
-                </div>
-
-                <div class="insp-pane active" data-inspector-pane="properties">
-                    <div id="inspector-properties"></div>
-                </div>
-                <div class="insp-pane" data-inspector-pane="layers">
-                    <div id="inspector-layers"></div>
-                </div>
-                <div class="insp-pane" data-inspector-pane="guide">
-                    <div id="inspector-guide"></div>
-                </div>
-            </aside>
-        </div>
-
-        <footer class="bottom-status-bar">
-            <div class="status-segment status-primary" id="status">Loading map...</div>
-            <div class="status-segment">
-                <span class="status-label">Cursor</span>
-                <span class="status-value" id="cursor-readout">x: -- | y: --</span>
-            </div>
-            <div class="status-segment">
-                <span class="status-label">Selection</span>
-                <span class="status-value" id="selection-readout">None</span>
-            </div>
-            <div class="status-segment">
-                <span class="status-label">Grid</span>
-                <span class="status-value" id="grid-status-readout">Off</span>
-            </div>
-            <div class="status-segment">
-                <span class="status-label">Snap</span>
-                <span class="status-value" id="snap-status-readout">Off</span>
-            </div>
-            <div class="status-segment">
-                <span class="status-label">Origin</span>
-                <span class="status-value" id="origin-status-readout">x: 0.000 | y: 0.000 | yaw: 0.00°</span>
-            </div>
-        </footer>
+        <main class="canvas-wrap">
+            <canvas id="editor"></canvas>
+            <div class="status" id="status">Loading map...</div>
+        </main>
     </div>
 
     <script>
@@ -1940,9 +735,7 @@
         const originYawInput = document.getElementById("origin-yaw");
         const originResetBtn = document.getElementById("origin-reset");
         const originReadout = document.getElementById("origin-readout");
-        const originStatusReadoutEl = document.getElementById("origin-status-readout");
         const undoBtn = document.getElementById("undo-btn");
-        const redoBtn = document.getElementById("redo-btn");
         const layoutChip = document.getElementById("layout-chip");
         const moveOriginToggle = document.getElementById("move-origin-toggle");
         const panBtn = document.getElementById("pan-btn");
@@ -1950,33 +743,16 @@
         const zoomOutBtn = document.getElementById("map-zoom-out-btn");
         const zoomResetBtn = document.getElementById("map-zoom-reset-btn");
         const zoomReadoutEl = document.getElementById("zoom-readout");
+        const gridToggleBtn = document.getElementById("grid-toggle-btn");
         const measureBtn = document.getElementById("measure-btn");
         const settingsToggleBtn = document.getElementById("editor-settings-toggle");
         const settingsPopover = document.getElementById("editor-settings-popover");
-        const cursorReadoutEl = document.getElementById("cursor-readout");
-        const selectionReadoutEl = document.getElementById("selection-readout");
-        const gridStatusReadoutEl = document.getElementById("grid-status-readout");
-        const snapStatusReadoutEl = document.getElementById("snap-status-readout");
-        const canvasModeTitleEl = document.getElementById("canvas-mode-title");
-        const canvasModeSubtitleEl = document.getElementById("canvas-mode-subtitle");
-        const canvasSelectionChipEl = document.getElementById("canvas-selection-chip");
-        const canvasLayerChipEl = document.getElementById("canvas-layer-chip");
-        const drawSelectionSummaryEl = document.getElementById("draw-selection-summary");
-        const dottedSessionMetaEl = document.getElementById("dotted-session-meta");
-        const inspectorHeaderTitleEl = document.getElementById("insp-header-title");
-        const inspectorModeBadgeEl = document.getElementById("insp-mode-badge");
-        const inspectorPropertiesEl = document.getElementById("inspector-properties");
-        const inspectorLayersEl = document.getElementById("inspector-layers");
-        const inspectorGuideEl = document.getElementById("inspector-guide");
         const shiftStepButtons = Array.from(document.querySelectorAll("button[data-shift-step]"));
         const shiftNudgeButtons = Array.from(document.querySelectorAll("button[data-shift-dx]"));
         const yawButtons = Array.from(document.querySelectorAll("button[data-yaw-delta]"));
         const overlayButtons = Array.from(document.querySelectorAll("button[data-overlay]"));
-        const gridToggleButtons = Array.from(document.querySelectorAll("button[data-grid-toggle]"));
         const modePillButtons = Array.from(document.querySelectorAll("button[data-editor-mode]"));
-        const modePanels = Array.from(document.querySelectorAll(".sidebar-panel[data-mode-panel]"));
-        const inspectorTabButtons = Array.from(document.querySelectorAll("button[data-inspector-tab]"));
-        const inspectorPanes = Array.from(document.querySelectorAll("[data-inspector-pane]"));
+        const modePanels = Array.from(document.querySelectorAll(".ctx-section[data-mode-panel]"));
 
         const API = {
             preview: "/api/editor/map/preview",
@@ -1992,8 +768,6 @@
             zoneSave: "/api/zones/save",
             zones: "/api/zones",
             zoneUpdate: "/api/zones/update",
-            zoneUpdateParams: "/api/zones/update-params",
-            zoneDelete: "/api/zones/delete",
             paths: "/api/paths",
             pathSave: "/api/path/save",
             layouts: "/api/layouts",
@@ -2046,7 +820,6 @@
             dragOffsetMap: null,
             pendingFromZone: null,
             undoStack: [],
-            redoStack: [],
             strokeSnapshot: null,
             lineStart: null,
             linePreviewEnd: null,
@@ -2081,18 +854,6 @@
             robotPosePlacementStart: null,
             robotPosePlacementPreviewEnd: null,
             dottedRefreshTimer: null,
-            pathSettings: new Map(),
-            pathMetrics: new Map(),
-            selection: {
-                kind: "none",
-                id: ""
-            },
-            inspectorTab: "properties",
-            cursorWorld: {
-                x: null,
-                y: null
-            },
-            snapEnabled: false,
             view: {
                 scale: 1,
                 minScale: 0.35,
@@ -2100,24 +861,6 @@
                 offsetX: 0,
                 offsetY: 0
             }
-        };
-
-        const MODE_META = {
-            draw: { label: "Draw" },
-            zones: { label: "Zones" },
-            paths: { label: "Paths" },
-            waypoints: { label: "Waypoints" },
-            dotted: { label: "Dotted Map" },
-            view: { label: "View" }
-        };
-
-        const MODE_DEFAULT_TOOL = {
-            draw: "add",
-            zones: "nogo",
-            paths: "add_path",
-            waypoints: "add_waypoint",
-            dotted: "add",
-            view: "inspect"
         };
 
         const TOOL_TO_MODE = {
@@ -2129,8 +872,7 @@
             nogo: "zones",
             slow: "zones",
             restricted: "zones",
-            add_path: "paths",
-            inspect: "view",
+            add_path: "zones",
             pan: "view",
             measure: "view",
             set_robot_pose: "dotted",
@@ -2184,7 +926,6 @@
             add: "Obstacle brush enabled",
             erase: "Obstacle erase brush enabled",
             wall_line: "Click start point, then end point to draw a wall line — width is adjustable in Settings",
-            inspect: "Click a zone or path to inspect its properties",
             pan: "Drag the map viewport",
             move_zone: "Drag a zone to reposition it",
             rotate_zone: "Drag around a zone to rotate it",
@@ -2201,205 +942,6 @@
             set_robot_pose: "Place Robot: click robot position, then click again to set heading"
         };
 
-        function escapeHtml(value) {
-            return String(value ?? "")
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-        }
-
-        function formatMeters(value, digits = 2) {
-            const num = Number(value);
-            return Number.isFinite(num) ? `${num.toFixed(digits)} m` : "—";
-        }
-
-        function formatCoord(value, digits = 3) {
-            const num = Number(value);
-            return Number.isFinite(num) ? num.toFixed(digits) : "—";
-        }
-
-        function formatDegrees(value, digits = 1) {
-            const num = Number(value);
-            return Number.isFinite(num) ? `${num.toFixed(digits)}°` : "—";
-        }
-
-        function cloneOrigin(origin) {
-            return {
-                x: Number(origin?.x) || 0,
-                y: Number(origin?.y) || 0,
-                yaw: Number(origin?.yaw) || 0
-            };
-        }
-
-        function captureEditorSnapshot() {
-            if (!state.mapReady) {
-                return null;
-            }
-            return {
-                imageData: editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height),
-                origin: cloneOrigin(state.origin)
-            };
-        }
-
-        function restoreEditorSnapshot(snapshot) {
-            if (!snapshot || !snapshot.imageData) {
-                return;
-            }
-            editCtx.putImageData(snapshot.imageData, 0, 0);
-            state.origin = cloneOrigin(snapshot.origin);
-            updateOriginPixel();
-            syncOriginInputs();
-            draw();
-        }
-
-        function syncHistoryButtons() {
-            if (undoBtn) {
-                undoBtn.disabled = state.undoStack.length === 0;
-            }
-            if (redoBtn) {
-                redoBtn.disabled = state.redoStack.length === 0;
-            }
-        }
-
-        function pushUndoSnapshot(snapshot = captureEditorSnapshot()) {
-            if (!snapshot) {
-                return;
-            }
-            state.undoStack.push(snapshot);
-            if (state.undoStack.length > 80) {
-                state.undoStack.shift();
-            }
-            state.redoStack = [];
-            syncHistoryButtons();
-        }
-
-        function getSelectedZone() {
-            return state.selection.kind === "zone" ? state.zones.get(state.selection.id) || null : null;
-        }
-
-        function getSelectedPath() {
-            return state.selection.kind === "path" ? state.paths.get(state.selection.id) || null : null;
-        }
-
-        function getModeLabel(mode = state.editorMode) {
-            return MODE_META[String(mode || "")]?.label || "Draw";
-        }
-
-        function getSelectionLabel() {
-            if (state.selection.kind === "zone") {
-                const zone = getSelectedZone();
-                return zone ? (zone.name || zone.id || "Zone") : "No selection";
-            }
-            if (state.selection.kind === "path") {
-                const path = getSelectedPath();
-                return path ? (path.id || "Path") : "No selection";
-            }
-            return "No selection";
-        }
-
-        function setSelection(kind, id, options = {}) {
-            state.selection.kind = String(kind || "none");
-            state.selection.id = String(id || "");
-            if (state.selection.kind === "zone" && !state.zones.has(state.selection.id)) {
-                state.selection.kind = "none";
-                state.selection.id = "";
-            }
-            if (state.selection.kind === "path" && !state.paths.has(state.selection.id)) {
-                state.selection.kind = "none";
-                state.selection.id = "";
-            }
-            renderSidebarCollections();
-            renderInspector();
-            syncCanvasContext();
-            syncStatusBar();
-            if (!options.silent) {
-                draw();
-            }
-        }
-
-        function clearSelection(options = {}) {
-            setSelection("none", "", options);
-        }
-
-        function countVisibleLayers() {
-            return Object.values(state.overlayVisibility).filter(Boolean).length + (state.showGrid ? 1 : 0);
-        }
-
-        function syncStatusBar() {
-            if (selectionReadoutEl) {
-                selectionReadoutEl.textContent = getSelectionLabel();
-            }
-            if (gridStatusReadoutEl) {
-                gridStatusReadoutEl.textContent = state.showGrid ? "On" : "Off";
-            }
-            if (snapStatusReadoutEl) {
-                snapStatusReadoutEl.textContent = state.snapEnabled ? "On" : "Off";
-            }
-        }
-
-        function syncCanvasContext() {
-            if (canvasModeTitleEl) {
-                canvasModeTitleEl.textContent = getModeLabel();
-            }
-            if (canvasModeSubtitleEl) {
-                canvasModeSubtitleEl.textContent = TOOL_HINTS[state.tool] || "Editor ready";
-            }
-            if (canvasSelectionChipEl) {
-                canvasSelectionChipEl.textContent = getSelectionLabel();
-            }
-            if (canvasLayerChipEl) {
-                canvasLayerChipEl.textContent = `${countVisibleLayers()} layers visible`;
-            }
-            if (drawSelectionSummaryEl) {
-                drawSelectionSummaryEl.textContent = state.selection.kind === "none"
-                    ? "No object selected."
-                    : `${getSelectionLabel()} selected. Use Move or Rotate to edit placement.`;
-            }
-            if (dottedSessionMetaEl) {
-                if (!state.dottedViewMode) {
-                    dottedSessionMetaEl.textContent = "Dotted overlay is currently off.";
-                } else {
-                    dottedSessionMetaEl.textContent = `${state.dottedSegments.length} custom segments · ${state.scanPoints.length} scan points`;
-                }
-            }
-            if (inspectorModeBadgeEl) {
-                inspectorModeBadgeEl.textContent = getModeLabel();
-            }
-        }
-
-        function openInspectorTab(tab) {
-            const normalized = ["properties", "layers", "guide"].includes(String(tab || ""))
-                ? String(tab)
-                : "properties";
-            state.inspectorTab = normalized;
-            inspectorTabButtons.forEach((button) => {
-                button.classList.toggle("active", String(button.dataset.inspectorTab || "") === normalized);
-            });
-            inspectorPanes.forEach((pane) => {
-                pane.classList.toggle("active", String(pane.dataset.inspectorPane || "") === normalized);
-            });
-        }
-
-        function activateEditorMode(mode) {
-            const normalized = ["draw", "zones", "paths", "waypoints", "dotted", "view"].includes(String(mode || ""))
-                ? String(mode)
-                : "draw";
-            setEditorMode(normalized);
-            const activeToolMode = TOOL_TO_MODE[state.tool] || TOOL_TO_MODE[resolveToolSelection(state.tool)] || "";
-            if (activeToolMode !== normalized) {
-                const defaultTool = MODE_DEFAULT_TOOL[normalized];
-                if (defaultTool) {
-                    setTool(defaultTool);
-                }
-            } else {
-                syncCanvasContext();
-                renderInspector();
-                syncStatusBar();
-            }
-        }
-
         function updateZoomReadout() {
             if (!zoomReadoutEl) {
                 return;
@@ -2411,8 +953,6 @@
             let cursor = "crosshair";
             if (state.draggingView) {
                 cursor = "grabbing";
-            } else if (state.tool === "inspect") {
-                cursor = "default";
             } else if (state.tool === "pan") {
                 cursor = "grab";
             } else if (state.tool === "move_zone") {
@@ -2586,12 +1126,7 @@
         }
 
         function syncGridButton() {
-            gridToggleButtons.forEach((button) => {
-                button.classList.toggle("active", !!state.showGrid);
-            });
-            if (gridStatusReadoutEl) {
-                gridStatusReadoutEl.textContent = state.showGrid ? "On" : "Off";
-            }
+            gridToggleBtn?.classList.toggle("active", !!state.showGrid);
         }
 
         function syncOverlayButtons(key) {
@@ -2639,7 +1174,7 @@
         }
 
         function setEditorMode(mode) {
-            const normalized = ["draw", "zones", "paths", "view", "waypoints", "dotted"].includes(String(mode || ""))
+            const normalized = ["draw", "zones", "view", "waypoints", "dotted"].includes(String(mode || ""))
                 ? String(mode)
                 : "draw";
             state.editorMode = normalized;
@@ -2649,8 +1184,6 @@
             modePanels.forEach((panel) => {
                 panel.classList.toggle("active-panel", String(panel.dataset.modePanel || "") === normalized);
             });
-            syncCanvasContext();
-            renderInspector();
         }
 
         function setTool(tool) {
@@ -2680,7 +1213,7 @@
                 resetMeasurement({ silent: true });
             }
 
-            document.querySelectorAll("button[data-tool]").forEach(btn => {
+            document.querySelectorAll("#toolbar button[data-tool]").forEach(btn => {
                 btn.classList.toggle("active", toolbarButtonMatchesTool(btn.dataset.tool, tool));
             });
 
@@ -2691,25 +1224,17 @@
                 updateStatus(baseMessage);
             }
             syncCanvasCursor();
-            syncCanvasContext();
-            renderInspector();
             draw();
         }
 
-        document.querySelectorAll("button[data-tool]").forEach(btn => {
+        document.querySelectorAll("#toolbar button[data-tool]").forEach(btn => {
             btn.addEventListener("click", () => setTool(btn.dataset.tool));
         });
 
         modePillButtons.forEach((button) => {
             button.addEventListener("click", () => {
                 const mode = String(button.dataset.editorMode || "draw");
-                activateEditorMode(mode);
-            });
-        });
-
-        inspectorTabButtons.forEach((button) => {
-            button.addEventListener("click", () => {
-                openInspectorTab(String(button.dataset.inspectorTab || "properties"));
+                setEditorMode(mode);
             });
         });
 
@@ -2717,7 +1242,6 @@
             state.moveOriginEnabled = !state.moveOriginEnabled;
             moveOriginToggle.classList.toggle("active", state.moveOriginEnabled);
             syncCanvasCursor();
-            renderInspector();
             updateStatus(state.moveOriginEnabled ? "Move Origin enabled" : "Move Origin disabled");
         });
 
@@ -2741,9 +1265,6 @@
         });
 
         document.addEventListener("click", () => {
-            if (!settingsPopover || !settingsToggleBtn) {
-                return;
-            }
             settingsPopover.setAttribute("hidden", "");
             settingsToggleBtn.classList.remove("active");
         });
@@ -2813,21 +1334,15 @@
                 }
                 state.overlayVisibility[key] = !state.overlayVisibility[key];
                 syncOverlayButtons(key);
-                syncCanvasContext();
-                renderInspector();
                 draw();
             });
         });
 
-        gridToggleButtons.forEach((button) => {
-            button.addEventListener("click", () => {
-                state.showGrid = !state.showGrid;
-                syncGridButton();
-                syncCanvasContext();
-                renderInspector();
-                updateStatus(state.showGrid ? "Metric grid enabled" : "Metric grid disabled");
-                draw();
-            });
+        gridToggleBtn?.addEventListener("click", () => {
+            state.showGrid = !state.showGrid;
+            syncGridButton();
+            updateStatus(state.showGrid ? "Metric grid enabled" : "Metric grid disabled");
+            draw();
         });
 
         undoBtn.addEventListener("click", () => {
@@ -2836,28 +1351,9 @@
                 return;
             }
             const snapshot = state.undoStack.pop();
-            const redoSnapshot = captureEditorSnapshot();
-            if (redoSnapshot) {
-                state.redoStack.push(redoSnapshot);
-            }
-            restoreEditorSnapshot(snapshot);
-            syncHistoryButtons();
+            editCtx.putImageData(snapshot, 0, 0);
+            draw();
             saveEdits("undo");
-        });
-
-        redoBtn?.addEventListener("click", () => {
-            if (!state.mapReady || state.redoStack.length === 0) {
-                updateStatus("Nothing to redo");
-                return;
-            }
-            const snapshot = state.redoStack.pop();
-            const undoSnapshot = captureEditorSnapshot();
-            if (undoSnapshot) {
-                state.undoStack.push(undoSnapshot);
-            }
-            restoreEditorSnapshot(snapshot);
-            syncHistoryButtons();
-            saveEdits("redo");
         });
 
         document.getElementById("save-permanent-btn").addEventListener("click", async () => {
@@ -2899,15 +1395,10 @@
             originXInput.value = "0.000";
             originYInput.value = "0.000";
             originYawInput.value = state.origin.yaw.toFixed(3);
-            const yawDeg = (state.origin.yaw * 180 / Math.PI);
-            const text = `x: ${state.origin.x.toFixed(3)} | y: ${state.origin.y.toFixed(3)} | yaw: ${yawDeg.toFixed(2)}°`;
             if (originReadout) {
-                originReadout.textContent = text;
+                const yawDeg = (state.origin.yaw * 180 / Math.PI);
+                originReadout.textContent = `x: ${state.origin.x.toFixed(3)} | y: ${state.origin.y.toFixed(3)} | yaw: ${yawDeg.toFixed(2)}°`;
             }
-            if (originStatusReadoutEl) {
-                originStatusReadoutEl.textContent = text;
-            }
-            syncStatusBar();
         }
 
         function applyMapTransform(dxMeters, dyMeters, yawDeltaDeg = 0, reason = "map-transform") {
@@ -2918,7 +1409,6 @@
                 updateStatus("Invalid transform input");
                 return;
             }
-            pushUndoSnapshot();
             if (dx !== 0 || dy !== 0) {
                 translateMapImage(dx, dy);
             }
@@ -2936,7 +1426,6 @@
         }
 
         originResetBtn.addEventListener("click", () => {
-            pushUndoSnapshot();
             state.origin = { ...state.initialOrigin };
             updateOriginPixel();
             syncOriginInputs();
@@ -3210,464 +1699,6 @@
                 stroke: "#63f3be",
                 textStroke: "rgba(111, 219, 178, 0.86)"
             };
-        }
-
-        function isWaypointType(type) {
-            return ["waypoint", "dock", "queue"].includes(String(type || "").trim().toLowerCase());
-        }
-
-        function propRow(label, value, options = {}) {
-            const classes = options.mono ? "prop-val mono" : "prop-val";
-            return `<div class="prop-row"><span class="prop-lbl">${escapeHtml(label)}</span><span class="${classes}">${escapeHtml(value)}</span></div>`;
-        }
-
-        function metricCell(label, value) {
-            return `<div class="metric-cell"><span class="metric-label">${escapeHtml(label)}</span><span class="metric-value">${escapeHtml(value)}</span></div>`;
-        }
-
-        function renderSidebarCollections() {
-            const zoneItems = Array.from(state.zones.values())
-                .filter((zone) => !isWaypointType(zone.type))
-                .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
-            const waypointItems = Array.from(state.zones.values())
-                .filter((zone) => isWaypointType(zone.type))
-                .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
-            const pathItems = Array.from(state.paths.values())
-                .sort((a, b) => String(a.id || "").localeCompare(String(b.id || "")));
-
-            const zonesListEl = document.getElementById("zones-list");
-            const waypointsListEl = document.getElementById("waypoints-list");
-            const pathsListEl = document.getElementById("paths-list");
-
-            if (zonesListEl) {
-                zonesListEl.innerHTML = zoneItems.length === 0
-                    ? '<div class="sidebar-list-empty">No zones placed yet.</div>'
-                    : zoneItems.map((zone) => {
-                        const active = state.selection.kind === "zone" && state.selection.id === zone.id ? " active" : "";
-                        return `
-                            <button class="sidebar-list-item${active}" type="button" data-select-zone="${escapeHtml(zone.id)}">
-                                <div class="sidebar-list-item-main">
-                                    <span class="sidebar-list-item-title">${escapeHtml(zone.name || zone.id)}</span>
-                                    <span class="sidebar-list-item-sub">${escapeHtml(String(zone.type || "zone").replace(/_/g, " "))}</span>
-                                </div>
-                                <span class="sidebar-badge">${escapeHtml(zone.type || "zone")}</span>
-                            </button>
-                        `;
-                    }).join("");
-            }
-
-            if (waypointsListEl) {
-                waypointsListEl.innerHTML = waypointItems.length === 0
-                    ? '<div class="sidebar-list-empty">No waypoints, docks, or queues yet.</div>'
-                    : waypointItems.map((zone) => {
-                        const active = state.selection.kind === "zone" && state.selection.id === zone.id ? " active" : "";
-                        return `
-                            <button class="sidebar-list-item${active}" type="button" data-select-zone="${escapeHtml(zone.id)}">
-                                <div class="sidebar-list-item-main">
-                                    <span class="sidebar-list-item-title">${escapeHtml(zone.name || zone.id)}</span>
-                                    <span class="sidebar-list-item-sub">${formatCoord(zone.x)}, ${formatCoord(zone.y)}</span>
-                                </div>
-                                <span class="sidebar-badge">${escapeHtml(zone.type || "point")}</span>
-                            </button>
-                        `;
-                    }).join("");
-            }
-
-            if (pathsListEl) {
-                pathsListEl.innerHTML = pathItems.length === 0
-                    ? '<div class="sidebar-list-empty">No saved paths yet.</div>'
-                    : pathItems.map((path) => {
-                        const active = state.selection.kind === "path" && state.selection.id === path.id ? " active" : "";
-                        const points = Array.isArray(path.points) ? path.points.length : 0;
-                        return `
-                            <button class="sidebar-list-item${active}" type="button" data-select-path="${escapeHtml(path.id)}">
-                                <div class="sidebar-list-item-main">
-                                    <span class="sidebar-list-item-title">${escapeHtml(path.id || "path")}</span>
-                                    <span class="sidebar-list-item-sub">${points} control point${points === 1 ? "" : "s"}</span>
-                                </div>
-                                <span class="sidebar-badge">Path</span>
-                            </button>
-                        `;
-                    }).join("");
-            }
-
-            document.querySelectorAll("[data-select-zone]").forEach((button) => {
-                button.addEventListener("click", () => {
-                    const zoneId = String(button.getAttribute("data-select-zone") || "");
-                    if (!zoneId) return;
-                    setSelection("zone", zoneId);
-                    openInspectorTab("properties");
-                });
-            });
-
-            document.querySelectorAll("[data-select-path]").forEach((button) => {
-                button.addEventListener("click", () => {
-                    const pathId = String(button.getAttribute("data-select-path") || "");
-                    if (!pathId) return;
-                    setSelection("path", pathId);
-                    openInspectorTab("properties");
-                });
-            });
-        }
-
-        function renderInspectorProperties() {
-            if (!inspectorPropertiesEl) {
-                return;
-            }
-
-            const zone = getSelectedZone();
-            const path = getSelectedPath();
-            let html = "";
-
-            if (zone) {
-                const yawDeg = Number(zone.yaw || 0) * 180 / Math.PI;
-                html = `
-                    <div class="insp-card">
-                        <div class="insp-section">Selected Zone</div>
-                        ${propRow("Name", zone.name || zone.id)}
-                        ${propRow("Type", String(zone.type || "zone").replace(/_/g, " "))}
-                        ${propRow("Coordinates", `${formatCoord(zone.x)}, ${formatCoord(zone.y)}`)}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Placement</div>
-                        <div class="prop-grid">
-                            <label class="prop-field">
-                                <span class="prop-field-label">X (m)</span>
-                                <input class="prop-input" id="selected-zone-x" type="number" step="0.01" value="${escapeHtml(zone.x)}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Y (m)</span>
-                                <input class="prop-input" id="selected-zone-y" type="number" step="0.01" value="${escapeHtml(zone.y)}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Yaw (deg)</span>
-                                <input class="prop-input" id="selected-zone-yaw" type="number" step="0.1" value="${escapeHtml(yawDeg.toFixed(2))}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Radius (m)</span>
-                                <input class="prop-input" id="selected-zone-radius" type="number" step="0.01" value="${escapeHtml(Number(zone.radius_m || 0).toFixed(2))}">
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Behavior</div>
-                        <div class="prop-grid">
-                            <label class="prop-field">
-                                <span class="prop-field-label">Zone Type</span>
-                                <select class="prop-select" id="selected-zone-type">
-                                    <option value="no_go"${zone.type === "no_go" ? " selected" : ""}>No-Go</option>
-                                    <option value="slow"${zone.type === "slow" ? " selected" : ""}>Slow</option>
-                                    <option value="restricted"${zone.type === "restricted" ? " selected" : ""}>Restricted</option>
-                                    <option value="waypoint"${zone.type === "waypoint" ? " selected" : ""}>Waypoint</option>
-                                    <option value="dock"${zone.type === "dock" ? " selected" : ""}>Dock</option>
-                                    <option value="queue"${zone.type === "queue" ? " selected" : ""}>Queue</option>
-                                    <option value="normal"${zone.type === "normal" ? " selected" : ""}>Normal</option>
-                                </select>
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Speed Limit</span>
-                                <input class="prop-input" id="selected-zone-speed" type="number" step="0.05" value="${escapeHtml(Number(zone.speed || 0.5).toFixed(2))}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Charge Duration</span>
-                                <input class="prop-input" id="selected-zone-charge" type="number" step="1" value="${escapeHtml(Number(zone.charge_duration || 0).toFixed(0))}">
-                            </label>
-                        </div>
-                        <div class="prop-actions">
-                            <button class="insp-action-btn primary" type="button" id="selected-zone-save-btn"><i class="fas fa-save"></i><span>Save Zone</span></button>
-                            <button class="insp-action-btn danger" type="button" id="selected-zone-delete-btn"><i class="fas fa-trash"></i><span>Delete Zone</span></button>
-                            <button class="insp-action-btn" type="button" id="clear-selection-btn"><i class="fas fa-xmark"></i><span>Clear Selection</span></button>
-                        </div>
-                    </div>
-                `;
-                if (inspectorHeaderTitleEl) {
-                    inspectorHeaderTitleEl.textContent = zone.name || zone.id || "Selected Zone";
-                }
-            } else if (path) {
-                const points = Array.isArray(path.points) ? path.points : [];
-                const metrics = state.pathMetrics.get(path.id) || {};
-                const [fromId, toId] = String(path.id || "").split("__");
-                const pathLength = Number(metrics.length_m ?? metrics.distance_m);
-                html = `
-                    <div class="insp-card">
-                        <div class="insp-section">Selected Path</div>
-                        ${propRow("Path ID", path.id || "path", { mono: true })}
-                        ${propRow("From", fromId || "—")}
-                        ${propRow("To", toId || "—")}
-                        ${propRow("Control Points", String(points.length))}
-                        ${propRow("Length", Number.isFinite(pathLength) ? formatMeters(pathLength, 2) : "Unavailable")}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Path Actions</div>
-                        <div class="prop-actions">
-                            <button class="insp-action-btn danger" type="button" id="selected-path-delete-btn"><i class="fas fa-trash"></i><span>Delete Path</span></button>
-                            <button class="insp-action-btn" type="button" id="clear-selection-btn"><i class="fas fa-xmark"></i><span>Clear Selection</span></button>
-                        </div>
-                    </div>
-                `;
-                if (inspectorHeaderTitleEl) {
-                    inspectorHeaderTitleEl.textContent = path.id || "Selected Path";
-                }
-            } else {
-                const widthMeters = state.mapInfo ? Number(state.mapInfo.width || 0) * Number(state.mapInfo.resolution || 0) : 0;
-                const heightMeters = state.mapInfo ? Number(state.mapInfo.height || 0) * Number(state.mapInfo.resolution || 0) : 0;
-                const zoneCount = Array.from(state.zones.values()).filter((zoneEntry) => !isWaypointType(zoneEntry.type)).length;
-                const waypointCount = Array.from(state.zones.values()).filter((zoneEntry) => isWaypointType(zoneEntry.type)).length;
-                html = `
-                    <div class="insp-card">
-                        <div class="insp-section">Map Overview</div>
-                        <div class="metrics-grid">
-                            ${metricCell("Width", formatMeters(widthMeters, 2))}
-                            ${metricCell("Height", formatMeters(heightMeters, 2))}
-                            ${metricCell("Resolution", formatMeters(state.mapInfo?.resolution || 0, 3))}
-                            ${metricCell("Zoom", `${Math.round(state.view.scale * 100)}%`)}
-                            ${metricCell("Zones", String(zoneCount))}
-                            ${metricCell("Waypoints", String(waypointCount))}
-                        </div>
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Origin</div>
-                        ${propRow("X", formatCoord(state.origin.x))}
-                        ${propRow("Y", formatCoord(state.origin.y))}
-                        ${propRow("Yaw", formatDegrees(state.origin.yaw * 180 / Math.PI, 2))}
-                        ${propRow("Active Map", basename(state.loadedMapPath || state.activeMapPath) || "active_map")}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-empty">
-                            <i class="fas fa-arrow-pointer"></i>
-                            <div>Select a zone or path to edit its properties here.</div>
-                        </div>
-                    </div>
-                `;
-                if (inspectorHeaderTitleEl) {
-                    inspectorHeaderTitleEl.textContent = "Map Overview";
-                }
-            }
-
-            inspectorPropertiesEl.innerHTML = html;
-            document.getElementById("selected-zone-save-btn")?.addEventListener("click", saveSelectedZoneProperties);
-            document.getElementById("selected-zone-delete-btn")?.addEventListener("click", deleteSelectedZone);
-            document.getElementById("selected-path-delete-btn")?.addEventListener("click", deleteSelectedPath);
-            document.getElementById("clear-selection-btn")?.addEventListener("click", () => clearSelection());
-        }
-
-        function renderInspectorLayers() {
-            if (!inspectorLayersEl) {
-                return;
-            }
-            inspectorLayersEl.innerHTML = `
-                <div class="insp-card">
-                    <div class="insp-section">Visibility</div>
-                    <div class="sidebar-toggle-grid">
-                        <button class="layer-toggle${state.showGrid ? " active" : ""}" type="button" data-grid-toggle="true">
-                            <i class="fas fa-border-all"></i>
-                            <span>Grid</span>
-                        </button>
-                        <button class="layer-toggle${state.overlayVisibility.zones ? " active" : ""}" type="button" data-overlay="zones">
-                            <i class="fas fa-draw-polygon"></i>
-                            <span>Zones</span>
-                        </button>
-                        <button class="layer-toggle${state.overlayVisibility.paths ? " active" : ""}" type="button" data-overlay="paths">
-                            <i class="fas fa-route"></i>
-                            <span>Paths</span>
-                        </button>
-                        <button class="layer-toggle${state.overlayVisibility.robot ? " active" : ""}" type="button" data-overlay="robot">
-                            <i class="fas fa-robot"></i>
-                            <span>Robot</span>
-                        </button>
-                        <button class="layer-toggle${state.overlayVisibility.axes ? " active" : ""}" type="button" data-overlay="axes">
-                            <i class="fas fa-plus"></i>
-                            <span>Axes</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="insp-card">
-                    <div class="insp-section">Viewport</div>
-                    ${propRow("Zoom", `${Math.round(state.view.scale * 100)}%`)}
-                    ${propRow("Grid", state.showGrid ? "Enabled" : "Disabled")}
-                    ${propRow("Visible Layers", String(countVisibleLayers()))}
-                </div>
-            `;
-
-            inspectorLayersEl.querySelectorAll("[data-overlay]").forEach((button) => {
-                button.addEventListener("click", () => {
-                    const key = String(button.getAttribute("data-overlay") || "");
-                    if (!key || !(key in state.overlayVisibility)) return;
-                    state.overlayVisibility[key] = !state.overlayVisibility[key];
-                    syncOverlayButtons(key);
-                    syncCanvasContext();
-                    renderInspector();
-                    draw();
-                });
-            });
-
-            inspectorLayersEl.querySelectorAll("[data-grid-toggle]").forEach((button) => {
-                button.addEventListener("click", () => {
-                    state.showGrid = !state.showGrid;
-                    syncGridButton();
-                    syncCanvasContext();
-                    renderInspector();
-                    draw();
-                });
-            });
-        }
-
-        function renderInspectorGuide() {
-            if (!inspectorGuideEl) {
-                return;
-            }
-            inspectorGuideEl.innerHTML = `
-                <div class="insp-card">
-                    <div class="insp-section">Current Mode</div>
-                    ${propRow("Mode", getModeLabel())}
-                    ${propRow("Tool", TOOL_HINTS[state.tool] || "Ready")}
-                    ${propRow("Pending Path", state.pendingFromZone || "None")}
-                    ${propRow("Dotted Overlay", state.dottedViewMode ? "Enabled" : "Disabled")}
-                </div>
-                <div class="insp-card">
-                    <div class="insp-section">Quick Help</div>
-                    ${propRow("Pan", "Middle click or Pan tool")}
-                    ${propRow("Zoom", "Mouse wheel or top bar controls")}
-                    ${propRow("Measure", "Two clicks in View mode")}
-                    ${propRow("Cancel", "Press Esc to cancel line placement")}
-                </div>
-            `;
-        }
-
-        function renderInspector() {
-            renderInspectorProperties();
-            renderInspectorLayers();
-            renderInspectorGuide();
-            openInspectorTab(state.inspectorTab || "properties");
-        }
-
-        function syncSelectionAfterDataRefresh() {
-            if (state.selection.kind === "zone" && !state.zones.has(state.selection.id)) {
-                state.selection.kind = "none";
-                state.selection.id = "";
-            }
-            if (state.selection.kind === "path" && !state.paths.has(state.selection.id)) {
-                state.selection.kind = "none";
-                state.selection.id = "";
-            }
-            renderSidebarCollections();
-            renderInspector();
-            syncCanvasContext();
-            syncStatusBar();
-        }
-
-        async function saveSelectedZoneProperties() {
-            const zone = getSelectedZone();
-            if (!zone) {
-                updateStatus("No zone selected");
-                return;
-            }
-
-            const nextX = Number(document.getElementById("selected-zone-x")?.value);
-            const nextY = Number(document.getElementById("selected-zone-y")?.value);
-            const nextYawDeg = Number(document.getElementById("selected-zone-yaw")?.value);
-            const nextRadius = Number(document.getElementById("selected-zone-radius")?.value);
-            const nextType = String(document.getElementById("selected-zone-type")?.value || zone.type || "normal");
-            const nextSpeed = Number(document.getElementById("selected-zone-speed")?.value);
-            const nextCharge = Number(document.getElementById("selected-zone-charge")?.value);
-
-            if (![nextX, nextY, nextYawDeg, nextRadius, nextSpeed, nextCharge].every((value) => Number.isFinite(value))) {
-                updateStatus("Zone properties contain invalid values");
-                return;
-            }
-
-            try {
-                updateStatus(`Saving zone ${zone.id}...`);
-                const poseResp = await postJson(API.zoneUpdate, {
-                    name: zone.id,
-                    x: nextX,
-                    y: nextY,
-                    theta: nextYawDeg * Math.PI / 180,
-                    overwrite: true,
-                    type: nextType,
-                    speed: nextSpeed,
-                    charge_duration: nextCharge
-                });
-                if (!poseResp.response.ok || poseResp.data?.ok === false) {
-                    throw new Error(poseResp.data?.message || "Failed to update zone pose");
-                }
-
-                const paramsResp = await postJson(API.zoneUpdateParams, {
-                    name: zone.id,
-                    type: nextType,
-                    speed: nextSpeed,
-                    charge_duration: Math.max(0, nextCharge)
-                });
-                if (!paramsResp.response.ok || paramsResp.data?.ok === false) {
-                    throw new Error(paramsResp.data?.message || "Failed to update zone parameters");
-                }
-
-                zone.x = nextX;
-                zone.y = nextY;
-                zone.yaw = nextYawDeg * Math.PI / 180;
-                zone.type = nextType;
-                zone.speed = nextSpeed;
-                zone.radius_m = Math.max(0, nextRadius);
-                zone.charge_duration = Math.max(0, nextCharge);
-                await loadZones();
-                updateStatus(paramsResp.data?.message || `Zone ${zone.id} saved`);
-            } catch (err) {
-                updateStatus(`Zone save failed: ${err.message}`);
-            }
-        }
-
-        async function deleteSelectedZone() {
-            const zone = getSelectedZone();
-            if (!zone) {
-                updateStatus("No zone selected");
-                return;
-            }
-            const confirmed = window.confirm(`Delete zone "${zone.id}"?`);
-            if (!confirmed) {
-                return;
-            }
-            try {
-                const { response, data } = await postJson(API.zoneDelete, { name: zone.id });
-                if (!response.ok || data?.ok === false) {
-                    throw new Error(data?.message || "Delete zone failed");
-                }
-                clearSelection({ silent: true });
-                await loadZones();
-                updateStatus(data?.message || `Zone ${zone.id} deleted`);
-            } catch (err) {
-                updateStatus(`Delete zone failed: ${err.message}`);
-            }
-        }
-
-        async function deleteSelectedPath() {
-            const path = getSelectedPath();
-            if (!path) {
-                updateStatus("No path selected");
-                return;
-            }
-            const confirmed = window.confirm(`Delete path "${path.id}"?`);
-            if (!confirmed) {
-                return;
-            }
-            try {
-                const response = await fetch(`/api/path/delete/${encodeURIComponent(path.id)}`, {
-                    method: "DELETE"
-                });
-                const data = await response.json();
-                if (!response.ok || data?.ok === false) {
-                    throw new Error(data?.message || "Delete path failed");
-                }
-                clearSelection({ silent: true });
-                await loadPaths();
-                updateStatus(data?.message || `Path ${path.id} deleted`);
-            } catch (err) {
-                updateStatus(`Delete path failed: ${err.message}`);
-            }
         }
 
         function draw() {

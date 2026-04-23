@@ -8,7 +8,7 @@
     <meta charset="UTF-8">
     <link rel="icon" id="site-favicon" href="/static/next_logo.png" type="image/png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Next Robotics Lab — UGV Control Interface</title>
+    <title>Next Robotics Lab</title>
     <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/easeljs@1.0.2/lib/easeljs.min.js"></script>
@@ -1111,8 +1111,28 @@
         }
 
         /* ── Recognition tab ─────────────────────────────────── */
-        #recognition-body { display: flex; height: 100%; overflow: hidden; background: var(--bg-primary); }
-        #recognition-library { display: flex; flex-shrink: 0; width: 240px; min-width: 160px; max-width: 320px; border-right: 1px solid var(--border-heavy); background: var(--bg-panel); flex-direction: row; }
+        #recognition-body {
+            --rcg-library-width: 240px;
+            --rcg-inspector-width: 280px;
+            display: grid;
+            grid-template-columns:
+                minmax(180px, var(--rcg-library-width))
+                minmax(0, 1fr)
+                minmax(200px, var(--rcg-inspector-width));
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        #recognition-library {
+            display: flex;
+            width: auto;
+            min-width: 0;
+            max-width: none;
+            border-right: 1px solid var(--border-heavy);
+            background: var(--bg-panel);
+            flex-direction: row;
+            position: relative;
+        }
         .rcg-library-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; width: 44px; border-right: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
         .rcg-category-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 36px; height: 40px; border: none; border-radius: 5px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 9px; padding: 4px 2px; transition: background 0.15s, color 0.15s; }
         .rcg-category-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
@@ -1127,6 +1147,10 @@
         .rcg-inline-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
         .rcg-inline-btn { display: flex; align-items: center; gap: 3px; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 3px 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
         .rcg-inline-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-inline-btn.active { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-stage-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .rcg-stage-tools .rcg-inline-btn { padding: 3px 7px; }
+        .rcg-stage-tools .rcg-inline-btn i { font-size: 10px; }
         .rcg-search-wrap { padding: 6px 8px; border-bottom: 1px solid var(--border-chrome); flex-shrink: 0; }
         .rcg-search-input { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px; outline: none; }
         .rcg-search-input:focus { border-color: var(--accent-normal); }
@@ -1145,9 +1169,32 @@
         .rcg-file-row:hover .rcg-file-actions { opacity: 1; }
         .rcg-file-act-btn { background: none; border: none; color: var(--text-tertiary); font-size: 10px; padding: 2px 4px; cursor: pointer; border-radius: 3px; }
         .rcg-file-act-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
-        #recognition-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border-heavy); }
+        #recognition-workspace {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-heavy);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
         .rcg-stage-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; flex-wrap: wrap; gap: 6px; }
-        #recognition-form-area { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+        #recognition-stage {
+            flex: 1;
+            min-height: 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            isolation: isolate;
+            contain: layout paint;
+            z-index: 1;
+            cursor: crosshair;
+            background: var(--bg-canvas, var(--bg-panel));
+            background-image: var(--rcg-grid-major, none), var(--rcg-grid-minor, none);
+        }
         .rcg-stage-status { padding: 3px 10px; font-size: 10px; color: var(--text-tertiary); border-top: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; min-height: 22px; display: flex; align-items: center; }
         .rcg-save-btn { background: var(--accent-normal); border: none; border-radius: 4px; color: #fff; font-size: 10px; padding: 4px 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
         .rcg-save-btn:hover { filter: brightness(1.15); }
@@ -1157,14 +1204,27 @@
         .rcg-copy-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
         .rcg-del-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--accent-danger,#fc8181); font-size: 10px; padding: 4px 8px; cursor: pointer; }
         .rcg-del-btn:hover { background: rgba(252,129,129,0.15); }
-        #recognition-inspector { width: 280px; min-width: 200px; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-panel); position: relative; }
+        #recognition-inspector { width: auto; min-width: 0; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-panel); position: relative; }
+        .rcg-library-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 6; }
+        .rcg-library-resizer:hover,
+        .rcg-library-resizer.resizing { background: var(--accent-normal); }
         .rcg-inspector-resizer { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 5; }
         .rcg-inspector-resizer:hover { background: var(--accent-normal); }
-        .rcg-inspector-tabs { display: flex; border-bottom: 1px solid var(--border-heavy); flex-shrink: 0; background: var(--bg-chrome); }
+        .rcg-inspector-tabs { display: flex; border-bottom: 1px solid var(--border-heavy); flex-shrink: 0; background: var(--bg-chrome); visibility: visible; }
         .rcg-inspector-tab { flex: 1; padding: 5px 6px; border: none; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
         .rcg-inspector-tab:hover { color: var(--text-primary); }
         .rcg-inspector-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-normal); }
         .rcg-empty-state { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
+        #recognition-empty-state {
+            position: absolute;
+            inset: 0;
+            display: none;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #recognition-empty-state.visible {
+            display: flex;
+        }
         .rcg-empty-state > div { max-width: 200px; }
         .rcg-empty-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; font-style: italic; }
         .rcg-popover { position: absolute; right: 8px; top: 36px; z-index: 200; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 6px; padding: 4px; display: none; flex-direction: column; gap: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 180px; }
@@ -1199,6 +1259,22 @@
         .rcg-form-check-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; color: var(--text-secondary); grid-column: 1 / -1; }
         .rcg-form-check-row input[type="checkbox"] { accent-color: var(--accent-normal); width: 13px; height: 13px; }
         .rcg-section-label { padding: 4px 10px 2px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); }
+
+        body.recognition-tab-active #recognition-top-controls {
+            display: flex !important;
+            visibility: visible;
+            position: relative;
+            z-index: 20;
+        }
+        body.recognition-tab-active .rcg-inspector-tabs {
+            display: flex !important;
+            visibility: visible;
+        }
+        #recognition-library,
+        #recognition-inspector {
+            position: relative;
+            z-index: 3;
+        }
 
         * {
             margin: 0;
@@ -12258,7 +12334,7 @@
                 <button class="mctrl-btn" id="recognition-more-btn" type="button" onclick="recognitionToggleOverflowMenu(event)" title="More actions">
                     <i class="fas fa-ellipsis-v"></i>
                 </button>
-                <span class="mctrl-btn device-config-status" id="recognition-toolbar-status" title="Recognition status">Recognition library ready</span>
+                <span class="device-config-status" id="recognition-toolbar-status" style="font-size:9px;color:var(--text-tertiary);padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="Recognition status">Recognition library ready</span>
             </div>
         </div>
 
@@ -12607,20 +12683,9 @@
                                                 </label>
                                             </div>
                                             <div id="zone-pre-point-coords" style="display:none;margin-top:6px;">
-                                                <div style="display:flex;gap:6px;margin-bottom:4px;">
-                                                    <div style="flex:1;">
-                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">X (m)</label>
-                                                        <input type="number" id="zone-pre-point-x" step="0.01" placeholder="0.00" style="width:100%;">
-                                                    </div>
-                                                    <div style="flex:1;">
-                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Y (m)</label>
-                                                        <input type="number" id="zone-pre-point-y" step="0.01" placeholder="0.00" style="width:100%;">
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Heading (deg, optional)</label>
-                                                    <input type="number" id="zone-pre-point-theta" step="1" min="-180" max="180" value="0" style="width:100%;">
-                                                </div>
+                                                <select id="zone-pre-point-poi" style="width:100%;padding:6px 8px;background:var(--bg-secondary,#161b22);color:var(--text-primary,#e6edf3);border:1px solid var(--border-chrome,#30363d);border-radius:6px;font-size:12px;box-sizing:border-box;">
+                                                    <option value="">Loading zones…</option>
+                                                </select>
                                                 <div style="margin-top:6px;font-size:10px;color:var(--text-tertiary,#6b7280);display:flex;align-items:center;gap:4px;">
                                                     <i class="fas fa-route" style="color:var(--accent-normal,#3b82f6);"></i>
                                                     <span>Path → <strong>Pre Point</strong> → Shelf Detection → Shelf Execution</span>
@@ -17959,6 +18024,8 @@
                     // ── Robot Params (robot_editor) ───────────────────────────
                     let _robotYamlCache = null;
 
+                    let _robotYamlRobotId = '';
+
                     async function loadRobotYamlParams() {
                         const listEl  = document.getElementById('robot-param-list');
                         const statEl  = document.getElementById('robot-status-text');
@@ -17970,9 +18037,11 @@
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor');
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             const data = await resp.json();
+                            if (!data.ok) throw new Error(data.message || 'Profile not available');
                             _robotYamlCache = data;
+                            _robotYamlRobotId = data.robot_id || '';
                             renderRobotYamlParams(data);
-                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Loaded – click a value to edit, blur to save'; }
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Profile: ' + (_robotYamlRobotId || '—') + ' — click a value to edit, blur to save'; }
                         } catch (err) {
                             listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
                             if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
@@ -18042,11 +18111,28 @@
                         const value = inputEl.value;
                         const statEl = document.getElementById('robot-status-text');
                         if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving ' + key + '…'; }
+                        // Apply dotted key path into cached profile_fields before sending
+                        if (_robotYamlCache && _robotYamlCache.profile_fields) {
+                            const parts = key.split('.');
+                            let obj = _robotYamlCache.profile_fields;
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                if (!obj[parts[i]] || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {};
+                                obj = obj[parts[i]];
+                            }
+                            const last = parts[parts.length - 1];
+                            obj[last] = (value === 'true') ? true : (value === 'false') ? false : (!isNaN(value) && value !== '' ? Number(value) : value);
+                        }
                         try {
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ key, value })
+                                body: JSON.stringify({
+                                    robot_id: _robotYamlRobotId,
+                                    profile_fields: (_robotYamlCache && _robotYamlCache.profile_fields) || {},
+                                    robot_builder: {},
+                                    compile_urdf: false,
+                                    apply_runtime: false
+                                })
                             });
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             inputEl.dataset.original = value;
@@ -18082,10 +18168,15 @@
                                 fetch('/api/settings/topics').catch(() => ({ ok: false }))
                             ]);
                             if (!mappingsResp.ok) throw new Error('Mappings HTTP ' + mappingsResp.status);
-                            const mappings = await mappingsResp.json();
-                            const topics   = topicsResp.ok ? await topicsResp.json() : [];
-                            _topicMappingsCache = Array.isArray(mappings) ? mappings : (mappings.mappings || Object.entries(mappings).map(([k,v]) => ({ key: k, value: v })));
-                            renderTopicMappingsInPopup(_topicMappingsCache, topics);
+                            const respData  = await mappingsResp.json();
+                            const topicsRaw = topicsResp.ok ? await topicsResp.json() : [];
+                            // Backend returns { ok, mappings: {key: value, ...}, topics: {...} }
+                            const rawMappings = respData.mappings || respData || {};
+                            _topicMappingsCache = Array.isArray(rawMappings)
+                                ? rawMappings
+                                : Object.entries(rawMappings).map(([k, v]) => ({ key: k, value: String(v || ''), type: '' }));
+                            const availTopics = Array.isArray(topicsRaw) ? topicsRaw : Object.keys(topicsRaw.topics || topicsRaw);
+                            renderTopicMappingsInPopup(_topicMappingsCache, availTopics);
                             if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = _topicMappingsCache.length + ' entries – blur a value to save inline'; }
                         } catch (err) {
                             listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
@@ -18131,10 +18222,13 @@
                         const statEl = document.getElementById('topic-status-text');
                         if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
                         try {
+                            // Convert array cache back to {key: value} dict for the backend
+                            const dictMappings = {};
+                            _topicMappingsCache.forEach(m => { dictMappings[m.key || m.name] = m.value || m.topic || ''; });
                             const resp = await fetch('/api/settings/mappings', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(_topicMappingsCache)
+                                body: JSON.stringify({ mappings: dictMappings, topics: {}, confirmed: true })
                             });
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             if (triggerEl) {
@@ -18172,18 +18266,26 @@
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor');
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             const data = await resp.json();
-                            // Extract safety-related fields – check common paths
-                            const safetyObj = data.safety || data.safety_params || {};
-                            const motionObj = data.motion || {};
-                            _safetyParamsCache = { ...(typeof safetyObj === 'object' ? safetyObj : {}), ...(typeof motionObj === 'object' ? {} : {}) };
-                            // Also pull any top-level keys with 'safety', 'estop', 'obstacle', 'timeout', 'range', 'limit' in name
-                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision'];
-                            Object.keys(data).forEach(k => {
-                                if (typeof data[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
-                                    _safetyParamsCache[k] = data[k];
+                            if (!data.ok) throw new Error(data.message || 'Profile not available');
+                            // Look for safety fields in profile_fields and full profile
+                            const profile = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+                            const profileFields = (data.profile_fields && typeof data.profile_fields === 'object') ? data.profile_fields : {};
+                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision','zone'];
+                            _safetyParamsCache = {};
+                            // 1. Dedicated safety/motion sub-objects from profile
+                            ['safety','safety_params','motion','speed','obstacle'].forEach(k => {
+                                if (profile[k] && typeof profile[k] === 'object') Object.assign(_safetyParamsCache, profile[k]);
+                                else if (typeof profile[k] !== 'undefined') _safetyParamsCache[k] = profile[k];
+                            });
+                            // 2. Any top-level profile key matching safety keywords
+                            Object.keys(profile).forEach(k => {
+                                if (typeof profile[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
+                                    _safetyParamsCache[k] = profile[k];
                                 }
                             });
-                            if (typeof safetyObj === 'object') Object.assign(_safetyParamsCache, safetyObj);
+                            // 3. Speed / frame limits from profile_fields (namespace, base_frame are on robot tab — skip)
+                            if (profileFields.max_speed !== undefined) _safetyParamsCache['max_speed'] = profileFields.max_speed;
+                            if (profileFields.speed_limit !== undefined) _safetyParamsCache['speed_limit'] = profileFields.speed_limit;
                             renderSafetyParams(_safetyParamsCache, data);
                             const count = Object.keys(_safetyParamsCache).length;
                             if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = count ? count + ' parameters – blur a value to mark changed, then Save' : 'No safety fields found in robot profile'; }
@@ -18943,15 +19045,43 @@
                     }
 
                     // ── Stubs for compat ──────────────────────────────────────
-                    function recognitionSetTool(t) {}
-                    function recognitionZoom(d) {}
-                    function recognitionFitView() {}
-                    function recognitionToggleGrid() {}
-                    function recognitionToggleLabels() {}
-                    function recognitionToggleConstraints() {}
-                    function recognitionSetStageView(v) {}
-                    function recognitionPasteGeometry() {}
-                    function recognitionCopyGeometry() {}
+                    // Delegate to runtime module when loaded, otherwise remain harmless.
+                    function recognitionSetTool(t) {
+                        const fn = window.recognitionSetTool;
+                        if (typeof fn === 'function' && fn !== recognitionSetTool) return fn(t);
+                    }
+                    function recognitionZoom(d) {
+                        const fn = window.recognitionZoom;
+                        if (typeof fn === 'function' && fn !== recognitionZoom) return fn(d);
+                    }
+                    function recognitionFitView() {
+                        const fn = window.recognitionFitView;
+                        if (typeof fn === 'function' && fn !== recognitionFitView) return fn();
+                    }
+                    function recognitionToggleGrid() {
+                        const fn = window.recognitionToggleGrid;
+                        if (typeof fn === 'function' && fn !== recognitionToggleGrid) return fn();
+                    }
+                    function recognitionToggleLabels() {
+                        const fn = window.recognitionToggleLabels;
+                        if (typeof fn === 'function' && fn !== recognitionToggleLabels) return fn();
+                    }
+                    function recognitionToggleConstraints() {
+                        const fn = window.recognitionToggleConstraints;
+                        if (typeof fn === 'function' && fn !== recognitionToggleConstraints) return fn();
+                    }
+                    function recognitionSetStageView(v) {
+                        const fn = window.recognitionSetStageView;
+                        if (typeof fn === 'function' && fn !== recognitionSetStageView) return fn(v);
+                    }
+                    function recognitionPasteGeometry() {
+                        const fn = window.recognitionPasteGeometry;
+                        if (typeof fn === 'function' && fn !== recognitionPasteGeometry) return fn();
+                    }
+                    function recognitionCopyGeometry() {
+                        const fn = window.recognitionCopyGeometry;
+                        if (typeof fn === 'function' && fn !== recognitionCopyGeometry) return fn();
+                    }
                     function recognitionCloseMenus() {
                         const m = document.getElementById('recognition-overflow-menu');
                         if (m) m.classList.remove('open');
@@ -22411,6 +22541,55 @@
                         return actionId ? 'action' : 'normal';
                     }
 
+                    function getActionPointConfigFromZone(zone) {
+                        if (!zone || typeof zone !== 'object') {
+                            return null;
+                        }
+                        if (zone.action_point_config && typeof zone.action_point_config === 'object') {
+                            return zone.action_point_config;
+                        }
+                        const metadata = (zone.metadata && typeof zone.metadata === 'object') ? zone.metadata : null;
+                        if (metadata && metadata.action_point && typeof metadata.action_point === 'object') {
+                            return metadata.action_point;
+                        }
+                        return null;
+                    }
+
+                    function normalizeActionPointType(pointTypeRaw) {
+                        const pointType = String(pointTypeRaw || 'generic').trim().toLowerCase();
+                        return pointType || 'generic';
+                    }
+
+                    function getActionPointSearchRadiusMeters(zone) {
+                        const zoneType = resolveZoneType(zone);
+                        if (zoneType !== 'action') {
+                            return 0;
+                        }
+                        const config = getActionPointConfigFromZone(zone);
+                        const pointType = normalizeActionPointType(config && config.point_type);
+                        if (pointType === 'generic') {
+                            return 0;
+                        }
+
+                        const rawRadius = Number(
+                            (config && (
+                                config.search_radius_m
+                                ?? config.detection_radius_m
+                                ?? config.radius_m
+                                ?? config.roi_radius_m
+                            ))
+                        );
+                        if (Number.isFinite(rawRadius) && rawRadius > 0) {
+                            return Math.max(0.15, Math.min(6.0, rawRadius));
+                        }
+
+                        // Defaults keep the overlay useful even when no explicit radius is configured.
+                        if (pointType === 'shelf') {
+                            return 0.75;
+                        }
+                        return 0.60;
+                    }
+
                     function getZoneTypeVisual(zoneTypeRaw) {
                         const zoneType = normalizeZoneType(zoneTypeRaw, 'normal');
                         if (zoneType === 'action') {
@@ -22866,11 +23045,27 @@
                                 const visual = getZoneTypeVisual(resolveZoneType(zone));
                                 const headingRad = getZoneHeadingRadians(zone);
                                 const headingDeg = getZoneHeadingDegrees(zone);
+                                const actionSearchRadiusM = getActionPointSearchRadiusMeters(zone);
                                 const retTheta = zoneReturnHeadings[name];
                                 const isHovered = mapHoverState.zoneName === name;
                                 const isSelected = isMapSelection('zone', name);
                                 const isTargeted = zoneHeadingTarget === name || returnOrientationTarget === name;
                                 const emphasized = isHovered || isSelected || isTargeted;
+
+                                if (actionSearchRadiusM > 0 && Number.isFinite(Number(mapData?.resolution)) && Number(mapData.resolution) > 0) {
+                                    const actionSearchRadiusPx = (actionSearchRadiusM / Number(mapData.resolution)) * scale;
+                                    if (Number.isFinite(actionSearchRadiusPx) && actionSearchRadiusPx > 1) {
+                                        ctx.save();
+                                        ctx.strokeStyle = emphasized ? 'rgba(251, 191, 36, 0.92)' : 'rgba(251, 191, 36, 0.62)';
+                                        ctx.lineWidth = emphasized ? Math.max(1.4, visualProfile.zoneStrokeWidth + 0.4) : Math.max(1.0, visualProfile.zoneStrokeWidth);
+                                        ctx.setLineDash(emphasized ? [4, 4] : [5, 5]);
+                                        ctx.beginPath();
+                                        ctx.arc(px, py, actionSearchRadiusPx, 0, Math.PI * 2);
+                                        ctx.stroke();
+                                        ctx.setLineDash([]);
+                                        ctx.restore();
+                                    }
+                                }
 
                                 ctx.save();
                                 ctx.translate(px, py);
@@ -25717,6 +25912,7 @@
                             point_type: actionPointConfig.point_type,
                             template_id: actionPointConfig.template_id,
                             recognize: actionPointConfig.recognize,
+                            pre_point: actionPointConfig.pre_point || null,
                         };
 
                         // Add type-specific parameters
@@ -25928,9 +26124,7 @@
                         const shelfRecognize = Boolean(actionPointConfig.recognize);
                         const prePointCfg = (actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object') ? actionPointConfig.pre_point : null;
                         const prePointEnabled = Boolean(prePointCfg);
-                        const prePointX = prePointCfg ? Number(prePointCfg.x || 0).toFixed(4) : '';
-                        const prePointY = prePointCfg ? Number(prePointCfg.y || 0).toFixed(4) : '';
-                        const prePointTheta = prePointCfg ? Number(prePointCfg.theta !== undefined ? prePointCfg.theta * 180 / Math.PI : 0).toFixed(1) : '0';
+                        const prePointZoneName = prePointCfg ? (prePointCfg.zone_name || '') : '';
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
                         const posY = (zone.position && zone.position.y !== undefined) ? zone.position.y : 0;
                         const headingDeg = getZoneHeadingDegrees(zone);
@@ -26011,21 +26205,10 @@
                                 </label>
                             </div>
                             <div id="ez-pre-point-coords" style="display:${prePointEnabled ? 'block' : 'none'};">
-                                <div style="display:flex;gap:10px;margin-bottom:8px;">
-                                    <div style="flex:1;">
-                                        <label style="${labelStyle}">X (m)</label>
-                                        <input type="number" id="ez-pre-point-x" value="${prePointX}" step="0.01" style="${inputStyle}">
-                                    </div>
-                                    <div style="flex:1;">
-                                        <label style="${labelStyle}">Y (m)</label>
-                                        <input type="number" id="ez-pre-point-y" value="${prePointY}" step="0.01" style="${inputStyle}">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label style="${labelStyle}">Heading (deg)</label>
-                                    <input type="number" id="ez-pre-point-theta" value="${prePointTheta}" step="1" min="-180" max="180" style="${inputStyle}">
-                                </div>
-                                <div style="margin-top:8px;font-size:10px;color:#8b949e;display:flex;align-items:center;gap:4px;">
+                                <select id="ez-pre-point-poi" style="${inputStyle}margin-bottom:8px;">
+                                    <option value="">Loading zones…</option>
+                                </select>
+                                <div style="margin-top:4px;font-size:10px;color:#8b949e;display:flex;align-items:center;gap:4px;">
                                     <i class="fas fa-route" style="color:#3b82f6;"></i>
                                     <span>Path → <strong style="color:#e6edf3;">Pre Point</strong> → Shelf Detection → Shelf Execution</span>
                                 </div>
@@ -26043,20 +26226,36 @@
                                 text: 'Save',
                                 style: 'success',
                                 action: async () => {
-                                    const newName      = (document.getElementById('ez-name').value || '').trim();
-                                    const newType      = document.getElementById('ez-type').value;
-                                    const newX         = parseFloat(document.getElementById('ez-x').value);
-                                    const newY         = parseFloat(document.getElementById('ez-y').value);
-                                    const newHeadingDeg= parseFloat(document.getElementById('ez-heading').value);
-                                    const newSpeed     = parseFloat(document.getElementById('ez-speed').value);
-                                    const newAction    = String(document.getElementById('ez-action').value || '').trim();
+                                    const nameEl = document.getElementById('ez-name');
+                                    const typeEl = document.getElementById('ez-type');
+                                    const xEl = document.getElementById('ez-x');
+                                    const yEl = document.getElementById('ez-y');
+                                    const headingEl = document.getElementById('ez-heading');
+                                    const speedEl = document.getElementById('ez-speed');
+                                    const actionEl = document.getElementById('ez-action');
+                                    const chargeEl = document.getElementById('ez-charge-duration');
+
+                                    if (!nameEl || !typeEl || !xEl || !yEl || !headingEl || !speedEl || !chargeEl) {
+                                        showStatus('Edit dialog is missing required fields. Re-open and try again.', 'error');
+                                        return;
+                                    }
+
+                                    const newName      = String(nameEl.value || '').trim();
+                                    const newType      = String(typeEl.value || '').trim();
+                                    const newX         = parseFloat(xEl.value);
+                                    const newY         = parseFloat(yEl.value);
+                                    const newHeadingDeg= parseFloat(headingEl.value);
+                                    const newSpeed     = parseFloat(speedEl.value);
+                                    const newAction    = String((actionEl && actionEl.value) || '').trim();
                                     const actionPointPayload = (typeof recognitionGetActionPointPayloadFromForm === 'function')
                                         ? recognitionGetActionPointPayloadFromForm('ez')
-                                        : { point_type: 'generic', template_id: '', recognize: false };
-                                    const newCharge    = parseFloat(document.getElementById('ez-charge-duration').value);
+                                        : { point_type: 'generic', template_id: '', recognize: false, pre_point: null };
+                                    const newCharge    = parseFloat(chargeEl.value);
 
                                     if (!newName) { showStatus('Zone name cannot be empty', 'error'); return; }
                                     if (isNaN(newX) || isNaN(newY)) { showStatus('Invalid coordinates', 'error'); return; }
+                                    if (isNaN(newHeadingDeg)) { showStatus('Invalid heading value', 'error'); return; }
+                                    if (isNaN(newSpeed)) { showStatus('Invalid speed value', 'error'); return; }
                                     if (newType === 'action' && actionPointPayload.point_type === 'shelf' && !actionPointPayload.template_id) {
                                         showStatus('Select a shelf template for shelf-aware action points', 'error');
                                         return;
@@ -26077,6 +26276,7 @@
                                         point_type: actionPointPayload.point_type,
                                         template_id: actionPointPayload.template_id,
                                         recognize: actionPointPayload.recognize,
+                                        pre_point: actionPointPayload.pre_point || null,
                                     };
 
                                     const saveZonePayload = async (overwrite = false) => {
@@ -26152,12 +26352,10 @@
                             if (typeSelect) typeSelect.addEventListener('change', editZoneTypeChange);
                             refreshZoneActionOptionsUI();
                             if (typeof recognitionRefreshActionPointForm === 'function') {
-                                recognitionRefreshActionPointForm('ez');
-                                const templateSelect = document.getElementById('ez-shelf-template');
-                                if (templateSelect && shelfTemplateId) {
-                                    templateSelect.value = shelfTemplateId;
-                                }
-                                recognitionRefreshActionPointForm('ez');
+                                recognitionRefreshActionPointForm('ez', shelfTemplateId || '');
+                            }
+                            if (prePointEnabled && typeof recognitionLoadPrePointPois === 'function') {
+                                recognitionLoadPrePointPois('ez', prePointZoneName);
                             }
                         }, 80);
                     }
@@ -27387,7 +27585,20 @@
                             const button = document.createElement('button');
                             button.className = `notification-btn notification-btn-${btn.style}`;
                             button.textContent = btn.text;
-                            button.onclick = btn.action;
+                            button.onclick = async (event) => {
+                                try {
+                                    if (typeof btn.action === 'function') {
+                                        await Promise.resolve(btn.action(event));
+                                    }
+                                } catch (error) {
+                                    const message = (error && error.message) ? error.message : String(error || 'Unknown error');
+                                    if (typeof showStatus === 'function') {
+                                        showStatus(`Action failed: ${message}`, 'error');
+                                    } else {
+                                        console.error('Notification action failed:', error);
+                                    }
+                                }
+                            };
                             buttonsDiv.appendChild(button);
                         });
 
@@ -27646,6 +27857,19 @@
                                             <div class="property-value">${actionPointConfig.recognize ? 'On' : 'Off'}</div>
                                         </div>
                                     `;
+                                    const prePoint = actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object' ? actionPointConfig.pre_point : null;
+                                    if (prePoint) {
+                                        const ppThetaDeg = Number.isFinite(Number(prePoint.theta)) ? (Number(prePoint.theta) * 180 / Math.PI).toFixed(1) : '0.0';
+                                        html += `
+                                        <div class="property-group">
+                                            <div class="property-label"><i class="fas fa-map-pin" style="color:#3b82f6;margin-right:3px;"></i>Pre Point</div>
+                                            <div class="property-value">
+                                                x: ${Number(prePoint.x || 0).toFixed(3)}m<br>
+                                                y: ${Number(prePoint.y || 0).toFixed(3)}m<br>
+                                                <span style="color:var(--text-tertiary);font-size:10px;">${ppThetaDeg}° · Path → <strong>Pre Point</strong> → Shelf</span>
+                                            </div>
+                                        </div>
+                                    `;}
                                 }
                             }
 
@@ -27674,7 +27898,7 @@
                                     </button>
                                 </div>
                             `;
-                        } else if (elementType === 'filter') {
+                        }   else if (elementType === 'filter') {
                             const filter = elementData;
                             const layerMeta = FILTER_LAYER_META[filter.layer] || { label: 'Unknown', color: '#888' };
 
@@ -30357,8 +30581,6 @@
                             <div id="rcg-category-title" class="rcg-pane-title">Charger</div>
                         </div>
                         <div class="rcg-inline-actions">
-                            <button type="button" class="rcg-inline-btn" onclick="recognitionPullAll()" title="Pull all files from robot"><i class="fas fa-download"></i><span>Pull</span></button>
-                            <button type="button" class="rcg-inline-btn" onclick="recognitionPushAll()" title="Push all files to robot"><i class="fas fa-upload"></i><span>Push</span></button>
                             <button type="button" class="rcg-inline-btn" onclick="recognitionCreateTemplate()" title="New file"><i class="fas fa-plus"></i><span>New</span></button>
                         </div>
                     </div>
@@ -30370,6 +30592,7 @@
                     </div>
                     <div id="rcg-lib-status" class="rcg-lib-status"></div>
                 </div>
+                <div class="rcg-library-resizer" id="recognition-library-resizer" title="Drag to resize library"></div>
             </aside>
 
             <section id="recognition-workspace">
@@ -30378,6 +30601,32 @@
                         <div class="rcg-pane-kicker">Configuration</div>
                         <div id="recognition-stage-title" class="rcg-stage-title">Select a file</div>
                         <div id="recognition-stage-subtitle" class="rcg-stage-subtitle"></div>
+                    </div>
+                    <div class="rcg-stage-tools" aria-label="Recognition editor tools">
+                        <button type="button" class="rcg-inline-btn active" data-rcg-tool="select" onclick="recognitionSetTool('select')" title="Select and move geometry">
+                            <i class="fas fa-mouse-pointer"></i><span>Select</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="point" onclick="recognitionSetTool('point')" title="Add anchor point">
+                            <i class="fas fa-map-pin"></i><span>Point</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="endpoint" onclick="recognitionSetTool('endpoint')" title="Add required endpoint">
+                            <i class="fas fa-dot-circle"></i><span>Endpoint</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="rectangle" onclick="recognitionSetTool('rectangle')" title="Draw capture rectangle">
+                            <i class="far fa-square"></i><span>Rect</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="segment" onclick="recognitionSetTool('segment')" title="Draw measured span">
+                            <i class="fas fa-ruler-horizontal"></i><span>Span</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn active" data-rcg-view="top" onclick="recognitionSetStageView('top')" title="Top view">
+                            <i class="fas fa-border-all"></i><span>Top</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-view="side" onclick="recognitionSetStageView('side')" title="Side view">
+                            <i class="fas fa-grip-lines-vertical"></i><span>Side</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-view="iso" onclick="recognitionSetStageView('iso')" title="Iso view">
+                            <i class="fas fa-cube"></i><span>Iso</span>
+                        </button>
                     </div>
                     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                         <button id="rcg-save-btn" type="button" class="rcg-save-btn" onclick="recognitionSaveActive()" style="display:none;">
@@ -30394,14 +30643,14 @@
                         </button>
                     </div>
                 </div>
-                <div id="recognition-form-area">
+                <div id="recognition-stage" tabindex="0">
+                    <svg id="recognition-svg" style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:auto;"></svg>
                     <div id="recognition-empty-state" class="rcg-empty-state">
                         <div>
-                            <div class="rcg-pane-title">No File Selected</div>
-                            <div class="rcg-empty-hint">Select a recognition file from the library, or use Pull All to sync from the robot.</div>
+                            <div class="rcg-pane-title">No Template Selected</div>
+                            <div class="rcg-empty-hint">Create or select a recognition template from the library to start drawing.</div>
                         </div>
                     </div>
-                    <div id="recognition-form-content" style="display:none;flex:1;min-height:0;overflow-y:auto;padding:14px;"></div>
                 </div>
                 <div id="recognition-stage-status" class="rcg-stage-status">Recognition library ready.</div>
             </section>

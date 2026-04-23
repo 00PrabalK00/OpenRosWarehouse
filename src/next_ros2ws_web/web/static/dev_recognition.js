@@ -543,11 +543,30 @@
         renderRecognition();
     }
 
-    function markDirty() {
+    function isRecognitionEditableTarget(target) {
+        if (!target || typeof target.closest !== 'function') return false;
+        if (target.isContentEditable) return true;
+        if (target.closest('input, textarea, select, [contenteditable="true"]')) return true;
+        return false;
+    }
+
+    function markDirty(options = {}) {
+        const skipRender = Boolean(options && options.skipRender);
         state.dirty = true;
         state.editorTemplate.validation = validateTemplate(state.editorTemplate);
         pushHistory();
-        renderRecognition();
+        if (!skipRender) {
+            renderRecognition();
+        }
+    }
+
+    function refreshRecognitionVisualsOnly() {
+        // Keep active input intact while still reflecting geometry/template changes.
+        renderTopToolbar();
+        renderStageHeader();
+        renderStage();
+        renderInspector();
+        bindToolbarButtons();
     }
 
     function setToolbarStatus(message) {
@@ -1682,9 +1701,84 @@
         });
     }
 
+    function bindLibraryResizer() {
+        const handle = document.getElementById('recognition-library-resizer');
+        const grid = document.getElementById('recognition-body');
+        if (!handle || !grid || handle.dataset.bound === '1') return;
+        handle.dataset.bound = '1';
+
+        const MIN_WIDTH = 180;
+        const MAX_WIDTH = 460;
+        const STORAGE_KEY = 'recognitionLibraryWidth';
+
+        try {
+            const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+            if (!Number.isNaN(saved) && saved >= MIN_WIDTH && saved <= MAX_WIDTH) {
+                grid.style.setProperty('--rcg-library-width', saved + 'px');
+            }
+        } catch (_) { /* localStorage may be unavailable */ }
+
+        const readCurrentWidth = () => {
+            const cs = getComputedStyle(grid).getPropertyValue('--rcg-library-width').trim();
+            const parsed = parseFloat(cs);
+            return Number.isFinite(parsed) ? parsed : 240;
+        };
+
+        let dragging = false;
+        let startX = 0;
+        let startWidth = 240;
+
+        const onMove = (ev) => {
+            if (!dragging) return;
+            const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            const delta = clientX - startX;
+            const nextWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta));
+            grid.style.setProperty('--rcg-library-width', nextWidth + 'px');
+        };
+
+        const onEnd = () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('resizing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try {
+                const cs = getComputedStyle(grid).getPropertyValue('--rcg-library-width').trim();
+                if (cs) localStorage.setItem(STORAGE_KEY, parseFloat(cs));
+            } catch (_) { /* ignore */ }
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onEnd);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+        };
+
+        const onStart = (ev) => {
+            dragging = true;
+            startX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            startWidth = readCurrentWidth();
+            handle.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+            ev.preventDefault();
+        };
+
+        handle.addEventListener('mousedown', onStart);
+        handle.addEventListener('touchstart', onStart, { passive: false });
+
+        handle.addEventListener('dblclick', () => {
+            grid.style.setProperty('--rcg-library-width', '240px');
+            try { localStorage.setItem(STORAGE_KEY, 240); } catch (_) { /* ignore */ }
+        });
+    }
+
     function bindDom() {
         if (state.domBound) return;
         state.domBound = true;
+        bindLibraryResizer();
         bindInspectorResizer();
         const stage = getStageElement();
         if (stage) {
@@ -1720,9 +1814,17 @@
                 }
             });
         }
+        document.addEventListener('blur', (event) => {
+            if (!state.dirty) return;
+            if (!isRecognitionEditableTarget(event.target)) return;
+            const recognitionTabActive = document.body && document.body.classList.contains('recognition-tab-active');
+            if (!recognitionTabActive) return;
+            renderRecognition();
+        }, true);
         document.addEventListener('keydown', (event) => {
             const recognitionTabActive = document.body && document.body.classList.contains('recognition-tab-active');
             if (!recognitionTabActive) return;
+            if (isRecognitionEditableTarget(event.target)) return;
             const modifier = event.ctrlKey || event.metaKey;
             if (modifier && event.key.toLowerCase() === 'z') {
                 event.preventDefault();
@@ -1787,7 +1889,44 @@
         return String(select && select.value || 'normal').trim().toLowerCase();
     }
 
-    function refreshActionPointForm(prefix) {
+    async function fetchAndPopulateShelfTemplateDropdown(prefix, selectedValue) {
+        const templateEl = document.getElementById(`${prefix}-shelf-template`);
+        if (!templateEl) return;
+        try {
+            const resp = await fetch('/api/recognition/templates');
+            const data = await resp.json().catch(() => ({ templates: [] }));
+            const fetched = Array.isArray(data.templates) ? data.templates : [];
+            // Also merge any already-cached local drafts
+            const allTemplates = fetched.length > 0 ? fetched : state.templates;
+            const shelfTemplates = allTemplates.filter((t) => normalizeCategory(t.category) === 'shelves');
+            // Update state cache to stay in sync
+            if (fetched.length > 0) {
+                fetched.forEach((t) => {
+                    const idx = state.templates.findIndex((s) => String(s.template_id || '') === String(t.template_id || ''));
+                    if (idx >= 0) state.templates[idx] = normalizeTemplate(t, t);
+                    else state.templates.push(normalizeTemplate(t, t));
+                });
+            }
+            const curSelected = selectedValue !== undefined ? selectedValue : String(templateEl.value || '').trim();
+            const options = ['<option value="">Select shelf template</option>']
+                .concat(shelfTemplates.map((template) => (
+                    `<option value="${safeHtml(template.template_id)}"${curSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
+                )));
+            templateEl.innerHTML = options.join('');
+        } catch (_e) {
+            // Fallback to cached templates on network error
+            const shelfTemplates = state.templates.filter((t) => normalizeCategory(t.category) === 'shelves');
+            const curSelected = selectedValue !== undefined ? selectedValue : String(templateEl.value || '').trim();
+            const options = ['<option value="">Select shelf template</option>']
+                .concat(shelfTemplates.map((template) => (
+                    `<option value="${safeHtml(template.template_id)}"${curSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
+                )));
+            templateEl.innerHTML = options.join('');
+        }
+    }
+    window.recognitionFetchShelfTemplates = fetchAndPopulateShelfTemplateDropdown;
+
+    function refreshActionPointForm(prefix, selectedTemplateId) {
         const pointTypeEl = document.getElementById(`${prefix}-point-type`);
         const templateEl = document.getElementById(`${prefix}-shelf-template`);
         const recognizeEl = document.getElementById(`${prefix}-shelf-recognize`);
@@ -1804,21 +1943,25 @@
             return;
         }
         const pointType = pointTypeEl ? normalizePointType(pointTypeEl.value || 'generic') : 'generic';
-        const shelfTemplates = state.templates.filter((template) => normalizeCategory(template.category) === 'shelves');
+        // Always fetch fresh templates from API (avoids stale cache after publish/push)
+        // selectedTemplateId overrides the DOM's current value for initial load scenarios
         if (templateEl) {
-            const selectedValue = String(templateEl.value || '').trim();
-            const options = ['<option value="">Select shelf template</option>']
-                .concat(shelfTemplates.map((template) => (
-                    `<option value="${safeHtml(template.template_id)}"${selectedValue === template.template_id ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
-                )));
-            templateEl.innerHTML = options.join('');
+            const resolvedId = selectedTemplateId !== undefined ? String(selectedTemplateId) : String(templateEl.value || '').trim();
+            fetchAndPopulateShelfTemplateDropdown(prefix, resolvedId);
         }
         if (shelfConfigEl) {
             shelfConfigEl.style.display = pointType === 'shelf' ? 'block' : 'none';
         }
         // Pre-point coords visibility follows its toggle state; only relevant for shelf type
         if (prePointCoordsEl && prePointEnabledEl) {
-            prePointCoordsEl.style.display = (pointType === 'shelf' && prePointEnabledEl.checked) ? 'block' : 'none';
+            const showPrePoint = (pointType === 'shelf' && prePointEnabledEl.checked);
+            prePointCoordsEl.style.display = showPrePoint ? 'block' : 'none';
+            if (showPrePoint) {
+                const poiEl = document.getElementById(`${prefix}-pre-point-poi`);
+                if (poiEl && (!poiEl.options.length || (poiEl.options.length === 1 && poiEl.options[0].value === ''))) {
+                    loadPrePointPois(prefix, null);
+                }
+            }
         }
         if (summaryEl) {
             summaryEl.innerHTML = buildActionPointSummary(templateEl ? templateEl.value : '', pointType, Boolean(recognizeEl && recognizeEl.checked));
@@ -1832,19 +1975,40 @@
                 point_type: 'generic',
                 template_id: '',
                 recognize: false,
+                pre_point: null,
             };
         }
         const pointTypeEl = document.getElementById(`${prefix}-point-type`);
         const templateEl = document.getElementById(`${prefix}-shelf-template`);
         const recognizeEl = document.getElementById(`${prefix}-shelf-recognize`);
+        const prePointEnabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
+        const prePointPoiEl = document.getElementById(`${prefix}-pre-point-poi`);
         const payload = {
             point_type: pointTypeEl ? normalizePointType(pointTypeEl.value || 'generic') : 'generic',
             template_id: '',
             recognize: false,
+            pre_point: null,
         };
         if (payload.point_type === 'shelf') {
             payload.template_id = String(templateEl && templateEl.value || '').trim();
             payload.recognize = Boolean(recognizeEl && recognizeEl.checked);
+            if (prePointEnabledEl && prePointEnabledEl.checked && prePointPoiEl && prePointPoiEl.value) {
+                const zoneName = prePointPoiEl.value;
+                const zoneData = _prePointZonesMap[zoneName];
+                if (zoneData) {
+                    const oz = Number((zoneData.orientation && zoneData.orientation.z) || 0);
+                    const ow = Number((zoneData.orientation && zoneData.orientation.w) || 1);
+                    const headingRad = 2 * Math.atan2(oz, ow);
+                    payload.pre_point = {
+                        zone_name: zoneName,
+                        x: Number((zoneData.position && zoneData.position.x) || 0),
+                        y: Number((zoneData.position && zoneData.position.y) || 0),
+                        theta: headingRad,
+                    };
+                } else {
+                    payload.pre_point = { zone_name: zoneName, x: 0, y: 0, theta: 0 };
+                }
+            }
         }
         return payload;
     }
@@ -2138,6 +2302,7 @@
         state.stageView = ['top', 'side', 'iso'].includes(String(view || '')) ? String(view) : 'top';
         bindToolbarButtons();
         renderStageHeader();
+        renderStage();
     };
     window.recognitionZoom = function recognitionZoom(delta) {
         state.viewport.zoom = Math.max(0.35, Math.min(2.8, Number(state.viewport.zoom || 1) + Number(delta || 0)));
@@ -2189,7 +2354,11 @@
         } else if (path === 'notes') {
             template.notes = String(value || '');
         }
-        markDirty();
+        const editing = isRecognitionEditableTarget(document.activeElement);
+        markDirty({ skipRender: editing });
+        if (editing) {
+            refreshRecognitionVisualsOnly();
+        }
     };
     window.recognitionUpdateSelectedGeometryField = function recognitionUpdateSelectedGeometryField(field, rawValue) {
         if (!state.selectedGeometry || !state.editorTemplate) return;
@@ -2197,7 +2366,14 @@
         if (!entity) return;
         pushHistory();
         if (['x', 'y', 'width', 'height', 'distance', 'x1', 'y1', 'x2', 'y2'].includes(field)) {
-            entity[field] = Number(rawValue);
+            if (rawValue === '' || rawValue === null || rawValue === undefined) {
+                return;
+            }
+            const parsed = Number(rawValue);
+            if (!Number.isFinite(parsed)) {
+                return;
+            }
+            entity[field] = parsed;
         } else if (field === 'required') {
             entity.required = Boolean(rawValue);
         } else {
@@ -2206,7 +2382,11 @@
         if (state.selectedGeometry.kind === 'segments') {
             entity.distance = Number(entity.distance || 0);
         }
-        markDirty();
+        const editing = isRecognitionEditableTarget(document.activeElement);
+        markDirty({ skipRender: editing });
+        if (editing) {
+            refreshRecognitionVisualsOnly();
+        }
     };
     window.recognitionAddConstraint = function recognitionAddConstraint(type) {
         const template = ensureActiveTemplate();
@@ -2286,6 +2466,45 @@
     };
     window.recognitionHandleActionPointTemplateChange = function recognitionHandleActionPointTemplateChange(prefix) {
         refreshActionPointForm(prefix);
+    };
+    let _prePointZonesMap = {};
+
+    async function loadPrePointPois(prefix, selectedZoneName) {
+        const selectEl = document.getElementById(`${prefix}-pre-point-poi`);
+        if (!selectEl) return;
+        try {
+            const resp = await fetch('/api/zones');
+            const data = await resp.json();
+            const zonesObj = (data && data.zones) ? data.zones : {};
+            _prePointZonesMap = {};
+            const options = ['<option value="">— Select a waypoint —</option>'];
+            const sortedNames = Object.keys(zonesObj).sort();
+            for (const name of sortedNames) {
+                _prePointZonesMap[name] = zonesObj[name];
+                const z = zonesObj[name];
+                const oz = Number((z.orientation && z.orientation.z) || 0);
+                const ow = Number((z.orientation && z.orientation.w) || 1);
+                const hdgDeg = (2 * Math.atan2(oz, ow) * 180 / Math.PI).toFixed(1);
+                const sel = (name === selectedZoneName) ? ' selected' : '';
+                options.push(`<option value="${name}"${sel}>${name} (${hdgDeg}°)</option>`);
+            }
+            selectEl.innerHTML = options.join('');
+        } catch (e) {
+            selectEl.innerHTML = '<option value="">Failed to load zones</option>';
+        }
+    }
+    window.recognitionLoadPrePointPois = loadPrePointPois;
+
+    window.recognitionHandlePrePointToggle = function recognitionHandlePrePointToggle(prefix) {
+        const enabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
+        const coordsEl  = document.getElementById(`${prefix}-pre-point-coords`);
+        const show = enabledEl && enabledEl.checked;
+        if (coordsEl) {
+            coordsEl.style.display = show ? 'block' : 'none';
+        }
+        if (show) {
+            loadPrePointPois(prefix, null);
+        }
     };
 
     document.addEventListener('click', (event) => {

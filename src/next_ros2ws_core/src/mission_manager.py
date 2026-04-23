@@ -11,7 +11,10 @@ import yaml
 from action_msgs.msg import GoalStatus
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from std_msgs.msg import Bool, Int32
+from std_msgs.msg import Bool, Int32, String as StringMsg
+from std_srvs.srv import Trigger, SetBool
+from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
 
 from next_ros2ws_interfaces.action import GoToZone
 from next_ros2ws_interfaces.srv import (
@@ -71,6 +74,8 @@ class MissionManager(Node):
         self._action_publish_queue_lock = threading.Lock()
         self._lift_status_raw = 0
         self._lift_status_stamp = 0.0
+        self._shelf_status: Dict[str, Any] = {}
+        self._shelf_status_lock = threading.Lock()
 
         self.zone_stop_timer_default_s = max(
             0.0,
@@ -92,9 +97,30 @@ class MissionManager(Node):
         self.go_to_zone_action_name = self._endpoint('/go_to_zone')
         self.estop_topic = self._endpoint('/set_estop')
 
+        self._shelf_detection_timeout_s = max(
+            5.0,
+            float(self.declare_parameter('shelf_detection_timeout_s', 30.0).value),
+        )
+        self._shelf_detector_node = str(
+            self.declare_parameter('shelf_detector_node', 'shelf_detector').value
+            or 'shelf_detector'
+        ).strip() or 'shelf_detector'
+
         # Route mission navigation through NavigationArbitrator's public ingress.
         self.go_to_zone_client = ActionClient(self, GoToZone, self.go_to_zone_action_name)
         self.estop_sub = self.create_subscription(Bool, self.estop_topic, self._estop_callback, 10)
+
+        # Shelf recognition workflow service clients and status subscription
+        self.shelf_enable_client = self.create_client(
+            SetBool, self._endpoint('/shelf/set_enabled'))
+        self.shelf_commit_client = self.create_client(
+            Trigger, self._endpoint('/shelf/commit'))
+        self._shelf_set_params_client = self.create_client(
+            SetParameters,
+            self._endpoint(f'/{self._shelf_detector_node}/set_parameters'))
+        self.shelf_status_sub = self.create_subscription(
+            StringMsg, self._endpoint('/shelf/status_json'),
+            self._shelf_status_callback, 10)
         self.lift_status_sub = self.create_subscription(
             Int32,
             self.zone_action_lift_status_topic,
@@ -306,6 +332,15 @@ class MissionManager(Node):
         self._lift_status_raw = int(msg.data)
         self._lift_status_stamp = time.monotonic()
 
+    def _shelf_status_callback(self, msg: StringMsg):
+        try:
+            data = json.loads(msg.data)
+            if isinstance(data, dict):
+                with self._shelf_status_lock:
+                    self._shelf_status = data
+        except Exception:
+            pass
+
     @staticmethod
     def _safe_float(value: Any, default: float = 0.0) -> float:
         try:
@@ -394,6 +429,239 @@ class MissionManager(Node):
             return {}
         zone_data = zones.get(zone_name, {})
         return zone_data if isinstance(zone_data, dict) else {}
+
+    def _get_action_point_config(self, zone_name: str) -> Dict[str, Any]:
+        try:
+            configs = self.db_manager.get_action_point_configs()
+            return configs.get(zone_name, {}) if isinstance(configs, dict) else {}
+        except Exception as exc:
+            self.get_logger().warn(f'Failed loading action point config for "{zone_name}": {exc}')
+            return {}
+
+    def _call_service_sync(
+        self, client, request, timeout: float = 5.0
+    ) -> Tuple[Any, Optional[str]]:
+        """Call a ROS service synchronously from a worker thread."""
+        done = threading.Event()
+        result_holder: List[Any] = [None, None]  # [response, error_str]
+
+        def _cb(future):
+            try:
+                result_holder[0] = future.result()
+            except Exception as exc:
+                result_holder[1] = str(exc)
+            done.set()
+
+        if not client.service_is_ready():
+            if not client.wait_for_service(timeout_sec=min(timeout, 2.0)):
+                return None, 'service_not_available'
+        future = client.call_async(request)
+        future.add_done_callback(_cb)
+        done.wait(timeout=timeout)
+        if result_holder[0] is None:
+            return None, result_holder[1] or 'timeout'
+        return result_holder[0], None
+
+    def _push_shelf_template_params(self, template: Dict[str, Any]) -> None:
+        """Push template width/depth constraints to shelf_detector via ROS SetParameters."""
+        dims = template.get('dimensions') if isinstance(template.get('dimensions'), dict) else {}
+        width = float(dims.get('width', 0.0) or 0.0)
+        depth = float(dims.get('depth', 0.0) or 0.0)
+        if width <= 0.0 or depth <= 0.0:
+            return  # no valid dimensions — detector keeps its own defaults
+
+        margin_w = max(0.05, round(width * 0.15, 3))
+        margin_d = max(0.05, round(depth * 0.15, 3))
+
+        def _fp(v: float) -> ParameterValue:
+            pv = ParameterValue()
+            pv.type = ParameterType.PARAMETER_DOUBLE
+            pv.double_value = round(v, 3)
+            return pv
+
+        params = [
+            Parameter(name='expected_width_min', value=_fp(width - margin_w)),
+            Parameter(name='expected_width_max', value=_fp(width + margin_w)),
+            Parameter(name='expected_depth_min', value=_fp(depth - margin_d)),
+            Parameter(name='expected_depth_max', value=_fp(depth + margin_d)),
+        ]
+        req = SetParameters.Request()
+        req.parameters = params
+        _resp, err = self._call_service_sync(self._shelf_set_params_client, req, timeout=3.0)
+        if err:
+            self.get_logger().warn(
+                f'Could not update shelf_detector params from template: {err} '
+                '(detector will use existing defaults)'
+            )
+
+    def _disable_shelf_detector_best_effort(self) -> None:
+        """Best-effort disable of shelf detector (cleanup path — ignore errors)."""
+        try:
+            req = SetBool.Request()
+            req.data = False
+            self._call_service_sync(self.shelf_enable_client, req, timeout=2.0)
+        except Exception:
+            pass
+
+    def _navigate_to_zone_sync(
+        self, zone_name: str, token: int, timeout: float = 120.0
+    ) -> Tuple[bool, str]:
+        """Navigate to a named zone synchronously (used for pre-point waypoints)."""
+        if not self.go_to_zone_client.wait_for_server(timeout_sec=3.0):
+            return False, 'GoToZone action server not available'
+
+        with self._lock:
+            if token != self._mission_token or not self.running:
+                return False, 'mission stopped'
+
+        goal = GoToZone.Goal()
+        goal.name = zone_name
+        done = threading.Event()
+        result_holder: List[Any] = [False, 'timeout']
+
+        def _on_result(future):
+            try:
+                res = future.result()
+                if res.status == GoalStatus.STATUS_SUCCEEDED:
+                    result_holder[0] = True
+                    result_holder[1] = 'arrived'
+                else:
+                    result_holder[0] = False
+                    result_holder[1] = f'navigation failed (status {res.status})'
+            except Exception as exc:
+                result_holder[0] = False
+                result_holder[1] = str(exc)
+            done.set()
+
+        def _on_goal_response(future):
+            try:
+                goal_handle = future.result()
+            except Exception as exc:
+                result_holder[0] = False
+                result_holder[1] = str(exc)
+                done.set()
+                return
+            if not goal_handle.accepted:
+                result_holder[0] = False
+                result_holder[1] = 'goal rejected by action server'
+                done.set()
+                return
+            goal_handle.get_result_async().add_done_callback(_on_result)
+
+        self.go_to_zone_client.send_goal_async(goal).add_done_callback(_on_goal_response)
+
+        deadline = time.monotonic() + timeout
+        while not done.wait(timeout=0.2):
+            with self._lock:
+                if token != self._mission_token or not self.running:
+                    return False, 'mission stopped during pre-point navigation'
+            if time.monotonic() > deadline:
+                result_holder[1] = f'timed out after {timeout:.0f}s'
+                break
+        return bool(result_holder[0]), str(result_holder[1])
+
+    def _run_shelf_recognition_workflow(
+        self, zone_name: str, template_id: str, token: int
+    ) -> Tuple[bool, str]:
+        """Load shelf template, constrain detector, enable, wait for valid candidate, commit.
+
+        Called from _run_zone_post_arrival when point_type='shelf' and recognize=True.
+        The robot must already be at (or near) the shelf — typically triggered upon
+        arrival at the Pre Point or the shelf action zone itself.
+        """
+        # --- 1. Load template dimensions from DB ---
+        template: Dict[str, Any] = {}
+        if template_id:
+            try:
+                templates = self.db_manager.get_recognition_templates()
+                template = templates.get(template_id, {}) or {} if isinstance(templates, dict) else {}
+            except Exception as exc:
+                self.get_logger().warn(
+                    f'shelf_recognition: failed loading template "{template_id}": {exc}')
+            if not template:
+                self.get_logger().warn(
+                    f'shelf_recognition: template "{template_id}" not found; '
+                    'proceeding with detector defaults'
+                )
+
+        # --- 2. Push template dimension constraints to detector (best-effort) ---
+        self._push_shelf_template_params(template)
+
+        with self._lock:
+            if token != self._mission_token or not self.running:
+                return False, 'mission stopped before shelf detection'
+
+        # --- 3. Enable shelf detector ---
+        enable_req = SetBool.Request()
+        enable_req.data = True
+        resp, err = self._call_service_sync(self.shelf_enable_client, enable_req, timeout=5.0)
+        if err:
+            return False, f'Failed to enable shelf detector: {err}'
+        if not bool(getattr(resp, 'success', False)):
+            return False, f'Shelf detector refused enable: {getattr(resp, "message", "")}'
+
+        self.get_logger().info(
+            f'Shelf detection enabled for zone "{zone_name}" '
+            f'(template: {template_id or "default"})'
+        )
+
+        # --- 4. Poll for valid candidate ---
+        with self._lock:
+            if token != self._mission_token or not self.running:
+                self._disable_shelf_detector_best_effort()
+                return False, 'mission stopped after enabling shelf detector'
+            self.message = f'Zone "{zone_name}": waiting for shelf detection…'
+            try:
+                self._persist_locked()
+            except Exception:
+                pass
+
+        deadline = time.monotonic() + self._shelf_detection_timeout_s
+        while time.monotonic() < deadline:
+            with self._lock:
+                if token != self._mission_token or not self.running:
+                    self._disable_shelf_detector_best_effort()
+                    return False, 'mission stopped during shelf detection'
+
+            with self._shelf_status_lock:
+                candidate_valid = bool(self._shelf_status.get('candidate_valid', False))
+
+            if candidate_valid:
+                break
+            time.sleep(0.2)
+        else:
+            self._disable_shelf_detector_best_effort()
+            return (
+                False,
+                f'Shelf detection timed out after {self._shelf_detection_timeout_s:.0f}s '
+                f'at zone "{zone_name}"',
+            )
+
+        # --- 5. Commit shelf pose ---
+        with self._lock:
+            if token != self._mission_token or not self.running:
+                self._disable_shelf_detector_best_effort()
+                return False, 'mission stopped before shelf commit'
+            self.message = f'Zone "{zone_name}": committing shelf pose'
+            try:
+                self._persist_locked()
+            except Exception:
+                pass
+
+        commit_req = Trigger.Request()
+        resp, err = self._call_service_sync(self.shelf_commit_client, commit_req, timeout=5.0)
+        if err:
+            self._disable_shelf_detector_best_effort()
+            return False, f'Shelf commit service error: {err}'
+        if not bool(getattr(resp, 'success', False)):
+            self._disable_shelf_detector_best_effort()
+            return False, f'Shelf commit rejected: {getattr(resp, "message", "")}'
+
+        self.get_logger().info(
+            f'Shelf recognition succeeded for zone "{zone_name}" '
+            f'(template: {template_id or "default"})'
+        )
+        return True, str(getattr(resp, 'message', 'Shelf committed'))
 
     def _resolve_zone_stop_timer(self, zone_meta: Dict[str, Any]) -> float:
         zone_specific = self._safe_float(zone_meta.get('charge_duration', 0.0), 0.0)
@@ -598,6 +866,14 @@ class MissionManager(Node):
         zone_type = str(zone_meta.get('type', 'normal') or 'normal').strip().lower()
         zone_action = normalize_action_id(zone_meta.get('action', ''))
 
+        # Load action point config for shelf recognition workflow
+        action_point_config = self._get_action_point_config(zone_name)
+        point_type = str(
+            action_point_config.get('point_type', 'generic') or 'generic'
+        ).strip().lower()
+        recognize = bool(action_point_config.get('recognize', False))
+        template_id = str(action_point_config.get('template_id', '') or '').strip()
+
         if stop_timer_s > 0.0:
             with self._lock:
                 if token != self._mission_token or not self.running:
@@ -623,6 +899,37 @@ class MissionManager(Node):
                     f'Action zone "{zone_name}" has no action configured',
                 )
                 return
+
+            # Shelf recognition workflow — triggered when recognize=True on a shelf action point.
+            if point_type == 'shelf' and recognize:
+                # Navigate to Pre Point first, if configured
+                pre_point_cfg = action_point_config.get('pre_point')
+                if isinstance(pre_point_cfg, dict):
+                    pre_zone = str(pre_point_cfg.get('zone_name', '') or '').strip()
+                    if pre_zone:
+                        with self._lock:
+                            if token != self._mission_token or not self.running:
+                                return
+                            self.message = (
+                                f'Zone "{zone_name}": navigating to pre-point "{pre_zone}"'
+                            )
+                            try:
+                                self._persist_locked()
+                            except Exception:
+                                pass
+                        ok, nav_msg = self._navigate_to_zone_sync(pre_zone, token)
+                        if not ok:
+                            self._mark_interrupted_if_active(
+                                token, 'shelf_recognition_failed',
+                                f'Failed to reach pre-point "{pre_zone}": {nav_msg}')
+                            return
+
+                ok, rcg_msg = self._run_shelf_recognition_workflow(
+                    zone_name, template_id, token)
+                if not ok:
+                    self._mark_interrupted_if_active(
+                        token, 'shelf_recognition_failed', rcg_msg)
+                    return
 
             with self._lock:
                 if token != self._mission_token or not self.running:
