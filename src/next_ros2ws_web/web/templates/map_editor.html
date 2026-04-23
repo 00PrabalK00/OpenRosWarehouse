@@ -455,7 +455,7 @@
         }
 
         /* ================================================================
-           Map Editor v2 shell — project bar | rail | tools | canvas | inspector
+           Map Editor shell — Home-style top nav | tools | canvas | inspector
            ================================================================ */
         #map-editor-shell {
             display: flex;
@@ -463,97 +463,117 @@
             height: 100vh;
             min-height: 100vh;
             overflow: hidden;
-            background:
-                radial-gradient(circle at top left, rgba(38, 105, 200, 0.12), transparent 24%),
-                linear-gradient(180deg, #0b1017 0%, #0a0e14 100%);
+            background: var(--bg-canvas);
         }
 
-        #map-editor-shell .project-bar {
+        #map-editor-shell .tab-navigation.map-editor-topnav {
             position: relative;
             z-index: 30;
-            height: 60px;
+            height: 40px;
             flex-shrink: 0;
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 14px;
-            padding: 0 14px;
-            background: rgba(20, 26, 36, 0.96);
+            background: var(--bg-chrome);
             border-bottom: 1px solid var(--border-chrome);
-            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
-            backdrop-filter: blur(8px);
+            box-shadow: none;
         }
 
-        #map-editor-shell .project-ident,
-        #map-editor-shell .project-actions {
+        #map-editor-shell .navigator-top-controls.map-editor-top-controls {
             display: flex;
+            justify-content: flex-start;
             align-items: center;
-            gap: 10px;
-            min-width: 0;
+            gap: 2px;
+            padding: 0 6px;
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-chrome) transparent;
         }
 
-        #map-editor-shell .project-ident {
-            flex: 1;
+        #map-editor-shell .navigator-top-controls.map-editor-top-controls::-webkit-scrollbar {
+            height: 3px;
         }
 
-        #map-editor-shell .project-brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            min-width: 0;
+        #map-editor-shell .navigator-top-controls.map-editor-top-controls::-webkit-scrollbar-thumb {
+            background: var(--border-chrome);
+            border-radius: 2px;
         }
 
-        #map-editor-shell .project-brand-mark {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 44px;
-            height: 30px;
-            padding: 0 10px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, rgba(38, 105, 200, 0.9), rgba(41, 148, 225, 0.8));
-            color: #f8fbff;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
-        }
-
-        #map-editor-shell .project-brand-copy {
+        #map-editor-shell .mctrl-btn {
             display: flex;
             flex-direction: column;
-            min-width: 0;
-            gap: 2px;
-        }
-
-        #map-editor-shell .project-title {
-            font-size: 13px;
+            align-items: center;
+            justify-content: center;
+            height: 32px;
+            min-width: 44px;
+            padding: 0 7px;
+            gap: 1px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 3px;
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-size: 8px;
             font-weight: 700;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.04em;
             text-transform: uppercase;
-            color: var(--text-primary);
+            cursor: pointer;
+            transition: background 0.1s, border-color 0.1s, color 0.1s;
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-family: inherit;
         }
 
-        #map-editor-shell .project-subtitle {
+        #map-editor-shell .mctrl-btn i {
             font-size: 10px;
-            color: var(--text-tertiary);
-            letter-spacing: 0.04em;
+            line-height: 1;
+        }
+
+        #map-editor-shell .mctrl-btn:hover {
+            background: rgba(255,255,255,0.07);
+            color: var(--text-primary);
+            border-color: var(--border-secondary);
+        }
+
+        #map-editor-shell .mctrl-btn.active,
+        #map-editor-shell .mctrl-btn.mctrl-btn-primary {
+            background: var(--selected-blue-dim);
+            border-color: var(--selected-blue);
+            color: var(--selected-blue);
+        }
+
+        #map-editor-shell .mctrl-btn.mctrl-btn-icon {
+            min-width: 32px;
+            width: 32px;
+            padding: 0;
+        }
+
+        #map-editor-shell .mctrl-sep {
+            width: 1px;
+            height: 22px;
+            background: var(--border-chrome);
+            margin: 0 8px;
+            flex-shrink: 0;
+            align-self: center;
         }
 
         #map-editor-shell .layout-chip {
-            height: 30px;
-            padding: 0 11px;
+            display: inline-flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 10px;
             border-radius: 999px;
-            background: rgba(23, 31, 44, 0.88);
-            border-color: rgba(49, 62, 82, 0.92);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-chrome);
             color: var(--text-primary);
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
-        }
-
-        #map-editor-shell .project-actions {
-            justify-content: flex-end;
-            flex-wrap: nowrap;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         #map-editor-shell .top-action-btn {
@@ -580,21 +600,6 @@
             background: rgba(255,255,255,0.07);
             color: var(--text-primary);
             border-color: var(--border-secondary);
-        }
-
-        #map-editor-shell .top-action-btn.primary {
-            background: rgba(38, 105, 200, 0.16);
-            border-color: rgba(38, 105, 200, 0.42);
-            color: #9ec6ff;
-        }
-
-        #map-editor-shell .top-action-btn.primary:hover {
-            background: rgba(38, 105, 200, 0.24);
-        }
-
-        #map-editor-shell .top-action-btn.icon-only {
-            width: 32px;
-            padding: 0;
         }
 
         #map-editor-shell .top-action-btn.compact {
@@ -625,8 +630,8 @@
         }
 
         #map-editor-shell .editor-popover {
-            top: 68px;
-            right: 14px;
+            top: 44px;
+            right: 8px;
             left: auto;
             width: 360px;
             padding: 12px;
@@ -680,71 +685,12 @@
             flex: 1;
             min-height: 0;
             display: grid;
-            grid-template-columns: 58px 286px minmax(0, 1fr) 318px;
+            grid-template-columns: var(--map-editor-sidebar-width, 286px) minmax(0, 1fr) 318px;
             overflow: hidden;
         }
 
-        #map-editor-shell .mode-rail {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            padding: 10px 0;
-            background: rgba(24, 30, 39, 0.95);
-            border-right: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .mode-rail-btn {
-            position: relative;
-            width: 42px;
-            height: 46px;
-            border: none;
-            border-radius: 8px;
-            background: transparent;
-            color: var(--text-tertiary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 3px;
-            cursor: pointer;
-            transition: background 0.14s ease, color 0.14s ease;
-        }
-
-        #map-editor-shell .mode-rail-btn:hover {
-            background: rgba(255,255,255,0.06);
-            color: var(--text-secondary);
-        }
-
-        #map-editor-shell .mode-rail-btn.active {
-            background: rgba(38, 105, 200, 0.16);
-            color: #9ec6ff;
-        }
-
-        #map-editor-shell .mode-rail-btn.active::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 6px;
-            bottom: 6px;
-            width: 3px;
-            border-radius: 0 2px 2px 0;
-            background: var(--selected-blue);
-        }
-
-        #map-editor-shell .mode-rail-label {
-            font-size: 7px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            line-height: 1;
-        }
-
-        #map-editor-shell .mode-rail-sep {
-            width: 28px;
-            height: 1px;
-            margin: 4px 0;
-            background: var(--border-chrome);
+        #map-editor-shell.sidebar-collapsed {
+            --map-editor-sidebar-width: 0px;
         }
 
         #map-editor-shell .tool-sidebar {
@@ -752,17 +698,65 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            background: rgba(20, 27, 37, 0.9);
+            background: var(--bg-inspector);
             border-right: 1px solid var(--border-chrome);
+            transition: opacity 0.14s ease, border-color 0.14s ease;
+        }
+
+        #map-editor-shell.sidebar-collapsed .tool-sidebar {
+            opacity: 0;
+            pointer-events: none;
+            border-right-color: transparent;
+        }
+
+        #map-editor-shell .tool-sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-chrome);
+            background: var(--bg-elevated);
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 3;
+        }
+
+        #map-editor-shell .tool-sidebar-header-copy {
+            display: grid;
+            gap: 3px;
+            min-width: 0;
+        }
+
+        #map-editor-shell .tool-sidebar-title {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        #map-editor-shell .tool-sidebar-subtitle {
+            font-size: 10px;
+            color: var(--text-tertiary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #map-editor-shell .tool-sidebar-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
         }
 
         #map-editor-shell .sidebar-panel {
             display: none;
             flex: 1;
             min-height: 0;
-            overflow-y: auto;
-            padding: 16px;
-            gap: 14px;
+            padding: 10px;
+            gap: 10px;
         }
 
         #map-editor-shell .sidebar-panel.active-panel {
@@ -770,50 +764,25 @@
             flex-direction: column;
         }
 
-        #map-editor-shell .sidebar-panel::-webkit-scrollbar,
+        #map-editor-shell .tool-sidebar-scroll::-webkit-scrollbar,
         #map-editor-shell .insp-pane::-webkit-scrollbar {
             width: 5px;
         }
 
-        #map-editor-shell .sidebar-panel::-webkit-scrollbar-thumb,
+        #map-editor-shell .tool-sidebar-scroll::-webkit-scrollbar-thumb,
         #map-editor-shell .insp-pane::-webkit-scrollbar-thumb {
             background: var(--border-chrome);
             border-radius: 999px;
         }
 
-        #map-editor-shell .sidebar-panel-header {
-            display: grid;
-            gap: 4px;
-        }
-
-        #map-editor-shell .sidebar-panel-eyebrow {
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-field-label);
-        }
-
-        #map-editor-shell .sidebar-panel-header h2 {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .sidebar-panel-header p {
-            font-size: 11px;
-            line-height: 1.5;
-            color: var(--text-secondary);
-        }
-
         #map-editor-shell .sidebar-card {
             display: grid;
             gap: 12px;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: linear-gradient(180deg, rgba(24, 32, 43, 0.9), rgba(16, 22, 31, 0.9));
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-chrome);
+            background: rgba(10, 14, 20, 0.4);
+            box-shadow: none;
         }
 
         #map-editor-shell .sidebar-card-title {
@@ -834,10 +803,10 @@
         #map-editor-shell .sidebar-tool-grid .editor-action-btn {
             width: 100%;
             min-width: 0;
-            height: 54px;
-            border-radius: 8px;
+            height: 50px;
+            border-radius: 3px;
             gap: 4px;
-            background: rgba(32, 39, 50, 0.92);
+            background: var(--bg-elevated);
         }
 
         #map-editor-shell .sidebar-tool-grid .tool-btn i,
@@ -880,8 +849,8 @@
             height: 34px;
             padding: 0 10px;
             border: 1px solid var(--border-chrome);
-            border-radius: 8px;
-            background: rgba(31, 38, 48, 0.94);
+            border-radius: 3px;
+            background: var(--bg-elevated);
             color: var(--text-primary);
             display: inline-flex;
             align-items: center;
@@ -908,8 +877,8 @@
             height: 34px;
             padding: 0 10px;
             border: 1px solid var(--border-chrome);
-            border-radius: 8px;
-            background: rgba(31, 38, 48, 0.92);
+            border-radius: 3px;
+            background: var(--bg-elevated);
             color: var(--text-secondary);
             display: inline-flex;
             align-items: center;
@@ -942,7 +911,7 @@
 
         #map-editor-shell .sidebar-list-empty {
             padding: 12px;
-            border-radius: 8px;
+            border-radius: 4px;
             border: 1px dashed rgba(54, 67, 88, 0.88);
             background: rgba(15, 20, 28, 0.7);
             font-size: 11px;
@@ -954,10 +923,10 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            padding: 10px 11px;
-            border-radius: 9px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: rgba(17, 23, 32, 0.88);
+            padding: 8px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-chrome);
+            background: rgba(10, 14, 20, 0.4);
             color: inherit;
             cursor: pointer;
             text-align: left;
@@ -1020,18 +989,18 @@
             min-height: 0;
             display: flex;
             flex-direction: column;
-            background: linear-gradient(180deg, rgba(18, 23, 32, 0.55), rgba(10, 14, 20, 0.94));
+            background: #0b1119;
         }
 
         #map-editor-shell .canvas-stage-header {
-            height: 44px;
+            height: 38px;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            padding: 0 14px;
-            background: rgba(24, 30, 39, 0.82);
+            padding: 0 12px;
+            background: var(--bg-elevated);
             border-bottom: 1px solid var(--border-chrome);
         }
 
@@ -1070,9 +1039,9 @@
             justify-content: center;
             height: 24px;
             padding: 0 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(40, 52, 68, 0.9);
-            background: rgba(16, 22, 31, 0.9);
+            border-radius: 3px;
+            border: 1px solid var(--border-chrome);
+            background: var(--bg-elevated);
             font-size: 10px;
             color: var(--text-secondary);
             white-space: nowrap;
@@ -1081,30 +1050,28 @@
         #map-editor-shell .canvas-wrap {
             flex: 1;
             min-height: 0;
-            padding: 16px;
-            background:
-                linear-gradient(rgba(20, 26, 35, 0.95), rgba(20, 26, 35, 0.95)),
-                radial-gradient(circle at center, rgba(34, 53, 82, 0.3), transparent 60%);
+            padding: 12px;
+            background: #0b1119;
         }
 
         #map-editor-shell #editor {
             width: 100%;
             height: 100%;
-            border-radius: 14px;
-            border-color: rgba(37, 43, 56, 0.98);
+            border-radius: 12px;
+            border: 1px solid rgba(37, 43, 56, 0.98);
             background:
                 linear-gradient(rgba(17, 22, 31, 0.96), rgba(17, 22, 31, 0.96)),
                 linear-gradient(90deg, rgba(64, 90, 122, 0.08) 1px, transparent 1px),
                 linear-gradient(rgba(64, 90, 122, 0.08) 1px, transparent 1px);
             background-size: auto, 80px 80px, 80px 80px;
-            box-shadow: 0 24px 56px rgba(0, 0, 0, 0.38);
+            box-shadow: none;
         }
 
         #map-editor-shell #inspector {
             min-width: 0;
             display: flex;
             flex-direction: column;
-            background: rgba(20, 27, 37, 0.94);
+            background: var(--bg-inspector);
             border-left: 1px solid var(--border-chrome);
             overflow: hidden;
         }
@@ -1113,9 +1080,9 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 12px 14px;
+            padding: 8px 10px;
             border-bottom: 1px solid var(--border-chrome);
-            background: rgba(24, 30, 39, 0.8);
+            background: var(--bg-elevated);
         }
 
         #map-editor-shell .insp-header-title {
@@ -1132,14 +1099,14 @@
             align-items: center;
             justify-content: center;
             height: 22px;
-            padding: 0 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(38, 105, 200, 0.34);
-            background: rgba(38, 105, 200, 0.14);
-            color: #9ec6ff;
-            font-size: 9px;
+            padding: 0 6px;
+            border-radius: 2px;
+            border: 1px solid rgba(38, 105, 200, 0.35);
+            background: var(--selected-blue-dim);
+            color: var(--selected-blue);
+            font-size: 8px;
             font-weight: 700;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
         }
 
@@ -1173,7 +1140,7 @@
             display: none;
             flex: 1;
             overflow-y: auto;
-            padding: 14px;
+            padding: 10px;
         }
 
         #map-editor-shell .insp-pane.active {
@@ -1183,11 +1150,11 @@
         #map-editor-shell .insp-card {
             display: grid;
             gap: 10px;
-            padding: 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(40, 52, 68, 0.92);
-            background: linear-gradient(180deg, rgba(24, 32, 43, 0.9), rgba(16, 22, 31, 0.9));
-            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-chrome);
+            background: rgba(10, 14, 20, 0.4);
+            margin-bottom: 10px;
         }
 
         #map-editor-shell .insp-card:last-child {
@@ -1396,18 +1363,18 @@
 
         @media (max-width: 1280px) {
             #map-editor-shell .workspace-grid {
-                grid-template-columns: 58px 248px minmax(0, 1fr) 288px;
+                grid-template-columns: minmax(240px, 248px) minmax(0, 1fr) 288px;
             }
         }
 
         @media (max-width: 1080px) {
             #map-editor-shell .workspace-grid {
-                grid-template-columns: 58px minmax(0, 1fr);
+                grid-template-columns: minmax(0, 1fr);
                 grid-template-rows: auto minmax(320px, 1fr) auto;
             }
 
             #map-editor-shell .tool-sidebar {
-                grid-column: 2;
+                grid-column: 1;
                 grid-row: 1;
                 border-right: none;
                 border-bottom: 1px solid var(--border-chrome);
@@ -1415,12 +1382,12 @@
             }
 
             #map-editor-shell .canvas-stage {
-                grid-column: 2;
+                grid-column: 1;
                 grid-row: 2;
             }
 
             #map-editor-shell #inspector {
-                grid-column: 2;
+                grid-column: 1;
                 grid-row: 3;
                 border-left: none;
                 border-top: 1px solid var(--border-chrome);
@@ -1429,21 +1396,14 @@
         }
 
         @media (max-width: 840px) {
-            #map-editor-shell .project-bar {
+            #map-editor-shell .tab-navigation.map-editor-topnav {
                 height: auto;
-                padding-top: 10px;
-                padding-bottom: 10px;
-                flex-wrap: wrap;
             }
 
-            #map-editor-shell .project-ident,
-            #map-editor-shell .project-actions {
-                width: 100%;
-            }
-
-            #map-editor-shell .project-actions {
+            #map-editor-shell .navigator-top-controls.map-editor-top-controls {
                 flex-wrap: wrap;
-                justify-content: flex-start;
+                padding-top: 6px;
+                padding-bottom: 6px;
             }
 
             #map-editor-shell .bottom-status-bar {
@@ -1468,25 +1428,14 @@
                 grid-template-columns: 1fr;
             }
 
-            #map-editor-shell .mode-rail {
-                flex-direction: row;
-                justify-content: flex-start;
-                overflow-x: auto;
-                padding: 8px;
-                border-right: none;
-                border-bottom: 1px solid var(--border-chrome);
+            #map-editor-shell .layout-chip {
+                order: -1;
+                max-width: 100%;
             }
 
-            #map-editor-shell .mode-rail-sep {
-                width: 1px;
-                height: 28px;
-                margin: 0 4px;
-            }
-
-            #map-editor-shell .tool-sidebar,
-            #map-editor-shell .canvas-stage,
-            #map-editor-shell #inspector {
-                grid-column: 1;
+            #map-editor-shell .mctrl-btn {
+                font-size: 8px;
+                padding: 0 8px;
             }
         }
     </style>
@@ -1494,51 +1443,71 @@
 
 <body>
     <div class="editor-root" id="map-editor-shell">
-        <header class="project-bar">
-            <div class="project-ident">
-                <div class="project-brand">
-                    <div class="project-brand-mark">NEXT</div>
-                    <div class="project-brand-copy">
-                        <span class="project-title">Map Editor</span>
-                        <span class="project-subtitle">Factory layout authoring</span>
-                    </div>
-                </div>
+        <div class="tab-navigation map-editor-topnav">
+            <div class="navigator-top-controls map-editor-top-controls">
+                <button class="mctrl-btn mctrl-btn-icon" id="sidebar-collapse-toggle" type="button" title="Collapse tools sidebar">
+                    <i class="fas fa-chevron-left" id="sidebar-collapse-icon"></i>
+                </button>
                 <span id="layout-chip" class="layout-chip" title="Active map">active_map</span>
-            </div>
+                <div class="mctrl-sep"></div>
 
-            <div class="project-actions">
-                <button class="top-action-btn" id="undo-btn" title="Undo last change">
+                <button class="mctrl-btn active" data-editor-mode="draw" type="button" title="Draw mode">
+                    <i class="fas fa-pen"></i>
+                    <span>Draw</span>
+                </button>
+                <button class="mctrl-btn" data-editor-mode="zones" type="button" title="Zones mode">
+                    <i class="fas fa-draw-polygon"></i>
+                    <span>Zones</span>
+                </button>
+                <button class="mctrl-btn" data-editor-mode="paths" type="button" title="Paths mode">
+                    <i class="fas fa-route"></i>
+                    <span>Paths</span>
+                </button>
+                <button class="mctrl-btn" data-editor-mode="waypoints" type="button" title="Waypoints mode">
+                    <i class="fas fa-location-dot"></i>
+                    <span>Waypoints</span>
+                </button>
+                <button class="mctrl-btn" data-editor-mode="dotted" type="button" title="Dotted map mode">
+                    <i class="fas fa-th-large"></i>
+                    <span>Dotted</span>
+                </button>
+                <button class="mctrl-btn" data-editor-mode="view" type="button" title="View and measure mode">
+                    <i class="fas fa-layer-group"></i>
+                    <span>View</span>
+                </button>
+
+                <div class="mctrl-sep"></div>
+                <button class="mctrl-btn" id="undo-btn" title="Undo last change">
                     <i class="fas fa-rotate-left"></i>
                     <span>Undo</span>
                 </button>
-                <button class="top-action-btn" id="redo-btn" title="Redo last undone change">
+                <button class="mctrl-btn" id="redo-btn" title="Redo last undone change">
                     <i class="fas fa-rotate-right"></i>
                     <span>Redo</span>
                 </button>
-                <button class="top-action-btn primary" id="save-permanent-btn" title="Save map to disk">
+                <button class="mctrl-btn mctrl-btn-primary" id="save-permanent-btn" title="Save map to disk">
                     <i class="fas fa-floppy-disk"></i>
                     <span class="save-lbl">Save</span>
                 </button>
 
-                <div class="zoom-toolbar">
-                    <button class="top-action-btn icon-only" id="map-zoom-out-btn" title="Zoom out">
-                        <i class="fas fa-magnifying-glass-minus"></i>
-                    </button>
-                    <span class="zoom-readout" id="zoom-readout">100%</span>
-                    <button class="top-action-btn icon-only" id="map-zoom-in-btn" title="Zoom in">
-                        <i class="fas fa-magnifying-glass-plus"></i>
-                    </button>
-                    <button class="top-action-btn" id="map-zoom-reset-btn" title="Fit map to viewport">
-                        <i class="fas fa-expand-arrows-alt"></i>
-                        <span>Fit</span>
-                    </button>
-                </div>
+                <div class="mctrl-sep"></div>
+                <button class="mctrl-btn mctrl-btn-icon" id="map-zoom-out-btn" title="Zoom out">
+                    <i class="fas fa-magnifying-glass-minus"></i>
+                </button>
+                <span class="zoom-readout" id="zoom-readout">100%</span>
+                <button class="mctrl-btn mctrl-btn-icon" id="map-zoom-in-btn" title="Zoom in">
+                    <i class="fas fa-magnifying-glass-plus"></i>
+                </button>
+                <button class="mctrl-btn" id="map-zoom-reset-btn" title="Fit map to viewport">
+                    <i class="fas fa-expand-arrows-alt"></i>
+                    <span>Fit</span>
+                </button>
 
-                <button class="top-action-btn icon-only" id="editor-settings-toggle" title="Global editor settings">
+                <div class="mctrl-sep"></div>
+                <button class="mctrl-btn mctrl-btn-icon" id="editor-settings-toggle" title="Global editor settings">
                     <i class="fas fa-gear"></i>
                 </button>
             </div>
-
             <div id="editor-settings-popover" class="editor-popover" hidden>
                 <div class="popover-stack">
                     <div class="popover-card">
@@ -1589,45 +1558,21 @@
                     </div>
                 </div>
             </div>
-        </header>
+        </div>
 
         <div class="workspace-grid">
-            <nav class="mode-rail" aria-label="Editor modes">
-                <button class="mode-rail-btn active" data-editor-mode="draw" type="button" title="Draw mode">
-                    <i class="fas fa-pen"></i>
-                    <span class="mode-rail-label">Draw</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="zones" type="button" title="Zones mode">
-                    <i class="fas fa-draw-polygon"></i>
-                    <span class="mode-rail-label">Zones</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="paths" type="button" title="Paths mode">
-                    <i class="fas fa-route"></i>
-                    <span class="mode-rail-label">Paths</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="waypoints" type="button" title="Waypoints mode">
-                    <i class="fas fa-location-dot"></i>
-                    <span class="mode-rail-label">Points</span>
-                </button>
-                <button class="mode-rail-btn" data-editor-mode="dotted" type="button" title="Dotted map mode">
-                    <i class="fas fa-th-large"></i>
-                    <span class="mode-rail-label">Dotted</span>
-                </button>
-                <div class="mode-rail-sep"></div>
-                <button class="mode-rail-btn" data-editor-mode="view" type="button" title="View and measure mode">
-                    <i class="fas fa-layer-group"></i>
-                    <span class="mode-rail-label">View</span>
-                </button>
-            </nav>
-
             <aside class="tool-sidebar">
-                <section class="sidebar-panel active-panel" data-mode-panel="draw">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Draw</h2>
-                        <p>Paint the occupancy map, erase noise, and reshape walls.</p>
+                <div class="tool-sidebar-header">
+                    <div class="tool-sidebar-header-copy">
+                        <span class="tool-sidebar-title" id="tool-sidebar-title">Draw</span>
+                        <span class="tool-sidebar-subtitle" id="tool-sidebar-subtitle">Paint the occupancy map, erase noise, and reshape walls.</span>
                     </div>
-
+                    <button class="sidebar-panel-close" id="sidebar-close-btn" type="button" title="Collapse tools sidebar">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                </div>
+                <div class="tool-sidebar-scroll">
+                <section class="sidebar-panel active-panel" data-mode-panel="draw">
                     <div class="sidebar-card">
                         <div class="sidebar-card-title">Tools</div>
                         <div class="sidebar-tool-grid">
@@ -1680,12 +1625,6 @@
                 </section>
 
                 <section class="sidebar-panel" data-mode-panel="zones">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Zones</h2>
-                        <p>Create navigation constraints and operational areas.</p>
-                    </div>
-
                     <div class="sidebar-card">
                         <div class="sidebar-card-title">Zone Tools</div>
                         <div class="sidebar-tool-grid">
@@ -1711,12 +1650,6 @@
                 </section>
 
                 <section class="sidebar-panel" data-mode-panel="paths">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Paths</h2>
-                        <p>Link zones together and inspect saved route geometry.</p>
-                    </div>
-
                     <div class="sidebar-card">
                         <div class="sidebar-card-title">Path Tools</div>
                         <div class="sidebar-tool-grid">
@@ -1735,12 +1668,6 @@
                 </section>
 
                 <section class="sidebar-panel" data-mode-panel="waypoints">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Waypoints</h2>
-                        <p>Place destinations, docking stations, and queue markers.</p>
-                    </div>
-
                     <div class="sidebar-card">
                         <div class="sidebar-card-title">Waypoint Tools</div>
                         <div class="sidebar-tool-grid">
@@ -1766,12 +1693,6 @@
                 </section>
 
                 <section class="sidebar-panel" data-mode-panel="dotted">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>Dotted Map</h2>
-                        <p>Edit the dotted render, place the robot, and preview live scan alignment.</p>
-                    </div>
-
                     <div class="sidebar-card">
                         <div class="sidebar-card-title">Session</div>
                         <div class="sidebar-tool-grid">
@@ -1805,12 +1726,6 @@
                 </section>
 
                 <section class="sidebar-panel" data-mode-panel="view">
-                    <div class="sidebar-panel-header">
-                        <span class="sidebar-panel-eyebrow">Mode</span>
-                        <h2>View &amp; Measure</h2>
-                        <p>Inspect objects, pan the canvas, and control visual layers.</p>
-                    </div>
-
                     <div class="sidebar-card">
                         <div class="sidebar-card-title">Navigation</div>
                         <div class="sidebar-tool-grid">
@@ -1859,6 +1774,7 @@
                         </div>
                     </div>
                 </section>
+                </div>
             </aside>
 
             <section class="canvas-stage">
@@ -1963,6 +1879,11 @@
         const canvasLayerChipEl = document.getElementById("canvas-layer-chip");
         const drawSelectionSummaryEl = document.getElementById("draw-selection-summary");
         const dottedSessionMetaEl = document.getElementById("dotted-session-meta");
+        const sidebarCollapseToggleBtn = document.getElementById("sidebar-collapse-toggle");
+        const sidebarCollapseIconEl = document.getElementById("sidebar-collapse-icon");
+        const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
+        const toolSidebarTitleEl = document.getElementById("tool-sidebar-title");
+        const toolSidebarSubtitleEl = document.getElementById("tool-sidebar-subtitle");
         const inspectorHeaderTitleEl = document.getElementById("insp-header-title");
         const inspectorModeBadgeEl = document.getElementById("insp-mode-badge");
         const inspectorPropertiesEl = document.getElementById("inspector-properties");
@@ -2003,6 +1924,7 @@
 
         const editCanvas = document.createElement("canvas");
         const editCtx = editCanvas.getContext("2d");
+        const sidebarCollapsedStorageKey = "mapEditorSidebarCollapsed";
 
         const savedBrushSize = Number(window.localStorage.getItem("mapEditorBrushSize"));
         if (Number.isFinite(savedBrushSize)) {
@@ -2093,6 +2015,7 @@
                 y: null
             },
             snapEnabled: false,
+            sidebarCollapsed: window.localStorage.getItem(sidebarCollapsedStorageKey) === "1",
             view: {
                 scale: 1,
                 minScale: 0.35,
@@ -2103,12 +2026,12 @@
         };
 
         const MODE_META = {
-            draw: { label: "Draw" },
-            zones: { label: "Zones" },
-            paths: { label: "Paths" },
-            waypoints: { label: "Waypoints" },
-            dotted: { label: "Dotted Map" },
-            view: { label: "View" }
+            draw: { label: "Draw", description: "Paint the occupancy map, erase noise, and reshape walls." },
+            zones: { label: "Zones", description: "Create navigation constraints and operational areas." },
+            paths: { label: "Paths", description: "Link zones together and inspect saved route geometry." },
+            waypoints: { label: "Waypoints", description: "Place destinations, docking stations, and queue markers." },
+            dotted: { label: "Dotted Map", description: "Edit the dotted render, place the robot, and preview scan alignment." },
+            view: { label: "View", description: "Inspect objects, pan the canvas, and control visual layers." }
         };
 
         const MODE_DEFAULT_TOOL = {
@@ -2289,6 +2212,10 @@
             return MODE_META[String(mode || "")]?.label || "Draw";
         }
 
+        function getModeDescription(mode = state.editorMode) {
+            return MODE_META[String(mode || "")]?.description || "Editor ready";
+        }
+
         function getSelectionLabel() {
             if (state.selection.kind === "zone") {
                 const zone = getSelectedZone();
@@ -2353,6 +2280,37 @@
             }
         }
 
+        function syncSidebarCollapsedState() {
+            document.getElementById("map-editor-shell")?.classList.toggle("sidebar-collapsed", !!state.sidebarCollapsed);
+            if (sidebarCollapseToggleBtn) {
+                sidebarCollapseToggleBtn.title = state.sidebarCollapsed ? "Expand tools sidebar" : "Collapse tools sidebar";
+                sidebarCollapseToggleBtn.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
+            }
+            if (sidebarCollapseIconEl) {
+                sidebarCollapseIconEl.className = state.sidebarCollapsed ? "fas fa-chevron-right" : "fas fa-chevron-left";
+            }
+            if (sidebarCloseBtn) {
+                sidebarCloseBtn.title = state.sidebarCollapsed ? "Expand tools sidebar" : "Collapse tools sidebar";
+            }
+        }
+
+        function setSidebarCollapsed(nextCollapsed) {
+            state.sidebarCollapsed = !!nextCollapsed;
+            try {
+                window.localStorage.setItem(sidebarCollapsedStorageKey, state.sidebarCollapsed ? "1" : "0");
+            } catch (_err) {
+                // ignore storage failures
+            }
+            syncSidebarCollapsedState();
+            window.requestAnimationFrame(() => {
+                resizeCanvasToViewport({ preserveView: true });
+            });
+        }
+
+        function toggleSidebarCollapsed(forceState = null) {
+            setSidebarCollapsed(typeof forceState === "boolean" ? forceState : !state.sidebarCollapsed);
+        }
+
         function syncCanvasContext() {
             if (canvasModeTitleEl) {
                 canvasModeTitleEl.textContent = getModeLabel();
@@ -2385,6 +2343,12 @@
             if (inspectorModeBadgeEl) {
                 inspectorModeBadgeEl.textContent = getModeLabel();
             }
+            if (toolSidebarTitleEl) {
+                toolSidebarTitleEl.textContent = getModeLabel();
+            }
+            if (toolSidebarSubtitleEl) {
+                toolSidebarSubtitleEl.textContent = getModeDescription();
+            }
         }
 
         function openInspectorTab(tab) {
@@ -2404,6 +2368,9 @@
             const normalized = ["draw", "zones", "paths", "waypoints", "dotted", "view"].includes(String(mode || ""))
                 ? String(mode)
                 : "draw";
+            if (state.sidebarCollapsed) {
+                setSidebarCollapsed(false);
+            }
             if (normalized === "dotted") {
                 if (!state.dottedViewMode) {
                     toggleDottedView();
@@ -2733,6 +2700,14 @@
                 const mode = String(button.dataset.editorMode || "draw");
                 activateEditorMode(mode);
             });
+        });
+
+        sidebarCollapseToggleBtn?.addEventListener("click", () => {
+            toggleSidebarCollapsed();
+        });
+
+        sidebarCloseBtn?.addEventListener("click", () => {
+            toggleSidebarCollapsed(true);
         });
 
         inspectorTabButtons.forEach((button) => {
@@ -5019,6 +4994,7 @@
             syncGridButton();
             Object.keys(state.overlayVisibility).forEach((key) => syncOverlayButtons(key));
             syncHistoryButtons();
+            syncSidebarCollapsedState();
             renderSidebarCollections();
             renderInspector();
             syncCanvasContext();
