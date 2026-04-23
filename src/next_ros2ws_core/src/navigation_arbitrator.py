@@ -356,11 +356,24 @@ class NavigationArbitrator(Node):
         waypoints,
         zone_names=None,
         shelf_checks=None,
+        segment_bidirectional=None,
+        path_mode_context=None,
     ):
         goal = FollowPathAction.Goal()
         goal.waypoints = list(waypoints or [])
         goal.zone_names = [str(name or '') for name in list(zone_names or [])]
         goal.shelf_checks = [bool(flag) for flag in list(shelf_checks or [])]
+        if hasattr(goal, 'segment_bidirectional'):
+            goal.segment_bidirectional = [
+                bool(flag) for flag in list(segment_bidirectional or [])
+            ]
+        context = path_mode_context if isinstance(path_mode_context, dict) else {}
+        if hasattr(goal, 'path_mode_selected_path'):
+            goal.path_mode_selected_path = str(context.get('selected_path', '') or '')
+        if hasattr(goal, 'path_mode_destination_poi'):
+            goal.path_mode_destination_poi = str(context.get('destination_poi', '') or '')
+        if hasattr(goal, 'path_mode_start_poi'):
+            goal.path_mode_start_poi = str(context.get('start_poi', '') or '')
         return goal
 
     def _start_service_dispatch(self, token: int, request: RequestNavigation.Request) -> Tuple[bool, str]:
@@ -385,6 +398,12 @@ class NavigationArbitrator(Node):
                 waypoints=waypoints,
                 zone_names=request.zone_names,
                 shelf_checks=request.shelf_checks,
+                segment_bidirectional=getattr(request, 'segment_bidirectional', []),
+                path_mode_context={
+                    'selected_path': getattr(request, 'path_mode_selected_path', ''),
+                    'destination_poi': getattr(request, 'path_mode_destination_poi', ''),
+                    'start_poi': getattr(request, 'path_mode_start_poi', ''),
+                },
             )
             send_future = self.follow_path_client.send_goal_async(goal)
         else:
@@ -645,6 +664,12 @@ class NavigationArbitrator(Node):
                 waypoints=goal_handle.request.waypoints,
                 zone_names=goal_handle.request.zone_names,
                 shelf_checks=goal_handle.request.shelf_checks,
+                segment_bidirectional=getattr(goal_handle.request, 'segment_bidirectional', []),
+                path_mode_context={
+                    'selected_path': getattr(goal_handle.request, 'path_mode_selected_path', ''),
+                    'destination_poi': getattr(goal_handle.request, 'path_mode_destination_poi', ''),
+                    'start_poi': getattr(goal_handle.request, 'path_mode_start_poi', ''),
+                },
             )
 
             def _forward_feedback(feedback_msg):

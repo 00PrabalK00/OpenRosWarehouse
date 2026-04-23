@@ -60,6 +60,8 @@ void NextNav2Controller::configure(
   base_frame_ = costmap_ros_->getBaseFrameID();
 
   declareAndLoadParameters();
+  parameter_callback_handle_ = node_->add_on_set_parameters_callback(
+    std::bind(&NextNav2Controller::handleDynamicParameters, this, std::placeholders::_1));
   motion_intent_service_ = node_->create_service<next_ros2ws_interfaces::srv::SetMotionIntent>(
     motion_intent_service_name_,
     std::bind(
@@ -120,6 +122,7 @@ void NextNav2Controller::configure(
 void NextNav2Controller::cleanup()
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
+  parameter_callback_handle_.reset();
   projection_pub_.reset();
   target_pub_.reset();
   segment_index_pub_.reset();
@@ -132,7 +135,6 @@ void NextNav2Controller::cleanup()
   rotate_mode_pub_.reset();
   motion_intent_status_pub_.reset();
   motion_intent_service_.reset();
-
   global_plan_.poses.clear();
   raw_plan_.poses.clear();
   segments_.clear();
@@ -153,6 +155,49 @@ void NextNav2Controller::cleanup()
   last_progress_checkpoint_m_ = 0.0;
   last_progress_checkpoint_stamp_ = rclcpp::Time();
   blocked_since_ = rclcpp::Time();
+}
+
+rcl_interfaces::msg::SetParametersResult NextNav2Controller::handleDynamicParameters(
+  const std::vector<rclcpp::Parameter> & parameters)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+
+  const std::string allow_reverse_name = plugin_name_ + ".allow_reverse";
+  bool allow_reverse_changed = false;
+  bool next_allow_reverse = allow_reverse_;
+
+  for (const auto & parameter : parameters) {
+    if (parameter.get_name() != allow_reverse_name) {
+      continue;
+    }
+
+    if (parameter.get_type() != rclcpp::PARAMETER_BOOL) {
+      result.successful = false;
+      result.reason = allow_reverse_name + " must be a bool";
+      return result;
+    }
+
+    next_allow_reverse = parameter.as_bool();
+    allow_reverse_changed = true;
+  }
+
+  if (!allow_reverse_changed) {
+    return result;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    allow_reverse_ = next_allow_reverse;
+  }
+
+  RCLCPP_INFO(
+    node_->get_logger(),
+    "%s dynamic parameter update: allow_reverse=%s",
+    plugin_name_.c_str(),
+    allow_reverse_ ? "true" : "false");
+
+  return result;
 }
 
 void NextNav2Controller::activate()

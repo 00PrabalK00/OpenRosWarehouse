@@ -4,6 +4,13 @@ geometry_msgs/PoseStamped[] waypoints
 string[] zone_names
 # Optional parallel shelf-check flags; true enables post-arrival shelf detection/docking at that waypoint
 bool[] shelf_checks
+# Optional parallel bidirectional flags; true means the segment arriving at that waypoint allows reverse
+# (robot reverses back along this segment after completing the shelf action at that waypoint)
+bool[] segment_bidirectional
+# Optional Path Mode graph context. Empty strings preserve legacy free FollowPath behavior.
+string path_mode_selected_path
+string path_mode_destination_poi
+string path_mode_start_poi
 ---
 bool success
 string message

@@ -596,6 +596,7 @@
         #mode-rail .mode-rail-btn[data-wf-mode] { /* base */ }
         #app-shell[data-mode="operate"]  #mode-rail [data-wf-mode="operate"]  { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
         #app-shell[data-mode="navigate"] #mode-rail [data-wf-mode="navigate"] { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
+        #app-shell[data-mode="path"]     #mode-rail [data-wf-mode="path"]     { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
         #app-shell[data-mode="zones"]    #mode-rail [data-wf-mode="zones"]    { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
         #app-shell[data-mode="map"]      #mode-rail [data-wf-mode="map"]      { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
         #app-shell[data-mode="diagnose"] #mode-rail [data-wf-mode="diagnose"] { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
@@ -12351,9 +12352,9 @@
                             <i class="fas fa-location-arrow"></i>
                             <span class="mode-rail-label">Free Nav</span>
                         </button>
-                        <button class="mode-rail-btn" data-wf-mode="zones" onclick="setWorkflowMode('zones'); openPathNavPicker(event)" title="Path Nav — follow a saved path">
-                            <i class="fas fa-route"></i>
-                            <span class="mode-rail-label">Path Nav</span>
+                        <button class="mode-rail-btn" id="path-nav-rail-btn" data-wf-mode="path" onclick="handlePathNavRailClick(event)" title="Path Mode — choose a saved path, then Go To POI">
+                            <i class="fas fa-route" id="path-nav-rail-icon"></i>
+                            <span class="mode-rail-label" id="path-nav-rail-label">Path Mode</span>
                         </button>
                     </div>
 
@@ -12481,7 +12482,7 @@
                 <!-- Path Nav saved path picker -->
                 <div id="path-nav-picker" role="menu">
                     <div class="fnp-hdr">
-                        <span>Follow Saved Path</span>
+                        <span id="path-nav-picker-title">Path Mode</span>
                         <button class="fnp-close" onclick="closePathNavPicker()">&#215;</button>
                     </div>
                     <div class="fnp-list" id="path-nav-picker-list">
@@ -12769,6 +12770,12 @@
                             id="path-drawing-card">
                             <div class="path-section-title">Draw</div>
                             <div class="path-card-content">
+                                <button class="path-btn path-btn-primary path-btn-main" onclick="startNewPathDrawing()"
+                                    id="path-new-btn">
+                                    <i class="fas fa-plus"></i>
+                                    <span>New Path</span>
+                                </button>
+
                                 <button class="path-btn path-btn-secondary path-btn-main" onclick="togglePathDrawing()"
                                     id="path-draw-btn">
                                     <i class="fas fa-pen-ruler"></i>
@@ -12934,12 +12941,12 @@
 
                                 <!-- Scope indicator + per-segment apply/load -->
                                 <div class="pattr-scope-bar">
-                                    <span id="pattr-scope-pill" class="pattr-scope-pill">PATH-WIDE</span>
+                                    <span id="pattr-scope-pill" class="pattr-scope-pill">SELECT SEGMENT</span>
                                     <button id="pattr-seg-load-btn" class="pattr-seg-btn" onclick="loadPattrFromSegment()" title="Load this segment's attribute overrides into the form">&#x2193; Load Seg</button>
                                     <button id="pattr-seg-save-btn" class="pattr-seg-btn" onclick="savePattrToSegment()" title="Apply current form state to this segment only">&#x2191; Apply to Seg</button>
                                 </div>
 
-                                <!-- Path direction (whole-path) -->
+                                <!-- Segment direction -->
                                 <div class="pattr-direction-row">
                                     <span class="pattr-direction-lbl"><i class="fas fa-arrows-left-right" style="margin-right:3px;"></i>Direction</span>
                                     <select id="pattr-direction" class="pattr-direction-sel" onchange="onPathDirectionChange()">
@@ -13800,6 +13807,10 @@
                     let savedPathsCache = {};
                     let savedPathSettingsCache = {};
                     let savedPathMetricsCache = {};
+                    let pathModeEnabled = false;
+                    let pathModeGotoToolActive = false;
+                    let pathModeSelectedPath = '';
+                    let editingSavedPathName = '';
                     let segmentAttrsOverrides = {};  // { "0": {maxspeed:0.3, ...}, ... } per-segment attribute overrides
                     let currentSidebarMode = 'view';
                     const VIEW_OVERVIEW_COLLAPSED_STORAGE_KEY = 'viewOverviewCollapsed';
@@ -14075,12 +14086,14 @@
                         let y = null;
                         let zoneName = null;
                         let shelfCheck = false;
+                        let segmentBidirectional = false;
 
                         if (Array.isArray(point) && point.length >= 2) {
                             x = point[0];
                             y = point[1];
                         } else if (point && typeof point === 'object') {
                             shelfCheck = Boolean(point.shelfCheck || point.shelf_check);
+                            segmentBidirectional = Boolean(point.segmentBidirectional || point.segment_bidirectional);
                             // Check if this is a zone reference
                             if (point.zoneName && typeof point.zoneName === 'string') {
                                 zoneName = point.zoneName;
@@ -14114,6 +14127,9 @@
                         }
                         if (shelfCheck) {
                             normalized.shelfCheck = true;
+                        }
+                        if (segmentBidirectional) {
+                            normalized.segmentBidirectional = true;
                         }
 
                         return normalized;
@@ -14412,7 +14428,7 @@
                         }
                     }
 
-                    // ── Scope bar: shows which segment (or path-wide) is being edited ─────────
+                    // ── Scope bar: shows which segment is being edited ────────────────────────
                     function updatePattrScopeBar() {
                         const pill    = document.getElementById('pattr-scope-pill');
                         const loadBtn = document.getElementById('pattr-seg-load-btn');
@@ -14429,37 +14445,123 @@
                             if (loadBtn) { loadBtn.style.display = ''; loadBtn.style.borderColor = hasOverride ? '#7c3aed' : ''; }
                             if (saveBtn)   saveBtn.style.display = '';
                         } else {
-                            pill.textContent = 'PATH-WIDE';
+                            pill.textContent = 'SELECT SEGMENT';
                             pill.classList.remove('seg');
                             if (loadBtn) { loadBtn.style.display = 'none'; loadBtn.style.borderColor = ''; }
                             if (saveBtn)   saveBtn.style.display = 'none';
                         }
+                        syncPathDirectionEditor();
+                    }
+
+                    function getPathDirectionValue(direction, fallback = 'uni') {
+                        const raw = String(direction || '').trim().toLowerCase();
+                        if (raw === 'bi' || raw === 'reverse' || raw === 'uni') {
+                            return raw;
+                        }
+                        return String(fallback || 'uni').trim().toLowerCase() === 'bi'
+                            ? 'bi'
+                            : (String(fallback || 'uni').trim().toLowerCase() === 'reverse' ? 'reverse' : 'uni');
+                    }
+
+                    function getPathDirectionEditorValue() {
+                        return getPathDirectionValue(document.getElementById('pattr-direction')?.value || 'uni');
+                    }
+
+                    function syncPathDirectionEditor() {
+                        const dirEl = document.getElementById('pattr-direction');
+                        if (!dirEl) {
+                            return;
+                        }
+                        const seg = selectedPathSegmentIndex;
+                        const maxSeg = getPathSegmentMaxIndex(drawnPath.length, pathLoopType);
+                        const hasSegment = seg >= 0 && seg <= maxSeg && drawnPath.length >= 2;
+                        dirEl.disabled = !hasSegment;
+                        dirEl.title = hasSegment
+                            ? 'Direction for the selected segment'
+                            : 'Select a segment to edit direction';
+                        if (!hasSegment) {
+                            dirEl.value = 'uni';
+                            return;
+                        }
+                        const params = (segmentAttrsOverrides && segmentAttrsOverrides[String(seg)]) || {};
+                        dirEl.value = getPathDirectionValue(params.direction, 'uni');
+                    }
+
+                    function getPathSegmentDirection(segmentIndex, loopType = pathLoopType, pointCount = drawnPath.length) {
+                        const maxSeg = getPathSegmentMaxIndex(pointCount, loopType);
+                        const idx = Number(segmentIndex);
+                        if (!Number.isInteger(idx) || idx < 0 || idx > maxSeg) {
+                            return 'uni';
+                        }
+                        const override = (segmentAttrsOverrides && segmentAttrsOverrides[String(idx)]) || {};
+                        return getPathDirectionValue(override.direction, 'uni');
+                    }
+
+                    function getIncomingSegmentIndexForAnchor(anchorIndex, loopType = pathLoopType, pointCount = drawnPath.length) {
+                        const count = Math.max(0, Number(pointCount) || 0);
+                        const idx = Number(anchorIndex);
+                        if (!Number.isInteger(idx) || idx < 0 || idx >= count || count < 2) {
+                            return -1;
+                        }
+                        if (idx === 0) {
+                            return normalizePathLoopType(loopType) === 'closed' ? (count - 1) : -1;
+                        }
+                        return idx - 1;
+                    }
+
+                    function getIncomingSegmentDirectionForAnchor(anchorIndex, loopType = pathLoopType, pointCount = drawnPath.length) {
+                        const incomingSegmentIndex = getIncomingSegmentIndexForAnchor(anchorIndex, loopType, pointCount);
+                        if (incomingSegmentIndex < 0) {
+                            return 'uni';
+                        }
+                        return getPathSegmentDirection(incomingSegmentIndex, loopType, pointCount);
+                    }
+
+                    function isIncomingSegmentBidirectional(anchorIndex, loopType = pathLoopType, pointCount = drawnPath.length) {
+                        return getIncomingSegmentDirectionForAnchor(anchorIndex, loopType, pointCount) === 'bi';
                     }
 
                     // Store current pattr form state as a segment-level override
                     function savePattrToSegment() {
                         const seg = selectedPathSegmentIndex;
                         if (seg < 0) return;
-                        segmentAttrsOverrides[String(seg)] = getPathAttrParams();
+                        segmentAttrsOverrides[String(seg)] = {
+                            ...getPathAttrParams(),
+                            direction: getPathDirectionEditorValue(),
+                        };
                         updatePattrScopeBar();
                         const label = getPathSegmentLabel(seg, drawnPath.length, pathLoopType) || String(seg + 1);
                         showStatus('Attributes saved to segment ' + label, 'success');
                     }
 
-                    // Load a segment's override (or path-wide defaults) into the pattr form
+                    // Load a segment's override into the pattr form
                     function loadPattrFromSegment() {
                         const seg = selectedPathSegmentIndex;
                         if (seg < 0) return;
                         const params = (segmentAttrsOverrides && segmentAttrsOverrides[String(seg)]) || {};
                         applyPathAttrParams(params);
+                        const dirEl = document.getElementById('pattr-direction');
+                        if (dirEl) {
+                            dirEl.value = getPathDirectionValue(params.direction, 'uni');
+                        }
                         const label = getPathSegmentLabel(seg, drawnPath.length, pathLoopType) || String(seg + 1);
                         const hasData = Object.keys(params).length > 0;
                         showStatus(hasData
                             ? 'Segment ' + label + ' overrides loaded'
-                            : 'No overrides for seg ' + label + ' — showing defaults', 'info');
+                            : 'No overrides for seg ' + label + ' — using unidirectional defaults', 'info');
                     }
 
                     function onPathDirectionChange() {
+                        if (selectedPathSegmentIndex < 0) {
+                            syncPathDirectionEditor();
+                            return;
+                        }
+                        const seg = selectedPathSegmentIndex;
+                        if (!segmentAttrsOverrides[String(seg)]) {
+                            segmentAttrsOverrides[String(seg)] = {};
+                        }
+                        segmentAttrsOverrides[String(seg)].direction = getPathDirectionEditorValue();
+                        updatePattrScopeBar();
                         drawMap();
                     }
 
@@ -14469,13 +14571,105 @@
                         return '→ Unidirectional';
                     }
 
+                    function getPolylineSampleAtDistance(polyline, distancePx) {
+                        if (!Array.isArray(polyline) || polyline.length < 2) {
+                            return null;
+                        }
+                        let remaining = Math.max(0, Number(distancePx) || 0);
+                        for (let i = 1; i < polyline.length; i++) {
+                            const start = polyline[i - 1];
+                            const end = polyline[i];
+                            const dx = Number(end.x) - Number(start.x);
+                            const dy = Number(end.y) - Number(start.y);
+                            const segLen = Math.hypot(dx, dy);
+                            if (!(segLen > 1e-6)) {
+                                continue;
+                            }
+                            if (remaining <= segLen || i === polyline.length - 1) {
+                                const ratio = Math.max(0, Math.min(1, remaining / segLen));
+                                return {
+                                    x: Number(start.x) + (dx * ratio),
+                                    y: Number(start.y) + (dy * ratio),
+                                    angle: Math.atan2(dy, dx),
+                                };
+                            }
+                            remaining -= segLen;
+                        }
+                        return null;
+                    }
+
+                    function drawPathSegmentDirectionArrows(ctx, polyline, direction, color) {
+                        if (!ctx || !Array.isArray(polyline) || polyline.length < 2) {
+                            return;
+                        }
+                        const segments = [];
+                        let totalLen = 0;
+                        for (let i = 1; i < polyline.length; i++) {
+                            const start = polyline[i - 1];
+                            const end = polyline[i];
+                            const segLen = Math.hypot(Number(end.x) - Number(start.x), Number(end.y) - Number(start.y));
+                            if (!(segLen > 1e-6)) {
+                                continue;
+                            }
+                            segments.push(segLen);
+                            totalLen += segLen;
+                        }
+                        if (!(totalLen > 12)) {
+                            return;
+                        }
+
+                        const dpr = window.devicePixelRatio || 1;
+                        const arrowLen = 9 * dpr;
+                        const wingLen = 4 * dpr;
+                        const placements = direction === 'bi'
+                            ? [
+                                { distance: totalLen * 0.36, reverse: false },
+                                { distance: totalLen * 0.64, reverse: true },
+                            ]
+                            : [{ distance: totalLen * 0.5, reverse: direction === 'reverse' }];
+
+                        ctx.save();
+                        ctx.strokeStyle = color;
+                        ctx.fillStyle = color;
+                        ctx.lineWidth = Math.max(1.1, 1.35 * dpr);
+                        ctx.lineJoin = 'round';
+                        ctx.lineCap = 'round';
+
+                        placements.forEach(({ distance, reverse }) => {
+                            const sample = getPolylineSampleAtDistance(polyline, distance);
+                            if (!sample) {
+                                return;
+                            }
+                            const angle = reverse ? (sample.angle + Math.PI) : sample.angle;
+                            const tailX = sample.x - Math.cos(angle) * arrowLen;
+                            const tailY = sample.y - Math.sin(angle) * arrowLen;
+                            const leftX = sample.x - Math.cos(angle - Math.PI / 6) * wingLen;
+                            const leftY = sample.y - Math.sin(angle - Math.PI / 6) * wingLen;
+                            const rightX = sample.x - Math.cos(angle + Math.PI / 6) * wingLen;
+                            const rightY = sample.y - Math.sin(angle + Math.PI / 6) * wingLen;
+
+                            ctx.beginPath();
+                            ctx.moveTo(tailX, tailY);
+                            ctx.lineTo(sample.x, sample.y);
+                            ctx.stroke();
+
+                            ctx.beginPath();
+                            ctx.moveTo(sample.x, sample.y);
+                            ctx.lineTo(leftX, leftY);
+                            ctx.lineTo(rightX, rightY);
+                            ctx.closePath();
+                            ctx.fill();
+                        });
+
+                        ctx.restore();
+                    }
+
                     function getPathSettingsPayload() {
                         return {
                             loop_type: normalizePathLoopType(pathLoopType),
                             curved_segments: getSortedCurvedSegmentStarts(),
                             curved_segment_controls: JSON.parse(JSON.stringify(curvedPathSegmentControls || {})),
                             params: getPathAttrParams(),
-                            direction: document.getElementById('pattr-direction')?.value || 'uni',
                             segment_attrs: JSON.parse(JSON.stringify(segmentAttrsOverrides || {})),
                         };
                     }
@@ -14521,13 +14715,6 @@
                         sanitizeCurvedPathSegments(normalizedCount);
                         syncPathLoopTypeControl();
                         applyPathAttrParams(payload.params);
-
-                        // Restore direction
-                        const dirEl = document.getElementById('pattr-direction');
-                        if (dirEl) {
-                            const d = payload.direction;
-                            dirEl.value = (d === 'bi' || d === 'reverse') ? d : 'uni';
-                        }
 
                         // Restore per-segment attribute overrides
                         segmentAttrsOverrides = {};
@@ -15249,10 +15436,12 @@
                         }
 
                         let searchStart = 0;
-                        sourceAnchors.forEach((anchor) => {
+                        sourceAnchors.forEach((anchor, anchorIndex) => {
                             const zoneName = String(anchor.zoneName || anchor.zone_name || '').trim();
                             const shelfCheck = Boolean(anchor.shelfCheck || anchor.shelf_check);
-                            if (!zoneName && !shelfCheck) {
+                            const segmentBidirectional = Boolean(anchor.segmentBidirectional || anchor.segment_bidirectional)
+                                || isIncomingSegmentBidirectional(anchorIndex, pathLoopType, sourceAnchors.length);
+                            if (!zoneName && !shelfCheck && !segmentBidirectional) {
                                 return;
                             }
 
@@ -15283,6 +15472,9 @@
                             if (shelfCheck) {
                                 enriched[bestIndex].shelfCheck = true;
                             }
+                            if (segmentBidirectional) {
+                                enriched[bestIndex].segmentBidirectional = true;
+                            }
                             searchStart = bestIndex;
                         });
 
@@ -15297,7 +15489,7 @@
 
                         const hasCurveSampling = Boolean(pathCurveAutoSmooth) || getCurvedPathSegmentCount() > 0;
                         if (!hasCurveSampling) {
-                            return anchors.map((point) => {
+                            return anchors.map((point, anchorIndex) => {
                                 const entry = {
                                     x: Number(point.x),
                                     y: Number(point.y),
@@ -15308,6 +15500,12 @@
                                 }
                                 if (Boolean(point.shelfCheck || point.shelf_check)) {
                                     entry.shelfCheck = true;
+                                }
+                                if (
+                                    Boolean(point.segmentBidirectional || point.segment_bidirectional)
+                                    || isIncomingSegmentBidirectional(anchorIndex, pathLoopType, anchors.length)
+                                ) {
+                                    entry.segmentBidirectional = true;
                                 }
                                 return entry;
                             });
@@ -16219,6 +16417,13 @@
                             return;
                         }
 
+                        if (currentMapMode === 'paths' && pathModeGotoToolActive) {
+                            hint.textContent = pathModeSelectedPath
+                                ? `Path Mode Go To: click a destination POI on "${pathModeSelectedPath}".`
+                                : 'Path Mode Go To: click a destination POI in the connected path graph.';
+                            return;
+                        }
+
                         if (currentMapMode === 'paths' && isDrawingPath) {
                             hint.textContent = 'Click to add waypoints. Click an existing waypoint to select it. Shift/Alt+click forces add.';
                             return;
@@ -17073,6 +17278,10 @@
 
                     // ── Free Nav zone picker ──────────────────────────────────
                     function openFreeNavPicker(event) {
+                        pathModeEnabled = false;
+                        pathModeGotoToolActive = false;
+                        pathModeSelectedPath = '';
+                        updatePathModeUI();
                         const picker = document.getElementById('free-nav-picker');
                         if (!picker) return;
                         const list = document.getElementById('free-nav-picker-list');
@@ -17102,31 +17311,72 @@
                     }
 
                     // ── Path Nav picker ──────────────────────────────────────
-                    function openPathNavPicker(event) {
-                        const picker = document.getElementById('path-nav-picker');
-                        if (!picker) return;
-                        const list = document.getElementById('path-nav-picker-list');
-                        const paths = (typeof savedPathsCache !== 'undefined' && savedPathsCache) ? Object.keys(savedPathsCache) : [];
-                        if (paths.length === 0) {
-                            list.innerHTML = '<div class="fnp-empty">No saved paths — load or draw a path first</div>';
+                    function handlePathNavRailClick(event) {
+                        setWorkflowMode('path');
+                        if (pathModeEnabled) {
+                            openPathModePoiPicker(event);
                         } else {
-                            list.innerHTML = paths.map(name => {
-                                const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                                return `<button class="fnp-item" onclick="followSavedPath('${safeName}'); closePathNavPicker()"><i class="fas fa-route"></i> ${name}</button>`;
-                            }).join('');
+                            openPathNavPicker(event);
                         }
+                    }
+
+                    function positionPathNavPicker(event) {
+                        const picker = document.getElementById('path-nav-picker');
                         const trigger = event && (event.currentTarget || event.target);
-                        if (trigger) {
+                        if (picker && trigger) {
                             const rect = trigger.getBoundingClientRect();
                             picker.style.top = (rect.bottom + 4) + 'px';
                             picker.style.left = rect.left + 'px';
                         }
-                        picker.classList.add('open');
+                        if (picker) picker.classList.add('open');
                     }
+
+                    function openPathNavPicker(event) {
+                        const picker = document.getElementById('path-nav-picker');
+                        if (!picker) return;
+                        const list = document.getElementById('path-nav-picker-list');
+                        const title = document.getElementById('path-nav-picker-title');
+                        if (title) title.textContent = 'Path Mode';
+                        const paths = (typeof savedPathsCache !== 'undefined' && savedPathsCache) ? Object.keys(savedPathsCache) : [];
+                        if (paths.length === 0) {
+                            list.innerHTML = '<button class="fnp-item" onclick="clearPathModeSelectedPath(); closePathNavPicker()"><i class="fas fa-layer-group"></i> Use all connected paths</button><div class="fnp-empty">No saved paths — draw and save a path first</div>';
+                        } else {
+                            const allPathsButton = '<button class="fnp-item" onclick="clearPathModeSelectedPath(); closePathNavPicker()"><i class="fas fa-layer-group"></i> Use all connected paths</button>';
+                            list.innerHTML = allPathsButton + paths.map(name => {
+                                const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                                return `
+                                    <button class="fnp-item" onclick="useSavedPathForPathMode('${safeName}'); closePathNavPicker()"><i class="fas fa-location-arrow"></i> Path Mode: ${name}</button>
+                                    <button class="fnp-item" onclick="followSavedPath('${safeName}'); closePathNavPicker()"><i class="fas fa-route"></i> Follow saved path: ${name}</button>
+                                `;
+                            }).join('');
+                        }
+                        positionPathNavPicker(event);
+                    }
+
+                    function openPathModePoiPicker(event) {
+                        const picker = document.getElementById('path-nav-picker');
+                        if (!picker) return;
+                        const list = document.getElementById('path-nav-picker-list');
+                        const title = document.getElementById('path-nav-picker-title');
+                        if (title) title.textContent = pathModeSelectedPath ? `GTP via ${pathModeSelectedPath}` : 'GTP via Path Graph';
+                        const zoneNames = zones ? Object.keys(zones) : [];
+                        if (zoneNames.length === 0) {
+                            list.innerHTML = '<div class="fnp-empty">No POIs available</div>';
+                        } else {
+                            list.innerHTML = zoneNames.map(name => {
+                                const z = zones[name] || {};
+                                const color = (z.visual && z.visual.color) || z.color || '#94a3b8';
+                                const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                                return `<button class="fnp-item" onclick="goToPathModePoi('${safeName}'); closePathNavPicker()"><i class="fas fa-location-dot" style="color:${color}"></i> ${name}</button>`;
+                            }).join('');
+                        }
+                        positionPathNavPicker(event);
+                    }
+
                     function closePathNavPicker() {
                         const p = document.getElementById('path-nav-picker');
                         if (p) p.classList.remove('open');
-                        setWorkflowMode('');
+                        setWorkflowMode(pathModeEnabled ? 'path' : '');
                     }
                     function mctl3DView() { showStatus('3D View is not configured in this deployment', 'info'); }
                     function mctrl3DView() { showStatus('3D View is not configured in this deployment', 'info'); }
@@ -22191,6 +22441,7 @@
                                         return btn;
                                     };
                                     actions.appendChild(makeBtn('fas fa-folder-open', 'Load', 'path-btn-neutral', () => loadSavedPathByName(name)));
+                                    actions.appendChild(makeBtn('fas fa-plus', 'Extend', 'path-btn-neutral', () => extendSavedPathByName(name)));
                                     actions.appendChild(makeBtn('fas fa-route', 'Follow', 'path-btn-secondary', () => followSavedPath(name)));
                                     actions.appendChild(makeBtn('fas fa-trash', 'Delete', 'path-btn-danger', () => deleteSavedPath(name)));
                                     row.appendChild(labelWrap);
@@ -23851,6 +24102,8 @@
                                     const [ex, ey] = worldToPixel(end.x, end.y);
                                     const segmentCurved = isPathSegmentCurved(i);
                                     const segmentSelected = (i === selectedPathSegmentIndex);
+                                    const segmentDirection = getPathSegmentDirection(i, pathLoopType, anchorPath.length);
+                                    let arrowPolyline = null;
 
                                     ctx.save();
                                     if (segmentCurved) {
@@ -23881,6 +24134,7 @@
                                             const [px, py] = worldToPixel(pt.x, pt.y);
                                             return { x: px, y: py };
                                         });
+                                        arrowPolyline = curvePixels;
                                         if (curvePixels.length > 1) {
                                             ctx.beginPath();
                                             ctx.moveTo(curvePixels[0].x, curvePixels[0].y);
@@ -23926,6 +24180,18 @@
                                         ctx.moveTo(sx, sy);
                                         ctx.lineTo(ex, ey);
                                         ctx.stroke();
+                                        arrowPolyline = [{ x: sx, y: sy }, { x: ex, y: ey }];
+                                    }
+
+                                    if (arrowPolyline && segmentDirection) {
+                                        drawPathSegmentDirectionArrows(
+                                            ctx,
+                                            arrowPolyline,
+                                            segmentDirection,
+                                            segmentSelected
+                                                ? 'rgba(248, 113, 113, 0.98)'
+                                                : 'rgba(239, 68, 68, 0.92)'
+                                        );
                                     }
 
                                     ctx.restore();
@@ -24946,6 +25212,26 @@
                         if (currentMapMode === 'paths' && !pathFollowingActive) {
                             const forceAddPoint = !!(e.shiftKey || e.altKey);
 
+                            if (pathModeGotoToolActive && !isDrawingPath) {
+                                let nearestZone = null;
+                                let nearestDist = Infinity;
+                                const clickThreshold = 60;
+                                for (const [name, zone] of Object.entries(zones)) {
+                                    const [zpx, zpy] = worldToPixel(zone.position.x, zone.position.y);
+                                    const dist = Math.hypot(x - zpx, y - zpy);
+                                    if (dist < nearestDist && dist < clickThreshold) {
+                                        nearestDist = dist;
+                                        nearestZone = name;
+                                    }
+                                }
+                                if (nearestZone) {
+                                    goToPathModePoi(nearestZone);
+                                } else {
+                                    showStatus('Path Mode Go To: click a destination POI, not empty map.', 'info');
+                                }
+                                return;
+                            }
+
                             if (pathCurveEditMode) {
                                 const segmentIndex = findNearestPathSegmentIndex(x, y, 28);
                                 if (segmentIndex >= 0) {
@@ -25314,6 +25600,10 @@
                                 
                                 // Check if click is inside the zone's rectangle
                                 if (Math.abs(localX) <= bodyLength / 2 && Math.abs(localY) <= bodyWidth / 2) {
+                                    if (currentMapMode === 'paths' && pathModeGotoToolActive) {
+                                        goToPathModePoi(name);
+                                        return;
+                                    }
                                     openPropertiesPanel('zone', name, zone);
                                     return;
                                 }
@@ -26431,6 +26721,143 @@
                             });
                     }
 
+                    function updatePathModeUI() {
+                        const railBtn = document.getElementById('path-nav-rail-btn');
+                        const railIcon = document.getElementById('path-nav-rail-icon');
+                        const railLabel = document.getElementById('path-nav-rail-label');
+
+                        if (railBtn) {
+                            railBtn.classList.toggle('active', pathModeEnabled);
+                            railBtn.title = pathModeEnabled
+                                ? (pathModeSelectedPath
+                                    ? `GTP — Go To POI through "${pathModeSelectedPath}"`
+                                    : 'GTP — Go To POI through all connected paths')
+                                : 'Path Mode — choose a saved path, then Go To POI';
+                        }
+                        if (railIcon) {
+                            railIcon.className = pathModeEnabled ? 'fas fa-location-arrow' : 'fas fa-route';
+                        }
+                        if (railLabel) {
+                            railLabel.textContent = pathModeEnabled ? 'GTP' : 'Path Mode';
+                        }
+
+                        if (pathModeGotoToolActive && currentMapMode === 'paths') {
+                            canvas.style.cursor = 'crosshair';
+                        }
+                        updateMapHintBanner();
+                    }
+
+                    function togglePathMode(forceEnable = null) {
+                        const shouldEnable = forceEnable === null ? !pathModeEnabled : !!forceEnable;
+                        pathModeEnabled = shouldEnable;
+                        if (!pathModeEnabled) {
+                            pathModeGotoToolActive = false;
+                        } else {
+                            setWorkflowMode('path');
+                            loadSavedPaths();
+                        }
+                        updatePathModeUI();
+                        showStatus(
+                            pathModeEnabled
+                                ? (pathModeSelectedPath ? `Path Mode enabled on "${pathModeSelectedPath}"` : 'Path Mode enabled across saved path graph')
+                                : 'Path Mode disabled',
+                            pathModeEnabled ? 'success' : 'info'
+                        );
+                    }
+
+                    function togglePathModeGotoTool() {
+                        if (!pathModeEnabled) {
+                            togglePathMode(true);
+                        }
+                        if (!pathModeEnabled) return;
+                        pathModeGotoToolActive = !pathModeGotoToolActive;
+                        if (pathModeGotoToolActive) {
+                            setMapMode('paths');
+                            showStatus('Path Mode Go To active: click a destination POI on the map.', 'info');
+                        } else {
+                            showStatus('Path Mode Go To canceled', 'info');
+                        }
+                        updatePathModeUI();
+                        drawMap();
+                    }
+
+                    function useSavedPathForPathMode(name) {
+                        const pathName = String(name || '').trim();
+                        if (!pathName) {
+                            showStatus('Select a saved path for Path Mode', 'error');
+                            return;
+                        }
+                        pathModeSelectedPath = pathName;
+                        pathModeEnabled = true;
+                        setWorkflowMode('path');
+                        updatePathModeUI();
+                        showStatus(`Path Mode corridor set to "${pathName}". Use Go To POI to route on it.`, 'success');
+                    }
+
+                    function clearPathModeSelectedPath() {
+                        pathModeSelectedPath = '';
+                        if (!pathModeEnabled) {
+                            pathModeEnabled = true;
+                        }
+                        setWorkflowMode('path');
+                        updatePathModeUI();
+                        showStatus('Path Mode will use all connected saved paths.', 'info');
+                    }
+
+                    function startNewPathDrawing() {
+                        editingSavedPathName = '';
+                        clearDrawnPath(true);
+                        setMapMode('paths');
+                        if (!isDrawingPath) {
+                            togglePathDrawing(true);
+                        }
+                        showStatus('New path started. Click POIs to build this directed path, then Save Path.', 'info');
+                    }
+
+                    function goToPathModePoi(name) {
+                        const destination = String(name || '').trim();
+                        if (!destination) {
+                            showStatus('Choose a destination POI for Path Mode Go To', 'error');
+                            return;
+                        }
+                        if (!pathModeEnabled) {
+                            togglePathMode(true);
+                        }
+                        pathModeGotoToolActive = false;
+                        updatePathModeUI();
+                        showStatus(
+                            pathModeSelectedPath
+                                ? `Path Mode routing to ${destination} on "${pathModeSelectedPath}"...`
+                                : `Path Mode routing to ${destination} across connected paths...`,
+                            'info'
+                        );
+
+                        fetch('/api/path_mode/goto', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                destination_poi: destination,
+                                selected_path: pathModeSelectedPath || '',
+                            })
+                        })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.ok) {
+                                    const plan = data.plan || {};
+                                    const start = plan.start_poi || data.start_poi || 'nearest POI';
+                                    const routeEdges = Array.isArray(plan.route_edges) ? plan.route_edges.length : 0;
+                                    showStatus(`Path Mode route started: ${start} -> ${destination}${routeEdges ? ` (${routeEdges} directed edge${routeEdges === 1 ? '' : 's'})` : ''}`, 'success');
+                                    loadPathFollowingStatus();
+                                } else {
+                                    showStatus(data.message || 'Path Mode route failed', 'error');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Path Mode goto error:', error);
+                                showStatus('Error: ' + error, 'error');
+                            });
+                    }
+
                     function togglePathDrawing(openPanel = false) {
                         console.log('togglePathDrawing called, isDrawingPath=' + isDrawingPath);
                         isDrawingPath = !isDrawingPath;
@@ -26441,6 +26868,7 @@
                             setPathButtonVisualState('path-draw-btn', 'fas fa-stop', 'Stop Drawing', 'path-btn-danger');
                             statusDiv.style.display = 'block';
                             canvas.style.cursor = 'crosshair';
+                            editingSavedPathName = '';
                             drawnPath = [];
                             activePathWaypoints = [];
                             curvedPathSegmentStarts.clear();
@@ -26474,6 +26902,27 @@
                             openToolPanel('path-drawing-card');
                         }
                         updateMapHintBanner();
+                        drawMap();
+                    }
+
+                    function activatePathAppendMode(pathName = '') {
+                        isDrawingPath = true;
+                        activePathWaypoints = [];
+                        pathCurveEditMode = false;
+                        selectedPathSegmentIndex = -1;
+                        pathWaypointOrientationMode = false;
+                        pathWaypointPreviewTheta = null;
+                        selectedPathWaypointIndex = drawnPath.length > 0 ? drawnPath.length - 1 : -1;
+                        editingSavedPathName = String(pathName || editingSavedPathName || '').trim();
+
+                        setPathButtonVisualState('path-draw-btn', 'fas fa-stop', 'Stop Drawing', 'path-btn-danger');
+                        const statusDiv = document.getElementById('path-status');
+                        if (statusDiv) statusDiv.style.display = 'block';
+                        const railDrawBtn = document.getElementById('rail-path-draw-btn');
+                        if (railDrawBtn) railDrawBtn.classList.add('active');
+                        canvas.style.cursor = 'crosshair';
+                        updatePathUI();
+                        updatePattrScopeBar();
                         drawMap();
                     }
 
@@ -26687,6 +27136,7 @@
                                 loop_type: pathLoopType,
                                 loop_mode: loopEnabled,
                                 params: getPathAttrParams(),
+                                settings: getPathSettingsPayload(),
                             })
                         })
                             .then(response => response.json())
@@ -26727,8 +27177,10 @@
                             return;
                         }
 
-                        // Prompt for path name
-                        const pathName = prompt('Enter a name for this path:');
+                        // Prompt for path name. When extending/loading a saved path, default
+                        // to that name so "Save Path" naturally updates the same route.
+                        const suggestedName = String(editingSavedPathName || '').trim();
+                        const pathName = prompt('Enter a name for this path:', suggestedName);
                         if (!pathName || pathName.trim() === '') {
                             showStatus('Path name is required', 'error');
                             return;
@@ -26766,6 +27218,7 @@
                             }
 
                             if (data.ok) {
+                                editingSavedPathName = trimmedPathName;
                                 showStatus(data.message, 'success');
                                 loadSavedPaths(); // Refresh the saved paths list
                             } else {
@@ -26784,6 +27237,7 @@
                                 if (data.ok && data.path) {
                                     drawnPath = normalizePathPoints(data.path);
                                     applyPathSettings(data.settings, drawnPath.length);
+                                    editingSavedPathName = String(name || '').trim();
                                     activePathWaypoints = [];
                                     isDrawingPath = false;
                                     pathCurveEditMode = false;
@@ -26803,6 +27257,34 @@
                             })
                             .catch(error => {
                                 console.error('Path load error:', error);
+                                showStatus('Error: ' + error, 'error');
+                            });
+                    }
+
+                    async function extendSavedPathByName(name) {
+                        const pathName = String(name || '').trim();
+                        if (!pathName) {
+                            showStatus('Select a saved path to extend', 'error');
+                            return;
+                        }
+
+                        fetch(`/api/path/load/${encodeURIComponent(pathName)}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.ok && data.path) {
+                                    drawnPath = normalizePathPoints(data.path);
+                                    applyPathSettings(data.settings, drawnPath.length);
+                                    editingSavedPathName = pathName;
+                                    setMapMode('paths');
+                                    activatePathAppendMode(pathName);
+                                    openToolPanel('path-drawing-card');
+                                    showStatus(`Extending "${pathName}". Click more POIs, then Save Path to update it.`, 'info');
+                                } else {
+                                    showStatus(data.message || 'Failed to load path for extending', 'error');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Path extend error:', error);
                                 showStatus('Error: ' + error, 'error');
                             });
                     }
@@ -26867,6 +27349,10 @@
                                 savedPathsCache = paths;
                                 savedPathSettingsCache = pathSettings;
                                 savedPathMetricsCache = pathMetrics;
+                                if (pathModeSelectedPath && !Object.prototype.hasOwnProperty.call(paths, pathModeSelectedPath)) {
+                                    pathModeSelectedPath = '';
+                                }
+                                updatePathModeUI();
                                 renderObjectsTab();
                                 const names = Object.keys(paths);
 
@@ -26937,10 +27423,12 @@
                                     actions.className = 'path-row-actions';
 
                                     const loadBtn = makeRowButton('fas fa-folder-open', 'Load', 'path-btn-neutral', () => loadSavedPathByName(name));
+                                    const extendBtn = makeRowButton('fas fa-plus', 'Extend', 'path-btn-neutral', () => extendSavedPathByName(name));
                                     const followBtn = makeRowButton('fas fa-route', 'Follow', 'path-btn-secondary', () => followSavedPath(name));
                                     const delBtn = makeRowButton('fas fa-trash', 'Delete', 'path-btn-danger', () => deleteSavedPath(name));
 
                                     actions.appendChild(loadBtn);
+                                    actions.appendChild(extendBtn);
                                     actions.appendChild(followBtn);
                                     actions.appendChild(delBtn);
 
@@ -28300,7 +28788,7 @@
                     // updates the <body data-mode="…"> attribute for CSS rules.
                     // ================================================================
                     function setWorkflowMode(mode) {
-                        const validModes = ['operate', 'navigate', 'zones', 'map', 'diagnose', 'settings'];
+                        const validModes = ['operate', 'navigate', 'path', 'zones', 'map', 'diagnose', 'settings'];
                         const newMode = validModes.includes(mode) ? mode : 'operate';
 
                         // Update app shell data-mode attribute (drives CSS visibility)
@@ -28315,7 +28803,7 @@
                         const modePill = document.getElementById('top-mode-pill-label');
                         if (modePill) {
                             const modeLabels = {
-                                operate: 'OPERATE', navigate: 'NAVIGATE', zones: 'ZONES',
+                                operate: 'OPERATE', navigate: 'NAVIGATE', path: 'PATH MODE', zones: 'ZONES',
                                 map: 'MAP', diagnose: 'DIAGNOSE', settings: 'SETTINGS'
                             };
                             modePill.textContent = modeLabels[newMode] || newMode.toUpperCase();
@@ -28324,7 +28812,8 @@
                         // Map workflow mode to internal setMapMode() state
                         const wfToMapMode = {
                             operate:  'view',
-                            navigate: 'paths',
+                            navigate: 'view',
+                            path:     'view',
                             zones:    'zones',
                             map:      'view',
                             diagnose: 'view',
@@ -28337,7 +28826,7 @@
                         const inspBadge = document.getElementById('insp-mode-badge');
                         if (inspBadge) {
                             const badgeLabels = {
-                                operate: 'OPERATE', navigate: 'PATHS', zones: 'ZONES',
+                                operate: 'OPERATE', navigate: 'NAV', path: 'PATH', zones: 'ZONES',
                                 map: 'MAP', diagnose: 'DEBUG', settings: 'CONFIG'
                             };
                             inspBadge.textContent = badgeLabels[newMode] || newMode.toUpperCase();
@@ -28345,7 +28834,7 @@
                         const inspTitle = document.getElementById('inspector-mode-title');
                         if (inspTitle) {
                             const titleLabels = {
-                                operate: 'OVERVIEW', navigate: 'PATHS & WAYPOINTS',
+                                operate: 'OVERVIEW', navigate: 'FREE NAV', path: 'PATH MODE',
                                 zones: 'ZONES', map: 'MAP LAYERS',
                                 diagnose: 'DIAGNOSTICS', settings: 'SETTINGS'
                             };
@@ -28383,6 +28872,7 @@
                         if (normalizedMode !== 'paths') {
                             pathWaypointOrientationMode = false;
                             pathWaypointPreviewTheta = null;
+                            pathModeGotoToolActive = false;
                         }
 
                         if (normalizedMode !== 'zones' && settingOrientation) {
@@ -28409,6 +28899,7 @@
                         closeZoneListOverlay();
 
                         updatePathUI();
+                        updatePathModeUI();
                         updateMapHintBanner();
                         updateCursor();
                     }
@@ -28453,6 +28944,7 @@
                         segmentAttrsOverrides = {};
                         pathWaypointOrientationMode = false;
                         pathWaypointPreviewTheta = null;
+                        editingSavedPathName = '';
 
                         const drawBtn = document.getElementById('path-draw-btn');
                         if (drawBtn) {
@@ -31780,17 +32272,34 @@
                 : 'n/a';
             setShelfBadgeState(centerBadge, centerText, centerPose ? 'green' : 'neutral');
 
+            // Detect autonomous shelf recognition: a mission/sequence/path is running, so
+            // the robot is committing the shelf solve automatically — no manual commit needed.
+            const isAutonomous = Boolean(
+                (typeof sequenceActive !== 'undefined' && sequenceActive) ||
+                (typeof pathFollowingActive !== 'undefined' && pathFollowingActive)
+            );
+
             const message = !detectorEnabled
-                ? 'Shelf detector is off. Turn it on only when you want to scan the shelf.'
+                ? (isAutonomous
+                    ? 'Robot is navigating to the shelf area. Shelf detector will turn on automatically.'
+                    : 'Shelf detector is off. Turn it on only when you want to scan the shelf.')
                 : busy
                     ? 'Sending the current shelf target...'
-                    : candidateValid
-                        ? candidateConsistent
-                            ? 'Shelf target ready. Commit when you want the robot to use this solve.'
-                            : 'Fresh shelf target available. Commit is allowed even if the solve is still wobbling.'
-                        : committedTargetValid
-                            ? 'Shelf target committed. Current reflector view may disappear during entry.'
-                            : shelfReasonLabel(data?.last_reason || 'status_unavailable');
+                    : isAutonomous
+                        ? (candidateValid
+                            ? (candidateConsistent
+                                ? 'Autonomous solve ready. Robot will commit and dock automatically.'
+                                : 'Robot is scanning the shelf. Waiting for a consistent solve...')
+                            : (committedTargetValid
+                                ? 'Shelf target committed by automation. Robot is docking.'
+                                : 'Autonomous shelf detection in progress. Scanning...'))
+                        : (candidateValid
+                            ? (candidateConsistent
+                                ? 'Shelf target ready. Commit when you want the robot to use this solve.'
+                                : 'Fresh shelf target available. Commit is allowed even if the solve is still wobbling.')
+                            : (committedTargetValid
+                                ? 'Shelf target committed. Current reflector view may disappear during entry.'
+                                : shelfReasonLabel(data?.last_reason || 'status_unavailable')));
 
             if (messageEl) {
                 messageEl.textContent = message;
@@ -31799,11 +32308,13 @@
             }
 
             if (toggleBtn) {
-                toggleBtn.disabled = busy;
+                toggleBtn.disabled = busy || isAutonomous;
                 toggleBtn.textContent = detectorEnabled ? 'TURN OFF' : 'TURN ON';
                 toggleBtn.classList.toggle('shelf-on', detectorEnabled);
                 toggleBtn.classList.toggle('shelf-off', !detectorEnabled);
-                toggleBtn.title = detectorEnabled ? 'Pause shelf scan processing' : 'Enable shelf scan processing';
+                toggleBtn.title = isAutonomous
+                    ? 'Shelf detector is managed automatically during this run'
+                    : (detectorEnabled ? 'Pause shelf scan processing' : 'Enable shelf scan processing');
             }
 
             if (topBtn) {
@@ -31834,21 +32345,27 @@
             const candidateValid = Boolean(data && data.candidate_valid);
             const candidateConsistent = Boolean(data && data.candidate_consistent);
             const committedTargetValid = Boolean(data && data.committed_target_valid);
-            const reasonText = !detectorEnabled
-                ? shelfReasonLabel(data?.last_reason || 'detector_disabled')
-                        : candidateValid
-                            ? candidateConsistent
-                                ? 'Commit the current fresh shelf target.'
-                                : 'Fresh shelf target available. Consistency latch is still wobbling, but manual commit is allowed.'
-                    : committedTargetValid
-                        ? 'Shelf target committed. Current reflector view may be gone during entry.'
-                        : shelfReasonLabel(data?.last_reason || 'status_unavailable');
+            const isAutonomous = Boolean(
+                (typeof sequenceActive !== 'undefined' && sequenceActive) ||
+                (typeof pathFollowingActive !== 'undefined' && pathFollowingActive)
+            );
+            const reasonText = isAutonomous
+                ? 'Robot is committing the shelf solve automatically. Manual commit is disabled during autonomous runs.'
+                : (!detectorEnabled
+                    ? shelfReasonLabel(data?.last_reason || 'detector_disabled')
+                    : candidateValid
+                        ? candidateConsistent
+                            ? 'Commit the current fresh shelf target.'
+                            : 'Fresh shelf target available. Consistency latch is still wobbling, but manual commit is allowed.'
+                        : committedTargetValid
+                            ? 'Shelf target committed. Current reflector view may be gone during entry.'
+                            : shelfReasonLabel(data?.last_reason || 'status_unavailable'));
 
             buttons.forEach((button) => {
-                button.disabled = busy || !detectorEnabled || !candidateValid;
+                button.disabled = busy || !detectorEnabled || !candidateValid || isAutonomous;
                 button.title = busy ? 'Publishing /tick for the current shelf target...' : reasonText;
                 button.setAttribute('aria-disabled', button.disabled ? 'true' : 'false');
-                button.classList.toggle('shelf-ready', !busy && detectorEnabled && candidateValid);
+                button.classList.toggle('shelf-ready', !busy && detectorEnabled && candidateValid && !isAutonomous);
                 button.classList.toggle('shelf-committed', !busy && !candidateValid && committedTargetValid);
             });
         }

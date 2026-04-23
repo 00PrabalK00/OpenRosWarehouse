@@ -254,6 +254,15 @@ class ZoneManager(Node):
             Trigger,
             '/shelf/commit',
         )
+        self._shelf_detector_node = str(
+            self.declare_parameter('shelf_detector_node', 'shelf_detector').value
+            or 'shelf_detector'
+        ).strip() or 'shelf_detector'
+        self._shelf_set_params_client = self.create_client(
+            SetParameters,
+            self._endpoint(f'/{self._shelf_detector_node}/set_parameters'),
+        )
+        self._active_shelf_template_depth_m: Optional[float] = None
         self.controller_motion_intent_service = self._endpoint('/controller_server/set_motion_intent')
         self.controller_motion_intent_client = self.create_client(
             SetMotionIntent,
@@ -1486,6 +1495,57 @@ class ZoneManager(Node):
         self._ensure_pose_orientation(mapped.pose)
         return mapped
 
+    async def _push_shelf_template_params(self, template: Dict[str, Any]) -> None:
+        """Push template width/depth constraints to shelf_detector via ROS SetParameters."""
+        dims = template.get('dimensions') if isinstance(template.get('dimensions'), dict) else {}
+        width = float(dims.get('width', 0.0) or 0.0)
+        depth = float(dims.get('depth', 0.0) or 0.0)
+        if width <= 0.0 or depth <= 0.0:
+            self._active_shelf_template_depth_m = None
+            return
+        self._active_shelf_template_depth_m = float(depth)
+
+        margin_w = max(0.05, round(width * 0.15, 3))
+        margin_d = max(0.05, round(depth * 0.15, 3))
+
+        def _fp(v: float) -> ParameterValue:
+            pv = ParameterValue()
+            pv.type = ParameterType.PARAMETER_DOUBLE
+            pv.double_value = round(v, 3)
+            return pv
+
+        params = [
+            Parameter(name='expected_width_min', value=_fp(width - margin_w)),
+            Parameter(name='expected_width_max', value=_fp(width + margin_w)),
+            Parameter(name='expected_depth_min', value=_fp(depth - margin_d)),
+            Parameter(name='expected_depth_max', value=_fp(depth + margin_d)),
+        ]
+        req = SetParameters.Request()
+        req.parameters = params
+        service_name = self._endpoint(f'/{self._shelf_detector_node}/set_parameters')
+        if not self._shelf_set_params_client.wait_for_service(timeout_sec=0.5):
+            self.get_logger().warn(
+                f'shelf_detector set_parameters unavailable ({service_name}); '
+                'detector will use existing defaults'
+            )
+            return
+        future = self._shelf_set_params_client.call_async(req)
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if future.done():
+                try:
+                    future.result()
+                except Exception as exc:
+                    self.get_logger().warn(
+                        f'Could not update shelf_detector params from template: {exc} '
+                        '(detector will use existing defaults)'
+                    )
+                return
+            await self._non_blocking_wait(0.05)
+        self.get_logger().warn(
+            'shelf_detector set_parameters timed out; detector will use existing defaults'
+        )
+
     def _call_setbool_service_async(self, client, enabled: bool, service_name: str):
         """Queue SetBool request to the owning node and log result asynchronously."""
         if not client.wait_for_service(timeout_sec=0.5):
@@ -1649,6 +1709,29 @@ class ZoneManager(Node):
         axis_y = math.sin(yaw)
         left_x = -axis_y
         left_y = axis_x
+        detected_depth = self._safe_float(pose_dict.get('depth'))
+        template_depth = self._safe_float(
+            getattr(self, '_active_shelf_template_depth_m', None)
+        )
+        front_midpoint = pose_dict.get('front_midpoint')
+        if (
+            (detected_depth is None or detected_depth <= 0.0)
+            and template_depth is not None
+            and template_depth > 0.0
+            and isinstance(front_midpoint, (list, tuple))
+            and len(front_midpoint) == 2
+        ):
+            try:
+                front_x = float(front_midpoint[0])
+                front_y = float(front_midpoint[1])
+                center_x = front_x + (axis_x * float(template_depth) * 0.5)
+                center_y = front_y + (axis_y * float(template_depth) * 0.5)
+                self.get_logger().info(
+                    f'SHELF_CHECK: synthesized shelf center from front pair using '
+                    f'template depth {float(template_depth):.2f}m'
+                )
+            except Exception:
+                pass
 
         source_pose = PoseStamped()
         source_pose.header.frame_id = source_frame
@@ -1894,7 +1977,7 @@ class ZoneManager(Node):
                     status += f', v={speed:.2f}m/s'
                 status += ')'
             feedback.status = status
-            goal_handle.publish_feedback(feedback)
+            self._publish_feedback_like_goal(goal_handle, feedback)
             last_feedback_ns = now_ns
 
         try:
@@ -2034,7 +2117,7 @@ class ZoneManager(Node):
                 f'dyaw={math.degrees(heading_error):.1f}deg, '
                 f'attempt {attempt_index + 1}/{max_attempts})'
             )
-            goal_handle.publish_feedback(feedback)
+            self._publish_feedback_like_goal(goal_handle, feedback)
 
             correction_ok, correction_msg = await self._execute_goal_pose_verification_correction(
                 observed_goal_pose,
@@ -2060,6 +2143,45 @@ class ZoneManager(Node):
                 double_value=float(value)
             )
         )
+
+    @staticmethod
+    def _goal_handle_is_follow_path(goal_handle) -> bool:
+        request = getattr(goal_handle, 'request', None)
+        return hasattr(request, 'waypoints')
+
+    def _publish_feedback_like_goal(self, goal_handle, feedback_msg) -> None:
+        status = str(getattr(feedback_msg, 'status', '') or '')
+        try:
+            progress = float(getattr(feedback_msg, 'progress', 0.0) or 0.0)
+        except Exception:
+            progress = 0.0
+
+        if self._goal_handle_is_follow_path(goal_handle):
+            request = getattr(goal_handle, 'request', None)
+            waypoints = getattr(request, 'waypoints', []) if request is not None else []
+            try:
+                total = int(len(waypoints or []))
+            except Exception:
+                total = 0
+
+            feedback = FollowPathAction.Feedback()
+            feedback.total = max(0, total)
+            if feedback.total > 0:
+                clamped_progress = max(0.0, min(1.0, progress))
+                feedback.current_index = min(
+                    feedback.total - 1,
+                    max(0, int(math.floor(clamped_progress * feedback.total))),
+                )
+            else:
+                feedback.current_index = 0
+            feedback.status = status
+            goal_handle.publish_feedback(feedback)
+            return
+
+        feedback = GoToZoneAction.Feedback()
+        feedback.progress = max(0.0, min(1.0, progress))
+        feedback.status = status
+        goal_handle.publish_feedback(feedback)
 
     @staticmethod
     def _extract_controller_plugin_ids(get_params_response):
@@ -2881,7 +3003,7 @@ class ZoneManager(Node):
                             status += f', v={float(dist_state["speed"]):.2f}m/s'
                         status += ')'
                     feedback.status = status
-                    goal_handle.publish_feedback(feedback)
+                    self._publish_feedback_like_goal(goal_handle, feedback)
                     last_feedback_ns = now_ns
 
                 await self._non_blocking_wait(0.05)
@@ -3280,7 +3402,7 @@ class ZoneManager(Node):
                     f'Frozen shelf heading recovery {attempt_index}/{attempt_total}: '
                     f'"{target_label}"'
                 )
-                goal_handle.publish_feedback(feedback)
+                self._publish_feedback_like_goal(goal_handle, feedback)
                 recovery_ok, recovery_msg, _ = await _execute_navigation_targets_sequence(
                     recovery_targets,
                     recovery_start_pose,
@@ -3370,7 +3492,7 @@ class ZoneManager(Node):
                 f'Frozen shelf pre-insert alignment {attempt_index}/{attempt_total}: '
                 f'"{target_label}"'
             )
-            goal_handle.publish_feedback(feedback)
+            self._publish_feedback_like_goal(goal_handle, feedback)
 
             try:
                 align_ok, align_msg = await _run_follow_path_phase(
@@ -3423,7 +3545,7 @@ class ZoneManager(Node):
 
         feedback.progress = 0.84
         feedback.status = f'Shelf insertion: driving straight into shelf center for "{target_label}"'
-        goal_handle.publish_feedback(feedback)
+        self._publish_feedback_like_goal(goal_handle, feedback)
         insert_ok, insert_msg = await self._execute_shelf_straight_insertion(
             plan,
             goal_handle,
@@ -3453,7 +3575,7 @@ class ZoneManager(Node):
 
         feedback.progress = 1.0
         feedback.status = f'Shelf insertion completed for "{target_label}"'
-        goal_handle.publish_feedback(feedback)
+        self._publish_feedback_like_goal(goal_handle, feedback)
         self._clear_active_goal_marker()
         completion_message = (
             f'Shelf insertion completed to ({final_pose.pose.position.x:.2f}, '
@@ -3513,7 +3635,7 @@ class ZoneManager(Node):
                     retry_feedback.status = (
                         f'Goal-pose handoff retry {attempt}/{max_attempts} for "{target_label}"'
                     )
-                    goal_handle.publish_feedback(retry_feedback)
+                    self._publish_feedback_like_goal(goal_handle, retry_feedback)
                 except Exception:
                     pass
 
@@ -3891,7 +4013,7 @@ class ZoneManager(Node):
                     f' yaw={math.degrees(float(current_error["heading_error"])):.2f}deg'
                 )
             feedback.status = status
-            goal_handle.publish_feedback(feedback)
+            self._publish_feedback_like_goal(goal_handle, feedback)
             last_feedback_ns = now_ns
 
         try:
@@ -5590,14 +5712,33 @@ class ZoneManager(Node):
         result = FollowPathAction.Result()
         zone_names_list = list(getattr(goal_handle.request, 'zone_names', []) or [])
         shelf_checks_list = list(getattr(goal_handle.request, 'shelf_checks', []) or [])
+        segment_bidirectional_list = list(
+            getattr(goal_handle.request, 'segment_bidirectional', []) or []
+        )
+        path_mode_selected_path = str(
+            getattr(goal_handle.request, 'path_mode_selected_path', '') or ''
+        ).strip()
+        path_mode_destination_poi = str(
+            getattr(goal_handle.request, 'path_mode_destination_poi', '') or ''
+        ).strip()
         zone_names_list = self._resolve_zone_names_from_waypoints(raw_waypoints, zone_names_list)
         try:
             self.load_zones()
             zones_for_path = dict((self.zones or {}).get('zones', {}))
         except Exception:
             zones_for_path = {}
+        try:
+            action_point_configs_for_path = dict(self.db_manager.get_action_point_configs())
+        except Exception:
+            action_point_configs_for_path = {}
         while len(shelf_checks_list) < total:
             shelf_checks_list.append(False)
+        if total > 0 and len(segment_bidirectional_list) == (total - 1):
+            segment_bidirectional_list = [False] + segment_bidirectional_list
+        while len(segment_bidirectional_list) < total:
+            segment_bidirectional_list.append(False)
+        if len(segment_bidirectional_list) > total:
+            segment_bidirectional_list = segment_bidirectional_list[:total]
         actioned_indices: set = set()
         completed_count = 1 if total > 0 else 0
         shelf_flip_flop_up_next = True
@@ -5809,6 +5950,88 @@ class ZoneManager(Node):
             if index < 0 or index >= len(shelf_checks_list):
                 return False
             return bool(shelf_checks_list[index])
+
+        def _incoming_segment_bidirectional_at(index: int) -> bool:
+            if index <= 0 or index >= len(segment_bidirectional_list):
+                return False
+            return bool(segment_bidirectional_list[index])
+
+        def _action_point_cfg_at(index: int) -> Dict[str, Any]:
+            zone_name = _zone_name_at(index)
+            if not zone_name:
+                return {}
+            cfg = action_point_configs_for_path.get(zone_name, {})
+            return cfg if isinstance(cfg, dict) else {}
+
+        def _shelf_recognition_cfg_at(index: int) -> Dict[str, Any]:
+            cfg = _action_point_cfg_at(index)
+            if (
+                str(cfg.get('point_type', '') or '').strip().lower() == 'shelf'
+                and bool(cfg.get('recognize', False))
+            ):
+                return cfg
+            return {}
+
+        def _pre_point_zone_name_from_cfg(cfg: Dict[str, Any]) -> str:
+            pre_point_cfg = cfg.get('pre_point')
+            if isinstance(pre_point_cfg, str):
+                return pre_point_cfg.strip()
+            if isinstance(pre_point_cfg, dict):
+                for key in ('zone_name', 'name', 'id'):
+                    value = str(pre_point_cfg.get(key, '') or '').strip()
+                    if value:
+                        return value
+            return ''
+
+        def _zone_pose_from_meta(zone_name: str, zone_meta: Dict[str, Any]) -> Tuple[Optional[PoseStamped], str]:
+            if not zone_name:
+                return None, 'missing zone name'
+            if not isinstance(zone_meta, dict) or not zone_meta:
+                return None, f'zone "{zone_name}" not found'
+
+            position = zone_meta.get('position', {})
+            orientation = zone_meta.get('orientation', {})
+            if not isinstance(position, dict):
+                return None, f'zone "{zone_name}" has no position'
+            if not isinstance(orientation, dict):
+                orientation = {}
+
+            try:
+                pose = PoseStamped()
+                pose.header.frame_id = str(zone_meta.get('frame_id') or base_frame or 'map') or 'map'
+                pose.header.stamp = self.get_clock().now().to_msg()
+                pose.pose.position.x = float(position.get('x', 0.0))
+                pose.pose.position.y = float(position.get('y', 0.0))
+                pose.pose.position.z = float(position.get('z', 0.0))
+                pose.pose.orientation.x = self._safe_float(orientation.get('x', 0.0))
+                pose.pose.orientation.y = self._safe_float(orientation.get('y', 0.0))
+                pose.pose.orientation.z = self._safe_float(orientation.get('z', 0.0))
+                pose.pose.orientation.w = self._safe_float(orientation.get('w', 1.0), 1.0)
+                self._ensure_pose_orientation(pose.pose)
+            except Exception as exc:
+                return None, f'zone "{zone_name}" has invalid pose: {exc}'
+
+            if pose.header.frame_id == base_frame:
+                return pose, ''
+            if base_frame == 'map':
+                mapped, error = self._transform_goal_pose_to_map(pose)
+                if mapped is None:
+                    return None, error or f'could not transform zone "{zone_name}" to map'
+                return mapped, ''
+            return None, (
+                f'zone "{zone_name}" frame "{pose.header.frame_id}" does not match path frame "{base_frame}"'
+            )
+
+        def _pre_point_pose_for_shelf_action_at(index: int) -> Tuple[Optional[PoseStamped], str, str]:
+            cfg = _shelf_recognition_cfg_at(index)
+            if not cfg:
+                return None, '', ''
+            pre_zone_name = _pre_point_zone_name_from_cfg(cfg)
+            if not pre_zone_name:
+                return None, '', ''
+            pre_meta = zones_for_path.get(pre_zone_name, {})
+            pose, err = _zone_pose_from_meta(pre_zone_name, pre_meta if isinstance(pre_meta, dict) else {})
+            return pose, pre_zone_name, err
 
         async def _validate_follow_move_arrival(
             waypoint_index: int,
@@ -6408,19 +6631,46 @@ class ZoneManager(Node):
             )
             return ''
 
-        async def _run_optional_shelf_check_phase(waypoint_index: int):
+        async def _run_optional_shelf_check_phase(waypoint_index: int, scan_label: str = ''):
             nonlocal shelf_flip_flop_up_next
 
-            if not _shelf_check_enabled_at(waypoint_index):
-                return ''
+            ap_cfg = _action_point_cfg_at(waypoint_index)
+            recognize_via_config = (
+                str(ap_cfg.get('point_type', '') or '').strip().lower() == 'shelf'
+                and bool(ap_cfg.get('recognize', False))
+            )
+            if not _shelf_check_enabled_at(waypoint_index) and not recognize_via_config:
+                return '', False
 
             target_label = _zone_name_at(waypoint_index) or f'waypoint {waypoint_index + 1}'
+            scan_location_label = str(scan_label or target_label).strip() or target_label
             detector_service_name = str(self.shelf_detector_enable_service or '/shelf/set_enabled')
             enable_receipt_before = float(self.latest_shelf_status_receipt_monotonic or 0.0)
 
+            # Load template constraints and push to detector before enabling
+            template_id = str(ap_cfg.get('template_id', '') or '').strip()
+            if template_id:
+                try:
+                    templates = self.db_manager.get_recognition_templates()
+                    template = templates.get(template_id, {}) if isinstance(templates, dict) else {}
+                except Exception:
+                    template = {}
+                if template:
+                    await self._push_shelf_template_params(template)
+                    self.get_logger().info(
+                        f'SHELF_CHECK: pushed template "{template_id}" constraints for '
+                        f'waypoint {waypoint_index + 1}/{total} ("{target_label}")'
+                    )
+                else:
+                    self.get_logger().warn(
+                        f'SHELF_CHECK: template "{template_id}" not found for waypoint '
+                        f'{waypoint_index + 1}/{total}; detector will use existing defaults'
+                    )
+
             _publish_feedback(
                 waypoint_index,
-                f'SHELF_CHECK: enabling detector at waypoint {waypoint_index + 1}/{total}',
+                f'SHELF_CHECK: enabling detector at "{scan_location_label}" '
+                f'for action point "{target_label}"',
             )
 
             enable_ok, enable_msg = await self._call_setbool_service(
@@ -6433,7 +6683,7 @@ class ZoneManager(Node):
                 return (
                     f'SHELF_CHECK failed to enable detector at waypoint '
                     f'{waypoint_index + 1}/{total}: {enable_msg}'
-                )
+                ), False
 
             try:
                 settle_sec = max(0.0, float(self.follow_path_shelf_check_enable_settle_sec))
@@ -6451,14 +6701,14 @@ class ZoneManager(Node):
                         result.success = False
                         result.completed = int(max(0, completed_count))
                         result.message = 'FollowPath canceled during shelf check'
-                        return terminal_error
+                        return terminal_error, False
 
                     if self.estop_active:
                         goal_handle.abort()
                         result.success = False
                         result.completed = int(max(0, completed_count))
                         result.message = 'E-STOP active during shelf check'
-                        return terminal_error
+                        return terminal_error, False
 
                     latest_receipt = float(self.latest_shelf_status_receipt_monotonic or 0.0)
                     if latest_receipt > enable_receipt_before and self._shelf_candidate_ready():
@@ -6472,8 +6722,8 @@ class ZoneManager(Node):
                             last_reason = str(self.latest_shelf_status.get('last_reason') or last_reason)
                         _publish_feedback(
                             waypoint_index,
-                            f'SHELF_CHECK: scanning at waypoint {waypoint_index + 1}/{total} '
-                            f'({last_reason})',
+                            f'SHELF_CHECK: scanning from "{scan_location_label}" '
+                            f'for action point "{target_label}" ({last_reason})',
                         )
                         last_feedback_ns = now_ns
 
@@ -6481,26 +6731,37 @@ class ZoneManager(Node):
 
                 if not candidate_ready:
                     self.get_logger().info(
-                        f'FollowPath shelf check: no shelf candidate at waypoint '
-                        f'{waypoint_index + 1}/{total}; continuing'
+                        f'FollowPath shelf check: no shelf candidate from "{scan_location_label}" '
+                        f'for waypoint {waypoint_index + 1}/{total}; continuing'
                     )
+                    if path_mode_destination_poi:
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = (
+                            f'PATH_MODE_REPLAN_FROM:{target_label}:'
+                            f'destination={path_mode_destination_poi}:'
+                            f'path={path_mode_selected_path}:'
+                            f'shelf_not_detected'
+                        )
+                        goal_handle.abort()
+                        return terminal_error, False
                     _publish_feedback(
                         waypoint_index,
-                        f'SHELF_CHECK: no shelf detected at waypoint {waypoint_index + 1}/{total}; continuing',
+                        f'SHELF_CHECK: no shelf detected from "{scan_location_label}"; continuing',
                     )
-                    return ''
+                    return '', False
 
                 goal_pose, goal_pose_err = self._build_shelf_goal_pose_from_status(base_frame)
                 if goal_pose is None:
                     return (
                         f'SHELF_CHECK failed to resolve shelf goal at waypoint '
                         f'{waypoint_index + 1}/{total}: {goal_pose_err}'
-                    )
+                    ), False
 
                 _publish_feedback(
                     waypoint_index,
-                    f'SHELF_CHECK: docking through controller at waypoint '
-                    f'{waypoint_index + 1}/{total}',
+                    f'SHELF_CHECK: docking to shelf/action area "{target_label}" '
+                    f'from "{scan_location_label}"',
                 )
                 dock_ok, dock_msg = await self._execute_goal_pose_handoff_with_retries(
                     goal_pose,
@@ -6513,17 +6774,34 @@ class ZoneManager(Node):
                     result.success = False
                     result.completed = int(max(0, completed_count))
                     result.message = 'FollowPath canceled during shelf insertion'
-                    return terminal_error
+                    return terminal_error, False
                 if not dock_ok:
                     return (
                         f'SHELF_CHECK docking failed at waypoint '
                         f'{waypoint_index + 1}/{total}: {dock_msg}'
-                    )
+                    ), False
 
-                lift_action_id = 'lift_up' if shelf_flip_flop_up_next else 'lift_down'
+                shelf_insertion_complete = dock_ok is True
+                if not shelf_insertion_complete:
+                    return (
+                        f'SHELF_CHECK did not receive shelf insertion completion at waypoint '
+                        f'{waypoint_index + 1}/{total}: {dock_msg}'
+                    ), False
+
+                configured_action_id = str(ap_cfg.get('action_id', '') or '').strip()
+                if configured_action_id:
+                    lift_action_id = configured_action_id
+                else:
+                    lift_action_id = 'lift_up' if shelf_flip_flop_up_next else 'lift_down'
+                    shelf_flip_flop_up_next = not shelf_flip_flop_up_next
+                self.get_logger().info(
+                    f'SHELF_CHECK: shelf insertion complete for waypoint '
+                    f'{waypoint_index + 1}/{total} ("{target_label}"); '
+                    f'now running action "{lift_action_id}"'
+                )
                 _publish_feedback(
                     waypoint_index,
-                    f'SHELF_CHECK: running {lift_action_id} after shelf dock at '
+                    f'SHELF_CHECK: shelf insertion complete; running {lift_action_id} at '
                     f'waypoint {waypoint_index + 1}/{total}',
                 )
                 lift_ok, lift_msg = await self._execute_named_path_action(lift_action_id)
@@ -6531,15 +6809,13 @@ class ZoneManager(Node):
                     return (
                         f'SHELF_CHECK lift action "{lift_action_id}" failed at waypoint '
                         f'{waypoint_index + 1}/{total}: {lift_msg}'
-                    )
-
-                shelf_flip_flop_up_next = not shelf_flip_flop_up_next
+                    ), False
                 self.get_logger().info(
                     f'FollowPath shelf check complete at waypoint {waypoint_index + 1}/{total}: '
                     f'dock="{dock_msg}" lift="{lift_msg}" next_action='
                     f'{"lift_up" if shelf_flip_flop_up_next else "lift_down"}'
                 )
-                return ''
+                return '', True
             finally:
                 disable_ok, disable_msg = await self._call_setbool_service(
                     self.shelf_enable_client,
@@ -6553,12 +6829,221 @@ class ZoneManager(Node):
                         f'{waypoint_index + 1}/{total}: {disable_msg}'
                     )
 
+        async def _run_reverse_retreat_phase(waypoint_index: int) -> str:
+            if not _incoming_segment_bidirectional_at(waypoint_index):
+                return ''
+
+            return await _run_reverse_retreat_to_pose(
+                waypoint_index,
+                stamped_waypoints[waypoint_index],
+                f'waypoint {waypoint_index + 1}/{total}',
+            )
+
+        async def _run_reverse_retreat_to_pose(
+            waypoint_index: int,
+            target_pose: PoseStamped,
+            target_label: str,
+        ) -> str:
+            start_pose = self._robot_pose_in_frame(base_frame, timeout_sec=0.20)
+            if start_pose is None:
+                return (
+                    f'REVERSE_RETREAT lost robot pose before retreat at waypoint '
+                    f'{waypoint_index + 1}/{total}'
+                )
+
+            start_yaw = self._yaw_from_quaternion(
+                float(start_pose.pose.orientation.x),
+                float(start_pose.pose.orientation.y),
+                float(start_pose.pose.orientation.z),
+                float(start_pose.pose.orientation.w),
+            )
+            target_dx = float(target_pose.pose.position.x) - float(start_pose.pose.position.x)
+            target_dy = float(target_pose.pose.position.y) - float(start_pose.pose.position.y)
+            backward_x = -math.cos(start_yaw)
+            backward_y = -math.sin(start_yaw)
+            retreat_distance = (target_dx * backward_x) + (target_dy * backward_y)
+            if retreat_distance <= 0.0:
+                retreat_distance = math.hypot(target_dx, target_dy)
+            if retreat_distance <= max(0.05, float(getattr(self, 'path_waypoint_tolerance', 0.40))):
+                return ''
+
+            retreat_speed = max(
+                0.02,
+                min(
+                    float(self.goal_pose_handoff_local_insert_entry_slow_speed),
+                    float(self.goal_pose_handoff_local_insert_max_speed),
+                ),
+            )
+            timeout_sec = max(
+                5.0,
+                (retreat_distance / max(0.01, retreat_speed)) * 2.5 + 3.0,
+            )
+            loop_hz = max(10.0, float(self.goal_pose_handoff_local_insert_loop_hz))
+            loop_dt = 1.0 / loop_hz
+            start_xy = (
+                float(start_pose.pose.position.x),
+                float(start_pose.pose.position.y),
+            )
+            started_monotonic = time.monotonic()
+            last_feedback_ns = 0
+
+            self._docking_motion_epoch += 1
+            lease = MotionAuthorityLease(
+                owner=MotionAuthorityOwner.INSERTION_CONTROLLER,
+                state=DockingState.CONTROLLED_RETREAT,
+                epoch=int(self._docking_motion_epoch),
+                granted_at_sec=float(time.time()),
+                expires_at_sec=float(time.time()) + timeout_sec + 1.0,
+                exclusive=True,
+                source='zone_manager:shelf_reverse_retreat',
+            )
+
+            try:
+                self._set_navigation_lane_locked(True)
+                self._docking_motion_gate.set_lease(lease)
+                _publish_feedback(
+                    waypoint_index,
+                    f'REVERSE_RETREAT: backing straight out {retreat_distance:.2f}m '
+                    f'toward "{target_label}"',
+                )
+
+                while True:
+                    if goal_handle.is_cancel_requested:
+                        self._publish_docking_twist(0.0, 0.0)
+                        goal_handle.canceled()
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = 'FollowPath canceled during reverse retreat'
+                        return terminal_error
+
+                    if self.estop_active:
+                        self._publish_docking_twist(0.0, 0.0)
+                        goal_handle.abort()
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = 'E-STOP active during reverse retreat'
+                        return terminal_error
+
+                    if self.distance_obstacle_hold_active:
+                        self._publish_docking_twist(0.0, 0.0)
+                        return (
+                            f'REVERSE_RETREAT aborted at waypoint '
+                            f'{waypoint_index + 1}/{total}: obstacle hold active'
+                        )
+
+                    robot_pose = self._robot_pose_in_frame(base_frame, timeout_sec=0.20)
+                    if robot_pose is None:
+                        self._publish_docking_twist(0.0, 0.0)
+                        return (
+                            f'REVERSE_RETREAT lost robot pose at waypoint '
+                            f'{waypoint_index + 1}/{total}'
+                        )
+
+                    traveled = max(
+                        0.0,
+                        (
+                            (float(robot_pose.pose.position.x) - start_xy[0]) * backward_x
+                            + (float(robot_pose.pose.position.y) - start_xy[1]) * backward_y
+                        ),
+                    )
+                    if traveled >= retreat_distance:
+                        self._publish_docking_twist(0.0, 0.0)
+                        _publish_feedback(
+                            waypoint_index,
+                            f'REVERSE_RETREAT: backed out {traveled:.2f}m toward "{target_label}"',
+                        )
+                        return ''
+
+                    if (time.monotonic() - started_monotonic) >= timeout_sec:
+                        self._publish_docking_twist(0.0, 0.0)
+                        return (
+                            f'REVERSE_RETREAT timed out after {timeout_sec:.2f}s '
+                            f'at waypoint {waypoint_index + 1}/{total} '
+                            f'(traveled={traveled:.2f}m target={retreat_distance:.2f}m)'
+                        )
+
+                    now_ns = self.get_clock().now().nanoseconds
+                    if (now_ns - last_feedback_ns) >= int(0.20 * 1e9):
+                        remaining = max(0.0, retreat_distance - traveled)
+                        _publish_feedback(
+                            waypoint_index,
+                            f'REVERSE_RETREAT: backing straight out '
+                            f'({remaining:.2f}m remaining)',
+                        )
+                        last_feedback_ns = now_ns
+
+                    command = MotionCommandEnvelope(
+                        owner=MotionAuthorityOwner.INSERTION_CONTROLLER,
+                        state=DockingState.CONTROLLED_RETREAT,
+                        epoch=int(lease.epoch),
+                        stamp_sec=float(time.time()),
+                        linear_speed_mps=-float(retreat_speed),
+                        angular_speed_rad_s=0.0,
+                        source='zone_manager:shelf_reverse_retreat',
+                        valid_for_sec=max(0.15, loop_dt * 2.0),
+                    )
+                    gate_decision = self._docking_motion_gate.evaluate(
+                        command,
+                        docking_active=True,
+                        now_sec=float(time.time()),
+                    )
+                    if not gate_decision.accepted:
+                        self._publish_docking_twist(0.0, 0.0)
+                        return (
+                            f'REVERSE_RETREAT motion rejected at waypoint '
+                            f'{waypoint_index + 1}/{total}: {gate_decision.reason}'
+                        )
+                    self._publish_docking_twist(
+                        gate_decision.applied_linear_speed_mps,
+                        gate_decision.applied_angular_speed_rad_s,
+                    )
+                    await self._non_blocking_wait(loop_dt)
+            finally:
+                self._publish_docking_twist(0.0, 0.0)
+                self._set_navigation_lane_locked(False)
+                self._docking_motion_gate.clear()
+
+        async def _run_explicit_align_pose_phase(
+            waypoint_index: int,
+            align_pose: PoseStamped,
+            poi_name: str,
+        ) -> str:
+            settle_sec = max(0.0, float(getattr(self, 'path_arrival_settle_sec', 0.30)))
+            if settle_sec > 0.0:
+                await self._non_blocking_wait(settle_sec)
+
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                result.success = False
+                result.completed = int(max(0, completed_count))
+                result.message = 'FollowPath canceled during explicit align settle'
+                return terminal_error
+            if self.estop_active:
+                goal_handle.abort()
+                result.success = False
+                result.completed = int(max(0, completed_count))
+                result.message = 'E-STOP active during explicit align settle'
+                return terminal_error
+
+            heading_tol = float(self.zone_heading_tolerance)
+            stable_before, _heading_before = await _heading_stable_within_tol(align_pose, heading_tol)
+            if stable_before:
+                return ''
+
+            return await _run_align_spin_phase(
+                waypoint_index,
+                align_pose,
+                heading_tol,
+                poi_name,
+            )
+
         async def _run_follow_segment_phase(
             segment_index: int,
             waypoint_index: int,
             phase_label: str,
             progress_index: int,
             *,
+            start_pose_override: Optional[PoseStamped] = None,
             end_pose_override: Optional[PoseStamped] = None,
             enforce_end_orientation_override: Optional[bool] = None,
         ):
@@ -6597,7 +7082,13 @@ class ZoneManager(Node):
             ):
                 enforce_end_orientation = False
 
-            segment_start_pose, start_gap, used_live_start = _resolve_segment_start_pose(segment_index)
+            if start_pose_override is not None:
+                segment_start_pose = self._copy_pose_stamped(start_pose_override)
+                segment_start_pose.header.stamp = self.get_clock().now().to_msg()
+                start_gap = 0.0
+                used_live_start = False
+            else:
+                segment_start_pose, start_gap, used_live_start = _resolve_segment_start_pose(segment_index)
             target_pose = end_pose_override if end_pose_override is not None else stamped_waypoints[waypoint_index]
             if used_live_start:
                 self.get_logger().warn(
@@ -6736,7 +7227,7 @@ class ZoneManager(Node):
                     f'({self._goal_status_name(status)})'
                 )
 
-            if phase_label == 'MOVE_TO_POINT':
+            if phase_label in ('MOVE_TO_POINT', 'MOVE_TO_PRE_POINT', 'REVERSE_RETREAT'):
                 arrival_err = await _validate_follow_move_arrival(
                     waypoint_index,
                     phase_label,
@@ -6754,6 +7245,7 @@ class ZoneManager(Node):
             phase_label: str,
             progress_index: int,
             *,
+            start_pose_override: Optional[PoseStamped] = None,
             end_pose_override: Optional[PoseStamped] = None,
             enforce_end_orientation_override: Optional[bool] = None,
             retry_on_aborted_override: Optional[bool] = None,
@@ -6767,6 +7259,7 @@ class ZoneManager(Node):
                     waypoint_index,
                     phase_label,
                     progress_index,
+                    start_pose_override=start_pose_override,
                     end_pose_override=end_pose_override,
                     enforce_end_orientation_override=enforce_end_orientation_override,
                 )
@@ -6840,15 +7333,33 @@ class ZoneManager(Node):
                     return result
 
                 target_idx = seg_idx + 1
+                pre_point_pose, pre_point_name, pre_point_err = _pre_point_pose_for_shelf_action_at(target_idx)
+                shelf_pre_point_flow = pre_point_pose is not None
+                if pre_point_err:
+                    result.success = False
+                    result.completed = int(max(0, completed_count))
+                    result.message = (
+                        f'Shelf action point "{_zone_name_at(target_idx)}" has invalid pre-point: '
+                        f'{pre_point_err}'
+                    )
+                    goal_handle.abort()
+                    return result
 
                 # Phase 1: MOVE_TO_POINT using a segment FollowPath so the controller
                 # retains lookahead. Semantic POI alignment is handled explicitly
                 # afterward in this state machine, not implicitly in the move phase.
+                if shelf_pre_point_flow:
+                    _publish_feedback(
+                        target_idx,
+                        f'MOVE_TO_PRE_POINT: "{pre_point_name}" before shelf action '
+                        f'"{_zone_name_at(target_idx)}"',
+                    )
                 _wrapped, phase_err = await _run_follow_segment_phase_with_retries(
                     seg_idx,
                     target_idx,
-                    'MOVE_TO_POINT',
+                    'MOVE_TO_PRE_POINT' if shelf_pre_point_flow else 'MOVE_TO_POINT',
                     seg_idx,
+                    end_pose_override=pre_point_pose if shelf_pre_point_flow else None,
                     enforce_end_orientation_override=False,
                 )
                 if phase_err:
@@ -6863,7 +7374,14 @@ class ZoneManager(Node):
                 # Phase 2: semantic POI heading alignment only if the reached anchor
                 # has an explicit POI heading and the current robot heading is outside
                 # tolerance.
-                phase_err = await _run_semantic_align_phase_with_retries(target_idx)
+                if shelf_pre_point_flow:
+                    phase_err = await _run_explicit_align_pose_phase(
+                        target_idx,
+                        pre_point_pose,
+                        pre_point_name,
+                    )
+                else:
+                    phase_err = await _run_semantic_align_phase_with_retries(target_idx)
                 if phase_err:
                     if phase_err == terminal_error:
                         return result
@@ -6877,7 +7395,7 @@ class ZoneManager(Node):
                 zone_name_at = _zone_name_at(target_idx)
                 zone_meta_at = _zone_meta_at(target_idx)
 
-                phase_err = await _run_semantic_stop_timer_phase(target_idx)
+                phase_err = '' if shelf_pre_point_flow else await _run_semantic_stop_timer_phase(target_idx)
                 if phase_err:
                     if phase_err == terminal_error:
                         return result
@@ -6888,7 +7406,10 @@ class ZoneManager(Node):
                     return result
 
                 # Phase 4: optional shelf detection/docking after arrival.
-                phase_err = await _run_optional_shelf_check_phase(target_idx)
+                phase_err, shelf_action_performed = await _run_optional_shelf_check_phase(
+                    target_idx,
+                    scan_label=pre_point_name if shelf_pre_point_flow else '',
+                )
                 if phase_err:
                     if phase_err == terminal_error:
                         return result
@@ -6897,6 +7418,25 @@ class ZoneManager(Node):
                     result.message = phase_err
                     goal_handle.abort()
                     return result
+
+                if shelf_action_performed:
+                    if shelf_pre_point_flow:
+                        phase_err = await _run_reverse_retreat_to_pose(
+                            target_idx,
+                            pre_point_pose,
+                            pre_point_name,
+                        )
+                    else:
+                        phase_err = await _run_reverse_retreat_phase(target_idx)
+                    if phase_err:
+                        if phase_err == terminal_error:
+                            return result
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = phase_err
+                        goal_handle.abort()
+                        return result
+                    actioned_indices.add(target_idx)
 
                 # Phase 5: optional POI action after move/align/stop timer/shelf check.
                 zone_action_id = normalize_action_id(zone_meta_at.get('action', ''))

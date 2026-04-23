@@ -17,6 +17,8 @@ Main:
     loop_mode: true
     curved_segments: []
     curved_segment_controls: {}
+    direction: uni
+    segment_attrs: {}
     has_curves: false
 back:
   points:
@@ -31,4 +33,58 @@ back:
     loop_mode: true
     curved_segments: []
     curved_segment_controls: {}
+    direction: uni
+    segment_attrs: {}
+    has_curves: false
+zlef:
+  points:
+  - x: 11.09
+    y: 6.66
+    zone_name: A3
+  - x: 12.06
+    y: 5.41
+    zone_name: PRE-POINT
+  - x: 13.17
+    y: 4.37
+    zone_name: SHELF1
+  - x: 10.08
+    y: 5.53
+    zone_name: A4
+  settings:
+    loop_type: closed
+    loop_mode: true
+    curved_segments: []
+    curved_segment_controls: {}
+    direction: uni
+    segment_attrs:
+      '1':
+        direction: bi
+    has_curves: false
+zelf multiple:
+  points:
+  - x: 10.08
+    y: 5.53
+    zone_name: A4
+  - x: 11.09
+    y: 6.66
+    zone_name: A3
+  - x: 12.06
+    y: 5.41
+    zone_name: PRE-POINT
+  - x: 13.17
+    y: 4.37
+    zone_name: SHELF1
+  - x: 12.06
+    y: 5.41
+    zone_name: PRE-POINT
+  - x: 10.08
+    y: 5.53
+    zone_name: A4
+  settings:
+    loop_type: none
+    loop_mode: false
+    curved_segments: []
+    curved_segment_controls: {}
+    direction: uni
+    segment_attrs: {}
     has_curves: false
