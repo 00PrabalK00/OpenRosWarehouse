@@ -2251,6 +2251,8 @@
             state.origin = cloneOrigin(snapshot.origin);
             updateOriginPixel();
             syncOriginInputs();
+            syncCanvasContext();
+            renderInspector();
             draw();
         }
 
@@ -2339,6 +2341,18 @@
             }
         }
 
+        function updateCursorReadout(worldPos = null) {
+            const world = worldPos && Number.isFinite(worldPos.x) && Number.isFinite(worldPos.y)
+                ? worldPos
+                : { x: null, y: null };
+            state.cursorWorld = { x: world.x, y: world.y };
+            if (cursorReadoutEl) {
+                cursorReadoutEl.textContent = Number.isFinite(world.x) && Number.isFinite(world.y)
+                    ? `x: ${world.x.toFixed(3)} | y: ${world.y.toFixed(3)}`
+                    : "x: -- | y: --";
+            }
+        }
+
         function syncCanvasContext() {
             if (canvasModeTitleEl) {
                 canvasModeTitleEl.textContent = getModeLabel();
@@ -2353,9 +2367,13 @@
                 canvasLayerChipEl.textContent = `${countVisibleLayers()} layers visible`;
             }
             if (drawSelectionSummaryEl) {
-                drawSelectionSummaryEl.textContent = state.selection.kind === "none"
-                    ? "No object selected."
-                    : `${getSelectionLabel()} selected. Use Move or Rotate to edit placement.`;
+                if (state.selection.kind === "zone") {
+                    drawSelectionSummaryEl.textContent = `${getSelectionLabel()} selected. Use Move or Rotate to edit placement.`;
+                } else if (state.selection.kind === "path") {
+                    drawSelectionSummaryEl.textContent = `${getSelectionLabel()} selected. Open Paths or Properties to inspect this route.`;
+                } else {
+                    drawSelectionSummaryEl.textContent = "No object selected.";
+                }
             }
             if (dottedSessionMetaEl) {
                 if (!state.dottedViewMode) {
@@ -2386,6 +2404,16 @@
             const normalized = ["draw", "zones", "paths", "waypoints", "dotted", "view"].includes(String(mode || ""))
                 ? String(mode)
                 : "draw";
+            if (normalized === "dotted") {
+                if (!state.dottedViewMode) {
+                    toggleDottedView();
+                }
+                setEditorMode("dotted");
+                return;
+            }
+            if (state.dottedViewMode && state.editorMode === "dotted") {
+                toggleDottedView();
+            }
             setEditorMode(normalized);
             const activeToolMode = TOOL_TO_MODE[state.tool] || TOOL_TO_MODE[resolveToolSelection(state.tool)] || "";
             if (activeToolMode !== normalized) {
@@ -2586,7 +2614,7 @@
         }
 
         function syncGridButton() {
-            gridToggleButtons.forEach((button) => {
+            document.querySelectorAll("button[data-grid-toggle]").forEach((button) => {
                 button.classList.toggle("active", !!state.showGrid);
             });
             if (gridStatusReadoutEl) {
@@ -3344,11 +3372,8 @@
                                 <span class="prop-field-label">Yaw (deg)</span>
                                 <input class="prop-input" id="selected-zone-yaw" type="number" step="0.1" value="${escapeHtml(yawDeg.toFixed(2))}">
                             </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Radius (m)</span>
-                                <input class="prop-input" id="selected-zone-radius" type="number" step="0.01" value="${escapeHtml(Number(zone.radius_m || 0).toFixed(2))}">
-                            </label>
                         </div>
+                        ${propRow("Radius", formatMeters(zone.radius_m || 0, 2))}
                     </div>
 
                     <div class="insp-card">
@@ -3571,12 +3596,11 @@
             const nextX = Number(document.getElementById("selected-zone-x")?.value);
             const nextY = Number(document.getElementById("selected-zone-y")?.value);
             const nextYawDeg = Number(document.getElementById("selected-zone-yaw")?.value);
-            const nextRadius = Number(document.getElementById("selected-zone-radius")?.value);
             const nextType = String(document.getElementById("selected-zone-type")?.value || zone.type || "normal");
             const nextSpeed = Number(document.getElementById("selected-zone-speed")?.value);
             const nextCharge = Number(document.getElementById("selected-zone-charge")?.value);
 
-            if (![nextX, nextY, nextYawDeg, nextRadius, nextSpeed, nextCharge].every((value) => Number.isFinite(value))) {
+            if (![nextX, nextY, nextYawDeg, nextSpeed, nextCharge].every((value) => Number.isFinite(value))) {
                 updateStatus("Zone properties contain invalid values");
                 return;
             }
@@ -3612,7 +3636,6 @@
                 zone.yaw = nextYawDeg * Math.PI / 180;
                 zone.type = nextType;
                 zone.speed = nextSpeed;
-                zone.radius_m = Math.max(0, nextRadius);
                 zone.charge_duration = Math.max(0, nextCharge);
                 await loadZones();
                 updateStatus(paramsResp.data?.message || `Zone ${zone.id} saved`);
@@ -3810,10 +3833,12 @@
                 const radius = zone.radius_m ? (zone.radius_m / state.mapInfo.resolution) : 12;
                 const drawRadius = Math.max(10, radius);
                 const style = getZoneStyle(zone);
+                const isSelected = state.selection.kind === "zone" && state.selection.id === zone.id;
 
                 ctx.beginPath();
-                ctx.fillStyle = style.fill;
-                ctx.strokeStyle = style.stroke;
+                ctx.fillStyle = isSelected ? "rgba(66, 153, 225, 0.24)" : style.fill;
+                ctx.strokeStyle = isSelected ? "#8ec5ff" : style.stroke;
+                ctx.lineWidth = isSelected ? 3.2 : 2.4;
                 ctx.arc(canvasPos.x, canvasPos.y, drawRadius, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
@@ -3851,13 +3876,13 @@
                 return;
             }
             ctx.save();
-            ctx.lineWidth = 2.5;
-            ctx.strokeStyle = "#55cfff";
-            ctx.setLineDash([8, 5]);
-
             state.paths.forEach((path, pathId) => {
                 const pts = getRenderablePathPoints(pathId, path);
                 if (!pts || pts.length < 2) return;
+                const isSelected = state.selection.kind === "path" && state.selection.id === pathId;
+                ctx.lineWidth = isSelected ? 3.6 : 2.5;
+                ctx.strokeStyle = isSelected ? "#9ec6ff" : "#55cfff";
+                ctx.setLineDash(isSelected ? [10, 4] : [8, 5]);
                 ctx.beginPath();
                 pts.forEach((pt, idx) => {
                     const mapPixel = worldToMapPixel(pt.x, pt.y);
@@ -4052,6 +4077,8 @@
                     throw new Error(result.data.message || `Failed to save ${preset.label.toLowerCase()}`);
                 }
                 await loadZones();
+                setSelection("zone", zoneName, { silent: true });
+                openInspectorTab("properties");
                 updateStatus(result.data.message || `${preset.label} saved`);
             } catch (err) {
                 updateStatus(`${preset.label} save failed: ${err.message}`);
@@ -4065,6 +4092,7 @@
             const p = getPos(e);
             const mapPos = canvasToMapPixel(p.x, p.y);
             const worldPos = mapPixelToWorld(mapPos.x, mapPos.y);
+            updateCursorReadout(worldPos);
             const shouldPanView = state.tool === "pan" || e.button === 1 || e.button === 2;
 
             if (shouldPanView) {
@@ -4077,6 +4105,26 @@
                 };
                 syncCanvasCursor();
                 updateStatus("Panning map view");
+                return;
+            }
+
+            if (state.tool === "inspect") {
+                const zoneHit = hitTestZone(p.x, p.y);
+                if (zoneHit) {
+                    setSelection("zone", zoneHit.id);
+                    openInspectorTab("properties");
+                    cancelPointerInteraction(e);
+                    return;
+                }
+                const pathHit = hitTestPath(p.x, p.y);
+                if (pathHit) {
+                    setSelection("path", pathHit.id);
+                    openInspectorTab("properties");
+                    cancelPointerInteraction(e);
+                    return;
+                }
+                clearSelection();
+                cancelPointerInteraction(e);
                 return;
             }
 
@@ -4097,6 +4145,7 @@
                 const dx = p.x - originCanvas.x;
                 const dy = p.y - originCanvas.y;
                 if (dx * dx + dy * dy <= 18 * 18) {
+                    state.strokeSnapshot = captureEditorSnapshot();
                     state.draggingOrigin = true;
                     syncCanvasCursor();
                     updateStatus("Moving origin");
@@ -4107,6 +4156,7 @@
             if (state.tool === "move_zone") {
                 const hit = hitTestZone(p.x, p.y);
                 if (!hit) return;
+                setSelection("zone", hit.id, { silent: true });
                 state.draggingZoneId = hit.id;
                 state.dragOffsetMap = {
                     x: hit.x - worldPos.x,
@@ -4120,6 +4170,7 @@
             if (state.tool === "rotate_zone") {
                 const hit = hitTestZone(p.x, p.y);
                 if (!hit) return;
+                setSelection("zone", hit.id, { silent: true });
                 const mapPixel = worldToMapPixel(hit.x, hit.y);
                 const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
                 state.rotatingZoneId = hit.id;
@@ -4132,7 +4183,15 @@
 
             if (state.tool === "add_path") {
                 const hit = hitTestZone(p.x, p.y);
-                if (!hit) return;
+                if (!hit) {
+                    const pathHit = hitTestPath(p.x, p.y);
+                    if (pathHit) {
+                        setSelection("path", pathHit.id);
+                        openInspectorTab("properties");
+                    }
+                    return;
+                }
+                setSelection("zone", hit.id, { silent: true });
                 if (!state.pendingFromZone) {
                     state.pendingFromZone = hit.id;
                     updateStatus(`Path from ${hit.name || hit.id}...`);
@@ -4145,7 +4204,7 @@
             }
 
             if (state.tool === "add" || state.tool === "erase") {
-                state.strokeSnapshot = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+                state.strokeSnapshot = captureEditorSnapshot();
                 paintCircle(mapPos.x, mapPos.y, state.tool === "erase");
                 draw();
             }
@@ -4158,7 +4217,7 @@
                     updateStatus("Wall Line: click end point (Esc to cancel)");
                 } else {
                     // Second click — commit line to edit canvas
-                    state.strokeSnapshot = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+                    state.strokeSnapshot = captureEditorSnapshot();
                     editCtx.save();
                     editCtx.strokeStyle = "#000000";
                     editCtx.lineWidth = Math.max(1, Number(state.wallLineWidth) || 1);
@@ -4169,7 +4228,7 @@
                     editCtx.lineTo(mapPos.x, mapPos.y);
                     editCtx.stroke();
                     editCtx.restore();
-                    state.undoStack.push(state.strokeSnapshot);
+                    pushUndoSnapshot(state.strokeSnapshot);
                     state.strokeSnapshot = null;
                     state.lineStart = null;
                     state.linePreviewEnd = null;
@@ -4240,29 +4299,25 @@
 
         canvas.addEventListener("pointermove", (e) => {
             if (!state.mapReady) return;
+            const p = getPos(e);
+            const mapPos = canvasToMapPixel(p.x, p.y);
+            const worldPos = mapPixelToWorld(mapPos.x, mapPos.y);
+            updateCursorReadout(worldPos);
             // Update wall-line preview even when pointer is not held down
             if (state.tool === "wall_line" && state.lineStart) {
-                const p = getPos(e);
-                const mapPos = canvasToMapPixel(p.x, p.y);
                 state.linePreviewEnd = { x: mapPos.x, y: mapPos.y };
                 draw();
             }
             // Update dotted wall preview
             if (state.tool === "dot_wall" && state.dottedLineStart) {
-                const p = getPos(e);
-                const mapPos = canvasToMapPixel(p.x, p.y);
                 state.dottedPreviewEnd = { x: mapPos.x, y: mapPos.y };
                 draw();
             }
             if (state.tool === "set_robot_pose" && state.robotPosePlacementStart) {
-                const p = getPos(e);
-                const mapPos = canvasToMapPixel(p.x, p.y);
                 state.robotPosePlacementPreviewEnd = { x: mapPos.x, y: mapPos.y };
                 draw();
             }
             if (!state.pointerDown) return;
-            const p = getPos(e);
-            const mapPos = canvasToMapPixel(p.x, p.y);
 
             if (state.draggingView && state.viewDragStart) {
                 state.view.offsetX = state.viewDragStart.offsetX + (p.x - state.viewDragStart.x);
@@ -4306,7 +4361,7 @@
 
             if (state.tool === "add" || state.tool === "erase") {
                 if (!state.strokeSnapshot) {
-                    state.strokeSnapshot = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+                    state.strokeSnapshot = captureEditorSnapshot();
                 }
                 paintCircle(mapPos.x, mapPos.y, state.tool === "erase");
                 draw();
@@ -4339,6 +4394,10 @@
             if (state.moveOriginEnabled && state.draggingOrigin) {
                 state.draggingOrigin = false;
                 syncCanvasCursor();
+                if (state.strokeSnapshot) {
+                    pushUndoSnapshot(state.strokeSnapshot);
+                    state.strokeSnapshot = null;
+                }
                 saveEdits("origin-drag");
                 return;
             }
@@ -4358,6 +4417,7 @@
                 state.dragOffsetMap = null;
                 syncCanvasCursor();
                 if (zone) {
+                    setSelection("zone", movedId, { silent: true });
                     updateZonePose(zone);
                     updateAttachedPaths(movedId);
                 }
@@ -4367,9 +4427,11 @@
 
             if (state.tool === "rotate_zone" && state.rotatingZoneId) {
                 const zone = state.zones.get(state.rotatingZoneId);
+                const zoneId = state.rotatingZoneId;
                 state.rotatingZoneId = null;
                 syncCanvasCursor();
                 if (zone) {
+                    setSelection("zone", zoneId, { silent: true });
                     updateZonePose(zone);
                 }
                 state.pointerDown = false;
@@ -4378,7 +4440,7 @@
 
             if (state.tool === "add" || state.tool === "erase") {
                 if (state.strokeSnapshot) {
-                    state.undoStack.push(state.strokeSnapshot);
+                    pushUndoSnapshot(state.strokeSnapshot);
                     state.strokeSnapshot = null;
                 }
                 saveEdits(state.tool);
@@ -4389,6 +4451,9 @@
         canvas.addEventListener("pointerup", finishPointer);
         canvas.addEventListener("pointercancel", finishPointer);
         canvas.addEventListener("pointerleave", finishPointer);
+        canvas.addEventListener("mouseleave", () => {
+            updateCursorReadout(null);
+        });
 
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && state.tool === "wall_line" && state.lineStart) {
@@ -4509,6 +4574,10 @@
                 resizeCanvasToViewport({ preserveView: false });
                 syncOriginInputs();
                 updateZoomReadout();
+                renderSidebarCollections();
+                renderInspector();
+                syncCanvasContext();
+                syncStatusBar();
                 updateStatus(`Map loaded: ${basename(state.loadedMapPath || state.activeMapPath) || "active_map"}`);
                 draw();
             };
@@ -4549,6 +4618,7 @@
                         charge_duration: Number(zone.charge_duration) || 0
                     });
                 });
+                syncSelectionAfterDataRefresh();
                 draw();
             } catch (e) {
                 updateStatus("Zones load failed");
@@ -4560,7 +4630,11 @@
                 const resp = await fetch(API.paths);
                 const data = await resp.json();
                 const paths = data.paths || {};
+                const pathSettings = data.path_settings || {};
+                const pathMetrics = data.path_metrics || {};
                 state.paths.clear();
+                state.pathSettings.clear();
+                state.pathMetrics.clear();
                 Object.entries(paths).forEach(([name, rawPath]) => {
                     const points = Array.isArray(rawPath)
                         ? rawPath
@@ -4569,7 +4643,14 @@
                         id: name,
                         points
                     });
+                    if (pathSettings[name] && typeof pathSettings[name] === "object") {
+                        state.pathSettings.set(name, pathSettings[name]);
+                    }
+                    if (pathMetrics[name] && typeof pathMetrics[name] === "object") {
+                        state.pathMetrics.set(name, pathMetrics[name]);
+                    }
                 });
+                syncSelectionAfterDataRefresh();
                 draw();
             } catch (e) {
                 updateStatus("Paths load failed");
@@ -4585,6 +4666,7 @@
                 if (state.currentLayout && state.currentLayout !== previousLayout) {
                     updateStatus(`Layout loaded: ${state.currentLayout}`);
                 }
+                renderInspector();
             } catch (e) {
                 state.currentLayout = null;
             }
@@ -4656,6 +4738,29 @@
             return best;
         }
 
+        function hitTestPath(px, py, pickDistance = 10) {
+            let best = null;
+            let bestDist = Infinity;
+            state.paths.forEach((path, pathId) => {
+                const pts = getRenderablePathPoints(pathId, path);
+                if (!Array.isArray(pts) || pts.length < 2) {
+                    return;
+                }
+                for (let index = 0; index < pts.length - 1; index += 1) {
+                    const fromMap = worldToMapPixel(pts[index].x, pts[index].y);
+                    const toMap = worldToMapPixel(pts[index + 1].x, pts[index + 1].y);
+                    const fromCanvas = mapPixelToCanvas(fromMap.x, fromMap.y);
+                    const toCanvas = mapPixelToCanvas(toMap.x, toMap.y);
+                    const dist = pointToSegmentDist(px, py, fromCanvas.x, fromCanvas.y, toCanvas.x, toCanvas.y);
+                    if (dist < bestDist && dist <= pickDistance) {
+                        bestDist = dist;
+                        best = path;
+                    }
+                }
+            });
+            return best;
+        }
+
         function createPathBetween(fromId, toId) {
             const from = state.zones.get(fromId);
             const to = state.zones.get(toId);
@@ -4667,6 +4772,7 @@
                 { x: to.x, y: to.y }
             ];
             state.paths.set(pathId, { id: pathId, points });
+            setSelection("path", pathId, { silent: true });
             savePathToRos(pathId, points);
             updateStatus(`Path ${fromId} -> ${toId}`);
             draw();
@@ -4681,6 +4787,7 @@
                 } else {
                     state.robotPose = null;
                 }
+                syncCanvasContext();
                 draw();
             } catch (e) {
                 // ignore
@@ -4709,6 +4816,7 @@
                         };
                     }
                 }
+                syncCanvasContext();
                 draw();
             } catch (e) {
                 // ignore
@@ -4740,6 +4848,7 @@
                     theta
                 };
                 await refreshScanOverlay();
+                syncCanvasContext();
                 draw();
                 updateStatus(data?.message || "Robot pose placed");
             } catch (err) {
@@ -4830,6 +4939,7 @@
                     const img = new Image();
                     img.onload = () => {
                         state.dottedBgImage = img;
+                        syncCanvasContext();
                         draw();
                         if (!silent) {
                             updateStatus("Dotted map ready — use Add, Erase, Place Bot, or Reloc");
@@ -4889,9 +4999,15 @@
                 state.scanPoints = [];
                 state.scanSource = "";
                 state.scanOrigin = null;
-                setTool("add");
+                state.tool = "add";
+                document.querySelectorAll("button[data-tool]").forEach((btnEl) => {
+                    btnEl.classList.toggle("active", toolbarButtonMatchesTool(btnEl.dataset.tool, state.tool));
+                });
+                syncCanvasCursor();
                 draw();
             }
+            syncCanvasContext();
+            renderInspector();
         }
 
         async function init() {
@@ -4902,6 +5018,12 @@
             syncOriginInputs();
             syncGridButton();
             Object.keys(state.overlayVisibility).forEach((key) => syncOverlayButtons(key));
+            syncHistoryButtons();
+            renderSidebarCollections();
+            renderInspector();
+            syncCanvasContext();
+            syncStatusBar();
+            openInspectorTab("properties");
             setTool("add");
             setEditorMode("draw");
             syncCanvasCursor();
