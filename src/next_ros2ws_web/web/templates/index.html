@@ -1111,8 +1111,28 @@
         }
 
         /* ── Recognition tab ─────────────────────────────────── */
-        #recognition-body { display: flex; height: 100%; overflow: hidden; background: var(--bg-primary); }
-        #recognition-library { display: flex; flex-shrink: 0; width: 240px; min-width: 160px; max-width: 320px; border-right: 1px solid var(--border-heavy); background: var(--bg-panel); flex-direction: row; }
+        #recognition-body {
+            --rcg-library-width: 240px;
+            --rcg-inspector-width: 280px;
+            display: grid;
+            grid-template-columns:
+                minmax(180px, var(--rcg-library-width))
+                minmax(0, 1fr)
+                minmax(200px, var(--rcg-inspector-width));
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        #recognition-library {
+            display: flex;
+            width: auto;
+            min-width: 0;
+            max-width: none;
+            border-right: 1px solid var(--border-heavy);
+            background: var(--bg-panel);
+            flex-direction: row;
+            position: relative;
+        }
         .rcg-library-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; width: 44px; border-right: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
         .rcg-category-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 36px; height: 40px; border: none; border-radius: 5px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 9px; padding: 4px 2px; transition: background 0.15s, color 0.15s; }
         .rcg-category-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
@@ -1127,6 +1147,10 @@
         .rcg-inline-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
         .rcg-inline-btn { display: flex; align-items: center; gap: 3px; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 3px 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
         .rcg-inline-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-inline-btn.active { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
+        .rcg-stage-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .rcg-stage-tools .rcg-inline-btn { padding: 3px 7px; }
+        .rcg-stage-tools .rcg-inline-btn i { font-size: 10px; }
         .rcg-search-wrap { padding: 6px 8px; border-bottom: 1px solid var(--border-chrome); flex-shrink: 0; }
         .rcg-search-input { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px; outline: none; }
         .rcg-search-input:focus { border-color: var(--accent-normal); }
@@ -1145,9 +1169,32 @@
         .rcg-file-row:hover .rcg-file-actions { opacity: 1; }
         .rcg-file-act-btn { background: none; border: none; color: var(--text-tertiary); font-size: 10px; padding: 2px 4px; cursor: pointer; border-radius: 3px; }
         .rcg-file-act-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
-        #recognition-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border-heavy); }
+        #recognition-workspace {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-heavy);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
         .rcg-stage-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; flex-wrap: wrap; gap: 6px; }
-        #recognition-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; cursor: crosshair; background: var(--bg-canvas, var(--bg-panel)); background-image: var(--rcg-grid-major, none), var(--rcg-grid-minor, none); }
+        #recognition-stage {
+            flex: 1;
+            min-height: 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            isolation: isolate;
+            contain: layout paint;
+            z-index: 1;
+            cursor: crosshair;
+            background: var(--bg-canvas, var(--bg-panel));
+            background-image: var(--rcg-grid-major, none), var(--rcg-grid-minor, none);
+        }
         .rcg-stage-status { padding: 3px 10px; font-size: 10px; color: var(--text-tertiary); border-top: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; min-height: 22px; display: flex; align-items: center; }
         .rcg-save-btn { background: var(--accent-normal); border: none; border-radius: 4px; color: #fff; font-size: 10px; padding: 4px 10px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
         .rcg-save-btn:hover { filter: brightness(1.15); }
@@ -1157,14 +1204,27 @@
         .rcg-copy-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
         .rcg-del-btn { background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--accent-danger,#fc8181); font-size: 10px; padding: 4px 8px; cursor: pointer; }
         .rcg-del-btn:hover { background: rgba(252,129,129,0.15); }
-        #recognition-inspector { width: 280px; min-width: 200px; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-panel); position: relative; }
+        #recognition-inspector { width: auto; min-width: 0; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-panel); position: relative; }
+        .rcg-library-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 6; }
+        .rcg-library-resizer:hover,
+        .rcg-library-resizer.resizing { background: var(--accent-normal); }
         .rcg-inspector-resizer { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent; z-index: 5; }
         .rcg-inspector-resizer:hover { background: var(--accent-normal); }
-        .rcg-inspector-tabs { display: flex; border-bottom: 1px solid var(--border-heavy); flex-shrink: 0; background: var(--bg-chrome); }
+        .rcg-inspector-tabs { display: flex; border-bottom: 1px solid var(--border-heavy); flex-shrink: 0; background: var(--bg-chrome); visibility: visible; }
         .rcg-inspector-tab { flex: 1; padding: 5px 6px; border: none; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
         .rcg-inspector-tab:hover { color: var(--text-primary); }
         .rcg-inspector-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-normal); }
         .rcg-empty-state { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
+        #recognition-empty-state {
+            position: absolute;
+            inset: 0;
+            display: none;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #recognition-empty-state.visible {
+            display: flex;
+        }
         .rcg-empty-state > div { max-width: 200px; }
         .rcg-empty-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; font-style: italic; }
         .rcg-popover { position: absolute; right: 8px; top: 36px; z-index: 200; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 6px; padding: 4px; display: none; flex-direction: column; gap: 2px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 180px; }
@@ -1199,6 +1259,22 @@
         .rcg-form-check-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; color: var(--text-secondary); grid-column: 1 / -1; }
         .rcg-form-check-row input[type="checkbox"] { accent-color: var(--accent-normal); width: 13px; height: 13px; }
         .rcg-section-label { padding: 4px 10px 2px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-tertiary); border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); }
+
+        body.recognition-tab-active #recognition-top-controls {
+            display: flex !important;
+            visibility: visible;
+            position: relative;
+            z-index: 20;
+        }
+        body.recognition-tab-active .rcg-inspector-tabs {
+            display: flex !important;
+            visibility: visible;
+        }
+        #recognition-library,
+        #recognition-inspector {
+            position: relative;
+            z-index: 3;
+        }
 
         * {
             margin: 0;
@@ -18969,15 +19045,43 @@
                     }
 
                     // ── Stubs for compat ──────────────────────────────────────
-                    function recognitionSetTool(t) {}
-                    function recognitionZoom(d) {}
-                    function recognitionFitView() {}
-                    function recognitionToggleGrid() {}
-                    function recognitionToggleLabels() {}
-                    function recognitionToggleConstraints() {}
-                    function recognitionSetStageView(v) {}
-                    function recognitionPasteGeometry() {}
-                    function recognitionCopyGeometry() {}
+                    // Delegate to runtime module when loaded, otherwise remain harmless.
+                    function recognitionSetTool(t) {
+                        const fn = window.recognitionSetTool;
+                        if (typeof fn === 'function' && fn !== recognitionSetTool) return fn(t);
+                    }
+                    function recognitionZoom(d) {
+                        const fn = window.recognitionZoom;
+                        if (typeof fn === 'function' && fn !== recognitionZoom) return fn(d);
+                    }
+                    function recognitionFitView() {
+                        const fn = window.recognitionFitView;
+                        if (typeof fn === 'function' && fn !== recognitionFitView) return fn();
+                    }
+                    function recognitionToggleGrid() {
+                        const fn = window.recognitionToggleGrid;
+                        if (typeof fn === 'function' && fn !== recognitionToggleGrid) return fn();
+                    }
+                    function recognitionToggleLabels() {
+                        const fn = window.recognitionToggleLabels;
+                        if (typeof fn === 'function' && fn !== recognitionToggleLabels) return fn();
+                    }
+                    function recognitionToggleConstraints() {
+                        const fn = window.recognitionToggleConstraints;
+                        if (typeof fn === 'function' && fn !== recognitionToggleConstraints) return fn();
+                    }
+                    function recognitionSetStageView(v) {
+                        const fn = window.recognitionSetStageView;
+                        if (typeof fn === 'function' && fn !== recognitionSetStageView) return fn(v);
+                    }
+                    function recognitionPasteGeometry() {
+                        const fn = window.recognitionPasteGeometry;
+                        if (typeof fn === 'function' && fn !== recognitionPasteGeometry) return fn();
+                    }
+                    function recognitionCopyGeometry() {
+                        const fn = window.recognitionCopyGeometry;
+                        if (typeof fn === 'function' && fn !== recognitionCopyGeometry) return fn();
+                    }
                     function recognitionCloseMenus() {
                         const m = document.getElementById('recognition-overflow-menu');
                         if (m) m.classList.remove('open');
@@ -22437,6 +22541,55 @@
                         return actionId ? 'action' : 'normal';
                     }
 
+                    function getActionPointConfigFromZone(zone) {
+                        if (!zone || typeof zone !== 'object') {
+                            return null;
+                        }
+                        if (zone.action_point_config && typeof zone.action_point_config === 'object') {
+                            return zone.action_point_config;
+                        }
+                        const metadata = (zone.metadata && typeof zone.metadata === 'object') ? zone.metadata : null;
+                        if (metadata && metadata.action_point && typeof metadata.action_point === 'object') {
+                            return metadata.action_point;
+                        }
+                        return null;
+                    }
+
+                    function normalizeActionPointType(pointTypeRaw) {
+                        const pointType = String(pointTypeRaw || 'generic').trim().toLowerCase();
+                        return pointType || 'generic';
+                    }
+
+                    function getActionPointSearchRadiusMeters(zone) {
+                        const zoneType = resolveZoneType(zone);
+                        if (zoneType !== 'action') {
+                            return 0;
+                        }
+                        const config = getActionPointConfigFromZone(zone);
+                        const pointType = normalizeActionPointType(config && config.point_type);
+                        if (pointType === 'generic') {
+                            return 0;
+                        }
+
+                        const rawRadius = Number(
+                            (config && (
+                                config.search_radius_m
+                                ?? config.detection_radius_m
+                                ?? config.radius_m
+                                ?? config.roi_radius_m
+                            ))
+                        );
+                        if (Number.isFinite(rawRadius) && rawRadius > 0) {
+                            return Math.max(0.15, Math.min(6.0, rawRadius));
+                        }
+
+                        // Defaults keep the overlay useful even when no explicit radius is configured.
+                        if (pointType === 'shelf') {
+                            return 0.75;
+                        }
+                        return 0.60;
+                    }
+
                     function getZoneTypeVisual(zoneTypeRaw) {
                         const zoneType = normalizeZoneType(zoneTypeRaw, 'normal');
                         if (zoneType === 'action') {
@@ -22892,11 +23045,27 @@
                                 const visual = getZoneTypeVisual(resolveZoneType(zone));
                                 const headingRad = getZoneHeadingRadians(zone);
                                 const headingDeg = getZoneHeadingDegrees(zone);
+                                const actionSearchRadiusM = getActionPointSearchRadiusMeters(zone);
                                 const retTheta = zoneReturnHeadings[name];
                                 const isHovered = mapHoverState.zoneName === name;
                                 const isSelected = isMapSelection('zone', name);
                                 const isTargeted = zoneHeadingTarget === name || returnOrientationTarget === name;
                                 const emphasized = isHovered || isSelected || isTargeted;
+
+                                if (actionSearchRadiusM > 0 && Number.isFinite(Number(mapData?.resolution)) && Number(mapData.resolution) > 0) {
+                                    const actionSearchRadiusPx = (actionSearchRadiusM / Number(mapData.resolution)) * scale;
+                                    if (Number.isFinite(actionSearchRadiusPx) && actionSearchRadiusPx > 1) {
+                                        ctx.save();
+                                        ctx.strokeStyle = emphasized ? 'rgba(251, 191, 36, 0.92)' : 'rgba(251, 191, 36, 0.62)';
+                                        ctx.lineWidth = emphasized ? Math.max(1.4, visualProfile.zoneStrokeWidth + 0.4) : Math.max(1.0, visualProfile.zoneStrokeWidth);
+                                        ctx.setLineDash(emphasized ? [4, 4] : [5, 5]);
+                                        ctx.beginPath();
+                                        ctx.arc(px, py, actionSearchRadiusPx, 0, Math.PI * 2);
+                                        ctx.stroke();
+                                        ctx.setLineDash([]);
+                                        ctx.restore();
+                                    }
+                                }
 
                                 ctx.save();
                                 ctx.translate(px, py);
@@ -26057,20 +26226,36 @@
                                 text: 'Save',
                                 style: 'success',
                                 action: async () => {
-                                    const newName      = (document.getElementById('ez-name').value || '').trim();
-                                    const newType      = document.getElementById('ez-type').value;
-                                    const newX         = parseFloat(document.getElementById('ez-x').value);
-                                    const newY         = parseFloat(document.getElementById('ez-y').value);
-                                    const newHeadingDeg= parseFloat(document.getElementById('ez-heading').value);
-                                    const newSpeed     = parseFloat(document.getElementById('ez-speed').value);
-                                    const newAction    = String(document.getElementById('ez-action').value || '').trim();
+                                    const nameEl = document.getElementById('ez-name');
+                                    const typeEl = document.getElementById('ez-type');
+                                    const xEl = document.getElementById('ez-x');
+                                    const yEl = document.getElementById('ez-y');
+                                    const headingEl = document.getElementById('ez-heading');
+                                    const speedEl = document.getElementById('ez-speed');
+                                    const actionEl = document.getElementById('ez-action');
+                                    const chargeEl = document.getElementById('ez-charge-duration');
+
+                                    if (!nameEl || !typeEl || !xEl || !yEl || !headingEl || !speedEl || !chargeEl) {
+                                        showStatus('Edit dialog is missing required fields. Re-open and try again.', 'error');
+                                        return;
+                                    }
+
+                                    const newName      = String(nameEl.value || '').trim();
+                                    const newType      = String(typeEl.value || '').trim();
+                                    const newX         = parseFloat(xEl.value);
+                                    const newY         = parseFloat(yEl.value);
+                                    const newHeadingDeg= parseFloat(headingEl.value);
+                                    const newSpeed     = parseFloat(speedEl.value);
+                                    const newAction    = String((actionEl && actionEl.value) || '').trim();
                                     const actionPointPayload = (typeof recognitionGetActionPointPayloadFromForm === 'function')
                                         ? recognitionGetActionPointPayloadFromForm('ez')
                                         : { point_type: 'generic', template_id: '', recognize: false, pre_point: null };
-                                    const newCharge    = parseFloat(document.getElementById('ez-charge-duration').value);
+                                    const newCharge    = parseFloat(chargeEl.value);
 
                                     if (!newName) { showStatus('Zone name cannot be empty', 'error'); return; }
                                     if (isNaN(newX) || isNaN(newY)) { showStatus('Invalid coordinates', 'error'); return; }
+                                    if (isNaN(newHeadingDeg)) { showStatus('Invalid heading value', 'error'); return; }
+                                    if (isNaN(newSpeed)) { showStatus('Invalid speed value', 'error'); return; }
                                     if (newType === 'action' && actionPointPayload.point_type === 'shelf' && !actionPointPayload.template_id) {
                                         showStatus('Select a shelf template for shelf-aware action points', 'error');
                                         return;
@@ -27400,7 +27585,20 @@
                             const button = document.createElement('button');
                             button.className = `notification-btn notification-btn-${btn.style}`;
                             button.textContent = btn.text;
-                            button.onclick = btn.action;
+                            button.onclick = async (event) => {
+                                try {
+                                    if (typeof btn.action === 'function') {
+                                        await Promise.resolve(btn.action(event));
+                                    }
+                                } catch (error) {
+                                    const message = (error && error.message) ? error.message : String(error || 'Unknown error');
+                                    if (typeof showStatus === 'function') {
+                                        showStatus(`Action failed: ${message}`, 'error');
+                                    } else {
+                                        console.error('Notification action failed:', error);
+                                    }
+                                }
+                            };
                             buttonsDiv.appendChild(button);
                         });
 
@@ -30394,6 +30592,7 @@
                     </div>
                     <div id="rcg-lib-status" class="rcg-lib-status"></div>
                 </div>
+                <div class="rcg-library-resizer" id="recognition-library-resizer" title="Drag to resize library"></div>
             </aside>
 
             <section id="recognition-workspace">
@@ -30402,6 +30601,32 @@
                         <div class="rcg-pane-kicker">Configuration</div>
                         <div id="recognition-stage-title" class="rcg-stage-title">Select a file</div>
                         <div id="recognition-stage-subtitle" class="rcg-stage-subtitle"></div>
+                    </div>
+                    <div class="rcg-stage-tools" aria-label="Recognition editor tools">
+                        <button type="button" class="rcg-inline-btn active" data-rcg-tool="select" onclick="recognitionSetTool('select')" title="Select and move geometry">
+                            <i class="fas fa-mouse-pointer"></i><span>Select</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="point" onclick="recognitionSetTool('point')" title="Add anchor point">
+                            <i class="fas fa-map-pin"></i><span>Point</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="endpoint" onclick="recognitionSetTool('endpoint')" title="Add required endpoint">
+                            <i class="fas fa-dot-circle"></i><span>Endpoint</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="rectangle" onclick="recognitionSetTool('rectangle')" title="Draw capture rectangle">
+                            <i class="far fa-square"></i><span>Rect</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-tool="segment" onclick="recognitionSetTool('segment')" title="Draw measured span">
+                            <i class="fas fa-ruler-horizontal"></i><span>Span</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn active" data-rcg-view="top" onclick="recognitionSetStageView('top')" title="Top view">
+                            <i class="fas fa-border-all"></i><span>Top</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-view="side" onclick="recognitionSetStageView('side')" title="Side view">
+                            <i class="fas fa-grip-lines-vertical"></i><span>Side</span>
+                        </button>
+                        <button type="button" class="rcg-inline-btn" data-rcg-view="iso" onclick="recognitionSetStageView('iso')" title="Iso view">
+                            <i class="fas fa-cube"></i><span>Iso</span>
+                        </button>
                     </div>
                     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                         <button id="rcg-save-btn" type="button" class="rcg-save-btn" onclick="recognitionSaveActive()" style="display:none;">
@@ -30419,7 +30644,7 @@
                     </div>
                 </div>
                 <div id="recognition-stage" tabindex="0">
-                    <svg id="recognition-svg" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;"></svg>
+                    <svg id="recognition-svg" style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:auto;"></svg>
                     <div id="recognition-empty-state" class="rcg-empty-state">
                         <div>
                             <div class="rcg-pane-title">No Template Selected</div>

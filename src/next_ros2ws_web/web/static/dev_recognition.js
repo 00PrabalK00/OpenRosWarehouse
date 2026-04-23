@@ -543,11 +543,30 @@
         renderRecognition();
     }
 
-    function markDirty() {
+    function isRecognitionEditableTarget(target) {
+        if (!target || typeof target.closest !== 'function') return false;
+        if (target.isContentEditable) return true;
+        if (target.closest('input, textarea, select, [contenteditable="true"]')) return true;
+        return false;
+    }
+
+    function markDirty(options = {}) {
+        const skipRender = Boolean(options && options.skipRender);
         state.dirty = true;
         state.editorTemplate.validation = validateTemplate(state.editorTemplate);
         pushHistory();
-        renderRecognition();
+        if (!skipRender) {
+            renderRecognition();
+        }
+    }
+
+    function refreshRecognitionVisualsOnly() {
+        // Keep active input intact while still reflecting geometry/template changes.
+        renderTopToolbar();
+        renderStageHeader();
+        renderStage();
+        renderInspector();
+        bindToolbarButtons();
     }
 
     function setToolbarStatus(message) {
@@ -1682,9 +1701,84 @@
         });
     }
 
+    function bindLibraryResizer() {
+        const handle = document.getElementById('recognition-library-resizer');
+        const grid = document.getElementById('recognition-body');
+        if (!handle || !grid || handle.dataset.bound === '1') return;
+        handle.dataset.bound = '1';
+
+        const MIN_WIDTH = 180;
+        const MAX_WIDTH = 460;
+        const STORAGE_KEY = 'recognitionLibraryWidth';
+
+        try {
+            const saved = parseFloat(localStorage.getItem(STORAGE_KEY));
+            if (!Number.isNaN(saved) && saved >= MIN_WIDTH && saved <= MAX_WIDTH) {
+                grid.style.setProperty('--rcg-library-width', saved + 'px');
+            }
+        } catch (_) { /* localStorage may be unavailable */ }
+
+        const readCurrentWidth = () => {
+            const cs = getComputedStyle(grid).getPropertyValue('--rcg-library-width').trim();
+            const parsed = parseFloat(cs);
+            return Number.isFinite(parsed) ? parsed : 240;
+        };
+
+        let dragging = false;
+        let startX = 0;
+        let startWidth = 240;
+
+        const onMove = (ev) => {
+            if (!dragging) return;
+            const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            const delta = clientX - startX;
+            const nextWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta));
+            grid.style.setProperty('--rcg-library-width', nextWidth + 'px');
+        };
+
+        const onEnd = () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('resizing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try {
+                const cs = getComputedStyle(grid).getPropertyValue('--rcg-library-width').trim();
+                if (cs) localStorage.setItem(STORAGE_KEY, parseFloat(cs));
+            } catch (_) { /* ignore */ }
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onEnd);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+        };
+
+        const onStart = (ev) => {
+            dragging = true;
+            startX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            startWidth = readCurrentWidth();
+            handle.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+            ev.preventDefault();
+        };
+
+        handle.addEventListener('mousedown', onStart);
+        handle.addEventListener('touchstart', onStart, { passive: false });
+
+        handle.addEventListener('dblclick', () => {
+            grid.style.setProperty('--rcg-library-width', '240px');
+            try { localStorage.setItem(STORAGE_KEY, 240); } catch (_) { /* ignore */ }
+        });
+    }
+
     function bindDom() {
         if (state.domBound) return;
         state.domBound = true;
+        bindLibraryResizer();
         bindInspectorResizer();
         const stage = getStageElement();
         if (stage) {
@@ -1720,9 +1814,17 @@
                 }
             });
         }
+        document.addEventListener('blur', (event) => {
+            if (!state.dirty) return;
+            if (!isRecognitionEditableTarget(event.target)) return;
+            const recognitionTabActive = document.body && document.body.classList.contains('recognition-tab-active');
+            if (!recognitionTabActive) return;
+            renderRecognition();
+        }, true);
         document.addEventListener('keydown', (event) => {
             const recognitionTabActive = document.body && document.body.classList.contains('recognition-tab-active');
             if (!recognitionTabActive) return;
+            if (isRecognitionEditableTarget(event.target)) return;
             const modifier = event.ctrlKey || event.metaKey;
             if (modifier && event.key.toLowerCase() === 'z') {
                 event.preventDefault();
@@ -2200,6 +2302,7 @@
         state.stageView = ['top', 'side', 'iso'].includes(String(view || '')) ? String(view) : 'top';
         bindToolbarButtons();
         renderStageHeader();
+        renderStage();
     };
     window.recognitionZoom = function recognitionZoom(delta) {
         state.viewport.zoom = Math.max(0.35, Math.min(2.8, Number(state.viewport.zoom || 1) + Number(delta || 0)));
@@ -2251,7 +2354,11 @@
         } else if (path === 'notes') {
             template.notes = String(value || '');
         }
-        markDirty();
+        const editing = isRecognitionEditableTarget(document.activeElement);
+        markDirty({ skipRender: editing });
+        if (editing) {
+            refreshRecognitionVisualsOnly();
+        }
     };
     window.recognitionUpdateSelectedGeometryField = function recognitionUpdateSelectedGeometryField(field, rawValue) {
         if (!state.selectedGeometry || !state.editorTemplate) return;
@@ -2259,7 +2366,14 @@
         if (!entity) return;
         pushHistory();
         if (['x', 'y', 'width', 'height', 'distance', 'x1', 'y1', 'x2', 'y2'].includes(field)) {
-            entity[field] = Number(rawValue);
+            if (rawValue === '' || rawValue === null || rawValue === undefined) {
+                return;
+            }
+            const parsed = Number(rawValue);
+            if (!Number.isFinite(parsed)) {
+                return;
+            }
+            entity[field] = parsed;
         } else if (field === 'required') {
             entity.required = Boolean(rawValue);
         } else {
@@ -2268,7 +2382,11 @@
         if (state.selectedGeometry.kind === 'segments') {
             entity.distance = Number(entity.distance || 0);
         }
-        markDirty();
+        const editing = isRecognitionEditableTarget(document.activeElement);
+        markDirty({ skipRender: editing });
+        if (editing) {
+            refreshRecognitionVisualsOnly();
+        }
     };
     window.recognitionAddConstraint = function recognitionAddConstraint(type) {
         const template = ensureActiveTemplate();
