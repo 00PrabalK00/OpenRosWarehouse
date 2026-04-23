@@ -1818,7 +1818,14 @@
         }
         // Pre-point coords visibility follows its toggle state; only relevant for shelf type
         if (prePointCoordsEl && prePointEnabledEl) {
-            prePointCoordsEl.style.display = (pointType === 'shelf' && prePointEnabledEl.checked) ? 'block' : 'none';
+            const showPrePoint = (pointType === 'shelf' && prePointEnabledEl.checked);
+            prePointCoordsEl.style.display = showPrePoint ? 'block' : 'none';
+            if (showPrePoint) {
+                const poiEl = document.getElementById(`${prefix}-pre-point-poi`);
+                if (poiEl && (!poiEl.options.length || (poiEl.options.length === 1 && poiEl.options[0].value === ''))) {
+                    loadPrePointPois(prefix, null);
+                }
+            }
         }
         if (summaryEl) {
             summaryEl.innerHTML = buildActionPointSummary(templateEl ? templateEl.value : '', pointType, Boolean(recognizeEl && recognizeEl.checked));
@@ -1839,9 +1846,7 @@
         const templateEl = document.getElementById(`${prefix}-shelf-template`);
         const recognizeEl = document.getElementById(`${prefix}-shelf-recognize`);
         const prePointEnabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
-        const prePointXEl = document.getElementById(`${prefix}-pre-point-x`);
-        const prePointYEl = document.getElementById(`${prefix}-pre-point-y`);
-        const prePointThetaEl = document.getElementById(`${prefix}-pre-point-theta`);
+        const prePointPoiEl = document.getElementById(`${prefix}-pre-point-poi`);
         const payload = {
             point_type: pointTypeEl ? normalizePointType(pointTypeEl.value || 'generic') : 'generic',
             template_id: '',
@@ -1851,15 +1856,22 @@
         if (payload.point_type === 'shelf') {
             payload.template_id = String(templateEl && templateEl.value || '').trim();
             payload.recognize = Boolean(recognizeEl && recognizeEl.checked);
-            if (prePointEnabledEl && prePointEnabledEl.checked) {
-                const px = parseFloat(prePointXEl && prePointXEl.value);
-                const py = parseFloat(prePointYEl && prePointYEl.value);
-                const ptDeg = parseFloat(prePointThetaEl && prePointThetaEl.value);
-                payload.pre_point = {
-                    x: Number.isFinite(px) ? px : 0,
-                    y: Number.isFinite(py) ? py : 0,
-                    theta: Number.isFinite(ptDeg) ? ptDeg * Math.PI / 180 : 0,
-                };
+            if (prePointEnabledEl && prePointEnabledEl.checked && prePointPoiEl && prePointPoiEl.value) {
+                const zoneName = prePointPoiEl.value;
+                const zoneData = _prePointZonesMap[zoneName];
+                if (zoneData) {
+                    const oz = Number((zoneData.orientation && zoneData.orientation.z) || 0);
+                    const ow = Number((zoneData.orientation && zoneData.orientation.w) || 1);
+                    const headingRad = 2 * Math.atan2(oz, ow);
+                    payload.pre_point = {
+                        zone_name: zoneName,
+                        x: Number((zoneData.position && zoneData.position.x) || 0),
+                        y: Number((zoneData.position && zoneData.position.y) || 0),
+                        theta: headingRad,
+                    };
+                } else {
+                    payload.pre_point = { zone_name: zoneName, x: 0, y: 0, theta: 0 };
+                }
             }
         }
         return payload;
@@ -2303,11 +2315,43 @@
     window.recognitionHandleActionPointTemplateChange = function recognitionHandleActionPointTemplateChange(prefix) {
         refreshActionPointForm(prefix);
     };
+    let _prePointZonesMap = {};
+
+    async function loadPrePointPois(prefix, selectedZoneName) {
+        const selectEl = document.getElementById(`${prefix}-pre-point-poi`);
+        if (!selectEl) return;
+        try {
+            const resp = await fetch('/api/zones');
+            const data = await resp.json();
+            const zonesObj = (data && data.zones) ? data.zones : {};
+            _prePointZonesMap = {};
+            const options = ['<option value="">— Select a waypoint —</option>'];
+            const sortedNames = Object.keys(zonesObj).sort();
+            for (const name of sortedNames) {
+                _prePointZonesMap[name] = zonesObj[name];
+                const z = zonesObj[name];
+                const oz = Number((z.orientation && z.orientation.z) || 0);
+                const ow = Number((z.orientation && z.orientation.w) || 1);
+                const hdgDeg = (2 * Math.atan2(oz, ow) * 180 / Math.PI).toFixed(1);
+                const sel = (name === selectedZoneName) ? ' selected' : '';
+                options.push(`<option value="${name}"${sel}>${name} (${hdgDeg}°)</option>`);
+            }
+            selectEl.innerHTML = options.join('');
+        } catch (e) {
+            selectEl.innerHTML = '<option value="">Failed to load zones</option>';
+        }
+    }
+    window.recognitionLoadPrePointPois = loadPrePointPois;
+
     window.recognitionHandlePrePointToggle = function recognitionHandlePrePointToggle(prefix) {
         const enabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
         const coordsEl  = document.getElementById(`${prefix}-pre-point-coords`);
+        const show = enabledEl && enabledEl.checked;
         if (coordsEl) {
-            coordsEl.style.display = (enabledEl && enabledEl.checked) ? 'block' : 'none';
+            coordsEl.style.display = show ? 'block' : 'none';
+        }
+        if (show) {
+            loadPrePointPois(prefix, null);
         }
     };
 

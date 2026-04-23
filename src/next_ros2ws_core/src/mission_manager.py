@@ -503,6 +503,63 @@ class MissionManager(Node):
         except Exception:
             pass
 
+    def _navigate_to_zone_sync(
+        self, zone_name: str, token: int, timeout: float = 120.0
+    ) -> Tuple[bool, str]:
+        """Navigate to a named zone synchronously (used for pre-point waypoints)."""
+        if not self.go_to_zone_client.wait_for_server(timeout_sec=3.0):
+            return False, 'GoToZone action server not available'
+
+        with self._lock:
+            if token != self._mission_token or not self.running:
+                return False, 'mission stopped'
+
+        goal = GoToZone.Goal()
+        goal.name = zone_name
+        done = threading.Event()
+        result_holder: List[Any] = [False, 'timeout']
+
+        def _on_result(future):
+            try:
+                res = future.result()
+                if res.status == GoalStatus.STATUS_SUCCEEDED:
+                    result_holder[0] = True
+                    result_holder[1] = 'arrived'
+                else:
+                    result_holder[0] = False
+                    result_holder[1] = f'navigation failed (status {res.status})'
+            except Exception as exc:
+                result_holder[0] = False
+                result_holder[1] = str(exc)
+            done.set()
+
+        def _on_goal_response(future):
+            try:
+                goal_handle = future.result()
+            except Exception as exc:
+                result_holder[0] = False
+                result_holder[1] = str(exc)
+                done.set()
+                return
+            if not goal_handle.accepted:
+                result_holder[0] = False
+                result_holder[1] = 'goal rejected by action server'
+                done.set()
+                return
+            goal_handle.get_result_async().add_done_callback(_on_result)
+
+        self.go_to_zone_client.send_goal_async(goal).add_done_callback(_on_goal_response)
+
+        deadline = time.monotonic() + timeout
+        while not done.wait(timeout=0.2):
+            with self._lock:
+                if token != self._mission_token or not self.running:
+                    return False, 'mission stopped during pre-point navigation'
+            if time.monotonic() > deadline:
+                result_holder[1] = f'timed out after {timeout:.0f}s'
+                break
+        return bool(result_holder[0]), str(result_holder[1])
+
     def _run_shelf_recognition_workflow(
         self, zone_name: str, template_id: str, token: int
     ) -> Tuple[bool, str]:
@@ -844,9 +901,29 @@ class MissionManager(Node):
                 return
 
             # Shelf recognition workflow — triggered when recognize=True on a shelf action point.
-            # The robot is expected to be at a position (Pre Point or action zone itself)
-            # where the shelf is visible. Detection constrains the solve using the linked template.
             if point_type == 'shelf' and recognize:
+                # Navigate to Pre Point first, if configured
+                pre_point_cfg = action_point_config.get('pre_point')
+                if isinstance(pre_point_cfg, dict):
+                    pre_zone = str(pre_point_cfg.get('zone_name', '') or '').strip()
+                    if pre_zone:
+                        with self._lock:
+                            if token != self._mission_token or not self.running:
+                                return
+                            self.message = (
+                                f'Zone "{zone_name}": navigating to pre-point "{pre_zone}"'
+                            )
+                            try:
+                                self._persist_locked()
+                            except Exception:
+                                pass
+                        ok, nav_msg = self._navigate_to_zone_sync(pre_zone, token)
+                        if not ok:
+                            self._mark_interrupted_if_active(
+                                token, 'shelf_recognition_failed',
+                                f'Failed to reach pre-point "{pre_zone}": {nav_msg}')
+                            return
+
                 ok, rcg_msg = self._run_shelf_recognition_workflow(
                     zone_name, template_id, token)
                 if not ok:

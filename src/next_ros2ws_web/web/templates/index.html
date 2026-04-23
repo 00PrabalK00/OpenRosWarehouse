@@ -12607,20 +12607,9 @@
                                                 </label>
                                             </div>
                                             <div id="zone-pre-point-coords" style="display:none;margin-top:6px;">
-                                                <div style="display:flex;gap:6px;margin-bottom:4px;">
-                                                    <div style="flex:1;">
-                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">X (m)</label>
-                                                        <input type="number" id="zone-pre-point-x" step="0.01" placeholder="0.00" style="width:100%;">
-                                                    </div>
-                                                    <div style="flex:1;">
-                                                        <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Y (m)</label>
-                                                        <input type="number" id="zone-pre-point-y" step="0.01" placeholder="0.00" style="width:100%;">
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label style="font-size:10px;color:var(--text-secondary,#8b949e);">Heading (deg, optional)</label>
-                                                    <input type="number" id="zone-pre-point-theta" step="1" min="-180" max="180" value="0" style="width:100%;">
-                                                </div>
+                                                <select id="zone-pre-point-poi" style="width:100%;padding:6px 8px;background:var(--bg-secondary,#161b22);color:var(--text-primary,#e6edf3);border:1px solid var(--border-chrome,#30363d);border-radius:6px;font-size:12px;box-sizing:border-box;">
+                                                    <option value="">Loading zones…</option>
+                                                </select>
                                                 <div style="margin-top:6px;font-size:10px;color:var(--text-tertiary,#6b7280);display:flex;align-items:center;gap:4px;">
                                                     <i class="fas fa-route" style="color:var(--accent-normal,#3b82f6);"></i>
                                                     <span>Path → <strong>Pre Point</strong> → Shelf Detection → Shelf Execution</span>
@@ -25929,9 +25918,7 @@
                         const shelfRecognize = Boolean(actionPointConfig.recognize);
                         const prePointCfg = (actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object') ? actionPointConfig.pre_point : null;
                         const prePointEnabled = Boolean(prePointCfg);
-                        const prePointX = prePointCfg ? Number(prePointCfg.x || 0).toFixed(4) : '';
-                        const prePointY = prePointCfg ? Number(prePointCfg.y || 0).toFixed(4) : '';
-                        const prePointTheta = prePointCfg ? Number(prePointCfg.theta !== undefined ? prePointCfg.theta * 180 / Math.PI : 0).toFixed(1) : '0';
+                        const prePointZoneName = prePointCfg ? (prePointCfg.zone_name || '') : '';
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
                         const posY = (zone.position && zone.position.y !== undefined) ? zone.position.y : 0;
                         const headingDeg = getZoneHeadingDegrees(zone);
@@ -26012,21 +25999,10 @@
                                 </label>
                             </div>
                             <div id="ez-pre-point-coords" style="display:${prePointEnabled ? 'block' : 'none'};">
-                                <div style="display:flex;gap:10px;margin-bottom:8px;">
-                                    <div style="flex:1;">
-                                        <label style="${labelStyle}">X (m)</label>
-                                        <input type="number" id="ez-pre-point-x" value="${prePointX}" step="0.01" style="${inputStyle}">
-                                    </div>
-                                    <div style="flex:1;">
-                                        <label style="${labelStyle}">Y (m)</label>
-                                        <input type="number" id="ez-pre-point-y" value="${prePointY}" step="0.01" style="${inputStyle}">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label style="${labelStyle}">Heading (deg)</label>
-                                    <input type="number" id="ez-pre-point-theta" value="${prePointTheta}" step="1" min="-180" max="180" style="${inputStyle}">
-                                </div>
-                                <div style="margin-top:8px;font-size:10px;color:#8b949e;display:flex;align-items:center;gap:4px;">
+                                <select id="ez-pre-point-poi" style="${inputStyle}margin-bottom:8px;">
+                                    <option value="">Loading zones…</option>
+                                </select>
+                                <div style="margin-top:4px;font-size:10px;color:#8b949e;display:flex;align-items:center;gap:4px;">
                                     <i class="fas fa-route" style="color:#3b82f6;"></i>
                                     <span>Path → <strong style="color:#e6edf3;">Pre Point</strong> → Shelf Detection → Shelf Execution</span>
                                 </div>
@@ -26160,6 +26136,9 @@
                                     templateSelect.value = shelfTemplateId;
                                 }
                                 recognitionRefreshActionPointForm('ez');
+                            }
+                            if (prePointEnabled && typeof recognitionLoadPrePointPois === 'function') {
+                                recognitionLoadPrePointPois('ez', prePointZoneName);
                             }
                         }, 80);
                     }
