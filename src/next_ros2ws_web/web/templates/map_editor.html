@@ -997,34 +997,11 @@
             flex-shrink: 0;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-end;
             gap: 12px;
             padding: 0 12px;
             background: var(--bg-elevated);
             border-bottom: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .canvas-stage-titlegroup {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
-        }
-
-        #map-editor-shell .canvas-stage-title {
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-primary);
-        }
-
-        #map-editor-shell .canvas-stage-subtitle {
-            font-size: 10px;
-            color: var(--text-tertiary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         #map-editor-shell .canvas-stage-chiprow {
@@ -1567,9 +1544,6 @@
                         <span class="tool-sidebar-title" id="tool-sidebar-title">Draw</span>
                         <span class="tool-sidebar-subtitle" id="tool-sidebar-subtitle">Paint the occupancy map, erase noise, and reshape walls.</span>
                     </div>
-                    <button class="sidebar-panel-close" id="sidebar-close-btn" type="button" title="Collapse tools sidebar">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
                 </div>
                 <div class="tool-sidebar-scroll">
                 <section class="sidebar-panel active-panel" data-mode-panel="draw">
@@ -1779,10 +1753,6 @@
 
             <section class="canvas-stage">
                 <div class="canvas-stage-header">
-                    <div class="canvas-stage-titlegroup">
-                        <span class="canvas-stage-title" id="canvas-mode-title">Draw</span>
-                        <span class="canvas-stage-subtitle" id="canvas-mode-subtitle">Obstacle brush enabled</span>
-                    </div>
                     <div class="canvas-stage-chiprow">
                         <span class="context-chip" id="canvas-selection-chip">No selection</span>
                         <span class="context-chip" id="canvas-layer-chip">4 overlays visible</span>
@@ -1873,15 +1843,12 @@
         const selectionReadoutEl = document.getElementById("selection-readout");
         const gridStatusReadoutEl = document.getElementById("grid-status-readout");
         const snapStatusReadoutEl = document.getElementById("snap-status-readout");
-        const canvasModeTitleEl = document.getElementById("canvas-mode-title");
-        const canvasModeSubtitleEl = document.getElementById("canvas-mode-subtitle");
         const canvasSelectionChipEl = document.getElementById("canvas-selection-chip");
         const canvasLayerChipEl = document.getElementById("canvas-layer-chip");
         const drawSelectionSummaryEl = document.getElementById("draw-selection-summary");
         const dottedSessionMetaEl = document.getElementById("dotted-session-meta");
         const sidebarCollapseToggleBtn = document.getElementById("sidebar-collapse-toggle");
         const sidebarCollapseIconEl = document.getElementById("sidebar-collapse-icon");
-        const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
         const toolSidebarTitleEl = document.getElementById("tool-sidebar-title");
         const toolSidebarSubtitleEl = document.getElementById("tool-sidebar-subtitle");
         const inspectorHeaderTitleEl = document.getElementById("insp-header-title");
@@ -2289,9 +2256,6 @@
             if (sidebarCollapseIconEl) {
                 sidebarCollapseIconEl.className = state.sidebarCollapsed ? "fas fa-chevron-right" : "fas fa-chevron-left";
             }
-            if (sidebarCloseBtn) {
-                sidebarCloseBtn.title = state.sidebarCollapsed ? "Expand tools sidebar" : "Collapse tools sidebar";
-            }
         }
 
         function setSidebarCollapsed(nextCollapsed) {
@@ -2312,12 +2276,6 @@
         }
 
         function syncCanvasContext() {
-            if (canvasModeTitleEl) {
-                canvasModeTitleEl.textContent = getModeLabel();
-            }
-            if (canvasModeSubtitleEl) {
-                canvasModeSubtitleEl.textContent = TOOL_HINTS[state.tool] || "Editor ready";
-            }
             if (canvasSelectionChipEl) {
                 canvasSelectionChipEl.textContent = getSelectionLabel();
             }
@@ -2704,10 +2662,6 @@
 
         sidebarCollapseToggleBtn?.addEventListener("click", () => {
             toggleSidebarCollapsed();
-        });
-
-        sidebarCloseBtn?.addEventListener("click", () => {
-            toggleSidebarCollapsed(true);
         });
 
         inspectorTabButtons.forEach((button) => {
