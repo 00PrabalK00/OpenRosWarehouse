@@ -1832,19 +1832,35 @@
                 point_type: 'generic',
                 template_id: '',
                 recognize: false,
+                pre_point: null,
             };
         }
         const pointTypeEl = document.getElementById(`${prefix}-point-type`);
         const templateEl = document.getElementById(`${prefix}-shelf-template`);
         const recognizeEl = document.getElementById(`${prefix}-shelf-recognize`);
+        const prePointEnabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
+        const prePointXEl = document.getElementById(`${prefix}-pre-point-x`);
+        const prePointYEl = document.getElementById(`${prefix}-pre-point-y`);
+        const prePointThetaEl = document.getElementById(`${prefix}-pre-point-theta`);
         const payload = {
             point_type: pointTypeEl ? normalizePointType(pointTypeEl.value || 'generic') : 'generic',
             template_id: '',
             recognize: false,
+            pre_point: null,
         };
         if (payload.point_type === 'shelf') {
             payload.template_id = String(templateEl && templateEl.value || '').trim();
             payload.recognize = Boolean(recognizeEl && recognizeEl.checked);
+            if (prePointEnabledEl && prePointEnabledEl.checked) {
+                const px = parseFloat(prePointXEl && prePointXEl.value);
+                const py = parseFloat(prePointYEl && prePointYEl.value);
+                const ptDeg = parseFloat(prePointThetaEl && prePointThetaEl.value);
+                payload.pre_point = {
+                    x: Number.isFinite(px) ? px : 0,
+                    y: Number.isFinite(py) ? py : 0,
+                    theta: Number.isFinite(ptDeg) ? ptDeg * Math.PI / 180 : 0,
+                };
+            }
         }
         return payload;
     }
@@ -2286,6 +2302,13 @@
     };
     window.recognitionHandleActionPointTemplateChange = function recognitionHandleActionPointTemplateChange(prefix) {
         refreshActionPointForm(prefix);
+    };
+    window.recognitionHandlePrePointToggle = function recognitionHandlePrePointToggle(prefix) {
+        const enabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
+        const coordsEl  = document.getElementById(`${prefix}-pre-point-coords`);
+        if (coordsEl) {
+            coordsEl.style.display = (enabledEl && enabledEl.checked) ? 'block' : 'none';
+        }
     };
 
     document.addEventListener('click', (event) => {
