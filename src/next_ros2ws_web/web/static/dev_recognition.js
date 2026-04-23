@@ -1787,7 +1787,44 @@
         return String(select && select.value || 'normal').trim().toLowerCase();
     }
 
-    function refreshActionPointForm(prefix) {
+    async function fetchAndPopulateShelfTemplateDropdown(prefix, selectedValue) {
+        const templateEl = document.getElementById(`${prefix}-shelf-template`);
+        if (!templateEl) return;
+        try {
+            const resp = await fetch('/api/recognition/templates');
+            const data = await resp.json().catch(() => ({ templates: [] }));
+            const fetched = Array.isArray(data.templates) ? data.templates : [];
+            // Also merge any already-cached local drafts
+            const allTemplates = fetched.length > 0 ? fetched : state.templates;
+            const shelfTemplates = allTemplates.filter((t) => normalizeCategory(t.category) === 'shelves');
+            // Update state cache to stay in sync
+            if (fetched.length > 0) {
+                fetched.forEach((t) => {
+                    const idx = state.templates.findIndex((s) => String(s.template_id || '') === String(t.template_id || ''));
+                    if (idx >= 0) state.templates[idx] = normalizeTemplate(t, t);
+                    else state.templates.push(normalizeTemplate(t, t));
+                });
+            }
+            const curSelected = selectedValue !== undefined ? selectedValue : String(templateEl.value || '').trim();
+            const options = ['<option value="">Select shelf template</option>']
+                .concat(shelfTemplates.map((template) => (
+                    `<option value="${safeHtml(template.template_id)}"${curSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
+                )));
+            templateEl.innerHTML = options.join('');
+        } catch (_e) {
+            // Fallback to cached templates on network error
+            const shelfTemplates = state.templates.filter((t) => normalizeCategory(t.category) === 'shelves');
+            const curSelected = selectedValue !== undefined ? selectedValue : String(templateEl.value || '').trim();
+            const options = ['<option value="">Select shelf template</option>']
+                .concat(shelfTemplates.map((template) => (
+                    `<option value="${safeHtml(template.template_id)}"${curSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
+                )));
+            templateEl.innerHTML = options.join('');
+        }
+    }
+    window.recognitionFetchShelfTemplates = fetchAndPopulateShelfTemplateDropdown;
+
+    function refreshActionPointForm(prefix, selectedTemplateId) {
         const pointTypeEl = document.getElementById(`${prefix}-point-type`);
         const templateEl = document.getElementById(`${prefix}-shelf-template`);
         const recognizeEl = document.getElementById(`${prefix}-shelf-recognize`);
@@ -1804,14 +1841,11 @@
             return;
         }
         const pointType = pointTypeEl ? normalizePointType(pointTypeEl.value || 'generic') : 'generic';
-        const shelfTemplates = state.templates.filter((template) => normalizeCategory(template.category) === 'shelves');
+        // Always fetch fresh templates from API (avoids stale cache after publish/push)
+        // selectedTemplateId overrides the DOM's current value for initial load scenarios
         if (templateEl) {
-            const selectedValue = String(templateEl.value || '').trim();
-            const options = ['<option value="">Select shelf template</option>']
-                .concat(shelfTemplates.map((template) => (
-                    `<option value="${safeHtml(template.template_id)}"${selectedValue === template.template_id ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
-                )));
-            templateEl.innerHTML = options.join('');
+            const resolvedId = selectedTemplateId !== undefined ? String(selectedTemplateId) : String(templateEl.value || '').trim();
+            fetchAndPopulateShelfTemplateDropdown(prefix, resolvedId);
         }
         if (shelfConfigEl) {
             shelfConfigEl.style.display = pointType === 'shelf' ? 'block' : 'none';

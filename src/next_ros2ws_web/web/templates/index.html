@@ -17948,6 +17948,8 @@
                     // ── Robot Params (robot_editor) ───────────────────────────
                     let _robotYamlCache = null;
 
+                    let _robotYamlRobotId = '';
+
                     async function loadRobotYamlParams() {
                         const listEl  = document.getElementById('robot-param-list');
                         const statEl  = document.getElementById('robot-status-text');
@@ -17959,9 +17961,11 @@
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor');
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             const data = await resp.json();
+                            if (!data.ok) throw new Error(data.message || 'Profile not available');
                             _robotYamlCache = data;
+                            _robotYamlRobotId = data.robot_id || '';
                             renderRobotYamlParams(data);
-                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Loaded – click a value to edit, blur to save'; }
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = 'Profile: ' + (_robotYamlRobotId || '—') + ' — click a value to edit, blur to save'; }
                         } catch (err) {
                             listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
                             if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
@@ -18031,11 +18035,28 @@
                         const value = inputEl.value;
                         const statEl = document.getElementById('robot-status-text');
                         if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving ' + key + '…'; }
+                        // Apply dotted key path into cached profile_fields before sending
+                        if (_robotYamlCache && _robotYamlCache.profile_fields) {
+                            const parts = key.split('.');
+                            let obj = _robotYamlCache.profile_fields;
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                if (!obj[parts[i]] || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {};
+                                obj = obj[parts[i]];
+                            }
+                            const last = parts[parts.length - 1];
+                            obj[last] = (value === 'true') ? true : (value === 'false') ? false : (!isNaN(value) && value !== '' ? Number(value) : value);
+                        }
                         try {
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ key, value })
+                                body: JSON.stringify({
+                                    robot_id: _robotYamlRobotId,
+                                    profile_fields: (_robotYamlCache && _robotYamlCache.profile_fields) || {},
+                                    robot_builder: {},
+                                    compile_urdf: false,
+                                    apply_runtime: false
+                                })
                             });
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             inputEl.dataset.original = value;
@@ -18071,10 +18092,15 @@
                                 fetch('/api/settings/topics').catch(() => ({ ok: false }))
                             ]);
                             if (!mappingsResp.ok) throw new Error('Mappings HTTP ' + mappingsResp.status);
-                            const mappings = await mappingsResp.json();
-                            const topics   = topicsResp.ok ? await topicsResp.json() : [];
-                            _topicMappingsCache = Array.isArray(mappings) ? mappings : (mappings.mappings || Object.entries(mappings).map(([k,v]) => ({ key: k, value: v })));
-                            renderTopicMappingsInPopup(_topicMappingsCache, topics);
+                            const respData  = await mappingsResp.json();
+                            const topicsRaw = topicsResp.ok ? await topicsResp.json() : [];
+                            // Backend returns { ok, mappings: {key: value, ...}, topics: {...} }
+                            const rawMappings = respData.mappings || respData || {};
+                            _topicMappingsCache = Array.isArray(rawMappings)
+                                ? rawMappings
+                                : Object.entries(rawMappings).map(([k, v]) => ({ key: k, value: String(v || ''), type: '' }));
+                            const availTopics = Array.isArray(topicsRaw) ? topicsRaw : Object.keys(topicsRaw.topics || topicsRaw);
+                            renderTopicMappingsInPopup(_topicMappingsCache, availTopics);
                             if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = _topicMappingsCache.length + ' entries – blur a value to save inline'; }
                         } catch (err) {
                             listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
@@ -18120,10 +18146,13 @@
                         const statEl = document.getElementById('topic-status-text');
                         if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
                         try {
+                            // Convert array cache back to {key: value} dict for the backend
+                            const dictMappings = {};
+                            _topicMappingsCache.forEach(m => { dictMappings[m.key || m.name] = m.value || m.topic || ''; });
                             const resp = await fetch('/api/settings/mappings', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(_topicMappingsCache)
+                                body: JSON.stringify({ mappings: dictMappings, topics: {}, confirmed: true })
                             });
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             if (triggerEl) {
@@ -18161,18 +18190,26 @@
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor');
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             const data = await resp.json();
-                            // Extract safety-related fields – check common paths
-                            const safetyObj = data.safety || data.safety_params || {};
-                            const motionObj = data.motion || {};
-                            _safetyParamsCache = { ...(typeof safetyObj === 'object' ? safetyObj : {}), ...(typeof motionObj === 'object' ? {} : {}) };
-                            // Also pull any top-level keys with 'safety', 'estop', 'obstacle', 'timeout', 'range', 'limit' in name
-                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision'];
-                            Object.keys(data).forEach(k => {
-                                if (typeof data[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
-                                    _safetyParamsCache[k] = data[k];
+                            if (!data.ok) throw new Error(data.message || 'Profile not available');
+                            // Look for safety fields in profile_fields and full profile
+                            const profile = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+                            const profileFields = (data.profile_fields && typeof data.profile_fields === 'object') ? data.profile_fields : {};
+                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision','zone'];
+                            _safetyParamsCache = {};
+                            // 1. Dedicated safety/motion sub-objects from profile
+                            ['safety','safety_params','motion','speed','obstacle'].forEach(k => {
+                                if (profile[k] && typeof profile[k] === 'object') Object.assign(_safetyParamsCache, profile[k]);
+                                else if (typeof profile[k] !== 'undefined') _safetyParamsCache[k] = profile[k];
+                            });
+                            // 2. Any top-level profile key matching safety keywords
+                            Object.keys(profile).forEach(k => {
+                                if (typeof profile[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
+                                    _safetyParamsCache[k] = profile[k];
                                 }
                             });
-                            if (typeof safetyObj === 'object') Object.assign(_safetyParamsCache, safetyObj);
+                            // 3. Speed / frame limits from profile_fields (namespace, base_frame are on robot tab — skip)
+                            if (profileFields.max_speed !== undefined) _safetyParamsCache['max_speed'] = profileFields.max_speed;
+                            if (profileFields.speed_limit !== undefined) _safetyParamsCache['speed_limit'] = profileFields.speed_limit;
                             renderSafetyParams(_safetyParamsCache, data);
                             const count = Object.keys(_safetyParamsCache).length;
                             if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = count ? count + ' parameters – blur a value to mark changed, then Save' : 'No safety fields found in robot profile'; }
@@ -26130,12 +26167,7 @@
                             if (typeSelect) typeSelect.addEventListener('change', editZoneTypeChange);
                             refreshZoneActionOptionsUI();
                             if (typeof recognitionRefreshActionPointForm === 'function') {
-                                recognitionRefreshActionPointForm('ez');
-                                const templateSelect = document.getElementById('ez-shelf-template');
-                                if (templateSelect && shelfTemplateId) {
-                                    templateSelect.value = shelfTemplateId;
-                                }
-                                recognitionRefreshActionPointForm('ez');
+                                recognitionRefreshActionPointForm('ez', shelfTemplateId || '');
                             }
                             if (prePointEnabled && typeof recognitionLoadPrePointPois === 'function') {
                                 recognitionLoadPrePointPois('ez', prePointZoneName);
