@@ -3663,14 +3663,21 @@ class ZoneManager(Node):
             if self.estop_active:
                 return False, last_message or 'Goal-pose handoff aborted: E-STOP active.'
 
-            # Previously the wrapper bailed out here on any message starting with
-            # "Shelf insertion" / "Frozen shelf insert" / "insertion guard" /
-            # "pre-insert", which meant insertion-path aborts never used the
-            # configured retry budget.  In practice the main failure mode is a
-            # transiently-biased shelf yaw estimate: attempt 1 plans with a bad
-            # yaw, aborts mid-insertion, and a fresh perception sample on a later
-            # attempt lines up correctly.  Letting the loop retry replicates what
-            # manually re-triggering the goto does.
+            insertion_started_failure = (
+                last_message.startswith('Shelf insertion "')
+                or last_message.startswith('Shelf insertion motion rejected')
+                or last_message.startswith('Shelf insertion made no progress')
+            )
+            if insertion_started_failure:
+                # Once the straight-in controller has started moving into the shelf,
+                # do not re-enter the handoff planner. A retry would rotate/re-align
+                # near the shelf legs, which is more dangerous than simply failing the
+                # action and waiting for operator recovery.
+                self.get_logger().warn(
+                    f'Goal-pose handoff stopped after insertion-stage failure for '
+                    f'"{target_label}": {last_message}'
+                )
+                break
 
             if attempt >= max_attempts:
                 break

@@ -2406,17 +2406,6 @@
             color: #5B9CF6;
         }
 
-        .path-toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 7px 9px;
-            border-radius: 6px;
-            border: 1px solid var(--border-primary);
-            background: rgba(10, 14, 20, 0.38);
-        }
-
         .path-toggle-label {
             display: inline-flex;
             align-items: center;
@@ -3853,11 +3842,6 @@
 
         #path-drawing-card.floating-mode-panel .path-inline-status-meta {
             font-size: 10px;
-        }
-
-        #path-drawing-card.floating-mode-panel .path-toggle-row {
-            padding: 6px 8px;
-            gap: 8px;
         }
 
         #path-drawing-card.floating-mode-panel .path-toggle-label {
@@ -12782,7 +12766,7 @@
                                     <span>Start Drawing</span>
                                 </button>
 
-                                <div class="path-toggle-row">
+                                <div>
                                     <div class="path-toggle-label">
                                         <i class="fas fa-sync-alt"></i>
                                         <span>Path Loop</span>
@@ -12799,7 +12783,7 @@
                                     <div class="path-inline-status-title">Drawing Mode Active</div>
                                     <div id="path-point-count" class="path-inline-status-meta">Points: 0</div>
 
-                                    <div class="path-toggle-row" style="margin-top: 10px;">
+                                    <div style="margin-top: 10px;">
                                         <div class="path-toggle-label">
                                             <i class="fas fa-bezier-curve"></i>
                                             <span>Curve Segment Tool</span>
@@ -12851,7 +12835,7 @@
                                                 onchange="setSelectedWaypointReturnHeadingFromInput(this.value)">
                                         </div>
 
-                                        <div class="path-toggle-row" id="path-goal-theta-toggle-row"
+                                        <div id="path-goal-theta-toggle-row"
                                             style="margin-top: 10px; display: none;">
                                             <div class="path-toggle-label">
                                                 <i class="fas fa-bullseye"></i>
@@ -12873,7 +12857,7 @@
                                                 onchange="setSelectedWaypointGoalHeadingFromInput(this.value)">
                                         </div>
 
-                                        <div class="path-toggle-row" id="path-shelf-check-toggle-row" style="margin-top: 10px;">
+                                        <div id="path-shelf-check-toggle-row" style="margin-top: 10px;">
                                             <div class="path-toggle-label">
                                                 <i class="fas fa-box-open"></i>
                                                 <span>Shelf Check After Arrival</span>
@@ -13808,7 +13792,6 @@
                     let savedPathSettingsCache = {};
                     let savedPathMetricsCache = {};
                     let pathModeEnabled = false;
-                    let pathModeGotoToolActive = false;
                     let pathModeSelectedPath = '';
                     let editingSavedPathName = '';
                     let segmentAttrsOverrides = {};  // { "0": {maxspeed:0.3, ...}, ... } per-segment attribute overrides
@@ -14556,12 +14539,6 @@
                             syncPathDirectionEditor();
                             return;
                         }
-                        const seg = selectedPathSegmentIndex;
-                        if (!segmentAttrsOverrides[String(seg)]) {
-                            segmentAttrsOverrides[String(seg)] = {};
-                        }
-                        segmentAttrsOverrides[String(seg)].direction = getPathDirectionEditorValue();
-                        updatePattrScopeBar();
                         drawMap();
                     }
 
@@ -16417,13 +16394,6 @@
                             return;
                         }
 
-                        if (currentMapMode === 'paths' && pathModeGotoToolActive) {
-                            hint.textContent = pathModeSelectedPath
-                                ? `Path Mode Go To: click a destination POI on "${pathModeSelectedPath}".`
-                                : 'Path Mode Go To: click a destination POI in the connected path graph.';
-                            return;
-                        }
-
                         if (currentMapMode === 'paths' && isDrawingPath) {
                             hint.textContent = 'Click to add waypoints. Click an existing waypoint to select it. Shift/Alt+click forces add.';
                             return;
@@ -17279,7 +17249,6 @@
                     // ── Free Nav zone picker ──────────────────────────────────
                     function openFreeNavPicker(event) {
                         pathModeEnabled = false;
-                        pathModeGotoToolActive = false;
                         pathModeSelectedPath = '';
                         updatePathModeUI();
                         const picker = document.getElementById('free-nav-picker');
@@ -17344,10 +17313,8 @@
                             const allPathsButton = '<button class="fnp-item" onclick="clearPathModeSelectedPath(); closePathNavPicker()"><i class="fas fa-layer-group"></i> Use all connected paths</button>';
                             list.innerHTML = allPathsButton + paths.map(name => {
                                 const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                                return `
-                                    <button class="fnp-item" onclick="useSavedPathForPathMode('${safeName}'); closePathNavPicker()"><i class="fas fa-location-arrow"></i> Path Mode: ${name}</button>
-                                    <button class="fnp-item" onclick="followSavedPath('${safeName}'); closePathNavPicker()"><i class="fas fa-route"></i> Follow saved path: ${name}</button>
-                                `;
+                                return `<button class="fnp-item" onclick="useSavedPathForPathMode('${safeName}'); closePathNavPicker()"><i class="fas fa-location-arrow"></i> Path Mode: ${name}</button>
+                                    <button class="fnp-item" onclick="followSavedPath('${safeName}'); closePathNavPicker()"><i class="fas fa-route"></i> Follow saved path: ${name}</button>`;
                             }).join('');
                         }
                         positionPathNavPicker(event);
@@ -17372,7 +17339,6 @@
                         }
                         positionPathNavPicker(event);
                     }
-
                     function closePathNavPicker() {
                         const p = document.getElementById('path-nav-picker');
                         if (p) p.classList.remove('open');
@@ -25212,26 +25178,6 @@
                         if (currentMapMode === 'paths' && !pathFollowingActive) {
                             const forceAddPoint = !!(e.shiftKey || e.altKey);
 
-                            if (pathModeGotoToolActive && !isDrawingPath) {
-                                let nearestZone = null;
-                                let nearestDist = Infinity;
-                                const clickThreshold = 60;
-                                for (const [name, zone] of Object.entries(zones)) {
-                                    const [zpx, zpy] = worldToPixel(zone.position.x, zone.position.y);
-                                    const dist = Math.hypot(x - zpx, y - zpy);
-                                    if (dist < nearestDist && dist < clickThreshold) {
-                                        nearestDist = dist;
-                                        nearestZone = name;
-                                    }
-                                }
-                                if (nearestZone) {
-                                    goToPathModePoi(nearestZone);
-                                } else {
-                                    showStatus('Path Mode Go To: click a destination POI, not empty map.', 'info');
-                                }
-                                return;
-                            }
-
                             if (pathCurveEditMode) {
                                 const segmentIndex = findNearestPathSegmentIndex(x, y, 28);
                                 if (segmentIndex >= 0) {
@@ -25600,10 +25546,6 @@
                                 
                                 // Check if click is inside the zone's rectangle
                                 if (Math.abs(localX) <= bodyLength / 2 && Math.abs(localY) <= bodyWidth / 2) {
-                                    if (currentMapMode === 'paths' && pathModeGotoToolActive) {
-                                        goToPathModePoi(name);
-                                        return;
-                                    }
                                     openPropertiesPanel('zone', name, zone);
                                     return;
                                 }
@@ -26725,60 +26667,14 @@
                         const railBtn = document.getElementById('path-nav-rail-btn');
                         const railIcon = document.getElementById('path-nav-rail-icon');
                         const railLabel = document.getElementById('path-nav-rail-label');
-
                         if (railBtn) {
                             railBtn.classList.toggle('active', pathModeEnabled);
                             railBtn.title = pathModeEnabled
-                                ? (pathModeSelectedPath
-                                    ? `GTP — Go To POI through "${pathModeSelectedPath}"`
-                                    : 'GTP — Go To POI through all connected paths')
+                                ? (pathModeSelectedPath ? `GTP — Go To POI through "${pathModeSelectedPath}"` : 'GTP — Go To POI through all connected paths')
                                 : 'Path Mode — choose a saved path, then Go To POI';
                         }
-                        if (railIcon) {
-                            railIcon.className = pathModeEnabled ? 'fas fa-location-arrow' : 'fas fa-route';
-                        }
-                        if (railLabel) {
-                            railLabel.textContent = pathModeEnabled ? 'GTP' : 'Path Mode';
-                        }
-
-                        if (pathModeGotoToolActive && currentMapMode === 'paths') {
-                            canvas.style.cursor = 'crosshair';
-                        }
-                        updateMapHintBanner();
-                    }
-
-                    function togglePathMode(forceEnable = null) {
-                        const shouldEnable = forceEnable === null ? !pathModeEnabled : !!forceEnable;
-                        pathModeEnabled = shouldEnable;
-                        if (!pathModeEnabled) {
-                            pathModeGotoToolActive = false;
-                        } else {
-                            setWorkflowMode('path');
-                            loadSavedPaths();
-                        }
-                        updatePathModeUI();
-                        showStatus(
-                            pathModeEnabled
-                                ? (pathModeSelectedPath ? `Path Mode enabled on "${pathModeSelectedPath}"` : 'Path Mode enabled across saved path graph')
-                                : 'Path Mode disabled',
-                            pathModeEnabled ? 'success' : 'info'
-                        );
-                    }
-
-                    function togglePathModeGotoTool() {
-                        if (!pathModeEnabled) {
-                            togglePathMode(true);
-                        }
-                        if (!pathModeEnabled) return;
-                        pathModeGotoToolActive = !pathModeGotoToolActive;
-                        if (pathModeGotoToolActive) {
-                            setMapMode('paths');
-                            showStatus('Path Mode Go To active: click a destination POI on the map.', 'info');
-                        } else {
-                            showStatus('Path Mode Go To canceled', 'info');
-                        }
-                        updatePathModeUI();
-                        drawMap();
+                        if (railIcon) railIcon.className = pathModeEnabled ? 'fas fa-location-arrow' : 'fas fa-route';
+                        if (railLabel) railLabel.textContent = pathModeEnabled ? 'GTP' : 'Path Mode';
                     }
 
                     function useSavedPathForPathMode(name) {
@@ -26791,17 +26687,15 @@
                         pathModeEnabled = true;
                         setWorkflowMode('path');
                         updatePathModeUI();
-                        showStatus(`Path Mode corridor set to "${pathName}". Use Go To POI to route on it.`, 'success');
+                        showStatus(`Path Mode corridor set to "${pathName}". Click GTP, then choose a destination POI.`, 'success');
                     }
 
                     function clearPathModeSelectedPath() {
                         pathModeSelectedPath = '';
-                        if (!pathModeEnabled) {
-                            pathModeEnabled = true;
-                        }
+                        pathModeEnabled = true;
                         setWorkflowMode('path');
                         updatePathModeUI();
-                        showStatus('Path Mode will use all connected saved paths.', 'info');
+                        showStatus('Path Mode will use all connected saved paths. Click GTP, then choose a destination POI.', 'info');
                     }
 
                     function startNewPathDrawing() {
@@ -26821,16 +26715,12 @@
                             return;
                         }
                         if (!pathModeEnabled) {
-                            togglePathMode(true);
+                            pathModeEnabled = true;
                         }
-                        pathModeGotoToolActive = false;
                         updatePathModeUI();
-                        showStatus(
-                            pathModeSelectedPath
-                                ? `Path Mode routing to ${destination} on "${pathModeSelectedPath}"...`
-                                : `Path Mode routing to ${destination} across connected paths...`,
-                            'info'
-                        );
+                        showStatus(pathModeSelectedPath
+                            ? `Path Mode routing to ${destination} on "${pathModeSelectedPath}"...`
+                            : `Path Mode routing to ${destination} across connected paths...`, 'info');
 
                         fetch('/api/path_mode/goto', {
                             method: 'POST',
@@ -27177,8 +27067,6 @@
                             return;
                         }
 
-                        // Prompt for path name. When extending/loading a saved path, default
-                        // to that name so "Save Path" naturally updates the same route.
                         const suggestedName = String(editingSavedPathName || '').trim();
                         const pathName = prompt('Enter a name for this path:', suggestedName);
                         if (!pathName || pathName.trim() === '') {
@@ -28872,7 +28760,6 @@
                         if (normalizedMode !== 'paths') {
                             pathWaypointOrientationMode = false;
                             pathWaypointPreviewTheta = null;
-                            pathModeGotoToolActive = false;
                         }
 
                         if (normalizedMode !== 'zones' && settingOrientation) {
@@ -28899,7 +28786,6 @@
                         closeZoneListOverlay();
 
                         updatePathUI();
-                        updatePathModeUI();
                         updateMapHintBanner();
                         updateCursor();
                     }
@@ -32272,34 +32158,17 @@
                 : 'n/a';
             setShelfBadgeState(centerBadge, centerText, centerPose ? 'green' : 'neutral');
 
-            // Detect autonomous shelf recognition: a mission/sequence/path is running, so
-            // the robot is committing the shelf solve automatically — no manual commit needed.
-            const isAutonomous = Boolean(
-                (typeof sequenceActive !== 'undefined' && sequenceActive) ||
-                (typeof pathFollowingActive !== 'undefined' && pathFollowingActive)
-            );
-
             const message = !detectorEnabled
-                ? (isAutonomous
-                    ? 'Robot is navigating to the shelf area. Shelf detector will turn on automatically.'
-                    : 'Shelf detector is off. Turn it on only when you want to scan the shelf.')
+                ? 'Shelf detector is off. Turn it on only when you want to scan the shelf.'
                 : busy
                     ? 'Sending the current shelf target...'
-                    : isAutonomous
-                        ? (candidateValid
-                            ? (candidateConsistent
-                                ? 'Autonomous solve ready. Robot will commit and dock automatically.'
-                                : 'Robot is scanning the shelf. Waiting for a consistent solve...')
-                            : (committedTargetValid
-                                ? 'Shelf target committed by automation. Robot is docking.'
-                                : 'Autonomous shelf detection in progress. Scanning...'))
-                        : (candidateValid
-                            ? (candidateConsistent
-                                ? 'Shelf target ready. Commit when you want the robot to use this solve.'
-                                : 'Fresh shelf target available. Commit is allowed even if the solve is still wobbling.')
-                            : (committedTargetValid
-                                ? 'Shelf target committed. Current reflector view may disappear during entry.'
-                                : shelfReasonLabel(data?.last_reason || 'status_unavailable')));
+                    : candidateValid
+                        ? candidateConsistent
+                            ? 'Shelf target ready. Commit when you want the robot to use this solve.'
+                            : 'Fresh shelf target available. Commit is allowed even if the solve is still wobbling.'
+                        : committedTargetValid
+                            ? 'Shelf target committed. Current reflector view may disappear during entry.'
+                            : shelfReasonLabel(data?.last_reason || 'status_unavailable');
 
             if (messageEl) {
                 messageEl.textContent = message;
@@ -32308,13 +32177,11 @@
             }
 
             if (toggleBtn) {
-                toggleBtn.disabled = busy || isAutonomous;
+                toggleBtn.disabled = busy;
                 toggleBtn.textContent = detectorEnabled ? 'TURN OFF' : 'TURN ON';
                 toggleBtn.classList.toggle('shelf-on', detectorEnabled);
                 toggleBtn.classList.toggle('shelf-off', !detectorEnabled);
-                toggleBtn.title = isAutonomous
-                    ? 'Shelf detector is managed automatically during this run'
-                    : (detectorEnabled ? 'Pause shelf scan processing' : 'Enable shelf scan processing');
+                toggleBtn.title = detectorEnabled ? 'Pause shelf scan processing' : 'Enable shelf scan processing';
             }
 
             if (topBtn) {
@@ -32345,27 +32212,21 @@
             const candidateValid = Boolean(data && data.candidate_valid);
             const candidateConsistent = Boolean(data && data.candidate_consistent);
             const committedTargetValid = Boolean(data && data.committed_target_valid);
-            const isAutonomous = Boolean(
-                (typeof sequenceActive !== 'undefined' && sequenceActive) ||
-                (typeof pathFollowingActive !== 'undefined' && pathFollowingActive)
-            );
-            const reasonText = isAutonomous
-                ? 'Robot is committing the shelf solve automatically. Manual commit is disabled during autonomous runs.'
-                : (!detectorEnabled
-                    ? shelfReasonLabel(data?.last_reason || 'detector_disabled')
-                    : candidateValid
-                        ? candidateConsistent
-                            ? 'Commit the current fresh shelf target.'
-                            : 'Fresh shelf target available. Consistency latch is still wobbling, but manual commit is allowed.'
-                        : committedTargetValid
-                            ? 'Shelf target committed. Current reflector view may be gone during entry.'
-                            : shelfReasonLabel(data?.last_reason || 'status_unavailable'));
+            const reasonText = !detectorEnabled
+                ? shelfReasonLabel(data?.last_reason || 'detector_disabled')
+                        : candidateValid
+                            ? candidateConsistent
+                                ? 'Commit the current fresh shelf target.'
+                                : 'Fresh shelf target available. Consistency latch is still wobbling, but manual commit is allowed.'
+                    : committedTargetValid
+                        ? 'Shelf target committed. Current reflector view may be gone during entry.'
+                        : shelfReasonLabel(data?.last_reason || 'status_unavailable');
 
             buttons.forEach((button) => {
-                button.disabled = busy || !detectorEnabled || !candidateValid || isAutonomous;
+                button.disabled = busy || !detectorEnabled || !candidateValid;
                 button.title = busy ? 'Publishing /tick for the current shelf target...' : reasonText;
                 button.setAttribute('aria-disabled', button.disabled ? 'true' : 'false');
-                button.classList.toggle('shelf-ready', !busy && detectorEnabled && candidateValid && !isAutonomous);
+                button.classList.toggle('shelf-ready', !busy && detectorEnabled && candidateValid);
                 button.classList.toggle('shelf-committed', !busy && !candidateValid && committedTargetValid);
             });
         }
