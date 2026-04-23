@@ -301,6 +301,7 @@ _MOTION_PATHS: frozenset = frozenset({
     '/api/mode/manual',
     '/api/mode/auto',
     '/api/zones/goto',
+    '/api/path_mode/goto',
     '/api/path/follow',
     '/api/path/stop',
     '/api/sequence/start',
@@ -558,6 +559,7 @@ def save_zone():
         template_id=str(data.get('template_id', data.get('shelf_template_id', ''))),
         recognize=_as_bool(data.get('recognize', data.get('shelf_detection_on', False)), default=False),
         action_point_notes=str(data.get('action_point_notes', '')),
+        pre_point=data.get('pre_point') or None,
     )
     return _status(result, fail_code=503)
 
@@ -634,6 +636,7 @@ def update_zone_params():
         template_id=str(data.get('template_id', data.get('shelf_template_id', ''))),
         recognize=_as_bool(data.get('recognize', data.get('shelf_detection_on', False)), default=False),
         action_point_notes=str(data.get('action_point_notes', '')),
+        pre_point=data.get('pre_point') or None,
     )
     return _status(result, fail_code=503)
 
@@ -788,10 +791,61 @@ def follow_path():
     path_points = data.get('path', [])
     loop_type = data.get('loop_type', 'none')
     loop_mode = _as_bool(data.get('loop_mode', False), default=False)
+    settings = data.get('settings', {})
 
-    result = node.follow_path(path_points, loop_type=loop_type, loop_mode=loop_mode)
+    result = node.follow_path(path_points, loop_type=loop_type, loop_mode=loop_mode, settings=settings)
     code = 200 if result.get('ok') else 503
     return jsonify(result), code
+
+
+@app.route('/api/path_mode/plan', methods=['POST'])
+def plan_path_mode_route():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    destination = (
+        data.get('destination_poi')
+        or data.get('destination')
+        or data.get('zone_name')
+        or data.get('name')
+        or ''
+    )
+    selected_path = data.get('selected_path') or data.get('path_name') or ''
+    current_poi = data.get('current_poi') or data.get('start_poi') or ''
+
+    result = node.plan_path_mode_route(
+        str(destination),
+        selected_path=str(selected_path or ''),
+        current_poi=str(current_poi or ''),
+    )
+    return _status(result, fail_code=404)
+
+
+@app.route('/api/path_mode/goto', methods=['POST'])
+def goto_path_mode_route():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    destination = (
+        data.get('destination_poi')
+        or data.get('destination')
+        or data.get('zone_name')
+        or data.get('name')
+        or ''
+    )
+    selected_path = data.get('selected_path') or data.get('path_name') or ''
+    current_poi = data.get('current_poi') or data.get('start_poi') or ''
+
+    result = node.follow_path_mode_route(
+        str(destination),
+        selected_path=str(selected_path or ''),
+        current_poi=str(current_poi or ''),
+    )
+    return _status(result, fail_code=503)
 
 
 @app.route('/api/path/stop', methods=['POST'])

@@ -20,7 +20,9 @@
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav2_costmap_2d/footprint_collision_checker.hpp"
 #include "nav_msgs/msg/path.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/node_interfaces/node_parameters_interface.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "std_msgs/msg/int32.hpp"
@@ -97,6 +99,8 @@ private:
   };
 
   void declareAndLoadParameters();
+  rcl_interfaces::msg::SetParametersResult handleDynamicParameters(
+    const std::vector<rclcpp::Parameter> & parameters);
   void handleSetMotionIntent(
     const std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Request> request,
     std::shared_ptr<next_ros2ws_interfaces::srv::SetMotionIntent::Response> response);
@@ -168,6 +172,7 @@ private:
     const rclcpp::Time & stamp) const;
 
   rclcpp_lifecycle::LifecycleNode::SharedPtr node_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
   std::string plugin_name_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;

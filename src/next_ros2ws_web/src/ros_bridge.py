@@ -3,6 +3,7 @@
 import base64
 import copy
 import concurrent.futures
+import heapq
 import hashlib
 import io
 import json
@@ -442,7 +443,19 @@ class RosBridge(Node):
             result_message = ''
             if result is not None:
                 result_message = str(getattr(result, 'message', '')).strip()
-            self.get_logger().info(f"FollowPath result status = {status}")
+            if result_message:
+                self.get_logger().info(
+                    f"FollowPath result status = {status}: {result_message}"
+                )
+            else:
+                self.get_logger().info(f"FollowPath result status = {status}")
+
+            if (
+                not succeeded
+                and not self._loop_enabled
+                and self._maybe_start_path_mode_replan(result_message)
+            ):
+                return
 
             if self._loop_enabled and not self._loop_stop_requested:
                 if getattr(self, 'estop_active', False):
@@ -473,6 +486,98 @@ class RosBridge(Node):
             self.path_state['active'] = False
             self.path_state['success'] = success
             self.path_state['message'] = message
+
+    @staticmethod
+    def _parse_path_mode_replan_message(message: str) -> Dict[str, str]:
+            text = str(message or '').strip()
+            prefix = 'PATH_MODE_REPLAN_FROM:'
+            if not text.startswith(prefix):
+                return {}
+            parts = text[len(prefix):].split(':')
+            if not parts:
+                return {}
+            payload = {'current_poi': parts[0].strip()}
+            for part in parts[1:]:
+                if '=' not in part:
+                    payload.setdefault('reason', part.strip())
+                    continue
+                key, value = part.split('=', 1)
+                payload[key.strip()] = value.strip()
+            return payload
+
+    def _maybe_start_path_mode_replan(self, message: str) -> bool:
+            payload = self._parse_path_mode_replan_message(message)
+            if not payload:
+                return False
+
+            current_poi = str(payload.get('current_poi', '') or '').strip()
+            destination = str(payload.get('destination', '') or '').strip()
+            selected_path = str(payload.get('path', '') or '').strip()
+
+            context = getattr(self, '_path_mode_route_context', {})
+            if isinstance(context, dict):
+                destination = destination or str(context.get('destination_poi', '') or '').strip()
+                selected_path = selected_path or str(context.get('selected_path', '') or '').strip()
+
+            if not current_poi or not destination:
+                self._set_follow_path_failure_state(
+                    message or 'Path Mode replan requested without enough context'
+                )
+                return True
+
+            attempts = int(getattr(self, '_path_mode_replan_attempts', 0) or 0)
+            if attempts >= 3:
+                self._set_follow_path_failure_state(
+                    f'Path Mode replan limit reached at "{current_poi}" toward "{destination}"'
+                )
+                return True
+
+            self._path_mode_replan_attempts = attempts + 1
+            self.get_logger().warn(
+                f'Path Mode replan {self._path_mode_replan_attempts}/3 from '
+                f'"{current_poi}" to "{destination}" via directed graph'
+            )
+            plan = self.plan_path_mode_route(
+                destination,
+                selected_path=selected_path,
+                current_poi=current_poi,
+            )
+            if not plan.get('ok'):
+                self._set_follow_path_failure_state(
+                    plan.get('message', 'Path Mode replan failed')
+                )
+                return True
+
+            route = plan.get('route', [])
+            if len(route) < 2:
+                self.path_state['active'] = False
+                self.path_state['success'] = True
+                self.path_state['message'] = plan.get('message', 'Path Mode replan already at destination')
+                return True
+
+            start_result = self.follow_path(
+                route,
+                loop_type='none',
+                loop_mode=False,
+                settings={},
+                path_mode_context={
+                    'selected_path': plan.get('selected_path', selected_path),
+                    'destination_poi': plan.get('destination_poi', destination),
+                    'start_poi': plan.get('start_poi', current_poi),
+                },
+            )
+            if not start_result.get('ok'):
+                self._set_follow_path_failure_state(
+                    start_result.get('message', 'Path Mode replan dispatch failed')
+                )
+                return True
+
+            self.path_state['active'] = True
+            self.path_state['success'] = False
+            self.path_state['message'] = (
+                f'Path Mode replan active: {current_poi} -> {destination}'
+            )
+            return True
 
     def _request_loop_restart(self):
             # set flags so loop will restart AFTER cancel completes
@@ -4915,6 +5020,8 @@ class RosBridge(Node):
         self._path_goal_handle = None
         self._path_goal_seq = 0
         self._follow_cancel_requested = False
+        self._path_mode_route_context = {}
+        self._path_mode_replan_attempts = 0
         self._loop_path_points = []
         self._loop_display_waypoint_count = 0
         self._loop_stop_requested = False
@@ -6719,6 +6826,10 @@ class RosBridge(Node):
         if isinstance(config.get('notes', ''), str) and str(config.get('notes', '')).strip():
             normalized_config['notes'] = str(config.get('notes', '')).strip()
 
+        stored_pre_point = config.get('pre_point')
+        if stored_pre_point is not None:
+            normalized_config['pre_point'] = stored_pre_point
+
         metadata = zone_payload.get('metadata') if isinstance(zone_payload.get('metadata'), dict) else {}
         metadata = copy.deepcopy(metadata)
         metadata['action_point'] = normalized_config
@@ -7227,6 +7338,7 @@ class RosBridge(Node):
         template_id: str = '',
         recognize: bool = False,
         action_point_notes: str = '',
+        pre_point: Any = None,
     ):
         zone_name = (name or '').strip()
         if not zone_name:
@@ -7277,6 +7389,7 @@ class RosBridge(Node):
                 template_id=template_id,
                 recognize=recognize,
                 action_point_notes=action_point_notes,
+                pre_point=pre_point,
             )
             if not meta.get('ok'):
                 return self._ok(
@@ -7300,6 +7413,8 @@ class RosBridge(Node):
                 'recognize': bool(recognize),
                 'notes': str(action_point_notes or '').strip(),
             }
+            if isinstance(pre_point, (dict, str)) and pre_point:
+                action_point_payload['pre_point'] = pre_point
             self._save_action_point_config_to_db(zone_name, action_point_payload)
         else:
             self._delete_action_point_config_from_db(zone_name)
@@ -7345,6 +7460,7 @@ class RosBridge(Node):
         template_id: str = '',
         recognize: bool = False,
         action_point_notes: str = '',
+        pre_point: Any = None,
     ):
         req = UpdateZoneParams.Request()
         req.name = str(name or '')
@@ -7367,24 +7483,53 @@ class RosBridge(Node):
             return self._ok(False, 'Update zone params failed')
         ok = bool(response.ok)
         if ok:
+            effective_point_type = self._normalize_action_point_type(point_type)
+            effective_template_id = str(template_id or '').strip()
+            effective_recognize = bool(recognize)
+            effective_notes = str(action_point_notes or '').strip()
+            effective_pre_point = pre_point
+
+            # When no action point fields were explicitly sent (all at their defaults),
+            # preserve whatever is already in the DB rather than overwriting with generic.
+            caller_sent_no_action_point_fields = (
+                effective_point_type == 'generic'
+                and not effective_template_id
+                and not effective_recognize
+                and not effective_notes
+                and pre_point is None
+            )
+            if caller_sent_no_action_point_fields:
+                existing = self._load_action_point_configs_from_db().get(str(name or '').strip(), {})
+                if isinstance(existing, dict) and existing:
+                    existing_point_type = self._normalize_action_point_type(existing.get('point_type', 'generic'))
+                    if existing_point_type != 'generic':
+                        effective_point_type = existing_point_type
+                        effective_template_id = str(existing.get('template_id', '') or '').strip()
+                        effective_recognize = bool(existing.get('recognize', False))
+                        effective_notes = str(existing.get('notes', '') or '').strip()
+                        effective_pre_point = existing.get('pre_point')
+
             should_persist_action_point = (
                 str(zone_type or 'normal').strip().lower() == 'action'
-                or bool(template_id)
-                or self._normalize_action_point_type(point_type) != 'generic'
-                or bool(recognize)
+                or bool(effective_template_id)
+                or effective_point_type != 'generic'
+                or effective_recognize
             )
             if should_persist_action_point:
+                db_payload = {
+                    'zone_name': str(name or '').strip(),
+                    'point_type': effective_point_type,
+                    'template_id': effective_template_id,
+                    'action_id': str(action or '').strip(),
+                    'action': str(action or '').strip(),
+                    'recognize': effective_recognize,
+                    'notes': effective_notes,
+                }
+                if isinstance(effective_pre_point, (dict, str)) and effective_pre_point:
+                    db_payload['pre_point'] = effective_pre_point
                 self._save_action_point_config_to_db(
                     str(name or ''),
-                    {
-                        'zone_name': str(name or '').strip(),
-                        'point_type': self._normalize_action_point_type(point_type),
-                        'template_id': str(template_id or '').strip(),
-                        'action_id': str(action or '').strip(),
-                        'action': str(action or '').strip(),
-                        'recognize': bool(recognize),
-                        'notes': str(action_point_notes or '').strip(),
-                    },
+                    db_payload,
                 )
             else:
                 self._delete_action_point_config_from_db(str(name or ''))
@@ -7539,6 +7684,7 @@ class RosBridge(Node):
             zone_name = ''
             shelf_check = False
 
+            segment_bidirectional = False
             if isinstance(point, dict):
                 x = point.get('x')
                 y = point.get('y')
@@ -7547,6 +7693,9 @@ class RosBridge(Node):
                 ).strip()
                 shelf_check = RosBridge._as_bool(
                     point.get('shelf_check', point.get('shelfCheck', False))
+                )
+                segment_bidirectional = RosBridge._as_bool(
+                    point.get('segment_bidirectional', point.get('segmentBidirectional', False))
                 )
             elif isinstance(point, (list, tuple)) and len(point) >= 2:
                 x = point[0]
@@ -7563,6 +7712,8 @@ class RosBridge(Node):
                 entry['zone_name'] = zone_name
             if shelf_check:
                 entry['shelf_check'] = True
+            if segment_bidirectional:
+                entry['segment_bidirectional'] = True
 
             parsed.append(entry)
         return parsed
@@ -7715,7 +7866,15 @@ class RosBridge(Node):
         loop_type = str(settings.get('loop_type', 'none') or 'none')
         curved_segments = settings.get('curved_segments', [])
         curved_controls = settings.get('curved_segment_controls', {})
-        return loop_type != 'none' or bool(curved_segments) or bool(curved_controls)
+        direction = str(settings.get('direction', 'uni') or 'uni').strip().lower()
+        segment_attrs = settings.get('segment_attrs', {})
+        return (
+            loop_type != 'none'
+            or bool(curved_segments)
+            or bool(curved_controls)
+            or direction in ('bi', 'reverse')
+            or bool(segment_attrs)
+        )
 
     def _normalize_path_settings(
         self,
@@ -7751,11 +7910,42 @@ class RosBridge(Node):
             allowed_segments=curved_segment_set,
         )
 
+        direction_raw = incoming.get('direction', existing.get('direction', 'uni'))
+        direction = str(direction_raw or 'uni').strip().lower()
+        if direction not in ('uni', 'bi', 'reverse'):
+            direction = 'uni'
+
+        segment_attrs_raw = incoming.get('segment_attrs')
+        if segment_attrs_raw is None:
+            segment_attrs_raw = existing.get('segment_attrs', {})
+        segment_attrs: Dict[str, Dict[str, Any]] = {}
+        if isinstance(segment_attrs_raw, dict):
+            max_segment_index = max(
+                -1,
+                (point_count - 1) if loop_type != 'closed' else (point_count - 1),
+            )
+            for raw_key, raw_value in segment_attrs_raw.items():
+                try:
+                    idx = int(raw_key)
+                except Exception:
+                    continue
+                if idx < 0 or idx > max_segment_index or not isinstance(raw_value, dict):
+                    continue
+                cleaned_entry = dict(raw_value)
+                entry_direction = str(cleaned_entry.get('direction', '') or '').strip().lower()
+                if entry_direction and entry_direction not in ('uni', 'bi', 'reverse'):
+                    cleaned_entry.pop('direction', None)
+                elif entry_direction:
+                    cleaned_entry['direction'] = entry_direction
+                segment_attrs[str(idx)] = cleaned_entry
+
         return {
             'loop_type': loop_type,
             'loop_mode': bool(loop_type != 'none'),
             'curved_segments': curved_segments,
             'curved_segment_controls': curved_segment_controls,
+            'direction': direction,
+            'segment_attrs': segment_attrs,
             'has_curves': bool(curved_segments),
         }
 
@@ -7934,6 +8124,7 @@ class RosBridge(Node):
         cleaned: List[Dict[str, float]] = []
         has_zone_reference = False
         has_shelf_check = False
+        has_segment_metadata = False
         for point in points:
             try:
                 x = float(point.get('x'))
@@ -7953,6 +8144,9 @@ class RosBridge(Node):
             if self._as_bool(point.get('shelf_check', point.get('shelfCheck', False))):
                 entry['shelf_check'] = True
                 has_shelf_check = True
+            if self._as_bool(point.get('segment_bidirectional', point.get('segmentBidirectional', False))):
+                entry['segment_bidirectional'] = True
+                has_segment_metadata = True
             cleaned.append(entry)
 
         with self._path_metadata_lock:
@@ -7963,7 +8157,7 @@ class RosBridge(Node):
                 point_count=len(cleaned),
                 existing_settings=existing_settings,
             )
-            keep_points_metadata = has_zone_reference or has_shelf_check
+            keep_points_metadata = has_zone_reference or has_shelf_check or has_segment_metadata
             keep_metadata = keep_points_metadata or self._has_non_default_path_settings(normalized_settings)
             if keep_metadata:
                 self.path_metadata[path_name] = {
@@ -8013,6 +8207,8 @@ class RosBridge(Node):
                         entry['zoneName'] = zone_name
                     if self._as_bool(md.get('shelf_check', False)):
                         entry['shelfCheck'] = True
+                    if self._as_bool(md.get('segment_bidirectional', False)):
+                        entry['segmentBidirectional'] = True
             enriched.append(entry)
         return enriched
 
@@ -8131,6 +8327,451 @@ class RosBridge(Node):
 
         return self._normalize_path_settings(settings_raw, point_count=point_count)
 
+    @staticmethod
+    def _point_zone_name(point: Dict[str, Any]) -> str:
+        if not isinstance(point, dict):
+            return ''
+        return str(point.get('zone_name', point.get('zoneName', '')) or '').strip()
+
+    @staticmethod
+    def _path_point_distance(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+        try:
+            return math.hypot(
+                float(a.get('x', 0.0)) - float(b.get('x', 0.0)),
+                float(a.get('y', 0.0)) - float(b.get('y', 0.0)),
+            )
+        except Exception:
+            return float('inf')
+
+    @staticmethod
+    def _slice_path_points(points: List[Dict[str, Any]], start_idx: int, end_idx: int) -> List[Dict[str, Any]]:
+        if start_idx <= end_idx:
+            return [dict(point) for point in points[start_idx:end_idx + 1]]
+        return [dict(point) for point in reversed(points[end_idx:start_idx + 1])]
+
+    def _segment_direction_for_path(
+        self,
+        settings: Dict[str, Any],
+        segment_index: int,
+    ) -> str:
+        direction = str(settings.get('direction', 'uni') or 'uni').strip().lower()
+        segment_attrs = settings.get('segment_attrs', {})
+        if isinstance(segment_attrs, dict):
+            attrs = segment_attrs.get(str(segment_index), {})
+            if isinstance(attrs, dict):
+                override = str(attrs.get('direction', '') or '').strip().lower()
+                if override in {'uni', 'bi', 'reverse'}:
+                    direction = override
+        return direction if direction in {'uni', 'bi', 'reverse'} else 'uni'
+
+    def _build_path_mode_graph(
+        self,
+        *,
+        selected_path: str = '',
+    ) -> Dict[str, Any]:
+        paths_result = self.get_paths()
+        if not paths_result.get('ok'):
+            return {
+                'ok': False,
+                'message': paths_result.get('message', 'Failed to load paths'),
+                'paths': {},
+                'nodes': {},
+                'edges': {},
+                'memberships': {},
+                'relationships': {},
+            }
+
+        paths = paths_result.get('paths', {})
+        settings_map = paths_result.get('path_settings', {})
+        if not isinstance(paths, dict) or not paths:
+            return {
+                'ok': False,
+                'message': 'No saved paths available for Path Mode',
+                'paths': {},
+                'nodes': {},
+                'edges': {},
+                'memberships': {},
+                'relationships': {},
+            }
+
+        selected = str(selected_path or '').strip()
+        nodes: Dict[str, Dict[str, Any]] = {}
+        memberships: Dict[str, Set[str]] = {}
+        edges: Dict[str, List[Dict[str, Any]]] = {}
+
+        for path_name, raw_points in paths.items():
+            path_id = str(path_name or '').strip()
+            if not path_id or not isinstance(raw_points, list):
+                continue
+            points = [dict(point) for point in raw_points if isinstance(point, dict)]
+            if len(points) < 2:
+                continue
+            settings = settings_map.get(path_id, {})
+            if not isinstance(settings, dict):
+                settings = self._normalize_path_settings({}, point_count=len(points))
+
+            poi_indices: List[Tuple[int, str]] = []
+            for idx, point in enumerate(points):
+                zone_name = self._point_zone_name(point)
+                if not zone_name:
+                    continue
+                poi_indices.append((idx, zone_name))
+                memberships.setdefault(zone_name, set()).add(path_id)
+                node = nodes.setdefault(
+                    zone_name,
+                    {
+                        'zone_name': zone_name,
+                        'x': float(point.get('x', 0.0)),
+                        'y': float(point.get('y', 0.0)),
+                        'paths': set(),
+                    },
+                )
+                node['paths'].add(path_id)
+
+            for pair_idx in range(len(poi_indices) - 1):
+                start_idx, start_zone = poi_indices[pair_idx]
+                end_idx, end_zone = poi_indices[pair_idx + 1]
+                if start_zone == end_zone:
+                    continue
+                geometry = self._slice_path_points(points, start_idx, end_idx)
+                cost = 0.0
+                for geo_idx in range(1, len(geometry)):
+                    cost += self._path_point_distance(geometry[geo_idx - 1], geometry[geo_idx])
+                if not math.isfinite(cost) or cost <= 0.0:
+                    continue
+
+                segment_direction = self._segment_direction_for_path(settings, start_idx)
+                if segment_direction in {'uni', 'bi'}:
+                    edges.setdefault(start_zone, []).append({
+                        'to': end_zone,
+                        'path': path_id,
+                        'cost': cost,
+                        'points': geometry,
+                        'direction': 'forward',
+                    })
+                if segment_direction in {'reverse', 'bi'}:
+                    edges.setdefault(end_zone, []).append({
+                        'to': start_zone,
+                        'path': path_id,
+                        'cost': cost,
+                        'points': list(reversed([dict(point) for point in geometry])),
+                        'direction': 'reverse',
+                    })
+
+        relationships: Dict[str, Dict[str, Any]] = {}
+        for zone_name, path_set in memberships.items():
+            incoming_paths: Set[str] = set()
+            outgoing_paths: Set[str] = set()
+            for from_zone, outgoing in edges.items():
+                for edge in outgoing:
+                    edge_path = str(edge.get('path', '') or '')
+                    if edge.get('to') == zone_name:
+                        incoming_paths.add(edge_path)
+                    if from_zone == zone_name:
+                        outgoing_paths.add(edge_path)
+            in_count = len(incoming_paths)
+            out_count = len(outgoing_paths)
+            if in_count <= 1 and out_count <= 1:
+                relation = '1:1'
+            elif in_count <= 1 and out_count > 1:
+                relation = '1:N'
+            else:
+                relation = 'N:M'
+            relationships[zone_name] = {
+                'type': relation,
+                'paths': sorted(path_set),
+                'incoming_paths': sorted(incoming_paths),
+                'outgoing_paths': sorted(outgoing_paths),
+            }
+
+        if selected and selected not in paths:
+            return {
+                'ok': False,
+                'message': f'Path "{selected}" not found',
+                'paths': paths,
+                'nodes': nodes,
+                'edges': edges,
+                'memberships': memberships,
+                'relationships': relationships,
+            }
+
+        return {
+            'ok': True,
+            'message': f'Built Path Mode graph with {len(nodes)} POIs',
+            'paths': paths,
+            'nodes': nodes,
+            'edges': edges,
+            'memberships': memberships,
+            'relationships': relationships,
+        }
+
+    def _nearest_path_mode_poi(
+        self,
+        graph: Dict[str, Any],
+        *,
+        selected_path: str = '',
+        current_poi: str = '',
+    ) -> Tuple[str, str]:
+        explicit = str(current_poi or '').strip()
+        nodes = graph.get('nodes', {})
+        if explicit:
+            if explicit in nodes:
+                return explicit, 'current_poi'
+            return '', f'Current POI "{explicit}" is not in the path graph'
+
+        pose_snapshot = self.get_robot_pose()
+        pose = pose_snapshot.get('pose') if isinstance(pose_snapshot, dict) else None
+        if not isinstance(pose, dict):
+            return '', 'Robot pose is unavailable; cannot enter selected path'
+        try:
+            robot_x = float(pose.get('x', 0.0))
+            robot_y = float(pose.get('y', 0.0))
+        except Exception:
+            return '', 'Robot pose is invalid; cannot enter selected path'
+
+        selected = str(selected_path or '').strip()
+        best_name = ''
+        best_dist = float('inf')
+        for zone_name, node in nodes.items():
+            node_paths = node.get('paths', set())
+            if selected and selected not in node_paths:
+                continue
+            dist = math.hypot(float(node.get('x', 0.0)) - robot_x, float(node.get('y', 0.0)) - robot_y)
+            if dist < best_dist:
+                best_name = str(zone_name)
+                best_dist = dist
+        if not best_name:
+            return '', f'No valid POI found on selected path "{selected}"'
+        return best_name, f'nearest_poi:{best_dist:.2f}m'
+
+    def _a_star_path_mode(
+        self,
+        graph: Dict[str, Any],
+        *,
+        start_poi: str,
+        goal_poi: str,
+        selected_path: str = '',
+    ) -> Tuple[List[Dict[str, Any]], str]:
+        nodes = graph.get('nodes', {})
+        edges = graph.get('edges', {})
+        if start_poi not in nodes:
+            return [], f'Start POI "{start_poi}" is not in the path graph'
+        if goal_poi not in nodes:
+            return [], f'Destination POI "{goal_poi}" is not in the path graph'
+
+        selected = str(selected_path or '').strip()
+
+        def heuristic(zone_name: str) -> float:
+            node = nodes.get(zone_name, {})
+            goal = nodes.get(goal_poi, {})
+            return math.hypot(
+                float(node.get('x', 0.0)) - float(goal.get('x', 0.0)),
+                float(node.get('y', 0.0)) - float(goal.get('y', 0.0)),
+            )
+
+        queue: List[Tuple[float, float, str, Tuple[str, ...]]] = []
+        heapq.heappush(queue, (heuristic(start_poi), 0.0, start_poi, (selected,) if selected else tuple()))
+        came_from: Dict[Tuple[str, Tuple[str, ...]], Tuple[Tuple[str, Tuple[str, ...]], Dict[str, Any]]] = {}
+        best_cost: Dict[Tuple[str, Tuple[str, ...]], float] = {
+            (start_poi, (selected,) if selected else tuple()): 0.0
+        }
+        goal_state: Optional[Tuple[str, Tuple[str, ...]]] = None
+
+        while queue:
+            _priority, cost_so_far, zone_name, context_paths = heapq.heappop(queue)
+            state = (zone_name, context_paths)
+            if cost_so_far > best_cost.get(state, float('inf')) + 1e-9:
+                continue
+            if zone_name == goal_poi:
+                goal_state = state
+                break
+
+            allowed_context = set(context_paths)
+            if not allowed_context:
+                allowed_context = set(nodes.get(zone_name, {}).get('paths', set()))
+
+            for edge in edges.get(zone_name, []):
+                edge_path = str(edge.get('path', '') or '')
+                if selected and allowed_context and edge_path not in allowed_context:
+                    # Shared POIs are graph-level transition points. If this POI belongs
+                    # to both the current context and the edge path, the transition is legal.
+                    memberships = set(nodes.get(zone_name, {}).get('paths', set()))
+                    if edge_path not in memberships:
+                        continue
+                next_zone = str(edge.get('to', '') or '')
+                if not next_zone:
+                    continue
+                new_context = tuple(sorted({edge_path} if edge_path else allowed_context))
+                next_cost = cost_so_far + float(edge.get('cost', 0.0) or 0.0)
+                next_state = (next_zone, new_context)
+                if next_cost >= best_cost.get(next_state, float('inf')):
+                    continue
+                best_cost[next_state] = next_cost
+                came_from[next_state] = (state, edge)
+                heapq.heappush(
+                    queue,
+                    (next_cost + heuristic(next_zone), next_cost, next_zone, new_context),
+                )
+
+        if goal_state is None:
+            return [], f'No directed Path Mode route from "{start_poi}" to "{goal_poi}"'
+
+        route_edges: List[Dict[str, Any]] = []
+        cursor = goal_state
+        start_state_prefix = start_poi
+        while cursor[0] != start_state_prefix:
+            prev, edge = came_from[cursor]
+            route_edges.append(edge)
+            cursor = prev
+        route_edges.reverse()
+        return route_edges, ''
+
+    @staticmethod
+    def _merge_route_edge_points(route_edges: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        merged: List[Dict[str, Any]] = []
+        for edge in route_edges:
+            points = edge.get('points', [])
+            if not isinstance(points, list):
+                continue
+            for idx, point in enumerate(points):
+                if idx == 0 and merged:
+                    continue
+                merged.append(dict(point))
+        return merged
+
+    def plan_path_mode_route(
+        self,
+        destination_poi: str,
+        *,
+        selected_path: str = '',
+        current_poi: str = '',
+    ):
+        destination = str(destination_poi or '').strip()
+        if not destination:
+            return self._ok(False, 'destination_poi is required')
+
+        graph = self._build_path_mode_graph(selected_path=selected_path)
+        if not graph.get('ok'):
+            return self._ok(False, graph.get('message', 'Failed to build Path Mode graph'))
+
+        start_poi, start_reason = self._nearest_path_mode_poi(
+            graph,
+            selected_path=selected_path,
+            current_poi=current_poi,
+        )
+        if not start_poi:
+            return self._ok(False, start_reason)
+        if start_poi == destination:
+            relationship = graph.get('relationships', {}).get(destination, {})
+            if isinstance(relationship, dict):
+                relationship = {
+                    key: sorted(value) if isinstance(value, set) else value
+                    for key, value in relationship.items()
+                }
+            return self._ok(
+                True,
+                f'Path Mode already at "{destination}"',
+                start_poi=start_poi,
+                start_reason=start_reason,
+                destination_poi=destination,
+                selected_path=str(selected_path or '').strip(),
+                route=[],
+                route_edges=[],
+                path_sequence=[],
+                relationships={destination: relationship},
+            )
+
+        route_edges, err = self._a_star_path_mode(
+            graph,
+            start_poi=start_poi,
+            goal_poi=destination,
+            selected_path=selected_path,
+        )
+        if err:
+            return self._ok(False, err, start_poi=start_poi, destination_poi=destination)
+
+        route_points = self._merge_route_edge_points(route_edges)
+        if len(route_points) < 2:
+            return self._ok(False, 'Path Mode route has fewer than 2 waypoints')
+
+        path_sequence = [str(edge.get('path', '') or '') for edge in route_edges]
+        relationship_summary = {
+            name: {
+                **{key: value for key, value in rel.items() if key != 'paths'},
+                'paths': list(rel.get('paths', [])),
+            }
+            for name, rel in graph.get('relationships', {}).items()
+            if name in {start_poi, destination, *[str(edge.get('to', '')) for edge in route_edges]}
+        }
+        return self._ok(
+            True,
+            f'Path Mode route {start_poi} -> {destination} ({len(route_points)} waypoints)',
+            start_poi=start_poi,
+            start_reason=start_reason,
+            destination_poi=destination,
+            selected_path=str(selected_path or '').strip(),
+            route=route_points,
+            route_edges=[
+                {
+                    'from': self._point_zone_name(edge.get('points', [{}])[0]) if edge.get('points') else '',
+                    'to': str(edge.get('to', '') or ''),
+                    'path': str(edge.get('path', '') or ''),
+                    'direction': str(edge.get('direction', '') or ''),
+                    'cost': round(float(edge.get('cost', 0.0) or 0.0), 3),
+                }
+                for edge in route_edges
+            ],
+            path_sequence=path_sequence,
+            relationships=relationship_summary,
+        )
+
+    def follow_path_mode_route(
+        self,
+        destination_poi: str,
+        *,
+        selected_path: str = '',
+        current_poi: str = '',
+    ):
+        plan = self.plan_path_mode_route(
+            destination_poi,
+            selected_path=selected_path,
+            current_poi=current_poi,
+        )
+        if not plan.get('ok'):
+            return plan
+        route = plan.get('route', [])
+        if len(route) < 2:
+            return self._ok(
+                True,
+                plan.get('message', 'Path Mode already at destination'),
+                plan=plan,
+                start_poi=plan.get('start_poi', ''),
+                destination_poi=plan.get('destination_poi', ''),
+                route=route,
+            )
+        self._path_mode_replan_attempts = 0
+        start_result = self.follow_path(
+            route,
+            loop_type='none',
+            loop_mode=False,
+            settings={},
+            path_mode_context={
+                'selected_path': plan.get('selected_path', ''),
+                'destination_poi': plan.get('destination_poi', ''),
+                'start_poi': plan.get('start_poi', ''),
+            },
+        )
+        if not start_result.get('ok'):
+            return self._ok(False, start_result.get('message', 'Failed to start Path Mode route'), plan=plan)
+        return self._ok(
+            True,
+            start_result.get('message', plan.get('message', 'Path Mode route started')),
+            plan=plan,
+            start_poi=plan.get('start_poi', ''),
+            destination_poi=plan.get('destination_poi', ''),
+            route=route,
+        )
+
 
 
 
@@ -8154,7 +8795,12 @@ class RosBridge(Node):
         self.path_state['total_waypoints'] = int(feedback.total)
         self.path_state['message'] = str(feedback.status or '')
     
-    def _build_follow_path_goal(self, points: Any):
+    def _build_follow_path_goal(
+        self,
+        points: Any,
+        *,
+        path_mode_context: Optional[Dict[str, Any]] = None,
+    ):
         goal = FollowPathAction.Goal()
         for point in points:
             x = float(point.get('x', 0.0))
@@ -8176,6 +8822,17 @@ class RosBridge(Node):
             bool(self._as_bool(point.get('shelf_check', point.get('shelfCheck', False))))
             for point in points
         ]
+        goal.segment_bidirectional = [
+            bool(self._as_bool(point.get('segment_bidirectional', point.get('segmentBidirectional', False))))
+            for point in points
+        ]
+        context = path_mode_context if isinstance(path_mode_context, dict) else {}
+        if hasattr(goal, 'path_mode_selected_path'):
+            goal.path_mode_selected_path = str(context.get('selected_path', '') or '')
+        if hasattr(goal, 'path_mode_destination_poi'):
+            goal.path_mode_destination_poi = str(context.get('destination_poi', '') or '')
+        if hasattr(goal, 'path_mode_start_poi'):
+            goal.path_mode_start_poi = str(context.get('start_poi', '') or '')
         return goal
     
     def _start_follow_path_goal(
@@ -8187,6 +8844,7 @@ class RosBridge(Node):
         display_total: Optional[int] = None,
         state_current_index: int = 0,
         state_message: Optional[str] = None,
+        path_mode_context: Optional[Dict[str, Any]] = None,
     ):
         if restart and self._loop_stop_requested:
             return self._ok(False, 'Loop stop requested')
@@ -8195,7 +8853,7 @@ class RosBridge(Node):
         if not self.follow_path_action_client.wait_for_server(timeout_sec=wait_timeout):
             return self._ok(False, 'FollowPath action server not available')
     
-        goal = self._build_follow_path_goal(points)
+        goal = self._build_follow_path_goal(points, path_mode_context=path_mode_context)
         ok = self._send_followpath_goal(goal)
         if not ok:
             return self._ok(False, 'FollowPath goal already in-flight')
@@ -8221,7 +8879,14 @@ class RosBridge(Node):
     # All loop progression is now driven by _on_follow_result (single callback chain).
 
     
-    def follow_path(self, path_points: Any, loop_type: Any = 'none', loop_mode: Optional[bool] = None):
+    def follow_path(
+        self,
+        path_points: Any,
+        loop_type: Any = 'none',
+        loop_mode: Optional[bool] = None,
+        settings: Optional[Dict[str, Any]] = None,
+        path_mode_context: Optional[Dict[str, Any]] = None,
+    ):
         if self.estop_active:
             return self._ok(False, 'E-STOP active. Reset before path following.')
 
@@ -8239,7 +8904,21 @@ class RosBridge(Node):
         if len(points) < 2:
             return self._ok(False, 'Path must have at least 2 points')
 
+        if isinstance(settings, dict) and settings:
+            point_count_for_settings = len(points)
+            self._normalize_path_settings(settings, point_count=point_count_for_settings)
+
         requested_loop_type = self._normalize_loop_type(loop_type, loop_mode=loop_mode)
+        context = path_mode_context if isinstance(path_mode_context, dict) else {}
+        if str(context.get('destination_poi', '') or '').strip():
+            self._path_mode_route_context = {
+                'selected_path': str(context.get('selected_path', '') or '').strip(),
+                'destination_poi': str(context.get('destination_poi', '') or '').strip(),
+                'start_poi': str(context.get('start_poi', '') or '').strip(),
+            }
+        else:
+            self._path_mode_route_context = {}
+            self._path_mode_replan_attempts = 0
 
         # Preempt any active goal using the unified goal handle.
         with self._nav_goal_lock:
@@ -8301,6 +8980,7 @@ class RosBridge(Node):
                 loop_type='none',
                 restart=False,
                 display_total=len(execution_points),
+                path_mode_context=path_mode_context,
             )
         if not start_result.get('ok'):
             self._loop_enabled = False

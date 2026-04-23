@@ -4,6 +4,10 @@ string goal_name
 geometry_msgs/PoseStamped[] waypoints
 string[] zone_names
 bool[] shelf_checks
+bool[] segment_bidirectional
+string path_mode_selected_path
+string path_mode_destination_poi
+string path_mode_start_poi
 ---
 bool ok
 string message
