@@ -1,6 +1,6 @@
 schema_version: 1
-profile_version: 13
-robot_id: Robot-1
+profile_version: 1
+robot_id: NewProfile
 namespace: /
 base_frame: base_footprint
 sensor_frames:
@@ -67,33 +67,25 @@ mappings:
     type: std_msgs/msg/Int32
 topics: {}
 urdf_artifact:
-  source_filename: robot.urdf.xacro
-  source_type: xacro
-  source_path: urdf/robot.urdf.xacro
-  compiled_urdf_path: artifacts/robot-1/v11/compiled.urdf
-  validation_report_path: artifacts/robot-1/v11/validation.yaml
-  uploaded_at: 1777004795
+  source_filename: ''
+  source_type: ''
+  source_path: ''
+  compiled_urdf_path: ''
+  validation_report_path: ''
+  uploaded_at: 0
   validation:
     valid: false
-    parse_ok: true
-    tree_connected: true
-    base_link_exists: true
+    parse_ok: false
+    tree_connected: false
+    base_link_exists: false
     required_frames_ok: false
-    message: 'missing required frames: base_scan, camera_link; optional frames absent
-      from URDF: map, odom'
-    required_frames:
-    - base_footprint
-    - base_scan
-    - camera_link
-    missing_required_frames:
-    - base_scan
-    - camera_link
-    optional_missing_frames:
-    - map
-    - odom
+    message: ''
+    required_frames: []
+    missing_required_frames: []
+    optional_missing_frames: []
     unknown_joint_links: []
-    link_count: 12
-    joint_count: 11
+    link_count: 0
+    joint_count: 0
   runtime:
     ok: false
     message: ''

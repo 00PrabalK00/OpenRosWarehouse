@@ -46,3 +46,5 @@ tmp_*.js
 plot_controller.py
 ip
 src.zip
+src/ui_ws/config/robot_profiles/registry.yaml
+src/ui_ws/.map_editor_stage.yaml
