@@ -1,23 +1,27 @@
 amcl:
   ros__parameters:
     use_sim_time: false
-    alpha1: 0.2
-    alpha2: 0.2
-    alpha3: 0.2
-    alpha4: 0.2
-    alpha5: 0.2
-    base_frame_id: base_link
-    beam_skip_distance: 0.5
-    beam_skip_error_threshold: 0.9
-    beam_skip_threshold: 0.3
-    do_beamskip: false
+    # Trust the EKF / wheel odom more so AMCL does not keep re-spreading the
+    # particle cloud aggressively during in-place turns and snapping back.
+    alpha1: 0.05
+    alpha2: 0.05
+    alpha3: 0.03
+    alpha4: 0.05
+    alpha5: 0.03
+    base_frame_id: base_footprint
+    beam_skip_distance: 0.4
+    beam_skip_error_threshold: 0.8
+    beam_skip_threshold: 0.5
+    # Combined dual-lidar scans can have partial mismatch while rotating.
+    # Enable beam skipping so a bad slice of the scan does not yank heading.
+    do_beamskip: true
     global_frame_id: map
     lambda_short: 0.1
-    laser_likelihood_max_dist: 2.0
+    laser_likelihood_max_dist: 1.5
     laser_max_range: 12.0
     laser_min_range: 0.3
     laser_model_type: likelihood_field
-    max_beams: 60
+    max_beams: 100
     max_particles: 2000
     min_particles: 500
     odom_frame_id: odom
@@ -25,18 +29,22 @@ amcl:
     pf_z: 0.99
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
-    resample_interval: 1
+    resample_interval: 3
     robot_model_type: nav2_amcl::DifferentialMotionModel
     save_pose_rate: 0.5
-    sigma_hit: 0.2
+    sigma_hit: 0.12
     tf_broadcast: true
-    transform_tolerance: 0.3
-    update_min_a: 0.15
-    update_min_d: 0.15
-    z_hit: 0.5
+    transform_tolerance: 0.5
+    # For this robot/environment, pure rotation is where AMCL is going unstable.
+    # Make it rely on odom through turns and only apply scan corrections after a
+    # much larger heading change.
+    update_min_a: 1.10
+    update_min_d: 0.10
+    z_hit: 0.75
     z_max: 0.05
-    z_rand: 0.5
+    z_rand: 0.20
     z_short: 0.05
+    # Keep AMCL on a raw single-lidar topic instead of the synthetic merged scan.
     scan_topic: /scan
 amcl_map_client:
   ros__parameters:
@@ -48,7 +56,7 @@ bt_navigator:
   ros__parameters:
     use_sim_time: false
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     odom_topic: /odometry/filtered
     default_nav_to_pose_bt_xml: ''
     default_nav_through_poses_bt_xml: navigate_through_poses_simple.xml
@@ -174,7 +182,7 @@ local_costmap:
     ros__parameters:
       use_sim_time: false
       global_frame: odom
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       rolling_window: true
       width: 10
       height: 10
@@ -224,7 +232,7 @@ global_costmap:
       origin_x: -7.02
       origin_y: -10.4
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       footprint: '[]'
       footprint_padding: 0.0
       width: 25
@@ -310,7 +318,7 @@ behavior_server:
     wait:
       plugin: nav2_behaviors/Wait
     global_frame: odom
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     transform_tolerance: 0.1
     max_rotational_vel: 0.55
     min_rotational_vel: 0.2

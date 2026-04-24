@@ -12,10 +12,10 @@ auto_reloc:
     # Lidar transforms (update these for your robot!)
     front_lidar_x: 0.35
     front_lidar_y: 0.0
-    front_lidar_yaw: 3.14159  # pi radians
+    front_lidar_yaw: 0.0
     rear_lidar_x: -0.35
     rear_lidar_y: 0.0
-    rear_lidar_yaw: 0.0
+    rear_lidar_yaw: 3.14159  # pi radians
     front_scan_frame: 'laser_front_frame'
     rear_scan_frame: 'laser_rear_frame'
     allow_manual_lidar_fallback: false
