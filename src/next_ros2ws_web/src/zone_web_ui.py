@@ -1857,12 +1857,17 @@ def save_robot_profile_robot_editor():
     if not isinstance(robot_builder, dict):
         robot_builder = {}
 
+    safety_overrides = data.get('safety_overrides', None)
+    if safety_overrides is not None and not isinstance(safety_overrides, dict):
+        safety_overrides = {}
+
     compile_urdf = bool(data.get('compile_urdf', True))
     apply_runtime = bool(data.get('apply_runtime', False))
     result = node.save_profile_robot_editor(
         robot_id=robot_id,
         profile_fields=profile_fields,
         robot_builder=robot_builder,
+        safety_overrides=safety_overrides,
         compile_urdf=compile_urdf,
         apply_runtime=apply_runtime,
     )
@@ -1957,7 +1962,7 @@ def get_robot_profile_urdf_visualization():
     include_tf = include_tf_raw in {'1', 'true', 'yes', 'on'}
 
     result = node.get_profile_urdf_visualization(robot_id=robot_id, include_tf=include_tf)
-    return _status(result, fail_code=400)
+    return _status(result, fail_code=200)
 
 
 @app.route('/api/settings/robot_profiles/urdf/source', methods=['GET'])
@@ -1968,7 +1973,7 @@ def get_robot_profile_urdf_source():
 
     robot_id = str(request.args.get('robot_id', '') or '').strip()
     result = node.get_profile_urdf_source_editor(robot_id=robot_id)
-    return _status(result, fail_code=400)
+    return _status(result, fail_code=200)
 
 
 @app.route('/api/settings/robot_profiles/urdf/source', methods=['POST'])

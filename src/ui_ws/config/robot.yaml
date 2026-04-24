@@ -93,7 +93,7 @@ safety_controller:
     # commands either pass through or are fully blocked.
     obstacle_gate_strict_stop_only: true
     # Absolute close-range stop distance for the hard gate.
-    obstacle_hard_stop_distance_m: 0.30
+    obstacle_hard_stop_distance_m: 0.3
     obstacle_forward_half_angle_deg: 70.0
     obstacle_rear_half_angle_deg: 70.0
     obstacle_min_points: 4
@@ -105,7 +105,7 @@ safety_controller:
     ttc_stop_sec: 1.10                  # was 0.90 — stops further away in autonomous
     ttc_warn_sec: 1.80                  # was 1.60
     ttc_min_speed_mps: 0.05
-    obstacle_ttc_min_distance_m: 0.30   # keep TTC gate aligned with the hard-stop distance
+    obstacle_ttc_min_distance_m: 0.3   # keep TTC gate aligned with the hard-stop distance
 
     # No advisory slowdown layer: the gate either passes commands or blocks them.
     obstacle_slowdown_enabled: false
@@ -114,8 +114,8 @@ safety_controller:
     obstacle_slowdown_ttc_buffer_sec: 0.70
 
     # Keep the legacy manual-only threshold aligned with the hard gate distance.
-    manual_critical_zone_m: 0.30
-    autonomous_critical_zone_m: 0.30
+    manual_critical_zone_m: 0.3
+    autonomous_critical_zone_m: 0.3
     robot_base_frame: base_footprint
 
     # Robot body echo filtering.

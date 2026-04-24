@@ -53,6 +53,16 @@ class SettingsManager(Node):
             'field': 'linear.x',
             'type': 'geometry_msgs/msg/Twist',
         },
+        'battery_temperature': {
+            'topic': '/battery_temperature',
+            'field': 'data',
+            'type': 'std_msgs/msg/Float32',
+        },
+        'battery_charge_cycles': {
+            'topic': '/battery_charge_cycles',
+            'field': 'data',
+            'type': 'std_msgs/msg/UInt32',
+        },
         **default_action_mappings(),
     }
 

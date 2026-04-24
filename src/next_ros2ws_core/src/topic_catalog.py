@@ -102,6 +102,9 @@ DEFAULT_TOPICS: Dict[str, str] = {
     'ui_action_mapping_prefix': 'action_node_',
     'ui_diagnostics_topic': '/diagnostics',
     'ui_robot_mode_topic': '/robot_mode',
+    'ui_battery_state_topic': '/battery_state',
+    'ui_battery_temperature_topic': '/battery_temperature',
+    'ui_battery_charge_cycles_topic': '/battery_charge_cycles',
 }
 
 

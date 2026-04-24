@@ -670,6 +670,16 @@ class RosBridge(Node):
             'field': 'linear.x',
             'type': 'geometry_msgs/msg/Twist',
         },
+        'battery_temperature': {
+            'topic': '/battery_temperature',
+            'field': 'data',
+            'type': 'std_msgs/msg/Float32',
+        },
+        'battery_charge_cycles': {
+            'topic': '/battery_charge_cycles',
+            'field': 'data',
+            'type': 'std_msgs/msg/UInt32',
+        },
         **default_action_mappings(),
     }
     DEFAULT_TOPICS: Dict[str, str] = catalog_default_topics()
@@ -3420,7 +3430,16 @@ class RosBridge(Node):
             base_frame=str(profile.get('base_frame', 'base_link') or 'base_link'),
             sensor_frames=profile.get('sensor_frames', {}) if isinstance(profile.get('sensor_frames', {}), dict) else {},
         )
-        if not bool(validation.get('valid')):
+        # Block only on hard structural failures. Missing sensor frames are warnings
+        # (the user can update sensor frame config to match after importing).
+        hard_failure = (
+            not validation.get('parse_ok')
+            or not validation.get('tree_connected')
+            or not validation.get('base_link_exists')
+            or len(validation.get('unknown_joint_links', [])) > 0
+            or int(validation.get('link_count', 0)) == 0
+        )
+        if hard_failure:
             return self._ok(False, str(validation.get('message', 'URDF validation failed')), validation=validation)
 
         current_version = int(profile.get('profile_version', 1) or 1)
@@ -3748,7 +3767,14 @@ class RosBridge(Node):
             base_frame=str(profile.get('base_frame', 'base_link') or 'base_link'),
             sensor_frames=profile.get('sensor_frames', {}) if isinstance(profile.get('sensor_frames', {}), dict) else {},
         )
-        if not bool(validation.get('valid')):
+        hard_failure = (
+            not validation.get('parse_ok')
+            or not validation.get('tree_connected')
+            or not validation.get('base_link_exists')
+            or len(validation.get('unknown_joint_links', [])) > 0
+            or int(validation.get('link_count', 0)) == 0
+        )
+        if hard_failure:
             profile['urdf_source'] = self._ui_relative_path(resolved_source)
             profile['urdf_artifact'] = {
                 'source_filename': os.path.basename(resolved_source),
@@ -3885,6 +3911,179 @@ class RosBridge(Node):
                 'show_robot_heading': bool(ui_toggles.get('show_robot_heading', True)),
             },
         }
+
+    def _resolve_robot_yaml_path(self) -> str:
+        configured = str(
+            self._get_or_declare_parameter(
+                'robot_yaml_file',
+                os.path.join(self.ui_root, 'config', 'robot.yaml'),
+            )
+            or ''
+        ).strip()
+        target = configured or os.path.join(self.ui_root, 'config', 'robot.yaml')
+        return os.path.abspath(os.path.expanduser(target))
+
+    @staticmethod
+    def _format_yaml_inline_scalar(value: Any) -> str:
+        if isinstance(value, bool):
+            return 'true' if value else 'false'
+        if value is None:
+            return "''"
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        if isinstance(value, (list, dict)):
+            rendered = yaml.safe_dump(value, default_flow_style=True, sort_keys=False).strip()
+            return rendered or '[]'
+
+        text = str(value)
+        if text == '':
+            return "''"
+        if re.search(r'[\s:#{}\[\],&*!?|>@`"\']', text):
+            return json.dumps(text)
+        return text
+
+    def _load_robot_yaml_safety_config(self) -> Dict[str, Any]:
+        path = self._resolve_robot_yaml_path()
+        if not path or not os.path.exists(path):
+            return self._ok(False, f'robot.yaml not found at "{path}"', source_path=path, safety={})
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                payload = yaml.safe_load(f) or {}
+        except Exception as exc:
+            return self._ok(False, f'Failed reading robot.yaml: {exc}', source_path=path, safety={})
+
+        if not isinstance(payload, dict):
+            return self._ok(False, 'robot.yaml did not parse into a mapping', source_path=path, safety={})
+
+        node_block = payload.get('safety_controller', {})
+        params = node_block.get('ros__parameters', {}) if isinstance(node_block, dict) else {}
+        if not isinstance(params, dict):
+            params = {}
+
+        return self._ok(
+            True,
+            'Loaded safety_controller parameters from robot.yaml',
+            source_path=path,
+            safety=copy.deepcopy(params),
+        )
+
+    def _save_robot_yaml_safety_config(self, overrides: Any) -> Dict[str, Any]:
+        payload = overrides if isinstance(overrides, dict) else {}
+        normalized: Dict[str, Any] = {}
+        for raw_key, raw_value in payload.items():
+            key = str(raw_key or '').strip()
+            if not key:
+                continue
+            normalized[key] = raw_value
+
+        path = self._resolve_robot_yaml_path()
+        if not path or not os.path.exists(path):
+            return self._ok(False, f'robot.yaml not found at "{path}"', source_path=path, safety={})
+        if not normalized:
+            return self._load_robot_yaml_safety_config()
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                original_text = f.read()
+        except Exception as exc:
+            return self._ok(False, f'Failed reading robot.yaml: {exc}', source_path=path, safety={})
+
+        lines = original_text.splitlines(True)
+        if not lines:
+            return self._ok(False, 'robot.yaml is empty', source_path=path, safety={})
+
+        def _indent(line: str) -> int:
+            return len(line) - len(line.lstrip(' '))
+
+        safety_idx = -1
+        for idx, line in enumerate(lines):
+            if re.match(r'^\s*safety_controller:\s*$', line):
+                safety_idx = idx
+                break
+        if safety_idx < 0:
+            return self._ok(False, 'Could not find "safety_controller:" in robot.yaml', source_path=path, safety={})
+
+        safety_indent = _indent(lines[safety_idx])
+        block_end = len(lines)
+        for idx in range(safety_idx + 1, len(lines)):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if _indent(lines[idx]) <= safety_indent:
+                block_end = idx
+                break
+
+        ros_idx = -1
+        for idx in range(safety_idx + 1, block_end):
+            if re.match(r'^\s+ros__parameters:\s*$', lines[idx]):
+                ros_idx = idx
+                break
+        if ros_idx < 0:
+            return self._ok(False, 'Could not find "ros__parameters:" under safety_controller in robot.yaml', source_path=path, safety={})
+
+        ros_indent = _indent(lines[ros_idx])
+        param_indent = ros_indent + 2
+        params_end = block_end
+        for idx in range(ros_idx + 1, block_end):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if _indent(lines[idx]) <= ros_indent:
+                params_end = idx
+                break
+
+        existing_lines: Dict[str, int] = {}
+        key_pattern = re.compile(rf'^\s{{{param_indent}}}([A-Za-z0-9_]+)\s*:\s*(.*?)(\s+#.*)?$')
+        for idx in range(ros_idx + 1, params_end):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            match = key_pattern.match(lines[idx].rstrip('\n'))
+            if match:
+                existing_lines[str(match.group(1) or '').strip()] = idx
+
+        new_lines: List[str] = []
+        for key, value in normalized.items():
+            rendered = self._format_yaml_inline_scalar(value)
+            if key in existing_lines:
+                line_idx = existing_lines[key]
+                existing = lines[line_idx].rstrip('\n')
+                comment_match = key_pattern.match(existing)
+                comment = comment_match.group(3) if comment_match else ''
+                lines[line_idx] = f'{" " * param_indent}{key}: {rendered}{comment}\n'
+            else:
+                new_lines.append(f'{" " * param_indent}{key}: {rendered}\n')
+
+        if new_lines:
+            insert_at = params_end
+            if insert_at > ros_idx + 1 and lines[insert_at - 1].strip():
+                new_lines.insert(0, '\n')
+            lines[insert_at:insert_at] = new_lines
+
+        updated_text = ''.join(lines)
+        try:
+            parsed = yaml.safe_load(updated_text) or {}
+        except Exception as exc:
+            return self._ok(False, f'Updated robot.yaml is invalid: {exc}', source_path=path, safety={})
+
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(updated_text)
+        except Exception as exc:
+            return self._ok(False, f'Failed writing robot.yaml: {exc}', source_path=path, safety={})
+
+        node_block = parsed.get('safety_controller', {}) if isinstance(parsed, dict) else {}
+        params = node_block.get('ros__parameters', {}) if isinstance(node_block, dict) else {}
+        if not isinstance(params, dict):
+            params = {}
+
+        return self._ok(
+            True,
+            f'Updated {len(normalized)} safety parameter(s) in robot.yaml',
+            source_path=path,
+            safety=copy.deepcopy(params),
+        )
 
     @classmethod
     def _apply_profile_field_overrides(cls, profile: Dict[str, Any], overrides: Any) -> Dict[str, Any]:
@@ -4266,6 +4465,8 @@ class RosBridge(Node):
                 'compiled_urdf_path': str(loaded.get('compiled_urdf_path', '') or ''),
             }
 
+        safety_payload = self._load_robot_yaml_safety_config()
+
         return self._ok(
             True,
             f'Loaded robot editor for profile "{target_robot_id}"',
@@ -4276,6 +4477,8 @@ class RosBridge(Node):
             imported_from_urdf=bool(imported_from_urdf),
             import_message=import_message,
             source=source_payload,
+            safety=copy.deepcopy(safety_payload.get('safety', {})) if isinstance(safety_payload, dict) else {},
+            safety_source_path=str(safety_payload.get('source_path', '') or '') if isinstance(safety_payload, dict) else '',
             profile=copy.deepcopy(profile),
         )
 
@@ -4285,6 +4488,7 @@ class RosBridge(Node):
         robot_id: str,
         profile_fields: Any,
         robot_builder: Any,
+        safety_overrides: Any = None,
         compile_urdf: bool = True,
         apply_runtime: bool = False,
     ):
@@ -4301,6 +4505,13 @@ class RosBridge(Node):
         original_profile = profiles.get(requested_robot_id, {})
         if not isinstance(original_profile, dict):
             return self._ok(False, f'Robot profile "{requested_robot_id}" not found')
+
+        safety_payload: Dict[str, Any] = {}
+        if isinstance(safety_overrides, dict):
+            safety_result = self._save_robot_yaml_safety_config(safety_overrides)
+            if not bool(safety_result.get('ok')):
+                return safety_result
+            safety_payload = safety_result
 
         updated_profile = self._apply_profile_field_overrides(original_profile, profile_fields)
         target_robot_id = str(updated_profile.get('robot_id', requested_robot_id) or requested_robot_id).strip()
@@ -4340,7 +4551,14 @@ class RosBridge(Node):
                     base_frame=str(updated_profile.get('base_frame', 'base_link') or 'base_link'),
                     sensor_frames=updated_profile.get('sensor_frames', {}) if isinstance(updated_profile.get('sensor_frames', {}), dict) else {},
                 )
-                compile_ok = bool(validation.get('valid', False))
+                hard_failure = (
+                    not validation.get('parse_ok')
+                    or not validation.get('tree_connected')
+                    or not validation.get('base_link_exists')
+                    or len(validation.get('unknown_joint_links', [])) > 0
+                    or int(validation.get('link_count', 0)) == 0
+                )
+                compile_ok = not hard_failure
                 if compile_ok:
                     current_version = max(1, int(updated_profile.get('profile_version', 1) or 1))
                     next_version = max(1, current_version + 1)
@@ -4430,6 +4648,9 @@ class RosBridge(Node):
         if saved_robot_id in profiles_by_id:
             saved_profile = profiles_by_id[saved_robot_id]
 
+        if not safety_payload:
+            safety_payload = self._load_robot_yaml_safety_config()
+
         if compile_requested:
             if compile_ok:
                 message = f'Robot editor saved for "{saved_robot_id}". {compile_message}'
@@ -4449,6 +4670,8 @@ class RosBridge(Node):
             profiles_by_id=profiles_by_id,
             profile_fields=self._profile_fields_from_profile(saved_profile),
             robot_builder=copy.deepcopy(saved_profile.get('robot_builder', {})),
+            safety=copy.deepcopy(safety_payload.get('safety', {})) if isinstance(safety_payload, dict) else {},
+            safety_source_path=str(safety_payload.get('source_path', '') or '') if isinstance(safety_payload, dict) else '',
             compile_requested=bool(compile_requested),
             compile_ok=bool(compile_ok),
             compile_message=compile_message,
@@ -4510,7 +4733,9 @@ class RosBridge(Node):
             search_roots=[self.ui_root, os.getcwd()]
         )
         self.maps_dir = os.path.join(self.ui_root, 'maps')
-        self.description_dir = os.path.join(self.ui_root, 'description')
+        _desc = os.path.join(self.ui_root, 'description')
+        _urdf = os.path.join(self.ui_root, 'urdf')
+        self.description_dir = _desc if os.path.isdir(_desc) else (_urdf if os.path.isdir(_urdf) else _desc)
         self.downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads', 'DownloadedMaps')
         self.robot_profiles_dir = ''
         self.robot_profile_registry_file = ''
