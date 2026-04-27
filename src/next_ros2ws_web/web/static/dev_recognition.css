@@ -474,6 +474,7 @@ body.recognition-tab-active #recognition-top-controls {
 
 /* ── Workspace (middle) ───────────────────────────────────────── */
 #recognition-workspace {
+    position: relative;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -542,20 +543,15 @@ body.recognition-tab-active #recognition-top-controls {
 }
 
 /* ── Canvas shell ─────────────────────────────────────────────── */
-#recognition-stage-shell {
+#recognition-stage {
     position: relative;
     flex: 1 1 auto;
-    min-height: 0;
-    margin: 6px 8px 8px;
+    min-height: 240px;
+    margin: 6px 8px 0;
     border-radius: 4px;
     border: 1px solid var(--border-primary, #2d3748);
-    background: var(--bg-primary, #0e131c);
+    background-color: var(--bg-primary, #0e131c);
     overflow: hidden;
-}
-
-#recognition-stage {
-    position: absolute;
-    inset: 0;
     background-image:
         linear-gradient(rgba(79, 102, 138, 0.08) 1px, transparent 1px),
         linear-gradient(90deg, rgba(79, 102, 138, 0.08) 1px, transparent 1px),
@@ -688,11 +684,9 @@ body.recognition-tab-active #recognition-top-controls {
 
 /* ── Stage status / empty state ───────────────────────────────── */
 .rcg-stage-status {
-    position: absolute;
-    left: 8px;
-    bottom: 8px;
-    z-index: 4;
-    max-width: calc(100% - 120px);
+    position: relative;
+    margin: 8px;
+    max-width: calc(100% - 16px);
     padding: 4px 8px;
     border-radius: 3px;
     border: 1px solid var(--border-primary, #2d3748);
