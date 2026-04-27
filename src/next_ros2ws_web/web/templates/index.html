@@ -9,10 +9,10 @@
     <link rel="icon" id="site-favicon" href="/static/next_logo.png" type="image/png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Next Robotics Lab</title>
-    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/easeljs@1.0.2/lib/easeljs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ros2d/build/ros2d.min.js"></script>
+    <script src="/static/eventemitter2.js"></script>
+    <script src="/static/roslib.min.js"></script>
+    <script src="/static/easeljs.min.js"></script>
+    <script src="/static/ros2d.min.js"></script>
     <style>
         :root {
             /* Industrial Dark Theme - HMI Style */
@@ -20326,28 +20326,131 @@
 
                     function dcBuildDetailHTML(name, linkData) {
                         const d = linkData || {};
-                        const type = dcInferLinkKind(d);
-                        const mass = d.mass != null ? `${parseFloat(d.mass).toFixed(3)} kg` : '—';
-                        const parent = d.parent || d.parent_link || '—';
-                        const collision = (d.collision && d.collision.enabled !== false) ? 'Enabled' : 'Disabled';
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const allLinkNames = links.map(l => l.name || l.link_name || '').filter(Boolean);
+                        const parentVal = d.parent || d.parent_link || '';
+                        const jointType = d.joint_type || 'fixed';
+                        const xyz = Array.isArray(d.joint_xyz) ? d.joint_xyz : [0,0,0];
+                        const rpy = Array.isArray(d.joint_rpy) ? d.joint_rpy : [0,0,0];
+                        const mass = d.mass != null ? parseFloat(d.mass) : '';
+                        const shapes = Array.isArray(model.shapes) ? model.shapes.filter(s => (s.link || s.link_name) === name) : [];
+                        const isBase = name === model.base_link;
+                        const parentOpts = allLinkNames.filter(n => n !== name).map(n =>
+                            `<option value="${n}"${n === parentVal ? ' selected' : ''}>${n}</option>`
+                        ).join('');
+                        const jointOpts = ['fixed','revolute','continuous','prismatic','floating','planar'].map(j =>
+                            `<option value="${j}"${j === jointType ? ' selected' : ''}>${j}</option>`
+                        ).join('');
+                        const shapesHTML = shapes.length === 0
+                            ? `<div style="font-size:10px;color:var(--text-tertiary);padding:6px 10px;">No shapes attached</div>`
+                            : shapes.map((sh, si) => {
+                                const shapeIdx = model.shapes.indexOf(sh);
+                                const stype = sh.type || sh.shape_type || 'box';
+                                const dims = stype === 'cylinder'
+                                    ? `r=${parseFloat(sh.radius||0).toFixed(3)} h=${parseFloat(sh.height||0).toFixed(3)}`
+                                    : stype === 'sphere'
+                                    ? `r=${parseFloat(sh.radius||0).toFixed(3)}`
+                                    : `${parseFloat(sh.size_x||sh.width||0).toFixed(3)}×${parseFloat(sh.size_y||sh.length||0).toFixed(3)}×${parseFloat(sh.size_z||sh.height||0).toFixed(3)}`;
+                                return `<div class="dc-prop-row" style="align-items:center;">
+                                    <span class="dc-prop-lbl" style="flex-shrink:0;">${stype}</span>
+                                    <span class="dc-prop-val" style="flex:1;font-family:monospace;font-size:9px;">${dims}</span>
+                                    <button class="dc-btn" style="height:18px;padding:0 6px;font-size:8px;flex-shrink:0;" onclick='dcEditShape(${JSON.stringify(name)},${shapeIdx})'><i class="fas fa-pen"></i></button>
+                                    <button class="dc-btn" style="height:18px;padding:0 6px;font-size:8px;flex-shrink:0;margin-left:2px;" onclick='dcDeleteShape(${shapeIdx})'><i class="fas fa-times"></i></button>
+                                </div>`;
+                            }).join('');
                         return `
-                            <div style="padding:10px 10px 4px;">
-                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                                    <span style="font-size:13px;font-weight:700;color:var(--text-primary);">${name}</span>
-                                    <span class="dc-tag dc-tag-blue">${type}</span>
-                                </div>
-                                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">Selected link details</div>
+                            <div style="padding:8px 10px 4px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                                <button class="dc-btn" style="height:22px;padding:0 6px;font-size:9px;" onclick="dcShowOverview()"><i class="fas fa-arrow-left"></i></button>
+                                <span style="font-size:12px;font-weight:700;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
+                                ${!isBase ? `<button class="dc-btn" style="height:22px;padding:0 6px;font-size:9px;color:#fc8181;" onclick='dcDeleteLinkByName(${JSON.stringify(name)})' title="Delete link"><i class="fas fa-trash"></i></button>` : ''}
                             </div>
-                            <div class="dc-insp-section">Link Properties</div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Name</span><span class="dc-prop-val">${name}</span></div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Type</span><span class="dc-prop-val">${type}</span></div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Mass</span><span class="dc-prop-val">${mass}</span></div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Parent</span><span class="dc-prop-val">${parent}</span></div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Collision</span><span class="dc-prop-val">${collision}</span></div>
-                            <div style="padding:8px 10px;display:flex;gap:4px;">
-                                <button class="dc-btn" onclick="dcShowOverview()"><i class="fas fa-arrow-left"></i> Back to Overview</button>
+                            <div class="dc-insp-section" style="margin-top:0;">Joint</div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Parent</span>
+                                ${isBase ? `<span class="dc-prop-val">— (base link)</span>` : `<select class="dc-prop-input" style="flex:1;" onchange='dcUpdateLinkField(${JSON.stringify(name)},"parent",this.value)'>${parentOpts}</select>`}
                             </div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Joint</span>
+                                <select class="dc-prop-input" style="flex:1;" onchange='dcUpdateLinkField(${JSON.stringify(name)},"joint_type",this.value)'>${jointOpts}</select>
+                            </div>
+                            <div class="dc-insp-section">Position (m)</div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">X</span><input class="dc-prop-input" type="number" step="0.001" value="${xyz[0]}" onchange='dcUpdateLinkXyz(${JSON.stringify(name)},0,this.value)' style="flex:1;"></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Y</span><input class="dc-prop-input" type="number" step="0.001" value="${xyz[1]}" onchange='dcUpdateLinkXyz(${JSON.stringify(name)},1,this.value)' style="flex:1;"></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Z</span><input class="dc-prop-input" type="number" step="0.001" value="${xyz[2]}" onchange='dcUpdateLinkXyz(${JSON.stringify(name)},2,this.value)' style="flex:1;"></div>
+                            <div class="dc-insp-section">Mass / Inertia</div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Mass (kg)</span><input class="dc-prop-input" type="number" step="0.01" min="0" value="${mass}" placeholder="0.0" onchange='dcUpdateLinkField(${JSON.stringify(name)},"mass",parseFloat(this.value)||0)' style="flex:1;"></div>
+                            <div class="dc-insp-section" style="display:flex;align-items:center;justify-content:space-between;">
+                                <span>Shapes</span>
+                                <button class="dc-btn" style="height:18px;padding:0 8px;font-size:8px;" onclick='dcAddShapeToLink(${JSON.stringify(name)})'><i class="fas fa-plus"></i> Add</button>
+                            </div>
+                            ${shapesHTML}
                         `;
+                    }
+
+                    function dcUpdateLinkField(linkName, field, value) {
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const link = links.find(l => (l.name || l.link_name) === linkName);
+                        if (!link) return;
+                        link[field] = value;
+                        model.updated_at = Math.floor(Date.now() / 1000);
+                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
+                    }
+
+                    function dcUpdateLinkXyz(linkName, axis, value) {
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const link = links.find(l => (l.name || l.link_name) === linkName);
+                        if (!link) return;
+                        if (!Array.isArray(link.joint_xyz)) link.joint_xyz = [0,0,0];
+                        link.joint_xyz[axis] = parseFloat(value) || 0;
+                        model.updated_at = Math.floor(Date.now() / 1000);
+                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
+                    }
+
+                    function dcDeleteLinkByName(linkName) {
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const idx = links.findIndex(l => (l.name || l.link_name) === linkName);
+                        if (idx < 0) return;
+                        if (typeof deleteRobotEditorLink === 'function') {
+                            deleteRobotEditorLink(idx);
+                        }
+                        dcShowOverview();
+                    }
+
+                    function dcAddShapeToLink(linkName) {
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        if (!Array.isArray(model.shapes)) model.shapes = [];
+                        const shapeId = `shape_${Date.now()}`;
+                        model.shapes.push({ id: shapeId, link: linkName, type: 'box', size_x: 0.2, size_y: 0.2, size_z: 0.1, xyz: [0,0,0], rpy: [0,0,0] });
+                        model.updated_at = Math.floor(Date.now() / 1000);
+                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
+                        dcShowDetailEditor(linkName);
+                    }
+
+                    function dcDeleteShape(shapeIdx) {
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        if (!Array.isArray(model.shapes) || shapeIdx < 0 || shapeIdx >= model.shapes.length) return;
+                        const linkName = model.shapes[shapeIdx].link || model.shapes[shapeIdx].link_name || '';
+                        model.shapes.splice(shapeIdx, 1);
+                        model.updated_at = Math.floor(Date.now() / 1000);
+                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
+                        if (linkName) dcShowDetailEditor(linkName);
+                    }
+
+                    function dcEditShape(linkName, shapeIdx) {
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        if (!Array.isArray(model.shapes) || shapeIdx < 0 || shapeIdx >= model.shapes.length) return;
+                        if (typeof selectRobotEditorShape === 'function') {
+                            selectRobotEditorShape(shapeIdx);
+                        } else {
+                            window.robotEditorState.selected_shape_id = String(model.shapes[shapeIdx].id || '');
+                            if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
+                        }
                     }
 
                     function dcShowDetailEditor(linkName) {
@@ -20648,7 +20751,7 @@
                             const isActive = id === activeId;
                             const state = p.state || (p.production ? 'published' : 'draft');
                             const dotColor = state === 'published' ? '#48bb78' : '#ed8936';
-                            return `<button class="dc-pd-item${isActive ? ' active' : ''}" onclick="dcSwitchProfile(${JSON.stringify(id)})">
+                            return `<button class="dc-pd-item${isActive ? ' active' : ''}" onclick='dcSwitchProfile(${JSON.stringify(id)})'>
                                 <span class="dc-pd-item-dot" style="background:${dotColor};"></span>
                                 <span class="dc-pd-item-meta">
                                     <span class="dc-pd-item-name">${name}</span>
@@ -20730,14 +20833,45 @@
                         }
 
                         function dcNewProfile() {
-                            dcCloseAllMenus();
-                            const name = prompt('New profile name:');
+                            const dd = document.getElementById('dc-profile-dropdown');
+                            if (!dd) return;
+                            if (!dd.classList.contains('open')) {
+                                dcBuildProfileDropdown();
+                                const card = document.getElementById('dc-toolbar-profile-btn');
+                                if (card) {
+                                    const rect = card.getBoundingClientRect();
+                                    dd.style.top = rect.bottom + 'px';
+                                    dd.style.left = rect.left + 'px';
+                                }
+                                dd.classList.add('open');
+                                document.getElementById('dc-modal-backdrop')?.classList.add('open');
+                            }
+                            const form = document.getElementById('dc-new-profile-form');
+                            if (form) {
+                                form.style.display = 'flex';
+                                const inp = document.getElementById('dc-new-profile-name');
+                                if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 50); }
+                            }
+                        }
+
+                        function dcHideNewProfileForm() {
+                            const form = document.getElementById('dc-new-profile-form');
+                            if (form) form.style.display = 'none';
+                        }
+
+                        async function dcCreateProfileFromForm() {
+                            const inp = document.getElementById('dc-new-profile-name');
+                            const name = inp ? inp.value.trim() : '';
                             if (!name) return;
-                            fetch('/api/settings/robot_profiles/create', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ robot_id: name, activate: true })
-                            }).then(r => r.json()).then(async data => {
+                            dcHideNewProfileForm();
+                            dcCloseAllMenus();
+                            try {
+                                const r = await fetch('/api/settings/robot_profiles/create', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ robot_id: name, activate: true }),
+                                });
+                                const data = await r.json();
                                 if (data.ok && typeof loadRobotProfiles === 'function') {
                                     await loadRobotProfiles();
                                     dcRefreshAfterRobotEditorChange();
@@ -20745,7 +20879,7 @@
                                 } else {
                                     dcSetStatus(data.message || data.error || 'Create failed', 'error', true);
                                 }
-                            }).catch(e => dcSetStatus(`Create failed: ${e.message}`, 'error', true));
+                            } catch(e) { dcSetStatus(`Create failed: ${e.message}`, 'error', true); }
                         }
 
                         function dcManageProfiles() {
@@ -32162,7 +32296,7 @@
                         <button class="dc-cvs-view-btn" data-dc-view="iso" onclick="dcSetCanvasView('iso', this)">Iso</button>
                     </div>
                     <!-- Visual layer toggles -->
-                    <button class="dc-btn" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
+                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
                     <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-sensors" onclick="dcToggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
                     <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-safety" onclick="dcToggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
                     <div class="dc-cvs-spacer"></div>
@@ -32246,8 +32380,9 @@
 
                 <!-- Hierarchy pane -->
                 <div class="dc-insp-pane" id="dc-pane-hierarchy">
-                    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;">
-                        <input class="dc-prop-input" style="width:100%;" placeholder="Filter links…" oninput="dcFilterHierarchy(this.value)" id="dc-hier-search">
+                    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;display:flex;align-items:center;gap:6px;">
+                        <input class="dc-prop-input" style="flex:1;" placeholder="Filter links…" oninput="dcFilterHierarchy(this.value)" id="dc-hier-search">
+                        <button class="dc-btn dc-btn-primary" style="height:26px;padding:0 10px;font-size:9px;flex-shrink:0;" onclick="addRobotEditorLink();dcOpenInspTab('hierarchy');" title="Add a new link"><i class="fas fa-plus"></i> Add Link</button>
                     </div>
                     <div id="dc-hier-tree" style="flex:1;overflow-y:auto;"></div>
                 </div>
@@ -32284,6 +32419,12 @@
                 <button class="dc-btn" style="height:20px;padding:0 8px;font-size:9px;" onclick="dcNewProfile()"><i class="fas fa-plus"></i> New</button>
             </div>
             <div id="dc-pd-list" class="dc-pd-list"></div>
+            <!-- New profile inline form (hidden by default) -->
+            <div id="dc-new-profile-form" style="display:none;padding:8px 10px;border-top:1px solid var(--border-chrome);gap:6px;display:none;align-items:center;">
+                <input id="dc-new-profile-name" class="dc-prop-input" style="flex:1;" placeholder="Profile name…" onkeydown="if(event.key==='Enter')dcCreateProfileFromForm();if(event.key==='Escape')dcHideNewProfileForm();">
+                <button class="dc-btn dc-btn-primary" style="height:26px;padding:0 8px;font-size:9px;flex-shrink:0;" onclick="dcCreateProfileFromForm()"><i class="fas fa-check"></i></button>
+                <button class="dc-btn" style="height:26px;padding:0 8px;font-size:9px;flex-shrink:0;" onclick="dcHideNewProfileForm()"><i class="fas fa-times"></i></button>
+            </div>
             <div class="dc-pd-footer">
                 <button class="dc-btn" style="flex:1;" onclick="dcManageProfiles()"><i class="fas fa-list"></i> Manage All</button>
             </div>
@@ -37636,29 +37777,29 @@
                     const linkSelected = Boolean(focusedLinkName) && linkName === focusedLinkName;
                     const isFocusMatch = isSelected || linkSelected;
 
-                    let alpha = 0.46;
+                    let alpha = 0.72;
                     let strokeColor = '#94a3b8';
-                    let fillColor = 'rgba(96, 165, 250, 0.22)';
+                    let fillColor = 'rgba(96, 165, 250, 0.38)';
                     if (shapeRole === 'body') {
-                        alpha = presetConfig.preset === 'structure' ? 0.96 : (presetConfig.preset === 'sensors' ? 0.26 : 0.62);
+                        alpha = presetConfig.preset === 'structure' ? 0.96 : (presetConfig.preset === 'sensors' ? 0.36 : 0.72);
                         strokeColor = '#e2e8f0';
-                        fillColor = 'rgba(203, 213, 225, 0.18)';
+                        fillColor = 'rgba(203, 213, 225, 0.40)';
                     } else if (shapeRole === 'wheel' || shapeRole === 'caster') {
-                        alpha = presetConfig.preset === 'motion' ? 0.94 : 0.60;
+                        alpha = presetConfig.preset === 'motion' ? 0.94 : 0.72;
                         strokeColor = '#93c5fd';
-                        fillColor = 'rgba(96, 165, 250, 0.20)';
+                        fillColor = 'rgba(96, 165, 250, 0.38)';
                     } else if (shapeRole === 'sensor') {
-                        alpha = presetConfig.preset === 'sensors' ? 0.98 : (presetConfig.preset === 'debug' ? 0.62 : 0.26);
+                        alpha = presetConfig.preset === 'sensors' ? 0.98 : (presetConfig.preset === 'debug' ? 0.72 : 0.46);
                         strokeColor = '#fbbf24';
-                        fillColor = 'rgba(251, 191, 36, 0.16)';
+                        fillColor = 'rgba(251, 191, 36, 0.34)';
                     } else if (isSafetyZone) {
-                        alpha = presetConfig.preset === 'debug' ? 0.54 : 0.18;
+                        alpha = presetConfig.preset === 'debug' ? 0.64 : 0.32;
                         strokeColor = '#fb7185';
-                        fillColor = 'rgba(244, 114, 182, 0.18)';
+                        fillColor = 'rgba(244, 114, 182, 0.28)';
                     }
 
                     if (focusActive && !isFocusMatch) {
-                        alpha *= 0.24;
+                        alpha *= 0.38;
                     }
                     if (isSelected) {
                         alpha = 1.0;

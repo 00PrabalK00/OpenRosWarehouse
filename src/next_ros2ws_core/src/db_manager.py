@@ -988,6 +988,54 @@ class DatabaseManager:
                 templates[template_id] = payload
             return templates
 
+    @staticmethod
+    def _recognition_template_sort_key(template: Dict[str, Any]) -> Tuple[int, str, str]:
+        payload = template if isinstance(template, dict) else {}
+        return (
+            int(payload.get('version', 1) or 1),
+            str(payload.get('updated_at', '') or ''),
+            str(payload.get('template_id', '') or ''),
+        )
+
+    def resolve_recognition_template(self, template_id: str) -> Tuple[str, Dict[str, Any]]:
+        """Resolve one template id to the newest published template in the same family.
+
+        Falls back to the exact template if no newer published version exists, and to an
+        empty payload when the supplied template cannot be found.
+        """
+        target_template_id = str(template_id or '').strip()
+        if not target_template_id:
+            return '', {}
+
+        templates = self.get_recognition_templates()
+        if not isinstance(templates, dict):
+            return target_template_id, {}
+
+        exact = templates.get(target_template_id, {})
+        if not isinstance(exact, dict) or not exact:
+            return target_template_id, {}
+
+        family_key = str(exact.get('family_key', '') or '').strip()
+        if not family_key:
+            return target_template_id, exact
+
+        family_templates = [
+            payload for payload in templates.values()
+            if isinstance(payload, dict)
+            and str(payload.get('family_key', '') or '').strip() == family_key
+        ]
+        if not family_templates:
+            return target_template_id, exact
+
+        published_templates = [
+            payload for payload in family_templates
+            if str(payload.get('status', 'draft') or 'draft').strip().lower() == 'published'
+        ]
+        candidates = published_templates or family_templates
+        resolved = max(candidates, key=self._recognition_template_sort_key)
+        resolved_id = str(resolved.get('template_id', target_template_id) or target_template_id).strip()
+        return resolved_id, resolved
+
     def save_recognition_template(self, template_id: str, payload: Dict[str, Any]) -> bool:
         """Save or update one recognition template payload."""
         target_template_id = str(template_id or '').strip()

@@ -81,6 +81,24 @@
         return 'generic';
     }
 
+    function getTemplateFamilyKey(templateOrId) {
+        if (templateOrId && typeof templateOrId === 'object') {
+            const familyKey = String(templateOrId.family_key || '').trim();
+            if (familyKey) return familyKey;
+            const templateId = String(templateOrId.template_id || '').trim();
+            if (templateId.includes('__v')) {
+                return templateId.split('__v')[0];
+            }
+            return templateId;
+        }
+        const templateId = String(templateOrId || '').trim();
+        if (!templateId) return '';
+        if (templateId.includes('__v')) {
+            return templateId.split('__v')[0];
+        }
+        return templateId;
+    }
+
     function isLocalTemplate(template) {
         const payload = template && typeof template === 'object' ? template : {};
         const templateId = String(payload.template_id || '').trim().toLowerCase();
@@ -1881,6 +1899,45 @@
         `;
     }
 
+    function updateActionPointSummary(prefix) {
+        const pointTypeEl = document.getElementById(`${prefix}-point-type`);
+        const templateEl = document.getElementById(`${prefix}-shelf-template`);
+        const recognizeEl = document.getElementById(`${prefix}-shelf-recognize`);
+        const summaryEl = document.getElementById(`${prefix}-shelf-summary`);
+        if (!summaryEl) return;
+        const pointType = pointTypeEl ? normalizePointType(pointTypeEl.value || 'generic') : 'generic';
+        const templateId = String(templateEl && templateEl.value || '').trim();
+        const recognize = Boolean(recognizeEl && recognizeEl.checked);
+        summaryEl.innerHTML = buildActionPointSummary(templateId, pointType, recognize);
+    }
+
+    function resolveShelfTemplateSelection(selectedValue, templates) {
+        const requestedId = String(selectedValue || '').trim();
+        const shelfTemplates = Array.isArray(templates)
+            ? templates.filter((template) => normalizeCategory(template.category) === 'shelves')
+            : [];
+        if (!requestedId) return '';
+
+        const exactMatch = shelfTemplates.find((template) => String(template.template_id || '').trim() === requestedId);
+        const familyKey = getTemplateFamilyKey(exactMatch || requestedId);
+        if (!familyKey) {
+            return exactMatch ? requestedId : '';
+        }
+
+        const familyTemplates = shelfTemplates
+            .filter((template) => String(getTemplateFamilyKey(template) || '').trim() === familyKey)
+            .sort((left, right) => {
+                const versionDiff = Number(right.version || 0) - Number(left.version || 0);
+                if (versionDiff !== 0) return versionDiff;
+                return String(right.updated_at || '').localeCompare(String(left.updated_at || ''));
+            });
+
+        if (familyTemplates.length > 0) {
+            return String(familyTemplates[0].template_id || '').trim();
+        }
+        return exactMatch ? requestedId : '';
+    }
+
     function getActionPointZoneType(prefix) {
         if (prefix === 'zone') {
             return String(window.currentZoneType || 'normal').trim().toLowerCase();
@@ -1897,31 +1954,38 @@
             const data = await resp.json().catch(() => ({ templates: [] }));
             const fetched = Array.isArray(data.templates) ? data.templates : [];
             // Also merge any already-cached local drafts
-            const allTemplates = fetched.length > 0 ? fetched : state.templates;
+            const normalizedFetched = fetched.map((template) => normalizeTemplate(template, template));
+            const allTemplates = normalizedFetched.length > 0 ? normalizedFetched : state.templates;
             const shelfTemplates = allTemplates.filter((t) => normalizeCategory(t.category) === 'shelves');
             // Update state cache to stay in sync
-            if (fetched.length > 0) {
-                fetched.forEach((t) => {
+            if (normalizedFetched.length > 0) {
+                normalizedFetched.forEach((t) => {
                     const idx = state.templates.findIndex((s) => String(s.template_id || '') === String(t.template_id || ''));
-                    if (idx >= 0) state.templates[idx] = normalizeTemplate(t, t);
-                    else state.templates.push(normalizeTemplate(t, t));
+                    if (idx >= 0) state.templates[idx] = t;
+                    else state.templates.push(t);
                 });
             }
             const curSelected = selectedValue !== undefined ? selectedValue : String(templateEl.value || '').trim();
+            const resolvedSelected = resolveShelfTemplateSelection(curSelected, shelfTemplates);
             const options = ['<option value="">Select shelf template</option>']
                 .concat(shelfTemplates.map((template) => (
-                    `<option value="${safeHtml(template.template_id)}"${curSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
+                    `<option value="${safeHtml(template.template_id)}"${resolvedSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
                 )));
             templateEl.innerHTML = options.join('');
+            templateEl.value = resolvedSelected;
+            updateActionPointSummary(prefix);
         } catch (_e) {
             // Fallback to cached templates on network error
             const shelfTemplates = state.templates.filter((t) => normalizeCategory(t.category) === 'shelves');
             const curSelected = selectedValue !== undefined ? selectedValue : String(templateEl.value || '').trim();
+            const resolvedSelected = resolveShelfTemplateSelection(curSelected, shelfTemplates);
             const options = ['<option value="">Select shelf template</option>']
                 .concat(shelfTemplates.map((template) => (
-                    `<option value="${safeHtml(template.template_id)}"${curSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
+                    `<option value="${safeHtml(template.template_id)}"${resolvedSelected === String(template.template_id || '') ? ' selected' : ''}>${safeHtml(template.name)} · v${Number(template.version || 1)} · ${safeHtml(template.status)}</option>`
                 )));
             templateEl.innerHTML = options.join('');
+            templateEl.value = resolvedSelected;
+            updateActionPointSummary(prefix);
         }
     }
     window.recognitionFetchShelfTemplates = fetchAndPopulateShelfTemplateDropdown;

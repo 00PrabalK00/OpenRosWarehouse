@@ -571,10 +571,10 @@ class MissionManager(Node):
         """
         # --- 1. Load template dimensions from DB ---
         template: Dict[str, Any] = {}
+        resolved_template_id = str(template_id or '').strip()
         if template_id:
             try:
-                templates = self.db_manager.get_recognition_templates()
-                template = templates.get(template_id, {}) or {} if isinstance(templates, dict) else {}
+                resolved_template_id, template = self.db_manager.resolve_recognition_template(template_id)
             except Exception as exc:
                 self.get_logger().warn(
                     f'shelf_recognition: failed loading template "{template_id}": {exc}')
@@ -602,7 +602,7 @@ class MissionManager(Node):
 
         self.get_logger().info(
             f'Shelf detection enabled for zone "{zone_name}" '
-            f'(template: {template_id or "default"})'
+            f'(template: {resolved_template_id or template_id or "default"})'
         )
 
         # --- 4. Poll for valid candidate ---

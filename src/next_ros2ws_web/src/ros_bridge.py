@@ -7016,7 +7016,21 @@ class RosBridge(Node):
         point_type = self._normalize_action_point_type(config.get('point_type', 'generic'))
         template_id = str(config.get('template_id', '') or '').strip()
         recognize = bool(config.get('recognize', False))
+        resolved_template_id = template_id
         template = recognition_templates.get(template_id, {}) if template_id else {}
+        manager = getattr(self, 'db_manager', None)
+        if template_id and manager is not None and hasattr(manager, 'resolve_recognition_template'):
+            try:
+                resolved_template_id, resolved_template = manager.resolve_recognition_template(template_id)
+            except Exception as exc:
+                self.get_logger().warn(
+                    f'Failed resolving action point template "{template_id}" for zone "{zone_name}": {exc}'
+                )
+            else:
+                if isinstance(resolved_template, dict) and resolved_template:
+                    template = resolved_template
+                if not resolved_template_id:
+                    resolved_template_id = template_id
 
         warnings: List[str] = []
         template_summary: Optional[Dict[str, Any]] = None
@@ -7033,6 +7047,11 @@ class RosBridge(Node):
                 'geometry_type': str(template.get('geometry_type', '') or ''),
                 'dimensions': copy.deepcopy(template.get('dimensions', {})),
             }
+            if resolved_template_id and resolved_template_id != template_id:
+                template_summary['resolved_from_template_id'] = template_id
+                warnings.append(
+                    f'Linked shelf template upgraded to latest published version "{resolved_template_id}".'
+                )
             if template_status == 'deprecated':
                 warnings.append('Linked shelf template is deprecated. Review before deployment.')
             elif template_status == 'draft':
@@ -7042,6 +7061,7 @@ class RosBridge(Node):
             'zone_name': str(zone_name or '').strip(),
             'point_type': point_type,
             'template_id': template_id,
+            'resolved_template_id': resolved_template_id,
             'action_id': action_id,
             'action': action_id,
             'recognize': recognize,

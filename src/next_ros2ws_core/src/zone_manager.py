@@ -6680,14 +6680,13 @@ class ZoneManager(Node):
             template_id = str(ap_cfg.get('template_id', '') or '').strip()
             if template_id:
                 try:
-                    templates = self.db_manager.get_recognition_templates()
-                    template = templates.get(template_id, {}) if isinstance(templates, dict) else {}
+                    resolved_template_id, template = self.db_manager.resolve_recognition_template(template_id)
                 except Exception:
-                    template = {}
+                    resolved_template_id, template = template_id, {}
                 if template:
                     await self._push_shelf_template_params(template)
                     self.get_logger().info(
-                        f'SHELF_CHECK: pushed template "{template_id}" constraints for '
+                        f'SHELF_CHECK: pushed template "{resolved_template_id or template_id}" constraints for '
                         f'waypoint {waypoint_index + 1}/{total} ("{target_label}")'
                     )
                 else:
