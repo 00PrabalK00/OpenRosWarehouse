@@ -127,7 +127,7 @@ robot_builder:
     joint_type: continuous
     joint_xyz:
     - 0.0
-    - 0.255
+    - 0.2475
     - 0.0
     joint_rpy:
     - -1.570796
@@ -138,7 +138,7 @@ robot_builder:
     joint_type: continuous
     joint_xyz:
     - 0.0
-    - -0.255
+    - -0.2475
     - 0.0
     joint_rpy:
     - 1.570796

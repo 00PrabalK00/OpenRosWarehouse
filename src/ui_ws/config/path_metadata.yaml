@@ -122,3 +122,22 @@ new:
     direction: uni
     segment_attrs: {}
     has_curves: false
+innershelf:
+  points:
+  - x: -2.79
+    y: 0.1
+    zone_name: new
+  - x: -1.415
+    y: 0.105
+    zone_name: ins1
+  - x: -0.33
+    y: 0.1
+    zone_name: SHELF11
+  settings:
+    loop_type: closed
+    loop_mode: true
+    curved_segments: []
+    curved_segment_controls: {}
+    direction: uni
+    segment_attrs: {}
+    has_curves: false

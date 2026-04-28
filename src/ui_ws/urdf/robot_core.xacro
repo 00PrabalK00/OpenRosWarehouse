@@ -11,7 +11,7 @@
     <xacro:property name="wheel_thickness" value="0.04"/>
     <xacro:property name="wheel_mass" value="1.5"/>
     <xacro:property name="wheel_offset_x" value="0.40"/>
-    <xacro:property name="wheel_offset_y" value="0.255"/>
+    <xacro:property name="wheel_offset_y" value="0.2475"/>
 
     <xacro:property name="caster_wheel_radius" value="0.038"/>
     <xacro:property name="caster_wheel_mass" value="0.4"/>

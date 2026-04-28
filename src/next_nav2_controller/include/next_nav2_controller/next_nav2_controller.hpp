@@ -218,7 +218,7 @@ private:
   double acc_lim_w_ {3.5};
   bool enforce_diff_drive_kinematics_ {true};
   bool allow_reverse_ {false};
-  double wheel_separation_ {0.51};
+  double wheel_separation_ {0.525};
   double max_wheel_linear_speed_ {1.25};
   double final_approach_distance_ {0.8};
   double blocked_timeout_ {2.5};
