@@ -1,0 +1,13 @@
+{
+  "repoPath": "/home/next/testBuild",
+  "lastCommit": "361da1b89d8ef5087b777934ba075a02c88c2061",
+  "indexedAt": "2026-04-27T02:49:30.009Z",
+  "stats": {
+    "files": 1375,
+    "nodes": 9219,
+    "edges": 14766,
+    "communities": 445,
+    "processes": 298,
+    "embeddings": 0
+  }
+}

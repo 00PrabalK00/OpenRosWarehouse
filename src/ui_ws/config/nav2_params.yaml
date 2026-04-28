@@ -35,9 +35,8 @@ amcl:
     sigma_hit: 0.12
     tf_broadcast: true
     transform_tolerance: 0.5
-    # For this robot/environment, pure rotation is where AMCL is going unstable.
-    # Make it rely on odom through turns and only apply scan corrections after a
-    # much larger heading change.
+    # Correct heading every ~17 degrees so AMCL applies small continuous
+    # corrections rather than large jumps after many turns.
     update_min_a: 1.10
     update_min_d: 0.10
     z_hit: 0.75
@@ -126,7 +125,7 @@ controller_server:
       acc_lim_w: 1.5
       allow_reverse: false
       enforce_diff_drive_kinematics: true
-      wheel_separation: 0.51
+      wheel_separation: 0.525
       max_wheel_linear_speed: 1.25
       min_tracking_speed: 0.05
       min_cruise_speed: 0.4
