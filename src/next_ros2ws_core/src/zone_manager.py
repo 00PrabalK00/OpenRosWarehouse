@@ -1794,22 +1794,26 @@ class ZoneManager(Node):
                         dy_r = ry - center_y
                         robot_shelf_y = -math.sin(yaw) * dx_r + math.cos(yaw) * dy_r
                         
-                        shift_y = 0.0
-                        if robot_shelf_y > 0.0:
-                            shift_y = -width_error / 2.0
-                            occluded_leg = 'right'
-                        else:
-                            shift_y = width_error / 2.0
-                            occluded_leg = 'left'
-                            
-                        center_x += left_x * shift_y
-                        center_y += left_y * shift_y
+                        # Scale shift based on how far off-center the robot is (up to 15cm)
+                        offset_ratio = max(-1.0, min(1.0, robot_shelf_y / 0.15))
+                        shift_y = -(width_error / 2.0) * offset_ratio
                         
-                        self.get_logger().info(
-                            f'SHELF_CHECK: solve width {detected_width:.2f}m does not make sense '
-                            f'against template {template_width:.2f}m. Robot is on the {"left" if robot_shelf_y > 0 else "right"}, '
-                            f'assuming {occluded_leg} leg is occluded. Adjusted centerline by {shift_y:.3f}m laterally.'
-                        )
+                        if offset_ratio > 0.3:
+                            occluded_leg = 'right'
+                        elif offset_ratio < -0.3:
+                            occluded_leg = 'left'
+                        else:
+                            occluded_leg = 'both symmetrically'
+                            
+                        if abs(shift_y) > 0.005:
+                            center_x += left_x * shift_y
+                            center_y += left_y * shift_y
+                            
+                            self.get_logger().info(
+                                f'SHELF_CHECK: solve width {detected_width:.2f}m does not make sense '
+                                f'against template {template_width:.2f}m. Robot offset is {robot_shelf_y:.3f}m, '
+                                f'assuming {occluded_leg} leg(s) occluded. Adjusted centerline by {shift_y:.3f}m laterally.'
+                            )
                 except Exception as exc:
                     self.get_logger().debug(f'Failed to adjust shelf centerline: {exc}')
 
