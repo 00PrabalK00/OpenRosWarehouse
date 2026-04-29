@@ -1,8 +1,6 @@
 amcl:
   ros__parameters:
     use_sim_time: false
-    # Trust the EKF / wheel odom more so AMCL does not keep re-spreading the
-    # particle cloud aggressively during in-place turns and snapping back.
     alpha1: 0.05
     alpha2: 0.05
     alpha3: 0.03
@@ -12,8 +10,6 @@ amcl:
     beam_skip_distance: 0.4
     beam_skip_error_threshold: 0.8
     beam_skip_threshold: 0.5
-    # Combined dual-lidar scans can have partial mismatch while rotating.
-    # Enable beam skipping so a bad slice of the scan does not yank heading.
     do_beamskip: true
     global_frame_id: map
     lambda_short: 0.1
@@ -35,15 +31,12 @@ amcl:
     sigma_hit: 0.12
     tf_broadcast: true
     transform_tolerance: 0.5
-    # Correct heading every ~17 degrees so AMCL applies small continuous
-    # corrections rather than large jumps after many turns.
-    update_min_a: 1.10
-    update_min_d: 0.10
+    update_min_a: 1.1
+    update_min_d: 0.1
     z_hit: 0.75
     z_max: 0.05
-    z_rand: 0.20
+    z_rand: 0.2
     z_short: 0.05
-    # Keep AMCL on a raw single-lidar topic instead of the synthetic merged scan.
     scan_topic: /scan
 amcl_map_client:
   ros__parameters:
@@ -173,6 +166,16 @@ controller_server:
       abort_on_progress_stall: true
       blocked_timeout: 3.0
       abort_on_blocked_timeout: true
+      max_vel_x: 0.5
+      desired_linear_vel: 0.5
+      min_vel_x: 0.0
+      max_vel_theta: 0.55
+      min_speed_xy: 0.05
+      max_speed_xy: 0.5
+      acc_lim_x: 2.5
+      acc_lim_theta: 1.5
+      decel_lim_x: -2.5
+      decel_lim_theta: -1.5
 controller_server_rclcpp_node:
   ros__parameters:
     use_sim_time: false

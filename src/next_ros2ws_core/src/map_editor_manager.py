@@ -270,10 +270,17 @@ class MapEditorManager(Node):
         if not image_ref:
             return None, 'Map YAML is missing image field'
 
-        if os.path.isabs(image_ref):
-            image_path = image_ref
-        else:
-            image_path = os.path.join(os.path.dirname(map_yaml_path), image_ref)
+        try:
+            save_plan = build_dotted_truth_plan(map_yaml_path, map_yaml)
+            image_path = str(save_plan.get('source_image_path') or '').strip()
+        except Exception:
+            image_path = ''
+
+        if not image_path:
+            if os.path.isabs(image_ref):
+                image_path = image_ref
+            else:
+                image_path = os.path.join(os.path.dirname(map_yaml_path), image_ref)
 
         if not os.path.exists(image_path):
             return None, f'Map image not found: {image_path}'

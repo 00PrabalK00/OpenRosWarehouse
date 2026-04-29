@@ -2,7 +2,9 @@
 set -euo pipefail
 
 WORKSPACE_ROOT="/home/next/testBuild"
-AUTO_BUILD="${NEXT_AUTO_BUILD:-1}"
+# Default to launch-only so callers do not pay for an extra full workspace
+# build when they already built explicitly. Set NEXT_AUTO_BUILD=1 to opt in.
+AUTO_BUILD="${NEXT_AUTO_BUILD:-0}"
 
 # Start from a clean ROS overlay state so old workspaces like next_UI/my_bot
 # cannot leak into this bringup and reintroduce stale launch/config behavior.
