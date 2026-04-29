@@ -8,6 +8,7 @@ from sensor_msgs.msg import LaserScan, PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import String, Bool, UInt8
 from std_srvs.srv import Trigger, SetBool
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 import math
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -161,6 +162,25 @@ class SafetyController(Node):
         self.robot_body_width_m = max(0.10, float(self.declare_parameter('robot_body_width_m', 0.30).value))
         self.obstacle_body_padding_m = max(0.0, float(self.declare_parameter('obstacle_body_padding_m', 0.06).value))
         self.obstacle_body_exclusion_radius_m = max(0.0, float(self.declare_parameter('obstacle_body_exclusion_radius_m', 0.22).value))
+        self.carried_profile_active = bool(
+            self.declare_parameter('carried_profile_active', False).value
+        )
+        self.carried_body_length_m = max(
+            self.robot_body_length_m,
+            float(self.declare_parameter('carried_body_length_m', self.robot_body_length_m).value),
+        )
+        self.carried_body_width_m = max(
+            self.robot_body_width_m,
+            float(self.declare_parameter('carried_body_width_m', self.robot_body_width_m).value),
+        )
+        self.carried_body_padding_m = max(
+            0.0,
+            float(self.declare_parameter('carried_body_padding_m', self.obstacle_body_padding_m).value),
+        )
+        self.carried_body_exclusion_radius_m = max(
+            0.0,
+            float(self.declare_parameter('carried_body_exclusion_radius_m', self.obstacle_body_exclusion_radius_m).value),
+        )
         # Drop stale obstacle state if scans stay invalid for a few frames.
         self.invalid_scan_clear_frames = max(1, int(self.declare_parameter('invalid_scan_clear_frames', 3).value))
         # Evaluate front/rear blocking based on commanded direction.
@@ -235,6 +255,7 @@ class SafetyController(Node):
         self._invalid_rear_scan_frames = 0
         self._last_combined_cloud_ns = None
         self._last_combined_scan_ns = None
+        self.add_on_set_parameters_callback(self._on_runtime_parameters_changed)
         
         # Subscribe to AMCL pose with correct QoS
         qos = QoSProfile(
@@ -453,16 +474,17 @@ class SafetyController(Node):
                     angle += angle_inc
                     continue
 
-                min_dist = min(min_dist, math.hypot(bx, by))
+                clearance = self._obstacle_clearance_m(bx, by)
+                min_dist = min(min_dist, clearance)
                 if half_angle > 1e-6:
                     ratio = sector_delta / half_angle
                     bin_idx = min(bins - 1, max(0, int(ratio * bins)))
                 else:
                     bin_idx = 0
 
-                if distance < self.critical_zone:
+                if clearance < self.critical_zone:
                     bin_counts_crit[bin_idx] += 1
-                elif distance < self.warning_zone:
+                elif clearance < self.warning_zone:
                     bin_counts_warn[bin_idx] += 1
 
             angle += angle_inc
@@ -479,19 +501,78 @@ class SafetyController(Node):
         a = self._distance_ema_alpha
         return (a * current) + ((1.0 - a) * previous)
 
+    def _effective_body_length_m(self) -> float:
+        if self.carried_profile_active:
+            return max(float(self.robot_body_length_m), float(self.carried_body_length_m))
+        return float(self.robot_body_length_m)
+
+    def _effective_body_width_m(self) -> float:
+        if self.carried_profile_active:
+            return max(float(self.robot_body_width_m), float(self.carried_body_width_m))
+        return float(self.robot_body_width_m)
+
+    def _effective_body_padding_m(self) -> float:
+        if self.carried_profile_active:
+            return max(float(self.obstacle_body_padding_m), float(self.carried_body_padding_m))
+        return float(self.obstacle_body_padding_m)
+
+    def _effective_body_exclusion_radius_m(self) -> float:
+        if self.carried_profile_active:
+            return max(float(self.obstacle_body_exclusion_radius_m), float(self.carried_body_exclusion_radius_m))
+        return float(self.obstacle_body_exclusion_radius_m)
+
+    def _body_support_radius_m(self, x_m: float, y_m: float, padding_m: float = 0.0) -> float:
+        half_len = max(0.0, (0.5 * self._effective_body_length_m()) + float(padding_m))
+        half_wid = max(0.0, (0.5 * self._effective_body_width_m()) + float(padding_m))
+        distance = math.hypot(float(x_m), float(y_m))
+        if distance <= 1e-9:
+            return max(float(self._effective_body_exclusion_radius_m()), half_len, half_wid)
+        ux = float(x_m) / distance
+        uy = float(y_m) / distance
+        rectangular_extent = (half_len * abs(ux)) + (half_wid * abs(uy))
+        return max(rectangular_extent, float(self._effective_body_exclusion_radius_m()))
+
+    def _obstacle_clearance_m(self, x_m: float, y_m: float) -> float:
+        distance = math.hypot(float(x_m), float(y_m))
+        body_extent = self._body_support_radius_m(x_m, y_m, padding_m=0.0)
+        return distance - body_extent
+
     def _is_body_echo_point(self, x_m: float, y_m: float) -> bool:
         # Ignore returns clearly inside robot footprint in base_link.
-        half_len = (0.5 * self.robot_body_length_m) + self.obstacle_body_padding_m
-        half_wid = (0.5 * self.robot_body_width_m) + self.obstacle_body_padding_m
+        distance = math.hypot(float(x_m), float(y_m))
+        body_extent = self._body_support_radius_m(
+            x_m,
+            y_m,
+            padding_m=float(self._effective_body_padding_m()),
+        )
+        return distance <= body_extent
 
-        if abs(float(x_m)) <= half_len and abs(float(y_m)) <= half_wid:
-            return True
-
-        radius = float(self.obstacle_body_exclusion_radius_m)
-        if radius > 0.0 and math.hypot(float(x_m), float(y_m)) <= radius:
-            return True
-
-        return False
+    def _on_runtime_parameters_changed(self, params):
+        try:
+            for param in list(params or []):
+                name = str(getattr(param, 'name', '') or '').strip()
+                value = getattr(param, 'value', None)
+                if name == 'robot_body_length_m':
+                    self.robot_body_length_m = max(0.10, float(value))
+                elif name == 'robot_body_width_m':
+                    self.robot_body_width_m = max(0.10, float(value))
+                elif name == 'obstacle_body_padding_m':
+                    self.obstacle_body_padding_m = max(0.0, float(value))
+                elif name == 'obstacle_body_exclusion_radius_m':
+                    self.obstacle_body_exclusion_radius_m = max(0.0, float(value))
+                elif name == 'carried_profile_active':
+                    self.carried_profile_active = bool(value)
+                elif name == 'carried_body_length_m':
+                    self.carried_body_length_m = max(0.10, float(value))
+                elif name == 'carried_body_width_m':
+                    self.carried_body_width_m = max(0.10, float(value))
+                elif name == 'carried_body_padding_m':
+                    self.carried_body_padding_m = max(0.0, float(value))
+                elif name == 'carried_body_exclusion_radius_m':
+                    self.carried_body_exclusion_radius_m = max(0.0, float(value))
+            return SetParametersResult(successful=True)
+        except Exception as exc:
+            return SetParametersResult(successful=False, reason=str(exc))
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:
@@ -550,30 +631,31 @@ class SafetyController(Node):
                 angle += angle_inc
                 continue
 
+            clearance = self._obstacle_clearance_m(bx, by)
             front_delta = abs(self._wrap_angle(angle))
             if front_delta <= self.obstacle_forward_half_angle_rad:
-                front_min = min(front_min, distance)
+                front_min = min(front_min, clearance)
                 if self.obstacle_forward_half_angle_rad > 1e-6:
                     front_ratio = front_delta / self.obstacle_forward_half_angle_rad
                 else:
                     front_ratio = 0.0
                 front_idx = min(bins - 1, max(0, int(front_ratio * bins)))
-                if distance < self.critical_zone:
+                if clearance < self.critical_zone:
                     front_crit_bins[front_idx] += 1
-                elif distance < self.warning_zone:
+                elif clearance < self.warning_zone:
                     front_warn_bins[front_idx] += 1
 
             rear_delta = abs(self._wrap_angle(angle - math.pi))
             if rear_delta <= self.obstacle_rear_half_angle_rad:
-                rear_min = min(rear_min, distance)
+                rear_min = min(rear_min, clearance)
                 if self.obstacle_rear_half_angle_rad > 1e-6:
                     rear_ratio = rear_delta / self.obstacle_rear_half_angle_rad
                 else:
                     rear_ratio = 0.0
                 rear_idx = min(bins - 1, max(0, int(rear_ratio * bins)))
-                if distance < self.critical_zone:
+                if clearance < self.critical_zone:
                     rear_crit_bins[rear_idx] += 1
-                elif distance < self.warning_zone:
+                elif clearance < self.warning_zone:
                     rear_warn_bins[rear_idx] += 1
 
             angle += angle_inc
@@ -624,25 +706,26 @@ class SafetyController(Node):
                 continue
             valid_points += 1
 
+            clearance = self._obstacle_clearance_m(bx, by)
             angle = math.atan2(by, bx)
             front_delta = abs(self._wrap_angle(angle))
             if front_delta <= self.obstacle_forward_half_angle_rad:
-                front_min = min(front_min, distance)
+                front_min = min(front_min, clearance)
                 front_ratio = (front_delta / self.obstacle_forward_half_angle_rad) if self.obstacle_forward_half_angle_rad > 1e-6 else 0.0
                 front_idx = min(bins - 1, max(0, int(front_ratio * bins)))
-                if distance < self.critical_zone:
+                if clearance < self.critical_zone:
                     front_crit_bins[front_idx] += 1
-                elif distance < self.warning_zone:
+                elif clearance < self.warning_zone:
                     front_warn_bins[front_idx] += 1
 
             rear_delta = abs(self._wrap_angle(angle - math.pi))
             if rear_delta <= self.obstacle_rear_half_angle_rad:
-                rear_min = min(rear_min, distance)
+                rear_min = min(rear_min, clearance)
                 rear_ratio = (rear_delta / self.obstacle_rear_half_angle_rad) if self.obstacle_rear_half_angle_rad > 1e-6 else 0.0
                 rear_idx = min(bins - 1, max(0, int(rear_ratio * bins)))
-                if distance < self.critical_zone:
+                if clearance < self.critical_zone:
                     rear_crit_bins[rear_idx] += 1
-                elif distance < self.warning_zone:
+                elif clearance < self.warning_zone:
                     rear_warn_bins[rear_idx] += 1
 
         front_critical = max(front_crit_bins) if front_crit_bins else 0
@@ -793,17 +876,37 @@ class SafetyController(Node):
 
         self.last_ttc_sec = ttc_value
 
+        front_active = bool(front_hard_stop or front_trigger)
+        rear_active = bool(rear_hard_stop or rear_trigger)
+
         if self.obstacle_use_directional_blocking:
+            active_side = 'none'
             if moving_forward:
-                static_trigger = front_trigger
+                active_side = 'front'
             elif moving_backward:
-                static_trigger = rear_trigger
-            else:
-                static_trigger = False
+                active_side = 'rear'
+            elif self.obstacle_stop:
+                if front_active and not rear_active:
+                    active_side = 'front'
+                elif rear_active and not front_active:
+                    active_side = 'rear'
+                elif front_active and rear_active:
+                    active_side = 'both'
+            static_trigger = (
+                front_trigger if active_side == 'front'
+                else rear_trigger if active_side == 'rear'
+                else (front_trigger or rear_trigger) if active_side == 'both'
+                else False
+            )
+            immediate_trigger = (
+                front_hard_stop if active_side == 'front'
+                else rear_hard_stop if active_side == 'rear'
+                else (front_hard_stop or rear_hard_stop) if active_side == 'both'
+                else False
+            )
         else:
             static_trigger = front_trigger or rear_trigger
-
-        immediate_trigger = front_hard_stop or rear_hard_stop
+            immediate_trigger = front_hard_stop or rear_hard_stop
         should_trigger = immediate_trigger or static_trigger or ttc_trigger
 
         reasons = []
@@ -837,6 +940,14 @@ class SafetyController(Node):
             'rear_trigger': bool(rear_trigger),
             'front_hard_stop': bool(front_hard_stop),
             'rear_hard_stop': bool(rear_hard_stop),
+            # Direction derivation should follow the currently-triggering side,
+            # not the hysteresis clear state. Otherwise a one-sided stop can
+            # degrade into "both blocked" while the opposite side is merely
+            # waiting to satisfy clear-confirm frames.
+            'front_active': bool(front_active),
+            'rear_active': bool(rear_active),
+            'front_clear': bool(front_clear),
+            'rear_clear': bool(rear_clear),
             'ttc_side': str(ttc_side or ''),
         }
         return should_trigger, clear_ready, reason, ttc_warning, immediate_trigger, details
@@ -878,21 +989,25 @@ class SafetyController(Node):
         return False, []
 
     def _derive_blocked_direction(self, details) -> str:
-        threshold = float(self.ttc_min_speed_mps)
-        if self.last_nonzero_cmd_linear_x > threshold:
-            return 'forward'
-        if self.last_nonzero_cmd_linear_x < -threshold:
-            return 'backward'
-
-        front_active = bool(details.get('front_hard_stop') or details.get('front_trigger') or details.get('ttc_side') == 'front')
-        rear_active = bool(details.get('rear_hard_stop') or details.get('rear_trigger') or details.get('ttc_side') == 'rear')
+        front_active = bool(details.get('front_active') or details.get('ttc_side') == 'front')
+        rear_active = bool(details.get('rear_active') or details.get('ttc_side') == 'rear')
         if front_active and rear_active:
             return 'both'
         if front_active:
             return 'forward'
         if rear_active:
             return 'backward'
-        return 'both'
+
+        threshold = float(self.ttc_min_speed_mps)
+        if self.last_cmd_linear_x > threshold:
+            return 'forward'
+        if self.last_cmd_linear_x < -threshold:
+            return 'backward'
+        if self.last_nonzero_cmd_linear_x > threshold:
+            return 'forward'
+        if self.last_nonzero_cmd_linear_x < -threshold:
+            return 'backward'
+        return 'none'
 
     def _apply_manual_directional_gate(self, msg: Twist) -> Twist:
         blocked = str(self._manual_blocked_direction or 'none').strip().lower()
@@ -937,7 +1052,6 @@ class SafetyController(Node):
             if (
                 self._control_mode_normalized() == 'manual'
                 and self.manual_directional_escape_enabled
-                and self._manual_blocked_direction == 'none'
             ):
                 self._manual_blocked_direction = self._obstacle_blocked_direction
             self._obstacle_stop_frames = (
@@ -953,6 +1067,7 @@ class SafetyController(Node):
                 )
         else:
             self._obstacle_stop_frames = 0
+            current_direction = self._derive_blocked_direction(details)
             if self.obstacle_stop and clear_ready:
                 self._obstacle_clear_frames += 1
                 if self._obstacle_clear_frames >= self.obstacle_clear_confirm_frames:
@@ -966,6 +1081,13 @@ class SafetyController(Node):
                     )
             else:
                 self._obstacle_clear_frames = 0
+                if self.obstacle_stop and current_direction in ('forward', 'backward', 'both'):
+                    self._obstacle_blocked_direction = current_direction
+                    if (
+                        self._control_mode_normalized() == 'manual'
+                        and self.manual_directional_escape_enabled
+                    ):
+                        self._manual_blocked_direction = current_direction
                 if not self.obstacle_stop:
                     self._obstacle_blocked_direction = 'none'
                     self._manual_blocked_direction = 'none'
@@ -1393,6 +1515,8 @@ class SafetyController(Node):
             f"  Control Mode: {self.control_mode}",
             f"  Distance Safety: {'ENABLED' if self.distance_safety_enabled else 'disabled'}",
             f"  Distance Hold Active: {'ACTIVE' if self._distance_hold_active() else 'inactive'}",
+            f"  Carry Shelf Profile: {'ACTIVE' if self.carried_profile_active else 'inactive'} "
+            f"(L={self._effective_body_length_m():.2f}m W={self._effective_body_width_m():.2f}m)",
             f"  Nav2 Filter Bridge: {'READY' if self.nav2_filter_bridge_ready else 'fallback only'}",
             f"  Nav2 Handoff Active: {'YES' if self._nav2_filter_handoff_enabled() else 'no'}",
             f"  Gate Policy: {'STRICT stop-only' if self.obstacle_gate_strict_stop_only else 'slowdown + stop'}",

@@ -141,3 +141,31 @@ innershelf:
     direction: uni
     segment_attrs: {}
     has_curves: false
+zelfy:
+  points:
+  - x: 10.08
+    y: 5.53
+    zone_name: A4
+  - x: 11.09
+    y: 6.66
+    zone_name: A3
+  - x: 11.747371
+    y: 5.672344
+    zone_name: PRE-POINT
+  - x: 12.57
+    y: 4.9
+    zone_name: zelf
+  - x: 11.747371
+    y: 5.672344
+    zone_name: PRE-POINT
+  - x: 10.08
+    y: 5.53
+    zone_name: A4
+  settings:
+    loop_type: none
+    loop_mode: false
+    curved_segments: []
+    curved_segment_controls: {}
+    direction: uni
+    segment_attrs: {}
+    has_curves: false

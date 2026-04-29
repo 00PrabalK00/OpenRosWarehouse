@@ -262,6 +262,12 @@ class ZoneManager(Node):
             SetParameters,
             self._endpoint(f'/{self._shelf_detector_node}/set_parameters'),
         )
+        self._refiner_set_params_client = self.create_client(
+            SetParameters,
+            self._endpoint('/shelf_geometric_refiner/set_parameters'),
+        )
+        self._active_shelf_template_opening_width_m: Optional[float] = None
+        self._active_shelf_template_shelf_width_m: Optional[float] = None
         self._active_shelf_template_depth_m: Optional[float] = None
         self.controller_motion_intent_service = self._endpoint('/controller_server/set_motion_intent')
         self.controller_motion_intent_client = self.create_client(
@@ -1414,17 +1420,32 @@ class ZoneManager(Node):
         if not isinstance(pose_dict, dict) or not pose_dict:
             return None
 
-        midpoint = pose_dict.get('front_midpoint')
-        if not isinstance(midpoint, (list, tuple)) or len(midpoint) != 2:
-            return None
-
         source_frame = str(pose_dict.get('frame_id') or '').strip()
         if not source_frame:
             return None
 
         try:
-            px = float(midpoint[0])
-            py = float(midpoint[1])
+            yaw = float(pose_dict.get('yaw', fallback_yaw))
+            center_x = float(pose_dict.get('x'))
+            center_y = float(pose_dict.get('y'))
+        except Exception:
+            return None
+
+        px = None
+        py = None
+        
+        midpoint = pose_dict.get('front_midpoint')
+        if isinstance(midpoint, (list, tuple)) and len(midpoint) == 2:
+            try:
+                px = float(midpoint[0])
+                py = float(midpoint[1])
+            except Exception:
+                pass
+
+        if px is None or py is None:
+            return None
+
+        try:
             yaw = float(pose_dict.get('yaw', fallback_yaw))
         except Exception:
             return None
@@ -1498,15 +1519,30 @@ class ZoneManager(Node):
     async def _push_shelf_template_params(self, template: Dict[str, Any]) -> None:
         """Push template width/depth constraints to shelf_detector via ROS SetParameters."""
         dims = template.get('dimensions') if isinstance(template.get('dimensions'), dict) else {}
-        width = float(dims.get('width', 0.0) or 0.0)
-        depth = float(dims.get('depth', 0.0) or 0.0)
-        if width <= 0.0 or depth <= 0.0:
+        opening_width = float(
+            dims.get('opening_width', dims.get('width', 0.0)) or 0.0
+        )
+        shelf_width = float(
+            dims.get('shelf_width', dims.get('width', opening_width)) or 0.0
+        )
+        shelf_depth = float(
+            dims.get('shelf_depth', dims.get('depth', 0.0)) or 0.0
+        )
+        self._active_shelf_template_opening_width_m = (
+            float(opening_width) if opening_width > 0.0 else None
+        )
+        self._active_shelf_template_shelf_width_m = (
+            float(shelf_width) if shelf_width > 0.0 else None
+        )
+        if opening_width <= 0.0 or shelf_depth <= 0.0:
+            self._active_shelf_template_opening_width_m = None
+            self._active_shelf_template_shelf_width_m = None
             self._active_shelf_template_depth_m = None
             return
-        self._active_shelf_template_depth_m = float(depth)
+        self._active_shelf_template_depth_m = float(shelf_depth)
 
-        margin_w = max(0.05, round(width * 0.15, 3))
-        margin_d = max(0.05, round(depth * 0.15, 3))
+        margin_w = max(0.05, round(opening_width * 0.15, 3))
+        margin_d = max(0.05, round(shelf_depth * 0.15, 3))
 
         def _fp(v: float) -> ParameterValue:
             pv = ParameterValue()
@@ -1515,10 +1551,10 @@ class ZoneManager(Node):
             return pv
 
         params = [
-            Parameter(name='expected_width_min', value=_fp(width - margin_w)),
-            Parameter(name='expected_width_max', value=_fp(width + margin_w)),
-            Parameter(name='expected_depth_min', value=_fp(depth - margin_d)),
-            Parameter(name='expected_depth_max', value=_fp(depth + margin_d)),
+            Parameter(name='expected_width_min', value=_fp(opening_width - margin_w)),
+            Parameter(name='expected_width_max', value=_fp(opening_width + margin_w)),
+            Parameter(name='expected_depth_min', value=_fp(shelf_depth - margin_d)),
+            Parameter(name='expected_depth_max', value=_fp(shelf_depth + margin_d)),
         ]
         req = SetParameters.Request()
         req.parameters = params
@@ -1545,6 +1581,16 @@ class ZoneManager(Node):
         self.get_logger().warn(
             'shelf_detector set_parameters timed out; detector will use existing defaults'
         )
+        
+        if self._active_shelf_template_opening_width_m and self._active_shelf_template_depth_m:
+            refiner_params = [
+                Parameter(name='shelf_model_width_m', value=_fp(self._active_shelf_template_opening_width_m)),
+                Parameter(name='shelf_model_length_m', value=_fp(self._active_shelf_template_depth_m)),
+            ]
+            req_refiner = SetParameters.Request()
+            req_refiner.parameters = refiner_params
+            if self._refiner_set_params_client.wait_for_service(timeout_sec=0.2):
+                self._refiner_set_params_client.call_async(req_refiner)
 
     def _call_setbool_service_async(self, client, enabled: bool, service_name: str):
         """Queue SetBool request to the owning node and log result asynchronously."""
@@ -1732,6 +1778,40 @@ class ZoneManager(Node):
                 )
             except Exception:
                 pass
+
+        template_width = self._safe_float(getattr(self, '_active_shelf_template_opening_width_m', None))
+        detected_width = self._safe_float(payload.get('candidate_front_width_m', pose_dict.get('front_width')))
+        
+        if template_width is not None and template_width > 0.0 and detected_width is not None and detected_width > 0.0:
+            width_error = template_width - detected_width
+            if width_error > 0.03:
+                try:
+                    robot_pose = self._robot_pose_in_frame(source_frame, timeout_sec=0.10)
+                    if robot_pose is not None:
+                        rx = float(robot_pose.pose.position.x)
+                        ry = float(robot_pose.pose.position.y)
+                        dx_r = rx - center_x
+                        dy_r = ry - center_y
+                        robot_shelf_y = -math.sin(yaw) * dx_r + math.cos(yaw) * dy_r
+                        
+                        shift_y = 0.0
+                        if robot_shelf_y > 0.0:
+                            shift_y = -width_error / 2.0
+                            occluded_leg = 'right'
+                        else:
+                            shift_y = width_error / 2.0
+                            occluded_leg = 'left'
+                            
+                        center_x += left_x * shift_y
+                        center_y += left_y * shift_y
+                        
+                        self.get_logger().info(
+                            f'SHELF_CHECK: solve width {detected_width:.2f}m does not make sense '
+                            f'against template {template_width:.2f}m. Robot is on the {"left" if robot_shelf_y > 0 else "right"}, '
+                            f'assuming {occluded_leg} leg is occluded. Adjusted centerline by {shift_y:.3f}m laterally.'
+                        )
+                except Exception as exc:
+                    self.get_logger().debug(f'Failed to adjust shelf centerline: {exc}')
 
         source_pose = PoseStamped()
         source_pose.header.frame_id = source_frame
@@ -2502,6 +2582,12 @@ class ZoneManager(Node):
         )
 
     def _current_shelf_opening_width(self) -> Optional[float]:
+        template_opening_width = self._safe_float(
+            getattr(self, '_active_shelf_template_opening_width_m', None)
+        )
+        if template_opening_width is not None and template_opening_width > 0.0:
+            return float(template_opening_width)
+
         payload = self.latest_shelf_status
         if not isinstance(payload, dict) or not payload:
             return None
@@ -2665,8 +2751,21 @@ class ZoneManager(Node):
             float(final_pose.pose.orientation.w),
         )
 
-        opening_line_pose = self._current_shelf_opening_pose(frame_id, goal_yaw)
-        opening_source = 'front_midpoint'
+        template_depth = self._safe_float(getattr(self, '_active_shelf_template_depth_m', None))
+        
+        opening_line_pose = None
+        opening_source = 'unknown'
+
+        if template_depth is not None and template_depth > 0.0:
+            opening_line_pose = self._copy_pose_stamped(final_pose)
+            opening_line_pose.header.stamp = self.get_clock().now().to_msg()
+            opening_line_pose.pose.position.x -= math.cos(goal_yaw) * (template_depth * 0.5)
+            opening_line_pose.pose.position.y -= math.sin(goal_yaw) * (template_depth * 0.5)
+            opening_source = 'template_depth_offset'
+        else:
+            opening_line_pose = self._current_shelf_opening_pose(frame_id, goal_yaw)
+            opening_source = 'front_midpoint'
+
         if opening_line_pose is None:
             opening_line_pose = self._copy_pose_stamped(final_pose)
             opening_line_pose.header.stamp = self.get_clock().now().to_msg()

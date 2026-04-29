@@ -4050,7 +4050,7 @@ class RosBridge(Node):
                 line_idx = existing_lines[key]
                 existing = lines[line_idx].rstrip('\n')
                 comment_match = key_pattern.match(existing)
-                comment = comment_match.group(3) if comment_match else ''
+                comment = (comment_match.group(3) or '') if comment_match else ''
                 lines[line_idx] = f'{" " * param_indent}{key}: {rendered}{comment}\n'
             else:
                 new_lines.append(f'{" " * param_indent}{key}: {rendered}\n')

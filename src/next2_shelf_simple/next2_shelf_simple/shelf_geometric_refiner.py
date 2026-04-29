@@ -52,6 +52,7 @@ from scipy.optimize import least_squares
 
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.msg import SetParametersResult
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
 import tf2_ros
@@ -796,6 +797,9 @@ class ShelfGeometricRefinerNode(Node):
         self._refiner = ShelfPoseRefiner(model)
         self._tracker = _TemporalTracker(window=int(self._p['temporal_window_size']))
 
+        # ---- Parameter Callback ----
+        self.add_on_set_parameters_callback(self._on_params_changed)
+
         # ---- TF ----
         self._tf_buf = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buf, self)
@@ -832,6 +836,20 @@ class ShelfGeometricRefinerNode(Node):
             f'legs={model.leg_h_m*100:.0f}mm '
             f'{"circ" if model.is_circular else "rect"})'
         )
+
+    def _on_params_changed(self, params):
+        for p in params:
+            if p.name == 'shelf_model_length_m':
+                self._model.length_m = float(p.value)
+                self.get_logger().info(f'Updated shelf_model_length_m to {self._model.length_m:.3f}m')
+            elif p.name == 'shelf_model_width_m':
+                self._model.width_m = float(p.value)
+                self.get_logger().info(f'Updated shelf_model_width_m to {self._model.width_m:.3f}m')
+            elif p.name == 'shelf_model_leg_h_m':
+                self._model.leg_h_m = float(p.value)
+            elif p.name == 'shelf_model_leg_w_m':
+                self._model.leg_w_m = float(p.value)
+        return SetParametersResult(successful=True)
 
     # ---- Scan callback: just cache ----
 

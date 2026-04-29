@@ -12205,7 +12205,13 @@
         .dc-cmdbar-more-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
 
         /* ── Main viewport ──────────────────────────────────── */
-        #dc-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        #dc-body {
+            display: flex;
+            flex: 1 1 auto;
+            min-height: 0;
+            height: 100%;
+            overflow: hidden;
+        }
 
         /* ── Mode Rail ──────────────────────────────────────── */
         #dc-rail {
@@ -12237,7 +12243,13 @@
 
         /* ── Canvas workspace ───────────────────────────────── */
         #dc-canvas-zone {
-            flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
             background: var(--bg-canvas);
         }
         #dc-canvas-header {
@@ -12381,9 +12393,16 @@
 
         /* ── Inspector ──────────────────────────────────────── */
         #dc-inspector {
-            width: 292px; min-width: 292px; flex-shrink: 0;
-            background: var(--bg-inspector); border-left: 1px solid var(--border-chrome);
-            display: flex; flex-direction: column; overflow: hidden;
+            width: 292px;
+            min-width: 292px;
+            height: 100%;
+            min-height: 0;
+            flex-shrink: 0;
+            background: var(--bg-inspector);
+            border-left: 1px solid var(--border-chrome);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
         .dc-insp-header {
             height: 38px; flex-shrink: 0; background: var(--bg-elevated);
@@ -12454,6 +12473,269 @@
         .dc-ov-cell  { padding: 8px 10px; background: var(--bg-canvas); display: flex; flex-direction: column; gap: 3px; }
         .dc-ov-lbl   { font-size: 9px; color: var(--text-field-label); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
         .dc-ov-val   { font-size: 13px; font-weight: 700; color: var(--text-primary); font-family: 'Roboto Mono', monospace; }
+        .dc-ov-panel {
+            margin: 8px 10px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 6px;
+            background: var(--bg-canvas);
+            overflow: hidden;
+        }
+        .dc-ov-panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            background: rgba(255,255,255,0.02);
+        }
+        .dc-ov-panel-title {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-field-label);
+        }
+        .dc-ov-panel-note {
+            font-size: 9px;
+            color: var(--text-tertiary);
+        }
+        .dc-ov-list {
+            display: flex;
+            flex-direction: column;
+        }
+        .dc-ov-kv {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 7px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .dc-ov-kv:last-child,
+        .dc-ov-action:last-child,
+        .dc-ov-inventory:last-child,
+        .dc-tree-group-row:last-child,
+        .dc-tree-leaf:last-child {
+            border-bottom: none;
+        }
+        .dc-ov-key {
+            flex: 0 0 92px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-field-label);
+        }
+        .dc-ov-value {
+            flex: 1;
+            min-width: 0;
+            font-size: 11px;
+            color: var(--text-primary);
+            line-height: 1.35;
+        }
+        .dc-ov-value.mono {
+            font-family: 'Roboto Mono', monospace;
+        }
+        .dc-ov-muted {
+            color: var(--text-tertiary);
+        }
+        .dc-detail-summary {
+            margin: 0 10px 8px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 6px;
+            background: var(--bg-canvas);
+            overflow: hidden;
+        }
+        .dc-detail-summary-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 7px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .dc-detail-summary-row:last-child {
+            border-bottom: none;
+        }
+        .dc-detail-summary-key {
+            flex: 0 0 78px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-field-label);
+        }
+        .dc-detail-summary-value {
+            flex: 1;
+            min-width: 0;
+            font-size: 11px;
+            color: var(--text-primary);
+            line-height: 1.35;
+        }
+        .dc-detail-actions {
+            display: flex;
+            gap: 6px;
+            padding: 0 10px 8px;
+        }
+        .dc-detail-actions .dc-btn {
+            flex: 1;
+        }
+        .dc-ov-actions {
+            display: flex;
+            flex-direction: column;
+        }
+        .dc-ov-action {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 10px;
+            border: none;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            background: transparent;
+            color: var(--text-secondary);
+            text-align: left;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .dc-ov-action:hover {
+            background: rgba(255,255,255,0.04);
+            color: var(--text-primary);
+        }
+        .dc-ov-action i {
+            width: 14px;
+            color: var(--text-field-label);
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .dc-ov-action-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+        .dc-ov-action-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: inherit;
+        }
+        .dc-ov-action-sub {
+            font-size: 9px;
+            color: var(--text-tertiary);
+        }
+        .dc-ov-inventory {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 10px;
+            border: none;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            background: transparent;
+            color: var(--text-secondary);
+            text-align: left;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .dc-ov-inventory:hover {
+            background: rgba(255,255,255,0.04);
+            color: var(--text-primary);
+        }
+        .dc-ov-inventory-icon {
+            width: 18px;
+            text-align: center;
+            color: var(--text-field-label);
+            flex-shrink: 0;
+        }
+        .dc-ov-inventory-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            flex: 1;
+        }
+        .dc-ov-inventory-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: inherit;
+        }
+        .dc-ov-inventory-sub {
+            font-size: 9px;
+            color: var(--text-tertiary);
+        }
+        .dc-ov-pill {
+            flex-shrink: 0;
+            font-size: 8px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid var(--border-chrome);
+            background: var(--bg-elevated);
+            color: var(--text-field-label);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .dc-ov-pill.good {
+            color: #68d391;
+            border-color: rgba(72,187,120,0.35);
+            background: rgba(72,187,120,0.12);
+        }
+        .dc-ov-pill.warn {
+            color: #ed8936;
+            border-color: rgba(237,137,54,0.35);
+            background: rgba(237,137,54,0.12);
+        }
+        .dc-ov-pill.bad {
+            color: #fc8181;
+            border-color: rgba(252,129,129,0.35);
+            background: rgba(252,129,129,0.12);
+        }
+        .dc-tree-group-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            background: rgba(255,255,255,0.02);
+        }
+        .dc-tree-group-icon {
+            width: 16px;
+            text-align: center;
+            color: var(--text-field-label);
+            flex-shrink: 0;
+        }
+        .dc-tree-group-name {
+            flex: 1;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .dc-tree-group-meta {
+            font-size: 8px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .dc-tree-leaf {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px 4px 18px;
+            cursor: pointer;
+            min-height: 28px;
+            border-bottom: 1px solid rgba(255,255,255,0.025);
+            transition: background 0.1s;
+        }
+        .dc-tree-leaf:hover {
+            background: rgba(255,255,255,0.04);
+        }
+        .dc-tree-leaf.selected {
+            background: var(--selected-blue-dim);
+        }
+        .dc-tree-leaf.selected .dc-tree-node-name {
+            color: var(--accent-blue, #4299E1);
+        }
 
         /* ── Tags ───────────────────────────────────────────── */
         .dc-tag { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 2px; }
@@ -18690,12 +18972,31 @@
                         if (p) p.classList.remove('open');
                         restoreParamsContent();
                     }
+                    function syncParamsPaneVisibility(activeTabName = 'nav2') {
+                        const active = String(activeTabName || '').trim().toLowerCase();
+                        document.querySelectorAll('.params-popup-pane').forEach((pane) => {
+                            const paneId = String(pane.id || '').trim().toLowerCase();
+                            const isActive = paneId === `params-tab-${active}`;
+                            pane.classList.toggle('active', isActive);
+                            pane.style.display = isActive ? 'flex' : 'none';
+                            pane.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                        });
+                    }
+                    function syncParamsNav2Visibility(activeTabName = 'nav2') {
+                        const active = String(activeTabName || '').trim().toLowerCase() === 'nav2';
+                        const nav2Card = document.getElementById('settings-navigation-nav2-card');
+                        const nav2Ws = document.getElementById('settings-nav2-editor');
+                        [nav2Card, nav2Ws].forEach((el) => {
+                            if (!el) return;
+                            el.style.display = active ? 'flex' : 'none';
+                            el.setAttribute('aria-hidden', active ? 'false' : 'true');
+                        });
+                    }
                     function switchParamsTab(tabName, btn) {
-                        document.querySelectorAll('.params-popup-pane').forEach(p => p.classList.remove('active'));
                         document.querySelectorAll('.params-popup-tab-btn').forEach(b => b.classList.remove('active'));
-                        const pane = document.getElementById('params-tab-' + tabName);
-                        if (pane) pane.classList.add('active');
+                        syncParamsPaneVisibility(tabName);
                         if (btn) btn.classList.add('active');
+                        syncParamsNav2Visibility(tabName);
                         if (tabName === 'robot')    loadRobotYamlParams();
                         if (tabName === 'safety')   loadSafetyParams();
                         if (tabName === 'topic')    loadTopicMappingsForPopup();
@@ -18712,12 +19013,15 @@
                             const toAdopt = nav2Card || nav2Ws;
                             if (toAdopt) nav2Tab.appendChild(toAdopt);
                         }
+                        syncParamsPaneVisibility('nav2');
+                        syncParamsNav2Visibility('nav2');
                         // Topic tab is now self-contained (loadTopicMappingsForPopup handles it)
                     }
 
                     function restoreParamsContent() {
                         const navShell = document.getElementById('settings-navigation-nav-shell');
                         const nav2Card = document.getElementById('settings-navigation-nav2-card');
+                        syncParamsNav2Visibility('nav2');
                         if (navShell && nav2Card && nav2Card.parentElement !== navShell) {
                             navShell.appendChild(nav2Card);
                         }
@@ -20263,6 +20567,284 @@
                         return 'link';
                     }
 
+                    function dcDescribeInventoryPill(count, requiredMinimum = 0) {
+                        const numericCount = Number(count || 0);
+                        if (numericCount <= 0 && requiredMinimum > 0) {
+                            return { label: 'missing', className: 'bad' };
+                        }
+                        if (numericCount <= 0) {
+                            return { label: 'empty', className: 'warn' };
+                        }
+                        if (numericCount < requiredMinimum) {
+                            return { label: 'partial', className: 'warn' };
+                        }
+                        return { label: 'ready', className: 'good' };
+                    }
+
+                    function dcBuildModelSnapshot() {
+                        const profileId = String(activeRobotProfileId || '').trim();
+                        const profilesById = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
+                        const profile = profileId && profilesById[profileId] ? profilesById[profileId] : (activeRobotProfile || {});
+                        const state = window.robotEditorState || {};
+                        const model = (state && typeof state.model === 'object') ? state.model : {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const shapes = Array.isArray(model.shapes) ? model.shapes : [];
+                        const warnings = Array.isArray(state.geometry_warnings) ? state.geometry_warnings : [];
+                        const urdfErrors = Array.isArray(state.urdf_errors) ? state.urdf_errors : [];
+                        const sensorFrames = (profile && typeof profile.sensor_frames === 'object') ? profile.sensor_frames : {};
+                        const topics = (profile && typeof profile.topics === 'object') ? profile.topics : {};
+                        const mappings = (profile && typeof profile.mappings === 'object') ? profile.mappings : {};
+                        const footprint = (model && typeof model.footprint === 'object') ? model.footprint : {};
+                        const geometry = (model && typeof model.geometry === 'object') ? model.geometry : {};
+                        const profileFields = (profile && typeof profile === 'object') ? profile : {};
+                        const topicBindings = Object.keys(topics).filter((key) => String(topics[key] || '').trim());
+                        const mappingBindings = Object.keys(mappings).filter((key) => {
+                            const entry = mappings[key];
+                            return entry && typeof entry === 'object'
+                                ? String(entry.topic || '').trim()
+                                : String(entry || '').trim();
+                        });
+
+                        const linkKinds = links.reduce((acc, link) => {
+                            const kind = dcInferLinkKind(link);
+                            acc[kind] = (acc[kind] || 0) + 1;
+                            return acc;
+                        }, {});
+
+                        const classifyShape = (shape) => {
+                            const text = [
+                                String(shape?.role || ''),
+                                String(shape?.name || ''),
+                                String(shape?.id || ''),
+                                String(shape?.link || ''),
+                            ].join(' ').toLowerCase();
+                            if (/(safety|protect|zone)/.test(text)) return 'safety';
+                            return 'collision';
+                        };
+
+                        const shapeKinds = shapes.reduce((acc, shape) => {
+                            const kind = classifyShape(shape);
+                            acc[kind] = (acc[kind] || 0) + 1;
+                            return acc;
+                        }, {});
+
+                        const issueCount = warnings.length + urdfErrors.length;
+                        const version = profile?.profile_version || profile?.version || '—';
+                        const stateLabel = profile?.state || (profile?.production ? 'published' : 'draft');
+                        const robotModel = profile?.robot_model || profile?.model || '—';
+                        const namespace = profile?.namespace || '/';
+                        const baseFrame = model.base_link || profile?.base_frame || 'base_link';
+                        const nav2Params = profile?.nav2_params_file || profileFields?.nav2_params_file || '—';
+                        const urdfSource = profile?.urdf_source || profile?.urdf_artifact?.source_path || '—';
+                        const mapName = profile?.map_association?.active_map || '—';
+                        const updatedAt = model?.updated_at
+                            ? new Date(Number(model.updated_at) * 1000).toLocaleString()
+                            : 'Unknown';
+
+                        return {
+                            profile,
+                            profileId,
+                            model,
+                            links,
+                            shapes,
+                            sensorFrames,
+                            topics,
+                            mappings,
+                            warnings,
+                            urdfErrors,
+                            geometry,
+                            footprint,
+                            version,
+                            stateLabel,
+                            robotModel,
+                            namespace,
+                            baseFrame,
+                            nav2Params,
+                            urdfSource,
+                            mapName,
+                            updatedAt,
+                            issueCount,
+                            linkKinds,
+                            shapeKinds,
+                            topicBindingsCount: topicBindings.length,
+                            mappingBindingsCount: mappingBindings.length,
+                        };
+                    }
+
+                    function dcBuildInventoryItems(snapshot) {
+                        const totalSensors = (snapshot.linkKinds.lidar || 0) + (snapshot.linkKinds.camera || 0) + (snapshot.linkKinds.imu || 0);
+                        return [
+                            { key: 'base', icon: 'fa-cube', title: 'Chassis & Base', subtitle: `${snapshot.linkKinds.base || 0} base links`, count: snapshot.linkKinds.base || 0, mode: 'structure', required: 1 },
+                            { key: 'motion', icon: 'fa-gauge-high', title: 'Drive & Motion', subtitle: `${snapshot.linkKinds.wheel || 0} drive links, ${snapshot.linkKinds.caster || 0} casters`, count: (snapshot.linkKinds.wheel || 0) + (snapshot.linkKinds.caster || 0), mode: 'motion', required: 1 },
+                            { key: 'sensors', icon: 'fa-satellite-dish', title: 'Sensors', subtitle: `${snapshot.linkKinds.lidar || 0} lidar, ${snapshot.linkKinds.camera || 0} camera, ${snapshot.linkKinds.imu || 0} imu`, count: totalSensors, mode: 'sensors', required: 1 },
+                            { key: 'collision', icon: 'fa-draw-polygon', title: 'Collision Geometry', subtitle: `${snapshot.shapeKinds.collision || 0} collision shapes`, count: snapshot.shapeKinds.collision || 0, mode: 'structure', required: 1 },
+                            { key: 'safety', icon: 'fa-shield-alt', title: 'Safety Zones', subtitle: `${snapshot.shapeKinds.safety || 0} safety-linked shapes`, count: snapshot.shapeKinds.safety || 0, mode: 'safety', required: 0 },
+                            { key: 'interfaces', icon: 'fa-plug', title: 'ROS Interfaces', subtitle: `${snapshot.topicBindingsCount} topics, ${snapshot.mappingBindingsCount} mappings`, count: snapshot.topicBindingsCount + snapshot.mappingBindingsCount, mode: 'diagnostics', required: 1 },
+                        ];
+                    }
+
+                    function dcRenderOverviewInventory(snapshot) {
+                        const mount = document.getElementById('dc-ov-inventory');
+                        if (!mount) return;
+                        const items = dcBuildInventoryItems(snapshot);
+                        mount.innerHTML = items.map((item) => {
+                            const pill = dcDescribeInventoryPill(item.count, item.required);
+                            return `<button type="button" class="dc-ov-inventory" onclick="dcJumpToInventory(${JSON.stringify(item.mode)})">
+                                <span class="dc-ov-inventory-icon"><i class="fas ${item.icon}"></i></span>
+                                <span class="dc-ov-inventory-copy">
+                                    <span class="dc-ov-inventory-title">${item.title}</span>
+                                    <span class="dc-ov-inventory-sub">${item.subtitle}</span>
+                                </span>
+                                <span class="dc-ov-pill ${pill.className}">${item.count}</span>
+                            </button>`;
+                        }).join('');
+                    }
+
+                    function dcRenderOverviewSources(snapshot) {
+                        const mount = document.getElementById('dc-ov-sources');
+                        if (!mount) return;
+                        mount.innerHTML = [
+                            ['Robot ID', snapshot.profileId || '—', true],
+                            ['Model', snapshot.robotModel || '—', false],
+                            ['Version', snapshot.version || '—', true],
+                            ['Namespace', snapshot.namespace || '—', true],
+                            ['Base Frame', snapshot.baseFrame || '—', true],
+                            ['Map', snapshot.mapName || '—', false],
+                            ['URDF Source', snapshot.urdfSource || '—', false],
+                            ['Nav2 Params', snapshot.nav2Params || '—', false],
+                            ['Updated', snapshot.updatedAt || 'Unknown', false],
+                        ].map(([label, value, mono]) => `
+                            <div class="dc-ov-kv">
+                                <span class="dc-ov-key">${label}</span>
+                                <span class="dc-ov-value${mono ? ' mono' : ''}">${escapeHtml(String(value || '—'))}</span>
+                            </div>
+                        `).join('');
+                    }
+
+                    function dcRenderOverviewInterfaces(snapshot) {
+                        const mount = document.getElementById('dc-ov-interfaces');
+                        if (!mount) return;
+                        const interfaceRows = [
+                            ['cmd_vel', snapshot.topics?.cmd_vel || snapshot.mappings?.cmd_vel?.topic || '—'],
+                            ['Localization', snapshot.topics?.localization || snapshot.mappings?.localization?.topic || '—'],
+                            ['Battery', snapshot.topics?.battery || snapshot.mappings?.battery?.topic || '—'],
+                            ['Laser', snapshot.sensorFrames?.laser || snapshot.topics?.laser || snapshot.topics?.scan || '—'],
+                            ['Map', snapshot.sensorFrames?.map || snapshot.topics?.map || '—'],
+                            ['Odom', snapshot.sensorFrames?.odom || snapshot.topics?.odom || '—'],
+                        ];
+                        mount.innerHTML = interfaceRows.map(([label, value]) => `
+                            <div class="dc-ov-kv">
+                                <span class="dc-ov-key">${label}</span>
+                                <span class="dc-ov-value mono">${escapeHtml(String(value || '—'))}</span>
+                            </div>
+                        `).join('');
+                    }
+
+                    function dcRenderOverviewActions(snapshot) {
+                        const mount = document.getElementById('dc-ov-actions');
+                        if (!mount) return;
+                        const footprintSummary = snapshot.footprint?.type
+                            ? `${snapshot.footprint.type}${snapshot.footprint.radius != null ? ` · r=${Number(snapshot.footprint.radius).toFixed(3)} m` : ''}`
+                            : (snapshot.shapeKinds.collision ? `${snapshot.shapeKinds.collision} collision shapes configured` : 'No collision footprint configured');
+                        const issuesSummary = snapshot.issueCount
+                            ? `${snapshot.issueCount} issue${snapshot.issueCount === 1 ? '' : 's'} need review before publish`
+                            : 'Validation is clean enough to publish';
+                        mount.innerHTML = [
+                            {
+                                icon: 'fa-draw-polygon',
+                                title: 'Collision & Footprint',
+                                subtitle: footprintSummary,
+                                onclick: `dcSetMode('structure');dcOpenInspTab('properties');`,
+                            },
+                            {
+                                icon: 'fa-route',
+                                title: 'Nav2 Geometry Inputs',
+                                subtitle: snapshot.nav2Params && snapshot.nav2Params !== '—' ? snapshot.nav2Params : 'Nav2 params file not linked',
+                                onclick: `switchTab('settings')`,
+                            },
+                            {
+                                icon: 'fa-clipboard-check',
+                                title: 'Deployment Readiness',
+                                subtitle: issuesSummary,
+                                onclick: `dcOpenInspTab('validation')`,
+                            },
+                        ].map((item) => `
+                            <button type="button" class="dc-ov-action" onclick="${item.onclick}">
+                                <i class="fas ${item.icon}"></i>
+                                <span class="dc-ov-action-copy">
+                                    <span class="dc-ov-action-title">${item.title}</span>
+                                    <span class="dc-ov-action-sub">${escapeHtml(item.subtitle)}</span>
+                                </span>
+                            </button>
+                        `).join('');
+                    }
+
+                    function dcJumpToInventory(mode) {
+                        dcSetMode(mode || 'structure');
+                        dcOpenInspTab('hierarchy');
+                    }
+
+                    function dcGetLinkOperationalSummary(name, linkData) {
+                        const d = linkData || {};
+                        const profileId = String(activeRobotProfileId || '').trim();
+                        const profilesById = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
+                        const profile = profileId && profilesById[profileId] ? profilesById[profileId] : (activeRobotProfile || {});
+                        const sensorFrames = (profile && typeof profile.sensor_frames === 'object') ? profile.sensor_frames : {};
+                        const topics = (profile && typeof profile.topics === 'object') ? profile.topics : {};
+                        const mappings = (profile && typeof profile.mappings === 'object') ? profile.mappings : {};
+                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
+                        const links = Array.isArray(model.links) ? model.links : [];
+                        const shapes = Array.isArray(model.shapes) ? model.shapes : [];
+                        const kind = dcInferLinkKind(d);
+                        const xyz = Array.isArray(d.joint_xyz) ? d.joint_xyz : [0, 0, 0];
+                        const distance = Math.sqrt(
+                            Math.pow(Number(xyz[0] || 0), 2) +
+                            Math.pow(Number(xyz[1] || 0), 2) +
+                            Math.pow(Number(xyz[2] || 0), 2)
+                        );
+                        const childCount = links.filter((link) => String(link.parent || link.parent_link || '').trim() === name).length;
+                        const shapeCount = shapes.filter((shape) => String(shape.link || shape.link_name || '').trim() === name).length;
+                        const roleLabelMap = {
+                            lidar: 'LiDAR / range sensor',
+                            camera: 'Camera / vision sensor',
+                            imu: 'IMU / orientation sensor',
+                            wheel: 'Drive wheel / actuator',
+                            caster: 'Caster / passive support',
+                            base: 'Chassis / structural base',
+                            link: 'Robot link / mount point',
+                        };
+                        const topicCandidates = {
+                            lidar: topics.scan || topics.laser || topics.localization || mappings.localization?.topic || '',
+                            camera: topics.camera || topics.image || mappings.camera?.topic || '',
+                            imu: topics.imu || mappings.imu?.topic || '',
+                            wheel: topics.cmd_vel || mappings.cmd_vel?.topic || '',
+                            caster: '',
+                            base: topics.cmd_vel || mappings.cmd_vel?.topic || '',
+                            link: '',
+                        };
+                        const frameCandidates = {
+                            lidar: sensorFrames.laser || sensorFrames.lidar || '',
+                            camera: sensorFrames.camera_frame || sensorFrames.camera || '',
+                            imu: sensorFrames.imu || '',
+                            wheel: '',
+                            caster: '',
+                            base: model.base_link || profile.base_frame || 'base_link',
+                            link: '',
+                        };
+                        const role = roleLabelMap[kind] || roleLabelMap.link;
+                        const topic = String(topicCandidates[kind] || '').trim() || 'No direct topic mapping found';
+                        const frame = String(frameCandidates[kind] || '').trim() || name;
+                        const mount = distance > 0
+                            ? `${distance.toFixed(3)} m from parent origin`
+                            : 'At parent origin';
+                        const readiness = [
+                            kind === 'base' || shapeCount > 0 ? 'geometry attached' : 'no geometry attached',
+                            childCount ? `${childCount} child frame${childCount === 1 ? '' : 's'}` : 'no child frames',
+                            topic !== 'No direct topic mapping found' ? 'ROS interface linked' : 'ROS interface not linked',
+                        ].join(' · ');
+                        return { kind, role, topic, frame, mount, readiness, childCount, shapeCount };
+                    }
+
                     function dcRefreshHierarchy(filterMode) {
                         const tree = document.getElementById('dc-hier-tree');
                         if (!tree) return;
@@ -20289,31 +20871,50 @@
                             return;
                         }
 
-                        tree.innerHTML = filtered.map((lk) => {
-                            const name = lk.name || lk.link_name || '—';
-                            const kind = dcInferLinkKind(lk);
-                            const icon = iconMap[kind] || 'fa-circle-small';
-                            const badgeClass = badgeMap[kind] || '';
-                            const badgeLabel = kind;
-                            return `<div class="dc-tree-node" onclick="dcSelectLink(${JSON.stringify(name)})">
-                                <span class="dc-tree-node-expand"><i class="fas fa-chevron-right"></i></span>
-                                <span class="dc-tree-node-icon"><i class="fas ${icon}"></i></span>
-                                <span class="dc-tree-node-name">${name}</span>
-                                <span class="dc-tree-node-badge ${badgeClass}">${badgeLabel}</span>
-                            </div>`;
+                        const groups = [
+                            { key: 'base', title: 'Base & Chassis', icon: 'fa-cube', kinds: ['base'] },
+                            { key: 'motion', title: 'Drive & Motion', icon: 'fa-gauge-high', kinds: ['wheel', 'caster'] },
+                            { key: 'sensors', title: 'Sensors', icon: 'fa-satellite-dish', kinds: ['lidar', 'camera', 'imu'] },
+                            { key: 'links', title: 'Other Links', icon: 'fa-project-diagram', kinds: ['link'] },
+                        ];
+
+                        tree.innerHTML = groups.map((group) => {
+                            const rows = filtered.filter((lk) => group.kinds.includes(dcInferLinkKind(lk)));
+                            if (!rows.length) return '';
+                            const children = rows.map((lk) => {
+                                const name = lk.name || lk.link_name || '—';
+                                const kind = dcInferLinkKind(lk);
+                                const icon = iconMap[kind] || 'fa-circle-small';
+                                const badgeClass = badgeMap[kind] || '';
+                                const badgeLabel = kind;
+                                return `<div class="dc-tree-leaf" onclick="dcSelectLink(${JSON.stringify(name)})">
+                                    <span class="dc-tree-node-expand"><i class="fas fa-chevron-right"></i></span>
+                                    <span class="dc-tree-node-icon"><i class="fas ${icon}"></i></span>
+                                    <span class="dc-tree-node-name">${name}</span>
+                                    <span class="dc-tree-node-badge ${badgeClass}">${badgeLabel}</span>
+                                </div>`;
+                            }).join('');
+                            return `
+                                <div class="dc-tree-group-row">
+                                    <span class="dc-tree-group-icon"><i class="fas ${group.icon}"></i></span>
+                                    <span class="dc-tree-group-name">${group.title}</span>
+                                    <span class="dc-tree-group-meta">${rows.length} item${rows.length === 1 ? '' : 's'}</span>
+                                </div>
+                                ${children}
+                            `;
                         }).join('');
                     }
 
                     function dcFilterHierarchy(q) {
                         const lq = q.toLowerCase();
-                        document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach((node) => {
+                        document.querySelectorAll('#dc-hier-tree .dc-tree-leaf').forEach((node) => {
                             const name = (node.querySelector('.dc-tree-node-name') || {}).textContent || '';
                             node.classList.toggle('dc-tree-filtered-out', !!lq && !name.toLowerCase().includes(lq));
                         });
                     }
 
                     function dcSelectLink(linkName) {
-                        document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach((node) => {
+                        document.querySelectorAll('#dc-hier-tree .dc-tree-leaf').forEach((node) => {
                             const name = (node.querySelector('.dc-tree-node-name') || {}).textContent || '';
                             node.classList.toggle('selected', name === linkName);
                         });
@@ -20336,6 +20937,7 @@
                         const mass = d.mass != null ? parseFloat(d.mass) : '';
                         const shapes = Array.isArray(model.shapes) ? model.shapes.filter(s => (s.link || s.link_name) === name) : [];
                         const isBase = name === model.base_link;
+                        const summary = dcGetLinkOperationalSummary(name, d);
                         const parentOpts = allLinkNames.filter(n => n !== name).map(n =>
                             `<option value="${n}"${n === parentVal ? ' selected' : ''}>${n}</option>`
                         ).join('');
@@ -20364,6 +20966,36 @@
                                 <button class="dc-btn" style="height:22px;padding:0 6px;font-size:9px;" onclick="dcShowOverview()"><i class="fas fa-arrow-left"></i></button>
                                 <span style="font-size:12px;font-weight:700;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
                                 ${!isBase ? `<button class="dc-btn" style="height:22px;padding:0 6px;font-size:9px;color:#fc8181;" onclick='dcDeleteLinkByName(${JSON.stringify(name)})' title="Delete link"><i class="fas fa-trash"></i></button>` : ''}
+                            </div>
+                            <div class="dc-detail-summary">
+                                <div class="dc-detail-summary-row">
+                                    <span class="dc-detail-summary-key">Role</span>
+                                    <span class="dc-detail-summary-value">${escapeHtml(summary.role)}</span>
+                                </div>
+                                <div class="dc-detail-summary-row">
+                                    <span class="dc-detail-summary-key">Frame</span>
+                                    <span class="dc-detail-summary-value dc-mono">${escapeHtml(summary.frame)}</span>
+                                </div>
+                                <div class="dc-detail-summary-row">
+                                    <span class="dc-detail-summary-key">Mount</span>
+                                    <span class="dc-detail-summary-value">${escapeHtml(summary.mount)}</span>
+                                </div>
+                                <div class="dc-detail-summary-row">
+                                    <span class="dc-detail-summary-key">ROS</span>
+                                    <span class="dc-detail-summary-value dc-mono">${escapeHtml(summary.topic)}</span>
+                                </div>
+                                <div class="dc-detail-summary-row">
+                                    <span class="dc-detail-summary-key">Readiness</span>
+                                    <span class="dc-detail-summary-value">${escapeHtml(summary.readiness)}</span>
+                                </div>
+                            </div>
+                            <div class="dc-detail-actions">
+                                <button class="dc-btn" type="button" onclick='dcSetMode(${JSON.stringify(summary.kind === "wheel" || summary.kind === "caster" ? "motion" : (summary.kind === "lidar" || summary.kind === "camera" || summary.kind === "imu" ? "sensors" : "structure"))});if(typeof centerRobotEditorOnLink === "function"){centerRobotEditorOnLink(${JSON.stringify(name)});}'>
+                                    <i class="fas fa-crosshairs"></i> Focus
+                                </button>
+                                <button class="dc-btn" type="button" onclick="dcOpenInspTab('validation')">
+                                    <i class="fas fa-shield-alt"></i> Validate
+                                </button>
                             </div>
                             <div class="dc-insp-section" style="margin-top:0;">Joint</div>
                             <div class="dc-prop-row"><span class="dc-prop-lbl">Parent</span>
@@ -20600,6 +21232,11 @@
                             setEl('dc-ov-fp-shape',   fp.type || (model.footprint_type || '—'));
                             setEl('dc-ov-fp-radius',  fp.radius != null ? fp.radius.toFixed(3) : '—');
                             setEl('dc-ov-fp-padding', fp.padding != null ? fp.padding.toFixed(3) : '—');
+                            const snapshot = dcBuildModelSnapshot();
+                            dcRenderOverviewInventory(snapshot);
+                            dcRenderOverviewSources(snapshot);
+                            dcRenderOverviewInterfaces(snapshot);
+                            dcRenderOverviewActions(snapshot);
                             dcSyncCanvasControls();
                     }
 
@@ -20829,7 +21466,7 @@
                             const dt = document.getElementById('dc-detail-state');
                             if (ov) ov.style.display = '';
                             if (dt) dt.style.display = 'none';
-                            document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach(n => n.classList.remove('selected'));
+                            document.querySelectorAll('#dc-hier-tree .dc-tree-leaf').forEach(n => n.classList.remove('selected'));
                         }
 
                         function dcNewProfile() {
@@ -32362,6 +32999,34 @@
                         <div style="padding:4px 10px 8px;display:flex;gap:4px;flex-wrap:wrap;">
                             <button class="dc-btn dc-btn-primary" style="flex:1;" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Import URDF</button>
                             <button class="dc-btn" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> Validate</button>
+                        </div>
+                        <div class="dc-ov-panel">
+                            <div class="dc-ov-panel-head">
+                                <span class="dc-ov-panel-title">Model Inventory</span>
+                                <span class="dc-ov-panel-note">Click a section to inspect it</span>
+                            </div>
+                            <div class="dc-ov-list" id="dc-ov-inventory"></div>
+                        </div>
+                        <div class="dc-ov-panel">
+                            <div class="dc-ov-panel-head">
+                                <span class="dc-ov-panel-title">Model Sources</span>
+                                <span class="dc-ov-panel-note">Profile and file truth</span>
+                            </div>
+                            <div class="dc-ov-list" id="dc-ov-sources"></div>
+                        </div>
+                        <div class="dc-ov-panel">
+                            <div class="dc-ov-panel-head">
+                                <span class="dc-ov-panel-title">Interfaces & Deployment</span>
+                                <span class="dc-ov-panel-note">What this model feeds</span>
+                            </div>
+                            <div class="dc-ov-list" id="dc-ov-interfaces"></div>
+                        </div>
+                        <div class="dc-ov-panel">
+                            <div class="dc-ov-panel-head">
+                                <span class="dc-ov-panel-title">Actionable Checks</span>
+                                <span class="dc-ov-panel-note">Shortcuts to likely next steps</span>
+                            </div>
+                            <div class="dc-ov-actions" id="dc-ov-actions"></div>
                         </div>
                         <!-- Base Link -->
                         <div class="dc-insp-section">Base Link</div>

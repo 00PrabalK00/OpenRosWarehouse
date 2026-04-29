@@ -99,6 +99,21 @@ def render(dot_mask: np.ndarray) -> np.ndarray:
     return vis
 
 
+def _looks_like_sparse_dotted_source(raw: np.ndarray, occ: np.ndarray) -> bool:
+    if raw.size == 0 or not occ.any():
+        return False
+
+    occupied_ratio = float(occ.mean())
+    bright_ratio = float((raw >= 224).mean())
+    unique_levels = int(np.unique(raw).size)
+
+    return (
+        occupied_ratio <= 0.02
+        and bright_ratio >= 0.90
+        and unique_levels <= 32
+    )
+
+
 def generate_dotted_truth(
     raw: np.ndarray,
     *,
@@ -108,6 +123,8 @@ def generate_dotted_truth(
     thin_count: int = 1,
 ) -> np.ndarray:
     occ = raw <= occupied_threshold
+    if _looks_like_sparse_dotted_source(raw, occ):
+        return render(occ)
     clean_occ = density_clean(occ)
     dots = grid_quantized_dots(
         clean_occ,

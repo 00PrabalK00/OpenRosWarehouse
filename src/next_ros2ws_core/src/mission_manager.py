@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
+from geometry_msgs.msg import Twist
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_msgs.msg import Bool, Int32, String as StringMsg
@@ -76,6 +77,8 @@ class MissionManager(Node):
         self._lift_status_stamp = 0.0
         self._shelf_status: Dict[str, Any] = {}
         self._shelf_status_lock = threading.Lock()
+        self._pending_shelf_safety_profile: Dict[str, Any] = {}
+        self._active_shelf_safety_profile: Dict[str, Any] = {}
 
         self.zone_stop_timer_default_s = max(
             0.0,
@@ -101,10 +104,46 @@ class MissionManager(Node):
             5.0,
             float(self.declare_parameter('shelf_detection_timeout_s', 30.0).value),
         )
+        self._shelf_detection_stable_hold_s = max(
+            0.5,
+            float(self.declare_parameter('shelf_detection_stable_hold_s', 3.0).value),
+        )
+        self._shelf_detection_post_detect_timeout_s = max(
+            self._shelf_detection_stable_hold_s + 1.0,
+            float(
+                self.declare_parameter('shelf_detection_post_detect_timeout_s', 8.0).value
+            ),
+        )
+        self._shelf_detection_nudge_enabled = bool(
+            self.declare_parameter('shelf_detection_nudge_enabled', True).value
+        )
+        self._shelf_detection_nudge_angular_speed = max(
+            0.05,
+            abs(
+                float(
+                    self.declare_parameter(
+                        'shelf_detection_nudge_angular_speed_rad_s', 0.3
+                    ).value
+                )
+            ),
+        )
+        self._shelf_detection_nudge_half_cycle_s = max(
+            0.1,
+            float(
+                self.declare_parameter(
+                    'shelf_detection_nudge_half_cycle_s', 0.5
+                ).value
+            ),
+        )
+        self._shelf_detection_nudge_rate_hz = max(
+            5.0,
+            float(self.declare_parameter('shelf_detection_nudge_rate_hz', 15.0).value),
+        )
         self._shelf_detector_node = str(
             self.declare_parameter('shelf_detector_node', 'shelf_detector').value
             or 'shelf_detector'
         ).strip() or 'shelf_detector'
+        self._shelf_detection_cmd_vel_topic = self._endpoint('/cmd_vel_tracker')
 
         # Route mission navigation through NavigationArbitrator's public ingress.
         self.go_to_zone_client = ActionClient(self, GoToZone, self.go_to_zone_action_name)
@@ -118,9 +157,20 @@ class MissionManager(Node):
         self._shelf_set_params_client = self.create_client(
             SetParameters,
             self._endpoint(f'/{self._shelf_detector_node}/set_parameters'))
+        self._refiner_set_params_client = self.create_client(
+            SetParameters,
+            self._endpoint('/shelf_geometric_refiner/set_parameters'))
+        self._safety_set_params_client = self.create_client(
+            SetParameters,
+            self._endpoint('/safety_controller/set_parameters'))
         self.shelf_status_sub = self.create_subscription(
             StringMsg, self._endpoint('/shelf/status_json'),
             self._shelf_status_callback, 10)
+        self._shelf_detection_cmd_vel_pub = self.create_publisher(
+            Twist,
+            self._shelf_detection_cmd_vel_topic,
+            10,
+        )
         self.lift_status_sub = self.create_subscription(
             Int32,
             self.zone_action_lift_status_topic,
@@ -493,6 +543,15 @@ class MissionManager(Node):
                 f'Could not update shelf_detector params from template: {err} '
                 '(detector will use existing defaults)'
             )
+            
+        if width > 0.0 and depth > 0.0:
+            refiner_params = [
+                Parameter(name='shelf_model_width_m', value=_fp(width)),
+                Parameter(name='shelf_model_length_m', value=_fp(depth)),
+            ]
+            req_refiner = SetParameters.Request()
+            req_refiner.parameters = refiner_params
+            self._call_service_sync(self._refiner_set_params_client, req_refiner, timeout=1.0)
 
     def _disable_shelf_detector_best_effort(self) -> None:
         """Best-effort disable of shelf detector (cleanup path — ignore errors)."""
@@ -502,6 +561,91 @@ class MissionManager(Node):
             self._call_service_sync(self.shelf_enable_client, req, timeout=2.0)
         except Exception:
             pass
+
+    def _derive_shelf_safety_profile(
+        self,
+        zone_name: str,
+        template_id: str,
+        template: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        dims = template.get('dimensions') if isinstance(template.get('dimensions'), dict) else {}
+        width = self._safe_float(dims.get('width', 0.0), 0.0)
+        depth = self._safe_float(dims.get('depth', dims.get('capture_depth', 0.0)), 0.0)
+        with self._shelf_status_lock:
+            status = dict(self._shelf_status) if isinstance(self._shelf_status, dict) else {}
+        width_candidates = [
+            width,
+            self._safe_float(status.get('candidate_front_width_m', 0.0), 0.0),
+            self._safe_float(status.get('candidate_back_width_m', 0.0), 0.0),
+            self._safe_float(status.get('preferred_front_width_m', 0.0), 0.0),
+        ]
+        width = max([value for value in width_candidates if value > 0.0], default=0.0)
+        depth = max(depth, 0.0)
+        if width <= 0.0 or depth <= 0.0:
+            return {}
+        return {
+            'zone_name': str(zone_name or '').strip(),
+            'template_id': str(template_id or template.get('template_id', '') or '').strip(),
+            'width_m': round(width, 3),
+            'depth_m': round(depth, 3),
+        }
+
+    def _build_set_parameters_request(self, values: Dict[str, Any]) -> SetParameters.Request:
+        req = SetParameters.Request()
+        params: List[Parameter] = []
+        for name, raw_value in values.items():
+            pv = ParameterValue()
+            if isinstance(raw_value, bool):
+                pv.type = ParameterType.PARAMETER_BOOL
+                pv.bool_value = bool(raw_value)
+            else:
+                pv.type = ParameterType.PARAMETER_DOUBLE
+                pv.double_value = float(raw_value)
+            params.append(Parameter(name=str(name), value=pv))
+        req.parameters = params
+        return req
+
+    def _apply_shelf_safety_profile(self, enabled: bool, profile: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+        payload = dict(profile or self._active_shelf_safety_profile or self._pending_shelf_safety_profile)
+        if enabled and not payload:
+            return False, 'No shelf safety profile available'
+
+        values: Dict[str, Any] = {'carried_profile_active': bool(enabled)}
+        if enabled:
+            width = self._safe_float(payload.get('width_m', 0.0), 0.0)
+            depth = self._safe_float(payload.get('depth_m', 0.0), 0.0)
+            if width <= 0.0 or depth <= 0.0:
+                return False, 'Shelf safety profile dimensions are invalid'
+            values.update({
+                'carried_body_width_m': round(width, 3),
+                'carried_body_length_m': round(depth, 3),
+                'carried_body_padding_m': 0.06,
+                'carried_body_exclusion_radius_m': 0.0,
+            })
+
+        req = self._build_set_parameters_request(values)
+        resp, err = self._call_service_sync(self._safety_set_params_client, req, timeout=3.0)
+        if err:
+            return False, f'Failed to update safety profile: {err}'
+        results = list(getattr(resp, 'results', []) or [])
+        failed = [item for item in results if not bool(getattr(item, 'successful', False))]
+        if failed:
+            reason = '; '.join(str(getattr(item, 'reason', '') or 'rejected') for item in failed)
+            return False, f'Safety profile update rejected: {reason}'
+
+        if enabled:
+            self._active_shelf_safety_profile = payload
+            self.get_logger().info(
+                f'Shelf carry safety profile enabled '
+                f'(template={payload.get("template_id", "") or "unknown"} '
+                f'width={payload.get("width_m", 0.0):.3f}m depth={payload.get("depth_m", 0.0):.3f}m)'
+            )
+        else:
+            if self._active_shelf_safety_profile:
+                self.get_logger().info('Shelf carry safety profile cleared after lift_down')
+            self._active_shelf_safety_profile = {}
+            self._pending_shelf_safety_profile = {}
+        return True, 'Shelf safety profile updated'
 
     def _navigate_to_zone_sync(
         self, zone_name: str, token: int, timeout: float = 120.0
@@ -637,6 +781,39 @@ class MissionManager(Node):
                 f'at zone "{zone_name}"',
             )
 
+        stable_hold_required = self._shelf_detection_stable_hold_s
+        post_detect_deadline = time.monotonic() + self._shelf_detection_post_detect_timeout_s
+
+        while time.monotonic() < post_detect_deadline:
+            with self._lock:
+                if token != self._mission_token or not self.running:
+                    self._disable_shelf_detector_best_effort()
+                    return False, 'mission stopped before shelf commit'
+
+            with self._shelf_status_lock:
+                status_snapshot = dict(self._shelf_status)
+
+            candidate_valid = bool(status_snapshot.get('candidate_valid', False))
+            solver_ok = bool(status_snapshot.get('solver_ok', candidate_valid))
+            stable_hold_sec = self._safe_float(
+                status_snapshot.get('candidate_stability_hold_sec', 0.0), 0.0
+            )
+            last_reason = str(status_snapshot.get('last_reason', '') or '').strip()
+
+            if candidate_valid and solver_ok and stable_hold_sec >= stable_hold_required:
+                break
+
+            time.sleep(0.2)
+        else:
+            self._disable_shelf_detector_best_effort()
+            detail = 'no stable shelf solve after detection'
+            if last_reason:
+                detail = f'{detail} ({last_reason})'
+            return False, (
+                f'Shelf detection found a candidate at zone "{zone_name}" but it never '
+                f'became stable enough to commit: {detail}'
+            )
+
         # --- 5. Commit shelf pose ---
         with self._lock:
             if token != self._mission_token or not self.running:
@@ -661,7 +838,49 @@ class MissionManager(Node):
             f'Shelf recognition succeeded for zone "{zone_name}" '
             f'(template: {template_id or "default"})'
         )
+        profile = self._derive_shelf_safety_profile(zone_name, resolved_template_id or template_id, template)
+        self._pending_shelf_safety_profile = profile
+        if profile:
+            self.get_logger().info(
+                f'Staged shelf carry safety profile for "{zone_name}" '
+                f'(width={profile.get("width_m", 0.0):.3f}m depth={profile.get("depth_m", 0.0):.3f}m)'
+            )
         return True, str(getattr(resp, 'message', 'Shelf committed'))
+
+    def _publish_shelf_detection_twist(self, angular_z: float) -> None:
+        msg = Twist()
+        msg.angular.z = float(angular_z)
+        self._shelf_detection_cmd_vel_pub.publish(msg)
+
+    def _run_shelf_detection_nudge(self, token: int) -> Tuple[bool, str]:
+        step_period = max(0.02, 1.0 / self._shelf_detection_nudge_rate_hz)
+        half_cycle = self._shelf_detection_nudge_half_cycle_s
+        angular_speed = self._shelf_detection_nudge_angular_speed
+        phases = (
+            (+angular_speed, half_cycle),
+            (-angular_speed, half_cycle * 2.0),
+            (+angular_speed, half_cycle),
+            (0.0, 0.15),
+        )
+
+        try:
+            for angular_z, duration in phases:
+                phase_deadline = time.monotonic() + max(0.0, duration)
+                while time.monotonic() < phase_deadline:
+                    with self._lock:
+                        if token != self._mission_token or not self.running:
+                            self._publish_shelf_detection_twist(0.0)
+                            return False, 'mission stopped during nudge'
+                    self._publish_shelf_detection_twist(angular_z)
+                    time.sleep(step_period)
+            self._publish_shelf_detection_twist(0.0)
+            return True, 'nudge complete'
+        except Exception as exc:
+            try:
+                self._publish_shelf_detection_twist(0.0)
+            except Exception:
+                pass
+            return False, str(exc)
 
     def _resolve_zone_stop_timer(self, zone_meta: Dict[str, Any]) -> float:
         zone_specific = self._safe_float(zone_meta.get('charge_duration', 0.0), 0.0)
@@ -839,9 +1058,26 @@ class MissionManager(Node):
             return False, message
 
         if normalized == 'lift_up':
-            return self._wait_for_lift_completion('top', token)
+            ok, message = self._wait_for_lift_completion('top', token)
+            if not ok:
+                return False, message
+            if self._pending_shelf_safety_profile:
+                safety_ok, safety_message = self._apply_shelf_safety_profile(
+                    True,
+                    self._pending_shelf_safety_profile,
+                )
+                if not safety_ok:
+                    return False, safety_message
+            return True, message
         if normalized == 'lift_down':
-            return self._wait_for_lift_completion('bottom', token)
+            ok, message = self._wait_for_lift_completion('bottom', token)
+            if not ok:
+                return False, message
+            if self._active_shelf_safety_profile or self._pending_shelf_safety_profile:
+                safety_ok, safety_message = self._apply_shelf_safety_profile(False)
+                if not safety_ok:
+                    return False, safety_message
+            return True, message
 
         self.get_logger().info(
             f'No completion condition configured for action "{normalized}", continuing'
@@ -906,7 +1142,9 @@ class MissionManager(Node):
                 pre_point_cfg = action_point_config.get('pre_point')
                 if isinstance(pre_point_cfg, dict):
                     pre_zone = str(pre_point_cfg.get('zone_name', '') or '').strip()
-                    if pre_zone:
+                    current_is_pre_point = point_type in ('pre_point', 'pre-point', 'prepoint')
+                    already_at_pre_point = bool(pre_zone) and zone_name.strip() == pre_zone
+                    if pre_zone and not current_is_pre_point and not already_at_pre_point:
                         with self._lock:
                             if token != self._mission_token or not self.running:
                                 return
@@ -923,6 +1161,11 @@ class MissionManager(Node):
                                 token, 'shelf_recognition_failed',
                                 f'Failed to reach pre-point "{pre_zone}": {nav_msg}')
                             return
+                    elif pre_zone and (current_is_pre_point or already_at_pre_point):
+                        self.get_logger().info(
+                            f'Zone "{zone_name}" is already a pre-point; skipping extra move '
+                            f'to "{pre_zone}" before shelf recognition'
+                        )
 
                 ok, rcg_msg = self._run_shelf_recognition_workflow(
                     zone_name, template_id, token)
