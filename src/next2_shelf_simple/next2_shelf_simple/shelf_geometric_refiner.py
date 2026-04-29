@@ -634,6 +634,11 @@ class ShelfPoseRefiner:
             for obs in lc_arr:
                 dists = np.linalg.norm(corners - obs, axis=1)
                 res.append(float(dists.min()))
+                
+            # Regularize yaw against the detector's robust face-normal estimate
+            # to prevent asymmetric leg occlusion from skewing the rotation.
+            yaw_penalty = abs(_norm_angle(ca - rough_yaw)) * 1.5
+            res.append(float(yaw_penalty))
             return res
 
         x0 = np.array([rough_cx, rough_cy, rough_yaw], dtype=float)
@@ -783,6 +788,8 @@ class ShelfGeometricRefinerNode(Node):
             leg_w_m=float(self._p['shelf_model_leg_w_m']),
             is_circular=bool(self._p['shelf_model_leg_is_circular']),
         )
+        self._model = model
+        
         self._validator = ShelfLegValidator(
             model=model,
             roi_radius_m=float(self._p['roi_radius_m']),
