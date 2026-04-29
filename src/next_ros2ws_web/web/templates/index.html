@@ -9,10 +9,10 @@
     <link rel="icon" id="site-favicon" href="/static/next_logo.png" type="image/png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Next Robotics Lab</title>
-    <script src="/static/eventemitter2.js"></script>
-    <script src="/static/roslib.min.js"></script>
-    <script src="/static/easeljs.min.js"></script>
-    <script src="/static/ros2d.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/easeljs@1.0.2/lib/easeljs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ros2d/build/ros2d.min.js"></script>
     <style>
         :root {
             /* Industrial Dark Theme - HMI Style */
@@ -150,7 +150,7 @@
         #device-config-top-controls {
             display: none;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: flex-end;
             flex: 1;
             gap: 4px;
             padding: 0 8px;
@@ -159,66 +159,6 @@
         }
         #device-config-top-controls .mctrl-btn {
             flex-shrink: 0;
-        }
-        #device-config-top-controls .device-config-profile-card {
-            flex-direction: row !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 8px !important;
-            min-width: 210px !important;
-            max-width: 280px;
-            padding: 0 10px !important;
-        }
-        #device-config-top-controls .device-config-profile-icon {
-            width: 22px;
-            height: 22px;
-            border-radius: 4px;
-            flex-shrink: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(56, 138, 255, 0.14);
-            border: 1px solid rgba(56, 138, 255, 0.28);
-            color: var(--selected-blue);
-        }
-        #device-config-top-controls .device-config-profile-icon i {
-            font-size: 11px !important;
-        }
-        #device-config-top-controls .device-config-profile-meta {
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 2px;
-        }
-        #device-config-top-controls .device-config-profile-sub {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            min-width: 0;
-        }
-        #device-config-top-controls .device-config-toolbar-summary {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            min-height: 32px;
-            padding: 0 8px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 3px;
-            background: var(--bg-elevated);
-            flex-shrink: 0;
-        }
-        #device-config-top-controls .device-config-toolbar-label {
-            font-size: 8px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-field-label);
-            white-space: nowrap;
-        }
-        #device-config-top-controls .device-config-toolbar-spacer {
-            flex: 1 1 auto;
-            min-width: 12px;
         }
         #device-config-top-controls .mctrl-btn.device-config-primary {
             background: var(--selected-blue-dim);
@@ -236,98 +176,6 @@
         }
         #device-config-top-controls::-webkit-scrollbar { height: 3px; }
         #device-config-top-controls::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 2px; }
-        body.device-config-tab-active #device-config-top-controls {
-            display: flex !important;
-        }
-        #recognition-top-controls {
-            display: none;
-            align-items: center;
-            justify-content: flex-start;
-            flex: 1;
-            gap: 4px;
-            padding: 0 8px;
-            overflow-x: auto;
-            overflow-y: hidden;
-        }
-        #recognition-top-controls .mctrl-btn {
-            flex-shrink: 0;
-        }
-        #recognition-top-controls .recognition-template-card {
-            flex-direction: row !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 8px !important;
-            min-width: 230px !important;
-            max-width: 330px;
-            padding: 0 10px !important;
-        }
-        #recognition-top-controls .recognition-template-card > i {
-            width: 22px;
-            height: 22px;
-            border-radius: 4px;
-            flex-shrink: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(56, 138, 255, 0.14);
-            border: 1px solid rgba(56, 138, 255, 0.28);
-            color: var(--selected-blue);
-            font-size: 11px !important;
-        }
-        #recognition-top-controls .recognition-toolbar-card-meta {
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            justify-content: center;
-            gap: 2px;
-        }
-        #recognition-top-controls .recognition-toolbar-card-title,
-        #recognition-top-controls .recognition-toolbar-card-sub {
-            display: block;
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        #recognition-top-controls .recognition-toolbar-card-title {
-            font-size: 11px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-        #recognition-top-controls .recognition-toolbar-card-sub {
-            font-size: 9px;
-            color: var(--text-tertiary);
-        }
-        #recognition-top-controls .recognition-toolbar-spacer {
-            flex: 1 1 auto;
-            min-width: 12px;
-        }
-        #recognition-top-controls .recognition-primary {
-            background: var(--selected-blue-dim);
-            border-color: var(--selected-blue);
-            color: var(--accent-blue);
-        }
-        #recognition-top-controls .recognition-success {
-            background: rgba(29,122,67,0.18);
-            border-color: rgba(72,187,120,0.45);
-            color: #68d391;
-        }
-        #recognition-top-controls .recognition-toolbar-status {
-            display: inline-flex;
-            align-items: center;
-            min-height: 32px;
-            padding: 0 8px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 3px;
-            background: var(--bg-elevated);
-            color: var(--text-tertiary);
-            font-size: 9px;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        #recognition-top-controls::-webkit-scrollbar { height: 3px; }
-        #recognition-top-controls::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 2px; }
         /* Context toolbar section: vertical label + row of buttons */
         .ctx-section {
             display: flex; flex-direction: column;
@@ -1002,11 +850,6 @@
             font-family: inherit; transition: background 0.1s, color 0.1s;
         }
         .mctrl-btn i { font-size: 10px !important; line-height: 1 !important; }
-        .mctrl-btn span {
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
         .mctrl-btn:hover { background: rgba(255,255,255,0.07) !important; color: var(--text-primary) !important; border-color: var(--border-secondary) !important; }
         .mctrl-btn.active { background: var(--selected-blue-dim) !important; border-color: var(--selected-blue) !important; color: var(--selected-blue) !important; }
         .mctrl-btn:disabled { cursor: not-allowed; opacity: 0.52; }
@@ -1242,37 +1085,26 @@
         }
         .prm-section-hdr:hover { background: var(--bg-elevated); }
         .prm-section-body { overflow: hidden; }
-        #params-popup .prm-param-row {
-            display: grid;
-            grid-template-columns: minmax(180px, 0.9fr) minmax(84px, 120px) minmax(240px, 1.2fr) 16px;
-            align-items: center; gap: 8px;
-            padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.035);
-            font-size: 11px; min-width: 720px;
+        .prm-param-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-size: 11px;
         }
-        #params-popup .prm-param-row.hidden { display: none; }
-        #params-popup .prm-param-row:hover { background: rgba(255,255,255,0.03); }
-        #params-popup .prm-param-key {
-            color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            font-weight: 600;
+        .prm-param-row.hidden { display: none; }
+        .prm-param-row:hover { background: rgba(255,255,255,0.03); }
+        .prm-param-key { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .prm-param-key .prm-ns { color: var(--text-tertiary); font-size: 9px; }
+        .prm-param-val {
+            background: transparent; border: 1px solid transparent;
+            color: var(--text-primary); font-size: 11px; font-family: monospace;
+            padding: 1px 4px; border-radius: 3px; text-align: right;
+            width: 110px; flex-shrink: 0;
         }
-        #params-popup .prm-param-key .prm-ns { color: var(--text-tertiary); font-size: 9px; }
-        #params-popup .prm-param-val {
-            width: 100% !important; min-width: 0; height: 28px;
-            background: var(--bg-elevated); border: 1px solid var(--border-chrome);
-            color: var(--text-primary); font-size: 11px; font-family: 'Roboto Mono', monospace;
-            padding: 4px 8px; border-radius: 4px; text-align: left;
-            box-shadow: none;
-        }
-        #params-popup .prm-param-val:focus { background: var(--bg-tertiary); border-color: var(--accent-normal); outline: none; }
-        #params-popup .prm-param-val.unsaved { border-color: #f59e0b !important; }
-        #params-popup .prm-param-val.saved { border-color: #4ade80; animation: pm-flash 0.4s ease forwards; }
+        .prm-param-val:focus { background: var(--bg-elevated); border-color: var(--accent-normal); outline: none; }
+        .prm-param-val.unsaved { border-color: #f59e0b !important; }
+        .prm-param-val.saved { border-color: #4ade80; animation: pm-flash 0.4s ease forwards; }
         @keyframes pm-flash { to { border-color: transparent; } }
-        #params-popup .prm-topic-type {
-            color: var(--text-tertiary); font-size: 9px; text-align: left; text-transform: uppercase;
-            letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        #params-popup .prm-live-dot { width: 7px; height: 7px; border-radius: 50%; justify-self: center; background: var(--border-secondary); }
-        #params-popup .prm-live-dot.live { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.45); }
+        .prm-topic-type { color: var(--text-tertiary); font-size: 9px; flex-shrink: 0; width: 70px; text-align: right; }
         .prm-empty {
             padding: 30px; text-align: center; color: var(--text-tertiary);
             font-size: 11px; font-style: italic;
@@ -1310,13 +1142,13 @@
         .rcg-pane-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; }
         .rcg-pane-kicker { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 2px; }
         .rcg-pane-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
-        .rcg-stage-title { font-size: 12px; font-weight: 700; color: var(--text-primary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rcg-stage-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
         .rcg-stage-subtitle { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; }
         .rcg-inline-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
         .rcg-inline-btn { display: flex; align-items: center; gap: 3px; background: var(--bg-elevated); border: 1px solid var(--border-chrome); border-radius: 4px; color: var(--text-secondary); font-size: 10px; padding: 3px 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
         .rcg-inline-btn:hover { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
         .rcg-inline-btn.active { background: var(--accent-normal); color: #fff; border-color: var(--accent-normal); }
-        .rcg-stage-tools { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; flex-shrink: 0; }
+        .rcg-stage-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
         .rcg-stage-tools .rcg-inline-btn { padding: 3px 7px; }
         .rcg-stage-tools .rcg-inline-btn i { font-size: 10px; }
         .rcg-search-wrap { padding: 6px 8px; border-bottom: 1px solid var(--border-chrome); flex-shrink: 0; }
@@ -1347,9 +1179,7 @@
             overflow: hidden;
             z-index: 1;
         }
-        .rcg-stage-header { display: flex; align-items: center; justify-content: flex-start; padding: 6px 12px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; gap: 8px; min-height: 44px; }
-        .rcg-stage-header-title { flex-shrink: 0; }
-        .rcg-stage-header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .rcg-stage-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-chrome); background: var(--bg-chrome); flex-shrink: 0; flex-wrap: wrap; gap: 6px; }
         #recognition-stage {
             flex: 1;
             min-height: 0;
@@ -1755,27 +1585,22 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            background: #e85d5d;
-            border-color: #ff9a9a;
+            background: #c62828;
+            border-color: #ff7070;
             color: #ffffff;
-            box-shadow: 0 0 12px rgba(232, 93, 93, 0.22);
+            box-shadow: 0 0 14px rgba(198, 40, 40, 0.32);
         }
 
         .global-header-right-controls .header-estop-btn:hover {
-            background: #f06b6b;
-            border-color: #ffb0b0;
+            background: #df2f2f;
+            border-color: #ff8b8b;
         }
 
         .global-header-right-controls .header-estop-btn.estop-active {
-            background: #7f1010;
-            border-color: #d64545;
+            background: #ff1f1f;
+            border-color: #ffd1d1;
             color: #ffffff;
-            box-shadow: 0 0 20px rgba(127, 16, 16, 0.55);
-        }
-
-        .global-header-right-controls .header-estop-btn.estop-active:hover {
-            background: #650c0c;
-            border-color: #bf3333;
+            box-shadow: 0 0 22px rgba(255, 31, 31, 0.62);
         }
 
         .global-header-right-controls .header-desktop-refresh-btn {
@@ -1800,6 +1625,13 @@
             background: rgba(34, 45, 63, 0.98);
             border-color: rgba(137, 168, 208, 0.56);
             color: #ffffff;
+        }
+
+        .global-estop-state {
+            font-size: 11px;
+            font-weight: 700;
+            margin-left: 6px;
+            color: #ffe8e8;
         }
 
         /* ============================================
@@ -5410,120 +5242,6 @@
         .settings-input:focus {
             outline: none;
             border-color: var(--accent-normal);
-        }
-
-        .battery-dashboard {
-            display: grid;
-            grid-template-columns: minmax(220px, 0.85fr) minmax(280px, 1.15fr);
-            gap: 14px;
-            align-items: stretch;
-        }
-
-        .battery-visual-panel {
-            display: grid;
-            grid-template-columns: minmax(150px, 1fr) 82px;
-            gap: 14px;
-            align-items: center;
-            padding: 14px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
-        }
-
-        .battery-gauge {
-            --battery-pct: 0%;
-            width: 150px;
-            aspect-ratio: 1;
-            margin: 0 auto;
-            border-radius: 50%;
-            background:
-                radial-gradient(circle at center, var(--bg-tertiary) 0 58%, transparent 59%),
-                conic-gradient(var(--accent-normal) var(--battery-pct), rgba(255,255,255,0.08) 0);
-            border: 1px solid var(--border-primary);
-            display: grid;
-            place-items: center;
-        }
-
-        .battery-gauge-value {
-            font-family: 'Roboto Mono', monospace;
-            font-size: 26px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .battery-temp-meter {
-            height: 168px;
-            display: flex;
-            align-items: center;
-            gap: 9px;
-        }
-
-        .battery-temp-track {
-            width: 18px;
-            height: 100%;
-            border: 1px solid var(--border-primary);
-            border-radius: 4px;
-            background: rgba(255,255,255,0.05);
-            display: flex;
-            align-items: flex-end;
-            overflow: hidden;
-        }
-
-        .battery-temp-fill {
-            width: 100%;
-            height: 0%;
-            background: linear-gradient(to top, var(--accent-normal), var(--accent-warning), var(--accent-critical));
-            transition: height 0.2s ease;
-        }
-
-        .battery-temp-labels {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            font-family: 'Roboto Mono', monospace;
-            font-size: 10px;
-            color: var(--text-tertiary);
-        }
-
-        .battery-kv-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-        }
-
-        .battery-kv {
-            min-height: 56px;
-            padding: 9px 10px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
-        }
-
-        .battery-kv-label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: var(--text-field-label);
-        }
-
-        .battery-kv-value {
-            display: block;
-            font-family: 'Roboto Mono', monospace;
-            font-size: 13px;
-            color: var(--text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        @media (max-width: 980px) {
-            .battery-dashboard {
-                grid-template-columns: 1fr;
-            }
         }
 
         /* Keep native <select> popup options readable in dark UI */
@@ -9344,213 +9062,6 @@
             transform: translateY(-1px);
         }
 
-        #params-tab-nav2 {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-        }
-
-        #params-tab-nav2 #settings-navigation-nav-shell,
-        #params-tab-nav2 #settings-navigation-nav2-card,
-        #params-tab-nav2 #settings-nav2-editor {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-        }
-
-        #params-tab-nav2 #settings-navigation-nav-shell {
-            padding: 0 !important;
-        }
-
-        #params-tab-nav2 #settings-navigation-nav-shell > h2,
-        #params-tab-nav2 #settings-navigation-nav-shell > p,
-        #params-tab-nav2 #settings-navigation-nav2-card > .settings-card-header {
-            display: none !important;
-        }
-
-        #params-tab-nav2 #settings-navigation-nav2-card {
-            margin: 0 !important;
-            padding: 0 !important;
-            border: none !important;
-            background: transparent !important;
-            box-shadow: none !important;
-        }
-
-        #params-tab-nav2 #settings-nav2-editor {
-            padding: 0 !important;
-            overflow-y: auto !important;
-            gap: 8px;
-        }
-
-        #params-tab-nav2 .nav2-params-section-group,
-        #params-tab-nav2 .settings-dropdown,
-        #params-tab-nav2 .advanced-details,
-        #params-tab-nav2 .settings-subgroup {
-            margin-top: 0 !important;
-            border: 1px solid var(--border-chrome) !important;
-            border-radius: 4px !important;
-            background: var(--bg-secondary) !important;
-            box-shadow: none !important;
-        }
-
-        #params-tab-nav2 .settings-subgroup {
-            padding: 0 !important;
-            background: transparent !important;
-            border: none !important;
-        }
-
-        #params-tab-nav2 .nav2-param-group-label,
-        #params-tab-nav2 .settings-subgroup-title,
-        #params-tab-nav2 .settings-dropdown-summary,
-        #params-tab-nav2 .advanced-details > summary {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 5px 10px;
-            margin: 0;
-            background: var(--bg-chrome);
-            border-bottom: 1px solid var(--border-chrome);
-            color: var(--text-secondary);
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            min-height: 30px;
-        }
-
-        #params-tab-nav2 .settings-dropdown-summary::after {
-            color: var(--text-tertiary) !important;
-        }
-
-        #params-tab-nav2 .nav2-params-section-group > .form-row,
-        #params-tab-nav2 .advanced-details > .form-row,
-        #params-tab-nav2 .settings-dropdown-content,
-        #params-tab-nav2 .nav2-params-section-group > textarea,
-        #params-tab-nav2 .nav2-advanced-toolbar,
-        #params-tab-nav2 .nav2-editor-actions {
-            padding: 10px;
-        }
-
-        #params-tab-nav2 .nav2-params-section-group > textarea {
-            margin: 0;
-        }
-
-        #params-tab-nav2 .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 10px;
-            margin-bottom: 0 !important;
-        }
-
-        #params-tab-nav2 .form-group {
-            margin-bottom: 0 !important;
-        }
-
-        #params-tab-nav2 .form-group label {
-            display: block;
-            margin-bottom: 4px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: var(--text-field-label);
-        }
-
-        #params-tab-nav2 input[type="text"],
-        #params-tab-nav2 input[type="number"],
-        #params-tab-nav2 select,
-        #params-tab-nav2 textarea,
-        #params-tab-nav2 .settings-input,
-        #params-tab-nav2 .nav2-advanced-input {
-            width: 100% !important;
-            min-width: 0;
-            min-height: 28px;
-            background: var(--bg-elevated) !important;
-            border: 1px solid var(--border-chrome) !important;
-            color: var(--text-primary) !important;
-            font-size: 11px !important;
-            font-family: 'Roboto Mono', monospace !important;
-            padding: 4px 8px !important;
-            border-radius: 4px !important;
-            box-shadow: none !important;
-        }
-
-        #params-tab-nav2 textarea {
-            min-height: 72px;
-            resize: vertical;
-        }
-
-        #params-tab-nav2 input:focus,
-        #params-tab-nav2 select:focus,
-        #params-tab-nav2 textarea:focus {
-            outline: none;
-            border-color: var(--accent-normal) !important;
-            background: var(--bg-tertiary) !important;
-        }
-
-        #params-tab-nav2 #nav2-sync-footprint-btn,
-        #params-tab-nav2 #nav2-apply-curated-btn,
-        #params-tab-nav2 .nav2-editor-actions .btn {
-            min-height: 28px !important;
-            height: 28px !important;
-            padding: 0 10px !important;
-            border-radius: 4px !important;
-            font-size: 11px !important;
-            font-weight: 700 !important;
-            letter-spacing: 0.03em !important;
-            box-shadow: none !important;
-            transform: none !important;
-        }
-
-        #params-tab-nav2 #nav2-sync-footprint-btn,
-        #params-tab-nav2 .nav2-editor-actions .btn:first-child {
-            background: var(--bg-elevated) !important;
-            border: 1px solid var(--border-chrome) !important;
-            color: var(--text-secondary) !important;
-        }
-
-        #params-tab-nav2 #nav2-apply-curated-btn,
-        #params-tab-nav2 .nav2-editor-actions .btn:last-child {
-            background: rgba(66, 153, 225, 0.14) !important;
-            border: 1px solid rgba(66, 153, 225, 0.45) !important;
-            color: #63b3ed !important;
-        }
-
-        #params-tab-nav2 .nav2-validation-grid {
-            padding: 10px;
-            margin-bottom: 0;
-        }
-
-        #params-tab-nav2 .nav2-advanced-wrap {
-            padding: 0 10px 10px;
-            overflow: auto;
-        }
-
-        #params-tab-nav2 .settings-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        #params-tab-nav2 .settings-table th,
-        #params-tab-nav2 .settings-table td {
-            border: 1px solid rgba(255,255,255,0.05);
-            padding: 6px 8px;
-            font-size: 11px;
-            vertical-align: top;
-        }
-
-        #params-tab-nav2 .settings-table th {
-            background: var(--bg-chrome);
-            color: var(--text-secondary);
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        #params-tab-nav2 .hidden {
-            display: none !important;
-        }
-
 
         .settings-slider {
             width: 100%;
@@ -12205,13 +11716,7 @@
         .dc-cmdbar-more-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
 
         /* ── Main viewport ──────────────────────────────────── */
-        #dc-body {
-            display: flex;
-            flex: 1 1 auto;
-            min-height: 0;
-            height: 100%;
-            overflow: hidden;
-        }
+        #dc-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
         /* ── Mode Rail ──────────────────────────────────────── */
         #dc-rail {
@@ -12221,11 +11726,10 @@
             z-index: 50; overflow: hidden;
         }
         .dc-rail-btn {
-            position: relative; width: 44px; height: 48px; border: none; border-radius: 5px;
+            position: relative; width: 40px; height: 44px; border: none; border-radius: 5px;
             background: transparent; color: var(--text-tertiary); cursor: pointer;
             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-            font-size: 14px; padding: 4px 3px; transition: background 0.14s, color 0.14s; font-family: inherit;
-            overflow: hidden;
+            font-size: 14px; padding: 4px; transition: background 0.14s, color 0.14s; font-family: inherit;
         }
         .dc-rail-btn:hover  { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
         .dc-rail-btn.active { background: var(--selected-blue-dim); color: var(--selected-blue); }
@@ -12234,22 +11738,15 @@
             width: 3px; background: var(--selected-blue); border-radius: 0 2px 2px 0;
         }
         .dc-rail-label {
-            max-width: 100%;
-            font-size: 6px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
-            line-height: 1.05; text-align: center; white-space: normal; overflow-wrap: anywhere;
+            font-size: 7px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+            line-height: 1; text-align: center;
         }
         .dc-rail-sep     { width: 26px; height: 1px; background: var(--border-chrome); margin: 3px 0; flex-shrink: 0; }
         .dc-rail-spacer  { flex: 1; }
 
         /* ── Canvas workspace ───────────────────────────────── */
         #dc-canvas-zone {
-            flex: 1 1 auto;
-            min-width: 0;
-            min-height: 0;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
             background: var(--bg-canvas);
         }
         #dc-canvas-header {
@@ -12393,16 +11890,9 @@
 
         /* ── Inspector ──────────────────────────────────────── */
         #dc-inspector {
-            width: 292px;
-            min-width: 292px;
-            height: 100%;
-            min-height: 0;
-            flex-shrink: 0;
-            background: var(--bg-inspector);
-            border-left: 1px solid var(--border-chrome);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            width: 292px; min-width: 292px; flex-shrink: 0;
+            background: var(--bg-inspector); border-left: 1px solid var(--border-chrome);
+            display: flex; flex-direction: column; overflow: hidden;
         }
         .dc-insp-header {
             height: 38px; flex-shrink: 0; background: var(--bg-elevated);
@@ -12473,269 +11963,6 @@
         .dc-ov-cell  { padding: 8px 10px; background: var(--bg-canvas); display: flex; flex-direction: column; gap: 3px; }
         .dc-ov-lbl   { font-size: 9px; color: var(--text-field-label); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
         .dc-ov-val   { font-size: 13px; font-weight: 700; color: var(--text-primary); font-family: 'Roboto Mono', monospace; }
-        .dc-ov-panel {
-            margin: 8px 10px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 6px;
-            background: var(--bg-canvas);
-            overflow: hidden;
-        }
-        .dc-ov-panel-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            padding: 8px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-            background: rgba(255,255,255,0.02);
-        }
-        .dc-ov-panel-title {
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--text-field-label);
-        }
-        .dc-ov-panel-note {
-            font-size: 9px;
-            color: var(--text-tertiary);
-        }
-        .dc-ov-list {
-            display: flex;
-            flex-direction: column;
-        }
-        .dc-ov-kv {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 7px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-        }
-        .dc-ov-kv:last-child,
-        .dc-ov-action:last-child,
-        .dc-ov-inventory:last-child,
-        .dc-tree-group-row:last-child,
-        .dc-tree-leaf:last-child {
-            border-bottom: none;
-        }
-        .dc-ov-key {
-            flex: 0 0 92px;
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-field-label);
-        }
-        .dc-ov-value {
-            flex: 1;
-            min-width: 0;
-            font-size: 11px;
-            color: var(--text-primary);
-            line-height: 1.35;
-        }
-        .dc-ov-value.mono {
-            font-family: 'Roboto Mono', monospace;
-        }
-        .dc-ov-muted {
-            color: var(--text-tertiary);
-        }
-        .dc-detail-summary {
-            margin: 0 10px 8px;
-            border: 1px solid var(--border-chrome);
-            border-radius: 6px;
-            background: var(--bg-canvas);
-            overflow: hidden;
-        }
-        .dc-detail-summary-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 7px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-        }
-        .dc-detail-summary-row:last-child {
-            border-bottom: none;
-        }
-        .dc-detail-summary-key {
-            flex: 0 0 78px;
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-field-label);
-        }
-        .dc-detail-summary-value {
-            flex: 1;
-            min-width: 0;
-            font-size: 11px;
-            color: var(--text-primary);
-            line-height: 1.35;
-        }
-        .dc-detail-actions {
-            display: flex;
-            gap: 6px;
-            padding: 0 10px 8px;
-        }
-        .dc-detail-actions .dc-btn {
-            flex: 1;
-        }
-        .dc-ov-actions {
-            display: flex;
-            flex-direction: column;
-        }
-        .dc-ov-action {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            width: 100%;
-            padding: 8px 10px;
-            border: none;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-            background: transparent;
-            color: var(--text-secondary);
-            text-align: left;
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .dc-ov-action:hover {
-            background: rgba(255,255,255,0.04);
-            color: var(--text-primary);
-        }
-        .dc-ov-action i {
-            width: 14px;
-            color: var(--text-field-label);
-            text-align: center;
-            flex-shrink: 0;
-        }
-        .dc-ov-action-copy {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
-        }
-        .dc-ov-action-title {
-            font-size: 11px;
-            font-weight: 600;
-            color: inherit;
-        }
-        .dc-ov-action-sub {
-            font-size: 9px;
-            color: var(--text-tertiary);
-        }
-        .dc-ov-inventory {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            width: 100%;
-            padding: 8px 10px;
-            border: none;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-            background: transparent;
-            color: var(--text-secondary);
-            text-align: left;
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .dc-ov-inventory:hover {
-            background: rgba(255,255,255,0.04);
-            color: var(--text-primary);
-        }
-        .dc-ov-inventory-icon {
-            width: 18px;
-            text-align: center;
-            color: var(--text-field-label);
-            flex-shrink: 0;
-        }
-        .dc-ov-inventory-copy {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
-            flex: 1;
-        }
-        .dc-ov-inventory-title {
-            font-size: 11px;
-            font-weight: 600;
-            color: inherit;
-        }
-        .dc-ov-inventory-sub {
-            font-size: 9px;
-            color: var(--text-tertiary);
-        }
-        .dc-ov-pill {
-            flex-shrink: 0;
-            font-size: 8px;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 999px;
-            border: 1px solid var(--border-chrome);
-            background: var(--bg-elevated);
-            color: var(--text-field-label);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .dc-ov-pill.good {
-            color: #68d391;
-            border-color: rgba(72,187,120,0.35);
-            background: rgba(72,187,120,0.12);
-        }
-        .dc-ov-pill.warn {
-            color: #ed8936;
-            border-color: rgba(237,137,54,0.35);
-            background: rgba(237,137,54,0.12);
-        }
-        .dc-ov-pill.bad {
-            color: #fc8181;
-            border-color: rgba(252,129,129,0.35);
-            background: rgba(252,129,129,0.12);
-        }
-        .dc-tree-group-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 7px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-            background: rgba(255,255,255,0.02);
-        }
-        .dc-tree-group-icon {
-            width: 16px;
-            text-align: center;
-            color: var(--text-field-label);
-            flex-shrink: 0;
-        }
-        .dc-tree-group-name {
-            flex: 1;
-            font-size: 10px;
-            font-weight: 700;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .dc-tree-group-meta {
-            font-size: 8px;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .dc-tree-leaf {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px 4px 18px;
-            cursor: pointer;
-            min-height: 28px;
-            border-bottom: 1px solid rgba(255,255,255,0.025);
-            transition: background 0.1s;
-        }
-        .dc-tree-leaf:hover {
-            background: rgba(255,255,255,0.04);
-        }
-        .dc-tree-leaf.selected {
-            background: var(--selected-blue-dim);
-        }
-        .dc-tree-leaf.selected .dc-tree-node-name {
-            color: var(--accent-blue, #4299E1);
-        }
 
         /* ── Tags ───────────────────────────────────────────── */
         .dc-tag { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 2px; }
@@ -12926,6 +12153,7 @@
                 <button class="manual-mode-btn header-estop-btn" id="global-estop-btn" onclick="toggleEStop()"
                     title="Toggle Emergency Stop">
                     <i class="fas fa-exclamation-triangle"></i> EMERGENCY STOP
+                    <span class="global-estop-state" id="global-estop-state">INACTIVE</span>
                 </button>
             </div>
         </div>
@@ -13038,23 +12266,6 @@
                 <button class="mctrl-btn" onclick="mctrlParameter()" title="Navigation Parameters"><i class="fas fa-sliders-h"></i><span>PARAM</span></button>
             </div>
             <div id="device-config-top-controls" class="navigator-top-controls">
-                <button class="mctrl-btn device-config-profile-card" id="dc-toolbar-profile-btn" type="button" onclick="dcToggleProfileDropdown(event)" title="Switch active robot profile">
-                    <span class="device-config-profile-icon"><i class="fas fa-cube"></i></span>
-                    <span class="device-config-profile-meta">
-                        <span id="dc-profile-name" class="dc-profile-name">Loading…</span>
-                        <span class="device-config-profile-sub">
-                            <span id="dc-profile-ver" class="dc-profile-ver mono">—</span>
-                            <span id="dc-profile-chip" class="dc-profile-chip draft">Draft</span>
-                        </span>
-                    </span>
-                </button>
-                <div class="device-config-toolbar-summary" title="Validation summary">
-                    <span class="device-config-toolbar-label">Issues</span>
-                    <span id="dc-val-chip-error" class="dc-val-chip error" style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-times-circle"></i> <span id="dc-val-err-count">0</span></span>
-                    <span id="dc-val-chip-warn" class="dc-val-chip warn" style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-exclamation-triangle"></i> <span id="dc-val-warn-count">0</span></span>
-                    <span id="dc-val-chip-ok" class="dc-val-chip ok" style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> OK</span>
-                </div>
-                <div class="device-config-toolbar-spacer"></div>
                 <button class="mctrl-btn" type="button" onclick="loadRobotEditor(true, false)" title="Reload robot editor from the current URDF/Xacro source">
                     <i class="fas fa-file-import"></i><span>IMPORT URDF</span>
                 </button>
@@ -13107,8 +12318,7 @@
                 <button class="mctrl-btn" id="recognition-more-btn" type="button" onclick="recognitionToggleOverflowMenu(event)" title="More actions">
                     <i class="fas fa-ellipsis-v"></i>
                 </button>
-                <div class="recognition-toolbar-spacer"></div>
-                <span class="recognition-toolbar-status" id="recognition-toolbar-status" title="Recognition status">Recognition library ready</span>
+                <span class="device-config-status" id="recognition-toolbar-status" style="font-size:9px;color:var(--text-tertiary);padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="Recognition status">Recognition library ready</span>
             </div>
         </div>
 
@@ -14329,9 +13539,6 @@
                         ui_action_mapping_prefix: 'action_node_',
                         ui_diagnostics_topic: '/diagnostics',
                         ui_robot_mode_topic: '/robot_mode',
-                        ui_battery_state_topic: '/battery_state',
-                        ui_battery_temperature_topic: '/battery_temperature',
-                        ui_battery_charge_cycles_topic: '/battery_charge_cycles',
                         ui_speed_primary: '/odometry/filtered',
                         ui_speed_fallback_cmd_vel: '/cmd_vel',
                         ui_speed_fallback_cmd_vel_nav: '/cmd_vel_nav',
@@ -14478,24 +13685,6 @@
                     let liftCmdTopic = null;
                     let liftStatusTopic = null;
                     let liftStatusRaw = null;
-                    let batteryStateTopic = null;
-                    let batteryTemperatureTopic = null;
-                    let batteryChargeCyclesTopic = null;
-                    let batteryTelemetry = {
-                        percentage: null,
-                        voltage: null,
-                        temperature: null,
-                        current: null,
-                        charge: null,
-                        capacity: null,
-                        designCapacity: null,
-                        status: null,
-                        health: null,
-                        technology: null,
-                        present: null,
-                        chargeCycles: null,
-                        updatedAt: null,
-                    };
                     let actionNodePublishers = {};
                     let actionNodeExtensions = {};
 
@@ -18972,31 +18161,12 @@
                         if (p) p.classList.remove('open');
                         restoreParamsContent();
                     }
-                    function syncParamsPaneVisibility(activeTabName = 'nav2') {
-                        const active = String(activeTabName || '').trim().toLowerCase();
-                        document.querySelectorAll('.params-popup-pane').forEach((pane) => {
-                            const paneId = String(pane.id || '').trim().toLowerCase();
-                            const isActive = paneId === `params-tab-${active}`;
-                            pane.classList.toggle('active', isActive);
-                            pane.style.display = isActive ? 'flex' : 'none';
-                            pane.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-                        });
-                    }
-                    function syncParamsNav2Visibility(activeTabName = 'nav2') {
-                        const active = String(activeTabName || '').trim().toLowerCase() === 'nav2';
-                        const nav2Card = document.getElementById('settings-navigation-nav2-card');
-                        const nav2Ws = document.getElementById('settings-nav2-editor');
-                        [nav2Card, nav2Ws].forEach((el) => {
-                            if (!el) return;
-                            el.style.display = active ? 'flex' : 'none';
-                            el.setAttribute('aria-hidden', active ? 'false' : 'true');
-                        });
-                    }
                     function switchParamsTab(tabName, btn) {
+                        document.querySelectorAll('.params-popup-pane').forEach(p => p.classList.remove('active'));
                         document.querySelectorAll('.params-popup-tab-btn').forEach(b => b.classList.remove('active'));
-                        syncParamsPaneVisibility(tabName);
+                        const pane = document.getElementById('params-tab-' + tabName);
+                        if (pane) pane.classList.add('active');
                         if (btn) btn.classList.add('active');
-                        syncParamsNav2Visibility(tabName);
                         if (tabName === 'robot')    loadRobotYamlParams();
                         if (tabName === 'safety')   loadSafetyParams();
                         if (tabName === 'topic')    loadTopicMappingsForPopup();
@@ -19013,15 +18183,12 @@
                             const toAdopt = nav2Card || nav2Ws;
                             if (toAdopt) nav2Tab.appendChild(toAdopt);
                         }
-                        syncParamsPaneVisibility('nav2');
-                        syncParamsNav2Visibility('nav2');
                         // Topic tab is now self-contained (loadTopicMappingsForPopup handles it)
                     }
 
                     function restoreParamsContent() {
                         const navShell = document.getElementById('settings-navigation-nav-shell');
                         const nav2Card = document.getElementById('settings-navigation-nav2-card');
-                        syncParamsNav2Visibility('nav2');
                         if (navShell && nav2Card && nav2Card.parentElement !== navShell) {
                             navShell.appendChild(nav2Card);
                         }
@@ -19036,80 +18203,43 @@
                         const q = (query || '').toLowerCase().trim();
                         const nav2Tab = document.getElementById('params-tab-nav2');
                         if (!nav2Tab) return;
-                        const nodeText = (node) => {
-                            const valueText = Array.from(node.querySelectorAll('input, textarea, select'))
-                                .map((el) => {
-                                    if (el.tagName === 'SELECT') {
-                                        return el.options?.[el.selectedIndex]?.text || el.value || '';
-                                    }
-                                    return el.value || '';
-                                })
-                                .join(' ');
-                            return `${node.textContent || ''} ${valueText}`.toLowerCase();
-                        };
                         // Try to filter rows in the adopted nav2 editor
-                        nav2Tab.querySelectorAll('[data-param-key], .nav2-param-row, .param-row, .nav2-params-section-group, .settings-dropdown, .settings-subgroup, .advanced-details').forEach(row => {
-                            const text = nodeText(row);
+                        nav2Tab.querySelectorAll('[data-param-key], .nav2-param-row, .param-row').forEach(row => {
+                            const text = row.textContent.toLowerCase();
                             row.classList.toggle('hidden', q !== '' && !text.includes(q));
                         });
                         // Also try span/input pairs inside the editor
-                        nav2Tab.querySelectorAll('.param-item, .nav2-item, .form-group').forEach(item => {
-                            const text = nodeText(item);
+                        nav2Tab.querySelectorAll('.param-item, .nav2-item').forEach(item => {
+                            const text = item.textContent.toLowerCase();
                             item.style.display = (q === '' || text.includes(q)) ? '' : 'none';
                         });
                     }
 
                     async function applyNav2ParamsFromPopup() {
-                        await applyNav2ParameterEditor('all');
+                        const btn = document.getElementById('nav2-apply-btn');
+                        const statusEl = document.getElementById('nav2-status-text');
+                        const statusBar = document.getElementById('nav2-status-bar');
+                        if (btn) btn.disabled = true;
+                        if (statusBar) statusBar.style.display = 'flex';
+                        if (statusEl) { statusEl.style.color = '#60a5fa'; statusEl.textContent = 'Applying…'; }
+                        try {
+                            const resp = await fetch('/api/settings/robot_profiles/nav2_parameters/apply', { method: 'POST' });
+                            const data = await resp.json().catch(() => ({}));
+                            if (statusEl) {
+                                statusEl.style.color = resp.ok ? '#4ade80' : '#fc8181';
+                                statusEl.textContent = resp.ok ? 'Applied successfully' : (data.error || 'Apply failed');
+                            }
+                        } catch (err) {
+                            if (statusEl) { statusEl.style.color = '#fc8181'; statusEl.textContent = 'Network error: ' + err.message; }
+                        } finally {
+                            if (btn) btn.disabled = false;
+                        }
                     }
 
                     // ── Robot Params (robot_editor) ───────────────────────────
                     let _robotYamlCache = null;
 
                     let _robotYamlRobotId = '';
-
-                    function prmEscape(value) {
-                        return String(value ?? '')
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;')
-                            .replace(/"/g, '&quot;')
-                            .replace(/'/g, '&#39;');
-                    }
-
-                    function prmValueToText(value) {
-                        if (value === null || value === undefined) return '';
-                        if (typeof value === 'object') return JSON.stringify(value);
-                        return String(value);
-                    }
-
-                    function prmTextToValue(text) {
-                        const raw = String(text ?? '').trim();
-                        if (raw === 'true') return true;
-                        if (raw === 'false') return false;
-                        if (raw === 'null') return null;
-                        if (raw !== '' && !Number.isNaN(Number(raw))) return Number(raw);
-                        if ((raw.startsWith('{') && raw.endsWith('}')) || (raw.startsWith('[') && raw.endsWith(']'))) {
-                            try { return JSON.parse(raw); } catch (_err) {}
-                        }
-                        return text;
-                    }
-
-                    function prmRowHTML({ key, value, type = 'Value', live = false, idx = '', extraAttrs = '' }) {
-                        const escapedKey = prmEscape(key);
-                        const escapedVal = prmEscape(prmValueToText(value));
-                        const escapedType = prmEscape(type || 'Value');
-                        const idxAttr = idx !== '' ? ` data-idx="${prmEscape(idx)}"` : '';
-                        return `<div class="prm-param-row" data-key="${escapedKey}"${idxAttr}${extraAttrs}>
-                            <span class="prm-param-key" title="${escapedKey}">${escapedKey}</span>
-                            <span class="prm-topic-type" title="${escapedType}">${escapedType}</span>
-                            <input class="prm-param-val" type="text" value="${escapedVal}"
-                                data-original="${escapedVal}"
-                                oninput="this.classList.add('unsaved')"
-                                onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
-                            <span class="prm-live-dot${live ? ' live' : ''}" title="${live ? 'Live topic found' : ''}"></span>
-                        </div>`;
-                    }
 
                     async function loadRobotYamlParams() {
                         const listEl  = document.getElementById('robot-param-list');
@@ -19176,12 +18306,16 @@
                             </div>
                             <div class="prm-section-body">
                                 ${sec.rows.map(r => {
-                                    return prmRowHTML({
-                                        key: r.key,
-                                        value: r.value,
-                                        type: sec.title,
-                                        extraAttrs: ' onfocusout="if(event.target.classList.contains(\'prm-param-val\')) saveRobotYamlParam(event.target)"',
-                                    });
+                                    const escapedKey = r.key.replace(/"/g, '&quot;');
+                                    const escapedVal = String(r.value === null ? '' : r.value).replace(/"/g, '&quot;');
+                                    return `<div class="prm-param-row" data-key="${escapedKey}">
+                                        <span class="prm-param-key" title="${escapedKey}">${r.key}</span>
+                                        <input class="prm-param-val" type="text" value="${escapedVal}"
+                                            data-original="${escapedVal}"
+                                            oninput="this.classList.add('unsaved')"
+                                            onblur="saveRobotYamlParam(this)"
+                                            onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                                    </div>`;
                                 }).join('')}
                             </div>`).join('');
                     }
@@ -19201,7 +18335,7 @@
                                 obj = obj[parts[i]];
                             }
                             const last = parts[parts.length - 1];
-                            obj[last] = prmTextToValue(value);
+                            obj[last] = (value === 'true') ? true : (value === 'false') ? false : (!isNaN(value) && value !== '' ? Number(value) : value);
                         }
                         try {
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
@@ -19210,26 +18344,16 @@
                                 body: JSON.stringify({
                                     robot_id: _robotYamlRobotId,
                                     profile_fields: (_robotYamlCache && _robotYamlCache.profile_fields) || {},
-                                    robot_builder: getActiveRobotBuilderSnapshot(_robotYamlCache),
+                                    robot_builder: {},
                                     compile_urdf: false,
                                     apply_runtime: false
                                 })
                             });
-                            const data = await resp.json();
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                            if (!data.ok) throw new Error(data.message || 'Save failed');
                             inputEl.dataset.original = value;
                             inputEl.classList.remove('unsaved');
                             inputEl.classList.add('saved');
                             setTimeout(() => inputEl.classList.remove('saved'), 1200);
-                            await triggerParameterReload({
-                                profilePayload: data,
-                                robotId: _robotYamlRobotId,
-                                reloadMappings: true,
-                                reloadRobotParams: true,
-                                reloadSafetyParamsView: true,
-                                refreshDynamicBindings: true,
-                            });
                             if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + key; }
                         } catch (err) {
                             if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
@@ -19239,7 +18363,7 @@
                     function filterRobotParams(query) {
                         const q = (query || '').toLowerCase().trim();
                         document.querySelectorAll('#robot-param-list .prm-param-row').forEach(row => {
-                            const text = `${row.textContent} ${row.querySelector('.prm-param-val')?.value || ''}`.toLowerCase();
+                            const text = row.textContent.toLowerCase();
                             row.classList.toggle('hidden', q !== '' && !text.includes(q));
                         });
                     }
@@ -19262,29 +18386,11 @@
                             const respData  = await mappingsResp.json();
                             const topicsRaw = topicsResp.ok ? await topicsResp.json() : [];
                             // Backend returns { ok, mappings: {key: value, ...}, topics: {...} }
-                            const mappingsPayload = respData.mappings || {};
-                            const rawMappings = mappingsPayload.mappings || mappingsPayload || {};
-                            const rawRuntimeTopics = respData.topics || mappingsPayload.topics || {};
-                            _topicMappingsCache = [];
-                            Object.entries(rawMappings).forEach(([k, v]) => {
-                                if (v && typeof v === 'object' && !Array.isArray(v)) {
-                                    _topicMappingsCache.push({
-                                        key: k,
-                                        value: v.topic || '',
-                                        field: v.field || '',
-                                        type: v.type || 'mapping',
-                                        kind: 'mapping',
-                                    });
-                                } else {
-                                    _topicMappingsCache.push({ key: k, value: String(v || ''), type: 'mapping', kind: 'mapping' });
-                                }
-                            });
-                            Object.entries(rawRuntimeTopics).forEach(([k, v]) => {
-                                _topicMappingsCache.push({ key: k, value: String(v || ''), type: inferTopicConfigType(k, v), kind: 'topic' });
-                            });
-                            const availTopics = Array.isArray(topicsRaw?.topics)
-                                ? topicsRaw.topics
-                                : (Array.isArray(topicsRaw) ? topicsRaw : Object.keys(topicsRaw.topics || topicsRaw || {}));
+                            const rawMappings = respData.mappings || respData || {};
+                            _topicMappingsCache = Array.isArray(rawMappings)
+                                ? rawMappings
+                                : Object.entries(rawMappings).map(([k, v]) => ({ key: k, value: String(v || ''), type: '' }));
+                            const availTopics = Array.isArray(topicsRaw) ? topicsRaw : Object.keys(topicsRaw.topics || topicsRaw);
                             renderTopicMappingsInPopup(_topicMappingsCache, availTopics);
                             if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = _topicMappingsCache.length + ' entries – blur a value to save inline'; }
                         } catch (err) {
@@ -19299,35 +18405,28 @@
                         if (!mappings || !mappings.length) {
                             listEl.innerHTML = '<div class="prm-empty">No topic mappings found.</div>'; return;
                         }
-                        const topicSet = new Set(Array.isArray(availableTopics) ? availableTopics.map(t => typeof t === 'string' ? t : t.name || t.topic || '').filter(Boolean) : []);
+                        const topicSet = new Set(Array.isArray(availableTopics) ? availableTopics.map(t => typeof t === 'string' ? t : t.name || t.topic || '') : []);
                         listEl.innerHTML = mappings.map((m, idx) => {
                             const key  = m.key   || m.name  || String(idx);
-                            const val  = m.value ?? m.topic ?? m.mapping ?? '';
-                            const type = m.kind === 'topic' ? (m.type || 'endpoint') : (m.type || 'mapping');
-                            return prmRowHTML({
-                                key,
-                                value: val,
-                                type,
-                                idx,
-                                live: topicSet.has(val),
-                                extraAttrs: ` data-type="${prmEscape(type).toLowerCase()}" data-kind="${prmEscape(m.kind || 'mapping')}" onfocusout="if(event.target.classList.contains('prm-param-val')) saveTopicMappingRow(event.target)"`,
-                            });
+                            const val  = m.value || m.topic || m.mapping || '';
+                            const type = (m.type  || '').toLowerCase();
+                            const live = topicSet.has(val) ? '<span title="Live topic" style="color:#4ade80;margin-left:4px;font-size:9px;">●</span>' : '';
+                            return `<div class="prm-param-row" data-type="${type}" data-idx="${idx}">
+                                <span class="prm-param-key" title="${key}">${key}</span>
+                                <span class="prm-topic-type">${type}</span>
+                                <input class="prm-param-val" type="text" value="${val.replace(/"/g,'&quot;')}"
+                                    data-original="${val.replace(/"/g,'&quot;')}" data-idx="${idx}"
+                                    oninput="this.classList.add('unsaved')"
+                                    onblur="saveTopicMappingRow(this)"
+                                    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                                ${live}
+                            </div>`;
                         }).join('');
-                    }
-
-                    function inferTopicConfigType(key, value) {
-                        const text = `${key || ''} ${value || ''}`.toLowerCase();
-                        if (text.includes('service_')) return 'service';
-                        if (text.includes('publisher_')) return 'publisher';
-                        if (text.includes('subscription_') || text.includes('subscriber_')) return 'subscriber';
-                        if (text.includes('action_')) return 'action';
-                        if (text.includes('topic')) return 'topic';
-                        return 'endpoint';
                     }
 
                     async function saveTopicMappingRow(inputEl) {
                         if (!inputEl.classList.contains('unsaved')) return;
-                        const idx = parseInt(inputEl.closest('.prm-param-row')?.dataset.idx || '', 10);
+                        const idx = parseInt(inputEl.dataset.idx);
                         if (isNaN(idx) || !_topicMappingsCache[idx]) return;
                         _topicMappingsCache[idx].value = inputEl.value;
                         _topicMappingsCache[idx].topic = inputEl.value;
@@ -19338,26 +18437,13 @@
                         const statEl = document.getElementById('topic-status-text');
                         if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
                         try {
+                            // Convert array cache back to {key: value} dict for the backend
                             const dictMappings = {};
-                            const dictTopics = {};
-                            _topicMappingsCache.forEach(m => {
-                                const key = m.key || m.name;
-                                if (!key) return;
-                                const value = m.value ?? m.topic ?? '';
-                                if (m.kind === 'topic') {
-                                    dictTopics[key] = value;
-                                } else {
-                                    dictMappings[key] = {
-                                        topic: value,
-                                        field: m.field || '',
-                                        type: m.type || '',
-                                    };
-                                }
-                            });
+                            _topicMappingsCache.forEach(m => { dictMappings[m.key || m.name] = m.value || m.topic || ''; });
                             const resp = await fetch('/api/settings/mappings', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ mappings: dictMappings, topics: dictTopics, confirmed: true })
+                                body: JSON.stringify({ mappings: dictMappings, topics: {}, confirmed: true })
                             });
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             if (triggerEl) {
@@ -19366,13 +18452,6 @@
                                 triggerEl.classList.add('saved');
                                 setTimeout(() => triggerEl && triggerEl.classList.remove('saved'), 1200);
                             }
-                            await triggerParameterReload({
-                                reloadMappings: true,
-                                reloadRobotParams: false,
-                                reloadSafetyParamsView: false,
-                                refreshDynamicBindings: true,
-                                reselectProfile: false,
-                            });
                             if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved'; }
                         } catch (err) {
                             if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
@@ -19383,8 +18462,7 @@
                         const q    = (query || '').toLowerCase().trim();
                         const type = (document.getElementById('topic-type-filter')?.value || '').toLowerCase();
                         document.querySelectorAll('#topic-mapping-list .prm-param-row').forEach(row => {
-                            const rowText = `${row.textContent} ${row.querySelector('.prm-param-val')?.value || ''}`.toLowerCase();
-                            const matchText = q === '' || rowText.includes(q);
+                            const matchText = q === '' || row.textContent.toLowerCase().includes(q);
                             const matchType = type === '' || (row.dataset.type || '').includes(type);
                             row.classList.toggle('hidden', !(matchText && matchType));
                         });
@@ -19392,110 +18470,6 @@
 
                     // ── Safety Params ─────────────────────────────────────────
                     let _safetyParamsCache = {};
-                    let _safetyFullDataCache = null;
-                    const SAFETY_PARAM_GROUPS = [
-                        {
-                            title: 'Distance Safety',
-                            keys: [
-                                'distance_safety_enabled',
-                                'obstacle_hard_stop_distance_m',
-                                'manual_critical_zone_m',
-                                'autonomous_critical_zone_m',
-                                'obstacle_ttc_min_distance_m',
-                            ],
-                        },
-                        {
-                            title: 'TTC Thresholds',
-                            keys: [
-                                'ttc_stop_sec',
-                                'ttc_warn_sec',
-                                'ttc_min_speed_mps',
-                            ],
-                        },
-                        {
-                            title: 'Gate Logic',
-                            keys: [
-                                'obstacle_use_directional_blocking',
-                                'manual_mode_same_obstacle_gate',
-                                'manual_directional_escape_enabled',
-                                'obstacle_gate_strict_stop_only',
-                                'obstacle_slowdown_enabled',
-                                'obstacle_slowdown_min_scale',
-                                'obstacle_slowdown_distance_buffer_m',
-                                'obstacle_slowdown_ttc_buffer_sec',
-                            ],
-                        },
-                        {
-                            title: 'Topics & Frames',
-                            keys: [
-                                'cmd_vel_input_topic',
-                                'cmd_vel_output_topic',
-                                'obstacle_cloud_topic',
-                                'obstacle_scan_topic',
-                                'robot_base_frame',
-                            ],
-                        },
-                        {
-                            title: 'Detection Window',
-                            keys: [
-                                'obstacle_prefer_cloud_timeout_sec',
-                                'obstacle_prefer_combined_timeout_sec',
-                                'obstacle_forward_half_angle_deg',
-                                'obstacle_rear_half_angle_deg',
-                                'obstacle_min_points',
-                                'obstacle_stop_confirm_frames',
-                                'obstacle_clear_confirm_frames',
-                                'obstacle_clear_margin_m',
-                            ],
-                        },
-                        {
-                            title: 'Body & Filtering',
-                            keys: [
-                                'obstacle_valid_min_range',
-                                'obstacle_median_window',
-                                'robot_body_length_m',
-                                'robot_body_width_m',
-                                'obstacle_body_padding_m',
-                                'obstacle_body_exclusion_radius_m',
-                            ],
-                        },
-                    ];
-
-                    function extractSafetyParamsFromPayload(data) {
-                        const payload = (data && typeof data === 'object') ? data : {};
-                        const profile = (payload.profile && typeof payload.profile === 'object') ? payload.profile : {};
-                        const profileFields = (payload.profile_fields && typeof payload.profile_fields === 'object') ? payload.profile_fields : {};
-                        const robotYamlSafety = (payload.safety && typeof payload.safety === 'object') ? payload.safety : {};
-                        if (Object.keys(robotYamlSafety).length) {
-                            return JSON.parse(JSON.stringify(robotYamlSafety));
-                        }
-
-                        const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision','zone','ttc'];
-                        const extracted = {};
-                        ['safety','safety_params','motion','speed','obstacle'].forEach(k => {
-                            if (profileFields[k] && typeof profileFields[k] === 'object') Object.assign(extracted, profileFields[k]);
-                            else if (typeof profileFields[k] !== 'undefined') extracted[k] = profileFields[k];
-                            if (profile[k] && typeof profile[k] === 'object') Object.assign(extracted, profile[k]);
-                            else if (typeof profile[k] !== 'undefined') extracted[k] = profile[k];
-                        });
-                        Object.keys(profile).forEach(k => {
-                            if (typeof profile[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
-                                extracted[k] = profile[k];
-                            }
-                        });
-                        if (profileFields.max_speed !== undefined) extracted.max_speed = profileFields.max_speed;
-                        if (profileFields.speed_limit !== undefined) extracted.speed_limit = profileFields.speed_limit;
-
-                        if (!Object.keys(extracted).length) {
-                            return {
-                                distance_safety_enabled: true,
-                                obstacle_hard_stop_distance_m: 0.30,
-                                manual_critical_zone_m: 0.30,
-                                autonomous_critical_zone_m: 0.30,
-                            };
-                        }
-                        return extracted;
-                    }
 
                     async function loadSafetyParams() {
                         const listEl  = document.getElementById('safety-param-list');
@@ -19508,15 +18482,28 @@
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
                             const data = await resp.json();
                             if (!data.ok) throw new Error(data.message || 'Profile not available');
-                            _safetyFullDataCache = data;
-                            _safetyParamsCache = extractSafetyParamsFromPayload(data);
+                            // Look for safety fields in profile_fields and full profile
+                            const profile = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+                            const profileFields = (data.profile_fields && typeof data.profile_fields === 'object') ? data.profile_fields : {};
+                            const safetyKeywords = ['safety','estop','stop','obstacle','timeout','range','limit','emergency','speed_limit','max_speed','collision','zone'];
+                            _safetyParamsCache = {};
+                            // 1. Dedicated safety/motion sub-objects from profile
+                            ['safety','safety_params','motion','speed','obstacle'].forEach(k => {
+                                if (profile[k] && typeof profile[k] === 'object') Object.assign(_safetyParamsCache, profile[k]);
+                                else if (typeof profile[k] !== 'undefined') _safetyParamsCache[k] = profile[k];
+                            });
+                            // 2. Any top-level profile key matching safety keywords
+                            Object.keys(profile).forEach(k => {
+                                if (typeof profile[k] !== 'object' && safetyKeywords.some(kw => k.toLowerCase().includes(kw))) {
+                                    _safetyParamsCache[k] = profile[k];
+                                }
+                            });
+                            // 3. Speed / frame limits from profile_fields (namespace, base_frame are on robot tab — skip)
+                            if (profileFields.max_speed !== undefined) _safetyParamsCache['max_speed'] = profileFields.max_speed;
+                            if (profileFields.speed_limit !== undefined) _safetyParamsCache['speed_limit'] = profileFields.speed_limit;
                             renderSafetyParams(_safetyParamsCache, data);
                             const count = Object.keys(_safetyParamsCache).length;
-                            if (statEl) {
-                                const sourceName = String(data.safety_source_path || '').trim().split('/').pop() || 'robot.yaml';
-                                statEl.style.color = 'var(--text-tertiary)';
-                                statEl.textContent = `${count} parameters from ${sourceName} – edit values, then Save`;
-                            }
+                            if (statEl) { statEl.style.color = 'var(--text-tertiary)'; statEl.textContent = count ? count + ' parameters – blur a value to mark changed, then Save' : 'No safety fields found in robot profile'; }
                         } catch (err) {
                             listEl.innerHTML = '<div class="prm-empty" style="color:#fc8181;">Failed to load: ' + err.message + '</div>';
                             if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Load error'; }
@@ -19526,35 +18513,25 @@
                     function renderSafetyParams(params, fullData) {
                         const listEl = document.getElementById('safety-param-list');
                         if (!listEl) return;
-                        const remaining = new Map(Object.entries(params || {}));
-                        const sections = [];
-                        SAFETY_PARAM_GROUPS.forEach((group) => {
-                            const rows = [];
-                            group.keys.forEach((key) => {
-                                if (!remaining.has(key)) return;
-                                rows.push([key, remaining.get(key)]);
-                                remaining.delete(key);
-                            });
-                            if (rows.length) sections.push({ title: group.title, rows });
-                        });
-                        if (remaining.size) {
-                            sections.push({ title: 'More Safety Fields', rows: Array.from(remaining.entries()).sort((a, b) => a[0].localeCompare(b[0])) });
-                        }
-                        if (!sections.length) {
+                        const entries = Object.entries(params);
+                        if (!entries.length) {
                             listEl.innerHTML = `<div class="prm-empty">
-                                No safety fields found in robot.yaml.<br>
-                                <span style="font-size:10px;color:var(--text-tertiary);">Add safety_controller.ros__parameters keys to manage them here.</span>
+                                No safety fields found in robot profile.<br>
+                                <span style="font-size:10px;color:var(--text-tertiary);">Add safety keys to your robot.yaml to manage them here.</span>
                             </div>`;
                             return;
                         }
-                        listEl.innerHTML = sections.map((section) => `
-                            <div class="prm-section-hdr" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
-                                ${section.title} <i class="fas fa-chevron-down" style="opacity:0.5;font-size:9px;"></i>
-                            </div>
-                            <div class="prm-section-body">
-                                ${section.rows.map(([k, v]) => prmRowHTML({ key: k, value: v, type: section.title })).join('')}
-                            </div>
-                        `).join('');
+                        listEl.innerHTML = entries.map(([k, v]) => {
+                            const escapedK = k.replace(/"/g, '&quot;');
+                            const escapedV = String(v === null ? '' : v).replace(/"/g, '&quot;');
+                            return `<div class="prm-param-row" data-key="${escapedK}">
+                                <span class="prm-param-key">${k}</span>
+                                <input class="prm-param-val" type="text" value="${escapedV}"
+                                    data-original="${escapedV}"
+                                    oninput="this.classList.add('unsaved')"
+                                    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value=this.dataset.original;this.classList.remove('unsaved');this.blur();}">
+                            </div>`;
+                        }).join('');
                     }
 
                     async function saveSafetyParams() {
@@ -19572,43 +18549,19 @@
                         });
                         if (statEl) { statEl.style.color = '#60a5fa'; statEl.textContent = 'Saving…'; }
                         try {
-                            const profileFields = (_safetyFullDataCache && typeof _safetyFullDataCache.profile_fields === 'object')
-                                ? JSON.parse(JSON.stringify(_safetyFullDataCache.profile_fields))
-                                : {};
-                            const safetyOverrides = {};
-                            Object.entries(changes).forEach(([key, value]) => {
-                                safetyOverrides[key] = prmTextToValue(value);
-                            });
                             const resp = await fetch('/api/settings/robot_profiles/robot_editor/save', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    robot_id: (_safetyFullDataCache && _safetyFullDataCache.robot_id) || _robotYamlRobotId || activeRobotProfileId,
-                                    profile_fields: profileFields,
-                                    safety_overrides: safetyOverrides,
-                                    robot_builder: getActiveRobotBuilderSnapshot(_safetyFullDataCache, _robotYamlCache),
-                                    compile_urdf: false,
-                                    apply_runtime: false,
-                                })
+                                body: JSON.stringify({ safety: changes })
                             });
-                            const data = await resp.json();
                             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                            if (!data.ok) throw new Error(data.message || 'Save failed');
                             unsaved.forEach(input => {
                                 input.dataset.original = input.value;
                                 input.classList.remove('unsaved');
                                 input.classList.add('saved');
                                 setTimeout(() => input.classList.remove('saved'), 1200);
                             });
-                            await triggerParameterReload({
-                                profilePayload: data,
-                                robotId: (_safetyFullDataCache && _safetyFullDataCache.robot_id) || _robotYamlRobotId || activeRobotProfileId,
-                                reloadMappings: true,
-                                reloadRobotParams: true,
-                                reloadSafetyParamsView: true,
-                                refreshDynamicBindings: true,
-                            });
-                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + Object.keys(changes).length + ' parameter(s) to robot.yaml'; }
+                            if (statEl) { statEl.style.color = '#4ade80'; statEl.textContent = 'Saved ' + Object.keys(changes).length + ' parameter(s)'; }
                         } catch (err) {
                             if (statEl) { statEl.style.color = '#fc8181'; statEl.textContent = 'Save failed: ' + err.message; }
                         }
@@ -19617,7 +18570,7 @@
                     function filterSafetyParams(query) {
                         const q = (query || '').toLowerCase().trim();
                         document.querySelectorAll('#safety-param-list .prm-param-row').forEach(row => {
-                            const text = `${row.textContent} ${row.querySelector('.prm-param-val')?.value || ''}`.toLowerCase();
+                            const text = row.textContent.toLowerCase();
                             row.classList.toggle('hidden', q !== '' && !text.includes(q));
                         });
                     }
@@ -20228,7 +19181,7 @@
                         </div>
                         <div class="rcg-usage-section">
                             <div class="rcg-usage-h">AMB Setup Workflow</div>
-                            <ul class="rcg-usage-list"><li>Build map, scan charger into map</li><li>Manually drive robot to charger at 0.02 m/s (set ManualBlock=false)</li><li>Insert until Roboshop shows positive battery current</li><li>Right-click robot → Mark Special Workstation → CP point</li><li>Drive back ~1 m → right-click → LM point</li><li>Connect LM→CP: forward, path nav; CP→LM: backward, path nav</li><li>Set LM→CP and CP→LM as straight line</li><li>Select amb.charger as CP recognition file</li></ul>
+                            <ul class="rcg-usage-list"><li>Build map, scan charger into map</li><li>Manually drive robot to charger at 0.02 m/s (set ManualBlock=false)</li><li>Insert until shows positive battery current</li><li>Right-click robot → Mark Special Workstation → CP point</li><li>Drive back ~1 m → right-click → LM point</li><li>Connect LM→CP: forward, path nav; CP→LM: backward, path nav</li><li>Set LM→CP and CP→LM as straight line</li><li>Select amb.charger as CP recognition file</li></ul>
                         </div>
                         <div class="rcg-usage-section">
                             <div class="rcg-usage-h">Common Mistakes</div>
@@ -20567,284 +19520,6 @@
                         return 'link';
                     }
 
-                    function dcDescribeInventoryPill(count, requiredMinimum = 0) {
-                        const numericCount = Number(count || 0);
-                        if (numericCount <= 0 && requiredMinimum > 0) {
-                            return { label: 'missing', className: 'bad' };
-                        }
-                        if (numericCount <= 0) {
-                            return { label: 'empty', className: 'warn' };
-                        }
-                        if (numericCount < requiredMinimum) {
-                            return { label: 'partial', className: 'warn' };
-                        }
-                        return { label: 'ready', className: 'good' };
-                    }
-
-                    function dcBuildModelSnapshot() {
-                        const profileId = String(activeRobotProfileId || '').trim();
-                        const profilesById = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
-                        const profile = profileId && profilesById[profileId] ? profilesById[profileId] : (activeRobotProfile || {});
-                        const state = window.robotEditorState || {};
-                        const model = (state && typeof state.model === 'object') ? state.model : {};
-                        const links = Array.isArray(model.links) ? model.links : [];
-                        const shapes = Array.isArray(model.shapes) ? model.shapes : [];
-                        const warnings = Array.isArray(state.geometry_warnings) ? state.geometry_warnings : [];
-                        const urdfErrors = Array.isArray(state.urdf_errors) ? state.urdf_errors : [];
-                        const sensorFrames = (profile && typeof profile.sensor_frames === 'object') ? profile.sensor_frames : {};
-                        const topics = (profile && typeof profile.topics === 'object') ? profile.topics : {};
-                        const mappings = (profile && typeof profile.mappings === 'object') ? profile.mappings : {};
-                        const footprint = (model && typeof model.footprint === 'object') ? model.footprint : {};
-                        const geometry = (model && typeof model.geometry === 'object') ? model.geometry : {};
-                        const profileFields = (profile && typeof profile === 'object') ? profile : {};
-                        const topicBindings = Object.keys(topics).filter((key) => String(topics[key] || '').trim());
-                        const mappingBindings = Object.keys(mappings).filter((key) => {
-                            const entry = mappings[key];
-                            return entry && typeof entry === 'object'
-                                ? String(entry.topic || '').trim()
-                                : String(entry || '').trim();
-                        });
-
-                        const linkKinds = links.reduce((acc, link) => {
-                            const kind = dcInferLinkKind(link);
-                            acc[kind] = (acc[kind] || 0) + 1;
-                            return acc;
-                        }, {});
-
-                        const classifyShape = (shape) => {
-                            const text = [
-                                String(shape?.role || ''),
-                                String(shape?.name || ''),
-                                String(shape?.id || ''),
-                                String(shape?.link || ''),
-                            ].join(' ').toLowerCase();
-                            if (/(safety|protect|zone)/.test(text)) return 'safety';
-                            return 'collision';
-                        };
-
-                        const shapeKinds = shapes.reduce((acc, shape) => {
-                            const kind = classifyShape(shape);
-                            acc[kind] = (acc[kind] || 0) + 1;
-                            return acc;
-                        }, {});
-
-                        const issueCount = warnings.length + urdfErrors.length;
-                        const version = profile?.profile_version || profile?.version || '—';
-                        const stateLabel = profile?.state || (profile?.production ? 'published' : 'draft');
-                        const robotModel = profile?.robot_model || profile?.model || '—';
-                        const namespace = profile?.namespace || '/';
-                        const baseFrame = model.base_link || profile?.base_frame || 'base_link';
-                        const nav2Params = profile?.nav2_params_file || profileFields?.nav2_params_file || '—';
-                        const urdfSource = profile?.urdf_source || profile?.urdf_artifact?.source_path || '—';
-                        const mapName = profile?.map_association?.active_map || '—';
-                        const updatedAt = model?.updated_at
-                            ? new Date(Number(model.updated_at) * 1000).toLocaleString()
-                            : 'Unknown';
-
-                        return {
-                            profile,
-                            profileId,
-                            model,
-                            links,
-                            shapes,
-                            sensorFrames,
-                            topics,
-                            mappings,
-                            warnings,
-                            urdfErrors,
-                            geometry,
-                            footprint,
-                            version,
-                            stateLabel,
-                            robotModel,
-                            namespace,
-                            baseFrame,
-                            nav2Params,
-                            urdfSource,
-                            mapName,
-                            updatedAt,
-                            issueCount,
-                            linkKinds,
-                            shapeKinds,
-                            topicBindingsCount: topicBindings.length,
-                            mappingBindingsCount: mappingBindings.length,
-                        };
-                    }
-
-                    function dcBuildInventoryItems(snapshot) {
-                        const totalSensors = (snapshot.linkKinds.lidar || 0) + (snapshot.linkKinds.camera || 0) + (snapshot.linkKinds.imu || 0);
-                        return [
-                            { key: 'base', icon: 'fa-cube', title: 'Chassis & Base', subtitle: `${snapshot.linkKinds.base || 0} base links`, count: snapshot.linkKinds.base || 0, mode: 'structure', required: 1 },
-                            { key: 'motion', icon: 'fa-gauge-high', title: 'Drive & Motion', subtitle: `${snapshot.linkKinds.wheel || 0} drive links, ${snapshot.linkKinds.caster || 0} casters`, count: (snapshot.linkKinds.wheel || 0) + (snapshot.linkKinds.caster || 0), mode: 'motion', required: 1 },
-                            { key: 'sensors', icon: 'fa-satellite-dish', title: 'Sensors', subtitle: `${snapshot.linkKinds.lidar || 0} lidar, ${snapshot.linkKinds.camera || 0} camera, ${snapshot.linkKinds.imu || 0} imu`, count: totalSensors, mode: 'sensors', required: 1 },
-                            { key: 'collision', icon: 'fa-draw-polygon', title: 'Collision Geometry', subtitle: `${snapshot.shapeKinds.collision || 0} collision shapes`, count: snapshot.shapeKinds.collision || 0, mode: 'structure', required: 1 },
-                            { key: 'safety', icon: 'fa-shield-alt', title: 'Safety Zones', subtitle: `${snapshot.shapeKinds.safety || 0} safety-linked shapes`, count: snapshot.shapeKinds.safety || 0, mode: 'safety', required: 0 },
-                            { key: 'interfaces', icon: 'fa-plug', title: 'ROS Interfaces', subtitle: `${snapshot.topicBindingsCount} topics, ${snapshot.mappingBindingsCount} mappings`, count: snapshot.topicBindingsCount + snapshot.mappingBindingsCount, mode: 'diagnostics', required: 1 },
-                        ];
-                    }
-
-                    function dcRenderOverviewInventory(snapshot) {
-                        const mount = document.getElementById('dc-ov-inventory');
-                        if (!mount) return;
-                        const items = dcBuildInventoryItems(snapshot);
-                        mount.innerHTML = items.map((item) => {
-                            const pill = dcDescribeInventoryPill(item.count, item.required);
-                            return `<button type="button" class="dc-ov-inventory" onclick="dcJumpToInventory(${JSON.stringify(item.mode)})">
-                                <span class="dc-ov-inventory-icon"><i class="fas ${item.icon}"></i></span>
-                                <span class="dc-ov-inventory-copy">
-                                    <span class="dc-ov-inventory-title">${item.title}</span>
-                                    <span class="dc-ov-inventory-sub">${item.subtitle}</span>
-                                </span>
-                                <span class="dc-ov-pill ${pill.className}">${item.count}</span>
-                            </button>`;
-                        }).join('');
-                    }
-
-                    function dcRenderOverviewSources(snapshot) {
-                        const mount = document.getElementById('dc-ov-sources');
-                        if (!mount) return;
-                        mount.innerHTML = [
-                            ['Robot ID', snapshot.profileId || '—', true],
-                            ['Model', snapshot.robotModel || '—', false],
-                            ['Version', snapshot.version || '—', true],
-                            ['Namespace', snapshot.namespace || '—', true],
-                            ['Base Frame', snapshot.baseFrame || '—', true],
-                            ['Map', snapshot.mapName || '—', false],
-                            ['URDF Source', snapshot.urdfSource || '—', false],
-                            ['Nav2 Params', snapshot.nav2Params || '—', false],
-                            ['Updated', snapshot.updatedAt || 'Unknown', false],
-                        ].map(([label, value, mono]) => `
-                            <div class="dc-ov-kv">
-                                <span class="dc-ov-key">${label}</span>
-                                <span class="dc-ov-value${mono ? ' mono' : ''}">${escapeHtml(String(value || '—'))}</span>
-                            </div>
-                        `).join('');
-                    }
-
-                    function dcRenderOverviewInterfaces(snapshot) {
-                        const mount = document.getElementById('dc-ov-interfaces');
-                        if (!mount) return;
-                        const interfaceRows = [
-                            ['cmd_vel', snapshot.topics?.cmd_vel || snapshot.mappings?.cmd_vel?.topic || '—'],
-                            ['Localization', snapshot.topics?.localization || snapshot.mappings?.localization?.topic || '—'],
-                            ['Battery', snapshot.topics?.battery || snapshot.mappings?.battery?.topic || '—'],
-                            ['Laser', snapshot.sensorFrames?.laser || snapshot.topics?.laser || snapshot.topics?.scan || '—'],
-                            ['Map', snapshot.sensorFrames?.map || snapshot.topics?.map || '—'],
-                            ['Odom', snapshot.sensorFrames?.odom || snapshot.topics?.odom || '—'],
-                        ];
-                        mount.innerHTML = interfaceRows.map(([label, value]) => `
-                            <div class="dc-ov-kv">
-                                <span class="dc-ov-key">${label}</span>
-                                <span class="dc-ov-value mono">${escapeHtml(String(value || '—'))}</span>
-                            </div>
-                        `).join('');
-                    }
-
-                    function dcRenderOverviewActions(snapshot) {
-                        const mount = document.getElementById('dc-ov-actions');
-                        if (!mount) return;
-                        const footprintSummary = snapshot.footprint?.type
-                            ? `${snapshot.footprint.type}${snapshot.footprint.radius != null ? ` · r=${Number(snapshot.footprint.radius).toFixed(3)} m` : ''}`
-                            : (snapshot.shapeKinds.collision ? `${snapshot.shapeKinds.collision} collision shapes configured` : 'No collision footprint configured');
-                        const issuesSummary = snapshot.issueCount
-                            ? `${snapshot.issueCount} issue${snapshot.issueCount === 1 ? '' : 's'} need review before publish`
-                            : 'Validation is clean enough to publish';
-                        mount.innerHTML = [
-                            {
-                                icon: 'fa-draw-polygon',
-                                title: 'Collision & Footprint',
-                                subtitle: footprintSummary,
-                                onclick: `dcSetMode('structure');dcOpenInspTab('properties');`,
-                            },
-                            {
-                                icon: 'fa-route',
-                                title: 'Nav2 Geometry Inputs',
-                                subtitle: snapshot.nav2Params && snapshot.nav2Params !== '—' ? snapshot.nav2Params : 'Nav2 params file not linked',
-                                onclick: `switchTab('settings')`,
-                            },
-                            {
-                                icon: 'fa-clipboard-check',
-                                title: 'Deployment Readiness',
-                                subtitle: issuesSummary,
-                                onclick: `dcOpenInspTab('validation')`,
-                            },
-                        ].map((item) => `
-                            <button type="button" class="dc-ov-action" onclick="${item.onclick}">
-                                <i class="fas ${item.icon}"></i>
-                                <span class="dc-ov-action-copy">
-                                    <span class="dc-ov-action-title">${item.title}</span>
-                                    <span class="dc-ov-action-sub">${escapeHtml(item.subtitle)}</span>
-                                </span>
-                            </button>
-                        `).join('');
-                    }
-
-                    function dcJumpToInventory(mode) {
-                        dcSetMode(mode || 'structure');
-                        dcOpenInspTab('hierarchy');
-                    }
-
-                    function dcGetLinkOperationalSummary(name, linkData) {
-                        const d = linkData || {};
-                        const profileId = String(activeRobotProfileId || '').trim();
-                        const profilesById = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
-                        const profile = profileId && profilesById[profileId] ? profilesById[profileId] : (activeRobotProfile || {});
-                        const sensorFrames = (profile && typeof profile.sensor_frames === 'object') ? profile.sensor_frames : {};
-                        const topics = (profile && typeof profile.topics === 'object') ? profile.topics : {};
-                        const mappings = (profile && typeof profile.mappings === 'object') ? profile.mappings : {};
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        const links = Array.isArray(model.links) ? model.links : [];
-                        const shapes = Array.isArray(model.shapes) ? model.shapes : [];
-                        const kind = dcInferLinkKind(d);
-                        const xyz = Array.isArray(d.joint_xyz) ? d.joint_xyz : [0, 0, 0];
-                        const distance = Math.sqrt(
-                            Math.pow(Number(xyz[0] || 0), 2) +
-                            Math.pow(Number(xyz[1] || 0), 2) +
-                            Math.pow(Number(xyz[2] || 0), 2)
-                        );
-                        const childCount = links.filter((link) => String(link.parent || link.parent_link || '').trim() === name).length;
-                        const shapeCount = shapes.filter((shape) => String(shape.link || shape.link_name || '').trim() === name).length;
-                        const roleLabelMap = {
-                            lidar: 'LiDAR / range sensor',
-                            camera: 'Camera / vision sensor',
-                            imu: 'IMU / orientation sensor',
-                            wheel: 'Drive wheel / actuator',
-                            caster: 'Caster / passive support',
-                            base: 'Chassis / structural base',
-                            link: 'Robot link / mount point',
-                        };
-                        const topicCandidates = {
-                            lidar: topics.scan || topics.laser || topics.localization || mappings.localization?.topic || '',
-                            camera: topics.camera || topics.image || mappings.camera?.topic || '',
-                            imu: topics.imu || mappings.imu?.topic || '',
-                            wheel: topics.cmd_vel || mappings.cmd_vel?.topic || '',
-                            caster: '',
-                            base: topics.cmd_vel || mappings.cmd_vel?.topic || '',
-                            link: '',
-                        };
-                        const frameCandidates = {
-                            lidar: sensorFrames.laser || sensorFrames.lidar || '',
-                            camera: sensorFrames.camera_frame || sensorFrames.camera || '',
-                            imu: sensorFrames.imu || '',
-                            wheel: '',
-                            caster: '',
-                            base: model.base_link || profile.base_frame || 'base_link',
-                            link: '',
-                        };
-                        const role = roleLabelMap[kind] || roleLabelMap.link;
-                        const topic = String(topicCandidates[kind] || '').trim() || 'No direct topic mapping found';
-                        const frame = String(frameCandidates[kind] || '').trim() || name;
-                        const mount = distance > 0
-                            ? `${distance.toFixed(3)} m from parent origin`
-                            : 'At parent origin';
-                        const readiness = [
-                            kind === 'base' || shapeCount > 0 ? 'geometry attached' : 'no geometry attached',
-                            childCount ? `${childCount} child frame${childCount === 1 ? '' : 's'}` : 'no child frames',
-                            topic !== 'No direct topic mapping found' ? 'ROS interface linked' : 'ROS interface not linked',
-                        ].join(' · ');
-                        return { kind, role, topic, frame, mount, readiness, childCount, shapeCount };
-                    }
-
                     function dcRefreshHierarchy(filterMode) {
                         const tree = document.getElementById('dc-hier-tree');
                         if (!tree) return;
@@ -20871,50 +19546,31 @@
                             return;
                         }
 
-                        const groups = [
-                            { key: 'base', title: 'Base & Chassis', icon: 'fa-cube', kinds: ['base'] },
-                            { key: 'motion', title: 'Drive & Motion', icon: 'fa-gauge-high', kinds: ['wheel', 'caster'] },
-                            { key: 'sensors', title: 'Sensors', icon: 'fa-satellite-dish', kinds: ['lidar', 'camera', 'imu'] },
-                            { key: 'links', title: 'Other Links', icon: 'fa-project-diagram', kinds: ['link'] },
-                        ];
-
-                        tree.innerHTML = groups.map((group) => {
-                            const rows = filtered.filter((lk) => group.kinds.includes(dcInferLinkKind(lk)));
-                            if (!rows.length) return '';
-                            const children = rows.map((lk) => {
-                                const name = lk.name || lk.link_name || '—';
-                                const kind = dcInferLinkKind(lk);
-                                const icon = iconMap[kind] || 'fa-circle-small';
-                                const badgeClass = badgeMap[kind] || '';
-                                const badgeLabel = kind;
-                                return `<div class="dc-tree-leaf" onclick="dcSelectLink(${JSON.stringify(name)})">
-                                    <span class="dc-tree-node-expand"><i class="fas fa-chevron-right"></i></span>
-                                    <span class="dc-tree-node-icon"><i class="fas ${icon}"></i></span>
-                                    <span class="dc-tree-node-name">${name}</span>
-                                    <span class="dc-tree-node-badge ${badgeClass}">${badgeLabel}</span>
-                                </div>`;
-                            }).join('');
-                            return `
-                                <div class="dc-tree-group-row">
-                                    <span class="dc-tree-group-icon"><i class="fas ${group.icon}"></i></span>
-                                    <span class="dc-tree-group-name">${group.title}</span>
-                                    <span class="dc-tree-group-meta">${rows.length} item${rows.length === 1 ? '' : 's'}</span>
-                                </div>
-                                ${children}
-                            `;
+                        tree.innerHTML = filtered.map((lk) => {
+                            const name = lk.name || lk.link_name || '—';
+                            const kind = dcInferLinkKind(lk);
+                            const icon = iconMap[kind] || 'fa-circle-small';
+                            const badgeClass = badgeMap[kind] || '';
+                            const badgeLabel = kind;
+                            return `<div class="dc-tree-node" onclick="dcSelectLink(${JSON.stringify(name)})">
+                                <span class="dc-tree-node-expand"><i class="fas fa-chevron-right"></i></span>
+                                <span class="dc-tree-node-icon"><i class="fas ${icon}"></i></span>
+                                <span class="dc-tree-node-name">${name}</span>
+                                <span class="dc-tree-node-badge ${badgeClass}">${badgeLabel}</span>
+                            </div>`;
                         }).join('');
                     }
 
                     function dcFilterHierarchy(q) {
                         const lq = q.toLowerCase();
-                        document.querySelectorAll('#dc-hier-tree .dc-tree-leaf').forEach((node) => {
+                        document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach((node) => {
                             const name = (node.querySelector('.dc-tree-node-name') || {}).textContent || '';
                             node.classList.toggle('dc-tree-filtered-out', !!lq && !name.toLowerCase().includes(lq));
                         });
                     }
 
                     function dcSelectLink(linkName) {
-                        document.querySelectorAll('#dc-hier-tree .dc-tree-leaf').forEach((node) => {
+                        document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach((node) => {
                             const name = (node.querySelector('.dc-tree-node-name') || {}).textContent || '';
                             node.classList.toggle('selected', name === linkName);
                         });
@@ -20927,162 +19583,28 @@
 
                     function dcBuildDetailHTML(name, linkData) {
                         const d = linkData || {};
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        const links = Array.isArray(model.links) ? model.links : [];
-                        const allLinkNames = links.map(l => l.name || l.link_name || '').filter(Boolean);
-                        const parentVal = d.parent || d.parent_link || '';
-                        const jointType = d.joint_type || 'fixed';
-                        const xyz = Array.isArray(d.joint_xyz) ? d.joint_xyz : [0,0,0];
-                        const rpy = Array.isArray(d.joint_rpy) ? d.joint_rpy : [0,0,0];
-                        const mass = d.mass != null ? parseFloat(d.mass) : '';
-                        const shapes = Array.isArray(model.shapes) ? model.shapes.filter(s => (s.link || s.link_name) === name) : [];
-                        const isBase = name === model.base_link;
-                        const summary = dcGetLinkOperationalSummary(name, d);
-                        const parentOpts = allLinkNames.filter(n => n !== name).map(n =>
-                            `<option value="${n}"${n === parentVal ? ' selected' : ''}>${n}</option>`
-                        ).join('');
-                        const jointOpts = ['fixed','revolute','continuous','prismatic','floating','planar'].map(j =>
-                            `<option value="${j}"${j === jointType ? ' selected' : ''}>${j}</option>`
-                        ).join('');
-                        const shapesHTML = shapes.length === 0
-                            ? `<div style="font-size:10px;color:var(--text-tertiary);padding:6px 10px;">No shapes attached</div>`
-                            : shapes.map((sh, si) => {
-                                const shapeIdx = model.shapes.indexOf(sh);
-                                const stype = sh.type || sh.shape_type || 'box';
-                                const dims = stype === 'cylinder'
-                                    ? `r=${parseFloat(sh.radius||0).toFixed(3)} h=${parseFloat(sh.height||0).toFixed(3)}`
-                                    : stype === 'sphere'
-                                    ? `r=${parseFloat(sh.radius||0).toFixed(3)}`
-                                    : `${parseFloat(sh.size_x||sh.width||0).toFixed(3)}×${parseFloat(sh.size_y||sh.length||0).toFixed(3)}×${parseFloat(sh.size_z||sh.height||0).toFixed(3)}`;
-                                return `<div class="dc-prop-row" style="align-items:center;">
-                                    <span class="dc-prop-lbl" style="flex-shrink:0;">${stype}</span>
-                                    <span class="dc-prop-val" style="flex:1;font-family:monospace;font-size:9px;">${dims}</span>
-                                    <button class="dc-btn" style="height:18px;padding:0 6px;font-size:8px;flex-shrink:0;" onclick='dcEditShape(${JSON.stringify(name)},${shapeIdx})'><i class="fas fa-pen"></i></button>
-                                    <button class="dc-btn" style="height:18px;padding:0 6px;font-size:8px;flex-shrink:0;margin-left:2px;" onclick='dcDeleteShape(${shapeIdx})'><i class="fas fa-times"></i></button>
-                                </div>`;
-                            }).join('');
+                        const type = dcInferLinkKind(d);
+                        const mass = d.mass != null ? `${parseFloat(d.mass).toFixed(3)} kg` : '—';
+                        const parent = d.parent || d.parent_link || '—';
+                        const collision = (d.collision && d.collision.enabled !== false) ? 'Enabled' : 'Disabled';
                         return `
-                            <div style="padding:8px 10px 4px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                                <button class="dc-btn" style="height:22px;padding:0 6px;font-size:9px;" onclick="dcShowOverview()"><i class="fas fa-arrow-left"></i></button>
-                                <span style="font-size:12px;font-weight:700;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
-                                ${!isBase ? `<button class="dc-btn" style="height:22px;padding:0 6px;font-size:9px;color:#fc8181;" onclick='dcDeleteLinkByName(${JSON.stringify(name)})' title="Delete link"><i class="fas fa-trash"></i></button>` : ''}
-                            </div>
-                            <div class="dc-detail-summary">
-                                <div class="dc-detail-summary-row">
-                                    <span class="dc-detail-summary-key">Role</span>
-                                    <span class="dc-detail-summary-value">${escapeHtml(summary.role)}</span>
+                            <div style="padding:10px 10px 4px;">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                                    <span style="font-size:13px;font-weight:700;color:var(--text-primary);">${name}</span>
+                                    <span class="dc-tag dc-tag-blue">${type}</span>
                                 </div>
-                                <div class="dc-detail-summary-row">
-                                    <span class="dc-detail-summary-key">Frame</span>
-                                    <span class="dc-detail-summary-value dc-mono">${escapeHtml(summary.frame)}</span>
-                                </div>
-                                <div class="dc-detail-summary-row">
-                                    <span class="dc-detail-summary-key">Mount</span>
-                                    <span class="dc-detail-summary-value">${escapeHtml(summary.mount)}</span>
-                                </div>
-                                <div class="dc-detail-summary-row">
-                                    <span class="dc-detail-summary-key">ROS</span>
-                                    <span class="dc-detail-summary-value dc-mono">${escapeHtml(summary.topic)}</span>
-                                </div>
-                                <div class="dc-detail-summary-row">
-                                    <span class="dc-detail-summary-key">Readiness</span>
-                                    <span class="dc-detail-summary-value">${escapeHtml(summary.readiness)}</span>
-                                </div>
+                                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">Selected link details</div>
                             </div>
-                            <div class="dc-detail-actions">
-                                <button class="dc-btn" type="button" onclick='dcSetMode(${JSON.stringify(summary.kind === "wheel" || summary.kind === "caster" ? "motion" : (summary.kind === "lidar" || summary.kind === "camera" || summary.kind === "imu" ? "sensors" : "structure"))});if(typeof centerRobotEditorOnLink === "function"){centerRobotEditorOnLink(${JSON.stringify(name)});}'>
-                                    <i class="fas fa-crosshairs"></i> Focus
-                                </button>
-                                <button class="dc-btn" type="button" onclick="dcOpenInspTab('validation')">
-                                    <i class="fas fa-shield-alt"></i> Validate
-                                </button>
+                            <div class="dc-insp-section">Link Properties</div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Name</span><span class="dc-prop-val">${name}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Type</span><span class="dc-prop-val">${type}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Mass</span><span class="dc-prop-val">${mass}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Parent</span><span class="dc-prop-val">${parent}</span></div>
+                            <div class="dc-prop-row"><span class="dc-prop-lbl">Collision</span><span class="dc-prop-val">${collision}</span></div>
+                            <div style="padding:8px 10px;display:flex;gap:4px;">
+                                <button class="dc-btn" onclick="dcShowOverview()"><i class="fas fa-arrow-left"></i> Back to Overview</button>
                             </div>
-                            <div class="dc-insp-section" style="margin-top:0;">Joint</div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Parent</span>
-                                ${isBase ? `<span class="dc-prop-val">— (base link)</span>` : `<select class="dc-prop-input" style="flex:1;" onchange='dcUpdateLinkField(${JSON.stringify(name)},"parent",this.value)'>${parentOpts}</select>`}
-                            </div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Joint</span>
-                                <select class="dc-prop-input" style="flex:1;" onchange='dcUpdateLinkField(${JSON.stringify(name)},"joint_type",this.value)'>${jointOpts}</select>
-                            </div>
-                            <div class="dc-insp-section">Position (m)</div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">X</span><input class="dc-prop-input" type="number" step="0.001" value="${xyz[0]}" onchange='dcUpdateLinkXyz(${JSON.stringify(name)},0,this.value)' style="flex:1;"></div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Y</span><input class="dc-prop-input" type="number" step="0.001" value="${xyz[1]}" onchange='dcUpdateLinkXyz(${JSON.stringify(name)},1,this.value)' style="flex:1;"></div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Z</span><input class="dc-prop-input" type="number" step="0.001" value="${xyz[2]}" onchange='dcUpdateLinkXyz(${JSON.stringify(name)},2,this.value)' style="flex:1;"></div>
-                            <div class="dc-insp-section">Mass / Inertia</div>
-                            <div class="dc-prop-row"><span class="dc-prop-lbl">Mass (kg)</span><input class="dc-prop-input" type="number" step="0.01" min="0" value="${mass}" placeholder="0.0" onchange='dcUpdateLinkField(${JSON.stringify(name)},"mass",parseFloat(this.value)||0)' style="flex:1;"></div>
-                            <div class="dc-insp-section" style="display:flex;align-items:center;justify-content:space-between;">
-                                <span>Shapes</span>
-                                <button class="dc-btn" style="height:18px;padding:0 8px;font-size:8px;" onclick='dcAddShapeToLink(${JSON.stringify(name)})'><i class="fas fa-plus"></i> Add</button>
-                            </div>
-                            ${shapesHTML}
                         `;
-                    }
-
-                    function dcUpdateLinkField(linkName, field, value) {
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        const links = Array.isArray(model.links) ? model.links : [];
-                        const link = links.find(l => (l.name || l.link_name) === linkName);
-                        if (!link) return;
-                        link[field] = value;
-                        model.updated_at = Math.floor(Date.now() / 1000);
-                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
-                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
-                    }
-
-                    function dcUpdateLinkXyz(linkName, axis, value) {
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        const links = Array.isArray(model.links) ? model.links : [];
-                        const link = links.find(l => (l.name || l.link_name) === linkName);
-                        if (!link) return;
-                        if (!Array.isArray(link.joint_xyz)) link.joint_xyz = [0,0,0];
-                        link.joint_xyz[axis] = parseFloat(value) || 0;
-                        model.updated_at = Math.floor(Date.now() / 1000);
-                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
-                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
-                    }
-
-                    function dcDeleteLinkByName(linkName) {
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        const links = Array.isArray(model.links) ? model.links : [];
-                        const idx = links.findIndex(l => (l.name || l.link_name) === linkName);
-                        if (idx < 0) return;
-                        if (typeof deleteRobotEditorLink === 'function') {
-                            deleteRobotEditorLink(idx);
-                        }
-                        dcShowOverview();
-                    }
-
-                    function dcAddShapeToLink(linkName) {
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        if (!Array.isArray(model.shapes)) model.shapes = [];
-                        const shapeId = `shape_${Date.now()}`;
-                        model.shapes.push({ id: shapeId, link: linkName, type: 'box', size_x: 0.2, size_y: 0.2, size_z: 0.1, xyz: [0,0,0], rpy: [0,0,0] });
-                        model.updated_at = Math.floor(Date.now() / 1000);
-                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
-                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
-                        dcShowDetailEditor(linkName);
-                    }
-
-                    function dcDeleteShape(shapeIdx) {
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        if (!Array.isArray(model.shapes) || shapeIdx < 0 || shapeIdx >= model.shapes.length) return;
-                        const linkName = model.shapes[shapeIdx].link || model.shapes[shapeIdx].link_name || '';
-                        model.shapes.splice(shapeIdx, 1);
-                        model.updated_at = Math.floor(Date.now() / 1000);
-                        if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
-                        if (typeof dcRefreshAfterRobotEditorChange === 'function') dcRefreshAfterRobotEditorChange();
-                        if (linkName) dcShowDetailEditor(linkName);
-                    }
-
-                    function dcEditShape(linkName, shapeIdx) {
-                        const model = (window.robotEditorState && window.robotEditorState.model) || {};
-                        if (!Array.isArray(model.shapes) || shapeIdx < 0 || shapeIdx >= model.shapes.length) return;
-                        if (typeof selectRobotEditorShape === 'function') {
-                            selectRobotEditorShape(shapeIdx);
-                        } else {
-                            window.robotEditorState.selected_shape_id = String(model.shapes[shapeIdx].id || '');
-                            if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
-                        }
                     }
 
                     function dcShowDetailEditor(linkName) {
@@ -21163,8 +19685,8 @@
                     }
 
                     function dcUpdateCommandBar() {
-                        const profileId = String(activeRobotProfileId || '').trim();
-                        const profilesById = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
+                        const profileId = window.activeRobotProfileId;
+                        const profilesById = window.robotProfilesById || {};
                         const profile = profileId && profilesById[profileId];
 
                         const nameEl = document.getElementById('dc-profile-name');
@@ -21232,16 +19754,11 @@
                             setEl('dc-ov-fp-shape',   fp.type || (model.footprint_type || '—'));
                             setEl('dc-ov-fp-radius',  fp.radius != null ? fp.radius.toFixed(3) : '—');
                             setEl('dc-ov-fp-padding', fp.padding != null ? fp.padding.toFixed(3) : '—');
-                            const snapshot = dcBuildModelSnapshot();
-                            dcRenderOverviewInventory(snapshot);
-                            dcRenderOverviewSources(snapshot);
-                            dcRenderOverviewInterfaces(snapshot);
-                            dcRenderOverviewActions(snapshot);
                             dcSyncCanvasControls();
                     }
 
                     async function dcApplyToRobot() {
-                        const profileId = String(activeRobotProfileId || '').trim();
+                        const profileId = window.activeRobotProfileId;
                         if (!profileId) {
                             dcSetStatus('Select a robot profile before publishing', 'warning', true);
                             return;
@@ -21278,12 +19795,12 @@
 
                     async function dcCloneProfile() {
                         dcCloseAllMenus();
-                        const profileId = String(activeRobotProfileId || '').trim();
+                        const profileId = window.activeRobotProfileId;
                         if (!profileId) {
                             dcSetStatus('Select a robot profile before duplicating it', 'warning', true);
                             return;
                         }
-                        const profiles = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
+                        const profiles = window.robotProfilesById || {};
                         const base = profiles[profileId] || {};
                         const newName = prompt('Enter name for duplicated profile:', (base.display_name || profileId) + ' (copy)');
                         if (!newName) return;
@@ -21308,7 +19825,7 @@
 
                     async function dcDeleteProfile() {
                         dcCloseAllMenus();
-                        const profileId = String(activeRobotProfileId || '').trim();
+                        const profileId = window.activeRobotProfileId;
                         if (!profileId) return;
                         const confirmed = (typeof showConfirm === 'function')
                             ? await showConfirm(`Delete profile "${profileId}"? This cannot be undone.`, 'Delete', 'Cancel')
@@ -21361,7 +19878,7 @@
                         if (dd.classList.contains('open')) { dcCloseAllMenus(); return; }
                         dcCloseAllMenus();
                         dcBuildProfileDropdown();
-                        const card = event?.currentTarget || document.getElementById('dc-toolbar-profile-btn');
+                        const card = event?.currentTarget || document.querySelector('.dc-cmdbar-profile');
                         if (card) {
                             const rect = card.getBoundingClientRect();
                             dd.style.top = rect.bottom + 'px';
@@ -21374,8 +19891,8 @@
                     function dcBuildProfileDropdown() {
                         const list = document.getElementById('dc-pd-list');
                         if (!list) return;
-                        const profilesById = (robotProfilesById && typeof robotProfilesById === 'object') ? robotProfilesById : {};
-                        const activeId = String(activeRobotProfileId || '').trim();
+                        const profilesById = window.robotProfilesById || {};
+                        const activeId = window.activeRobotProfileId;
                         const ids = Object.keys(profilesById);
                         if (ids.length === 0) {
                             list.innerHTML = '<div style="padding:12px;font-size:11px;color:var(--text-tertiary);">No profiles found</div>';
@@ -21388,7 +19905,7 @@
                             const isActive = id === activeId;
                             const state = p.state || (p.production ? 'published' : 'draft');
                             const dotColor = state === 'published' ? '#48bb78' : '#ed8936';
-                            return `<button class="dc-pd-item${isActive ? ' active' : ''}" onclick='dcSwitchProfile(${JSON.stringify(id)})'>
+                            return `<button class="dc-pd-item${isActive ? ' active' : ''}" onclick="dcSwitchProfile(${JSON.stringify(id)})">
                                 <span class="dc-pd-item-dot" style="background:${dotColor};"></span>
                                 <span class="dc-pd-item-meta">
                                     <span class="dc-pd-item-name">${name}</span>
@@ -21406,27 +19923,19 @@
 
                     async function dcSwitchProfile(profileId) {
                         dcCloseAllMenus();
-                        const nextProfileId = String(profileId || '').trim();
-                        activeRobotProfileId = nextProfileId;
-                        syncRobotProfileGlobals();
-                        let selectionApplied = false;
+                        window.activeRobotProfileId = profileId;
                         try {
-                            const response = await fetch('/api/settings/robot_profiles/select', {
+                            await fetch('/api/settings/robot_profiles/select', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ robot_id: nextProfileId, apply_map: false })
+                                body: JSON.stringify({ robot_id: profileId, apply_map: false })
                             });
-                            const data = await response.json();
-                            if (data && typeof data === 'object') {
-                                applyProfileSelectionPayload(data);
-                                selectionApplied = Boolean(data.ok);
-                            }
                         } catch (e) { /* non-fatal */ }
-                        if (!selectionApplied && typeof loadRobotEditor === 'function') {
+                        if (typeof loadRobotEditor === 'function') {
                             await loadRobotEditor(false, false);
                         }
                         dcRefreshAfterRobotEditorChange();
-                        dcSetStatus(`Loaded profile "${nextProfileId}"`, selectionApplied ? 'success' : 'warning', false);
+                        dcSetStatus(`Loaded profile "${profileId}"`, 'success', false);
                     }
 
                         function dcToggleLayer(layer, btn) {
@@ -21466,49 +19975,18 @@
                             const dt = document.getElementById('dc-detail-state');
                             if (ov) ov.style.display = '';
                             if (dt) dt.style.display = 'none';
-                            document.querySelectorAll('#dc-hier-tree .dc-tree-leaf').forEach(n => n.classList.remove('selected'));
+                            document.querySelectorAll('#dc-hier-tree .dc-tree-node').forEach(n => n.classList.remove('selected'));
                         }
 
                         function dcNewProfile() {
-                            const dd = document.getElementById('dc-profile-dropdown');
-                            if (!dd) return;
-                            if (!dd.classList.contains('open')) {
-                                dcBuildProfileDropdown();
-                                const card = document.getElementById('dc-toolbar-profile-btn');
-                                if (card) {
-                                    const rect = card.getBoundingClientRect();
-                                    dd.style.top = rect.bottom + 'px';
-                                    dd.style.left = rect.left + 'px';
-                                }
-                                dd.classList.add('open');
-                                document.getElementById('dc-modal-backdrop')?.classList.add('open');
-                            }
-                            const form = document.getElementById('dc-new-profile-form');
-                            if (form) {
-                                form.style.display = 'flex';
-                                const inp = document.getElementById('dc-new-profile-name');
-                                if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 50); }
-                            }
-                        }
-
-                        function dcHideNewProfileForm() {
-                            const form = document.getElementById('dc-new-profile-form');
-                            if (form) form.style.display = 'none';
-                        }
-
-                        async function dcCreateProfileFromForm() {
-                            const inp = document.getElementById('dc-new-profile-name');
-                            const name = inp ? inp.value.trim() : '';
-                            if (!name) return;
-                            dcHideNewProfileForm();
                             dcCloseAllMenus();
-                            try {
-                                const r = await fetch('/api/settings/robot_profiles/create', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ robot_id: name, activate: true }),
-                                });
-                                const data = await r.json();
+                            const name = prompt('New profile name:');
+                            if (!name) return;
+                            fetch('/api/settings/robot_profiles/create', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ robot_id: name, activate: true })
+                            }).then(r => r.json()).then(async data => {
                                 if (data.ok && typeof loadRobotProfiles === 'function') {
                                     await loadRobotProfiles();
                                     dcRefreshAfterRobotEditorChange();
@@ -21516,7 +19994,7 @@
                                 } else {
                                     dcSetStatus(data.message || data.error || 'Create failed', 'error', true);
                                 }
-                            } catch(e) { dcSetStatus(`Create failed: ${e.message}`, 'error', true); }
+                            }).catch(e => dcSetStatus(`Create failed: ${e.message}`, 'error', true));
                         }
 
                         function dcManageProfiles() {
@@ -21538,12 +20016,12 @@
                             if (typeof loadRobotProfiles === 'function') {
                                 await loadRobotProfiles();
                             }
-                            if (activeRobotProfileId && typeof loadRobotEditor === 'function') {
+                            if (window.activeRobotProfileId && typeof loadRobotEditor === 'function') {
                                 await loadRobotEditor(false, true);
                             }
                         } catch (e) { /* non-fatal */ }
                         dcRefreshAfterRobotEditorChange();
-                        dcSetStatus(activeRobotProfileId ? `Ready · ${activeRobotProfileId}` : 'Ready', 'info', false);
+                        dcSetStatus(window.activeRobotProfileId ? `Ready · ${window.activeRobotProfileId}` : 'Ready', 'info', false);
                     }
                     // (adoptDevConfigContent is called in window.onload to ensure DOM is ready)
 
@@ -21553,10 +20031,7 @@
                         const batEl = document.getElementById('diag-bat-val');
                         const modeEl = document.getElementById('diag-mode-val');
                         const connEl = document.getElementById('diag-conn-val');
-                        if (batEl) {
-                            const batteryText = document.getElementById('global-battery-value')?.textContent || '—';
-                            batEl.textContent = batteryText === '—' ? batteryText : `${batteryText}%`;
-                        }
+                        if (batEl) batEl.textContent = (document.getElementById('global-battery-value')?.textContent || '—');
                         if (modeEl) modeEl.textContent = (document.getElementById('global-robot-mode-value')?.textContent || document.getElementById('global-mode-value')?.textContent || '—');
                         if (connEl) connEl.textContent = (document.getElementById('global-conn-value')?.textContent || '—');
                         // Count node states from diagnostics list
@@ -21758,7 +20233,7 @@
                         // Initialize global header status
                         try {
                             updateGlobalHeaderStatus('connection', true);
-                            updateGlobalHeaderStatus('battery', null);
+                            updateGlobalHeaderStatus('battery', 85); // Default value
                             updateGlobalHeaderStatus('mode', 'AUTO');
                             updateGlobalHeaderStatus('localization', 0);
                             updateGlobalHeaderStatus('speed', '0.00');
@@ -22147,7 +20622,6 @@
                             subscribeToMapTopic();
                             subscribeToDiagnostics();
                             subscribeToRobotMode();
-                            subscribeToBatteryTopics();
                             subscribeToVelocitySources();
                             initCmdVelPublisher();
                             initLiftControlTopics();
@@ -22165,7 +20639,6 @@
                             initialPosePub = null;
                             diagnosticsTopic = null;
                             robotModeTopic = null;
-                            clearBatterySubscriptions();
                             if (liftStatusTopic) {
                                 try {
                                     liftStatusTopic.unsubscribe();
@@ -22602,207 +21075,6 @@
                             const modeName = ROBOT_MODE_NAMES[message.robot_mode] || 'UNKNOWN';
                             updateGlobalHeaderStatus('robot_mode', modeName);
                         });
-                    }
-
-                    function getBatteryTopicNames() {
-                        const config = getUiTopicConfig();
-                        const mappings = (currentMappings && typeof currentMappings === 'object') ? currentMappings : {};
-                        return {
-                            state: String(mappings.battery?.topic || config.ui_battery_state_topic || UI_RUNTIME_TOPIC_DEFAULTS.ui_battery_state_topic).trim(),
-                            temperature: String(mappings.battery_temperature?.topic || config.ui_battery_temperature_topic || UI_RUNTIME_TOPIC_DEFAULTS.ui_battery_temperature_topic).trim(),
-                            cycles: String(mappings.battery_charge_cycles?.topic || config.ui_battery_charge_cycles_topic || UI_RUNTIME_TOPIC_DEFAULTS.ui_battery_charge_cycles_topic).trim(),
-                        };
-                    }
-
-                    function clearBatterySubscriptions() {
-                        [batteryStateTopic, batteryTemperatureTopic, batteryChargeCyclesTopic].forEach((topic) => {
-                            if (!topic) return;
-                            try {
-                                topic.unsubscribe();
-                            } catch (e) {
-                                console.warn('[Battery] Failed to unsubscribe:', topic.name, e);
-                            }
-                        });
-                        batteryStateTopic = null;
-                        batteryTemperatureTopic = null;
-                        batteryChargeCyclesTopic = null;
-                    }
-
-                    function subscribeToBatteryTopics() {
-                        if (!rosbridgeConnected || !ros) return;
-                        const topics = getBatteryTopicNames();
-
-                        if (batteryStateTopic && batteryStateTopic.name !== topics.state) {
-                            clearBatterySubscriptions();
-                        }
-                        if (!batteryStateTopic && topics.state) {
-                            batteryStateTopic = new ROSLIB.Topic({
-                                ros: ros,
-                                name: topics.state,
-                                messageType: 'sensor_msgs/msg/BatteryState',
-                            });
-                            batteryStateTopic.subscribe((message) => {
-                                handleBatteryStateMessage(message);
-                            });
-                        }
-
-                        if (batteryTemperatureTopic && batteryTemperatureTopic.name !== topics.temperature) {
-                            try { batteryTemperatureTopic.unsubscribe(); } catch (e) {}
-                            batteryTemperatureTopic = null;
-                        }
-                        if (!batteryTemperatureTopic && topics.temperature) {
-                            batteryTemperatureTopic = new ROSLIB.Topic({
-                                ros: ros,
-                                name: topics.temperature,
-                                messageType: 'std_msgs/msg/Float32',
-                            });
-                            batteryTemperatureTopic.subscribe((message) => {
-                                updateBatteryTelemetry({ temperature: readScalarMessage(message) });
-                            });
-                        }
-
-                        if (batteryChargeCyclesTopic && batteryChargeCyclesTopic.name !== topics.cycles) {
-                            try { batteryChargeCyclesTopic.unsubscribe(); } catch (e) {}
-                            batteryChargeCyclesTopic = null;
-                        }
-                        if (!batteryChargeCyclesTopic && topics.cycles) {
-                            batteryChargeCyclesTopic = new ROSLIB.Topic({
-                                ros: ros,
-                                name: topics.cycles,
-                                messageType: 'std_msgs/msg/UInt32',
-                            });
-                            batteryChargeCyclesTopic.subscribe((message) => {
-                                updateBatteryTelemetry({ chargeCycles: readScalarMessage(message) });
-                            });
-                        }
-
-                        renderBatteryTelemetry();
-                    }
-
-                    function readScalarMessage(message) {
-                        if (message && typeof message === 'object' && Object.prototype.hasOwnProperty.call(message, 'data')) {
-                            const value = Number(message.data);
-                            return Number.isFinite(value) ? value : null;
-                        }
-                        const value = Number(message);
-                        return Number.isFinite(value) ? value : null;
-                    }
-
-                    function normalizeBatteryPercentage(rawValue) {
-                        const value = Number(rawValue);
-                        if (!Number.isFinite(value)) return null;
-                        const percent = value <= 1 ? value * 100 : value;
-                        return Math.max(0, Math.min(100, percent));
-                    }
-
-                    function handleBatteryStateMessage(message) {
-                        if (!message || typeof message !== 'object') return;
-                        updateBatteryTelemetry({
-                            percentage: normalizeBatteryPercentage(message.percentage),
-                            voltage: Number(message.voltage),
-                            temperature: Number(message.temperature),
-                            current: Number(message.current),
-                            charge: Number(message.charge),
-                            capacity: Number(message.capacity),
-                            designCapacity: Number(message.design_capacity),
-                            status: Number(message.power_supply_status),
-                            health: Number(message.power_supply_health),
-                            technology: Number(message.power_supply_technology),
-                            present: Boolean(message.present),
-                        });
-                    }
-
-                    function updateBatteryTelemetry(partial) {
-                        Object.entries(partial || {}).forEach(([key, value]) => {
-                            if (typeof value === 'number' && !Number.isFinite(value)) return;
-                            if (value === null || value === undefined) return;
-                            batteryTelemetry[key] = value;
-                        });
-                        batteryTelemetry.updatedAt = Date.now();
-                        if (Number.isFinite(Number(batteryTelemetry.percentage))) {
-                            updateGlobalHeaderStatus('battery', batteryTelemetry.percentage);
-                            const diagBat = document.getElementById('diag-bat-val');
-                            if (diagBat) diagBat.textContent = `${Math.round(batteryTelemetry.percentage)}%`;
-                        }
-                        renderBatteryTelemetry();
-                    }
-
-                    function batteryStatusLabel(value) {
-                        return ({
-                            0: 'Unknown',
-                            1: 'Charging',
-                            2: 'Discharging',
-                            3: 'Not charging',
-                            4: 'Full',
-                        })[Number(value)] || '—';
-                    }
-
-                    function batteryHealthLabel(value) {
-                        return ({
-                            0: 'Unknown',
-                            1: 'Good',
-                            2: 'Overheat',
-                            3: 'Dead',
-                            4: 'Over voltage',
-                            5: 'Failure',
-                            6: 'Cold',
-                            7: 'Watchdog',
-                            8: 'Safety timer',
-                        })[Number(value)] || '—';
-                    }
-
-                    function batteryTechnologyLabel(value) {
-                        return ({
-                            0: 'Unknown',
-                            1: 'NiMH',
-                            2: 'Li-ion',
-                            3: 'Li-poly',
-                            4: 'LiFe',
-                            5: 'NiCd',
-                            6: 'LiMn',
-                        })[Number(value)] || '—';
-                    }
-
-                    function formatBatteryNumber(value, digits = 1, unit = '') {
-                        const number = Number(value);
-                        if (!Number.isFinite(number)) return '—';
-                        return `${number.toFixed(digits)}${unit}`;
-                    }
-
-                    function renderBatteryTelemetry() {
-                        const pct = Number(batteryTelemetry.percentage);
-                        const safePct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
-                        const temp = Number(batteryTelemetry.temperature);
-                        const safeTemp = Number.isFinite(temp) ? Math.max(0, Math.min(80, temp)) : 0;
-                        const tempFill = Math.round((safeTemp / 80) * 100);
-
-                        const setText = (id, text) => {
-                            const el = document.getElementById(id);
-                            if (el) el.textContent = text;
-                        };
-
-                        setText('battery-settings-percent', Number.isFinite(pct) ? `${Math.round(safePct)}%` : '—');
-                        setText('battery-settings-temp', Number.isFinite(temp) ? `${temp.toFixed(1)} °C` : '—');
-                        setText('battery-settings-status', batteryStatusLabel(batteryTelemetry.status));
-                        setText('battery-settings-health', batteryHealthLabel(batteryTelemetry.health));
-                        setText('battery-settings-present', batteryTelemetry.present === null ? '—' : (batteryTelemetry.present ? 'Yes' : 'No'));
-                        setText('battery-settings-voltage', formatBatteryNumber(batteryTelemetry.voltage, 2, ' V'));
-                        setText('battery-settings-current', formatBatteryNumber(batteryTelemetry.current, 2, ' A'));
-                        setText('battery-settings-charge', formatBatteryNumber(batteryTelemetry.charge, 2, ' Ah'));
-                        setText('battery-settings-capacity', formatBatteryNumber(batteryTelemetry.capacity, 2, ' Ah'));
-                        setText('battery-settings-design-capacity', formatBatteryNumber(batteryTelemetry.designCapacity, 2, ' Ah'));
-                        setText('battery-settings-technology', batteryTechnologyLabel(batteryTelemetry.technology));
-                        setText('battery-settings-cycles', formatBatteryNumber(batteryTelemetry.chargeCycles, 0, ''));
-                        setText('battery-settings-updated', batteryTelemetry.updatedAt ? new Date(batteryTelemetry.updatedAt).toLocaleTimeString() : 'Waiting for data');
-                        const topics = getBatteryTopicNames();
-                        setText('battery-settings-state-topic', topics.state || '—');
-                        setText('battery-settings-temp-topic', topics.temperature || '—');
-                        setText('battery-settings-cycles-topic', topics.cycles || '—');
-
-                        const gauge = document.getElementById('battery-settings-gauge');
-                        if (gauge) gauge.style.setProperty('--battery-pct', `${safePct}%`);
-                        const tempFillEl = document.getElementById('battery-settings-temp-fill');
-                        if (tempFillEl) tempFillEl.style.height = `${tempFill}%`;
                     }
 
                     // Subscribe to velocity sources for speed display
@@ -23845,14 +22117,12 @@
                                 if (connDot) connDot.className = value ? 'status-indicator-dot active' : 'status-indicator-dot critical';
                                 break;
                             case 'battery':
-                                const pct = (value === null || value === undefined || value === '') ? NaN : Number(value);
+                                const pct = Math.round(value || 0);
                                 const battVal = document.getElementById('global-battery-value');
                                 const battDot = document.getElementById('global-battery-dot');
-                                if (battVal) battVal.textContent = Number.isFinite(pct) ? String(Math.round(pct)) : '—';
+                                if (battVal) battVal.textContent = pct + '%';
                                 if (battDot) {
-                                    if (!Number.isFinite(pct)) {
-                                        battDot.className = 'status-indicator-dot';
-                                    } else if (pct > 50) {
+                                    if (pct > 50) {
                                         battDot.className = 'status-indicator-dot active';
                                     } else if (pct > 20) {
                                         battDot.className = 'status-indicator-dot warning';
@@ -30187,8 +28457,12 @@
 
                         // Update global header E-STOP
                         const globalBtn = document.getElementById('global-estop-btn');
+                        const globalLabel = document.getElementById('global-estop-state');
                         if (globalBtn) {
                             globalBtn.classList.toggle('estop-active', active);
+                        }
+                        if (globalLabel) {
+                            globalLabel.textContent = active ? 'ACTIVE' : 'INACTIVE';
                         }
                         // Update bottom status bar E-STOP indicator
                         const bottomEstop = document.getElementById('bottom-estop-indicator');
@@ -31300,10 +29574,6 @@
                                 onclick="showSettingsCategory('style', this)">
                                 <i class="fas fa-paintbrush"></i> Style
                             </button>
-                            <button class="settings-menu-item" data-settings-category="battery"
-                                onclick="showSettingsCategory('battery', this)">
-                                <i class="fas fa-battery-half"></i> Battery
-                            </button>
                             <button class="settings-menu-item" data-settings-category="filemanagement"
                                 onclick="showSettingsCategory('filemanagement', this)">
                                 <i class="fas fa-folder-open"></i> File Management
@@ -31526,106 +29796,6 @@
 
                                 <div id="settings-relaunch-status" class="nav2-editor-status" style="margin-top:10px;">
                                     Ready. Select a relaunch action.
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Battery -->
-                        <div id="settings-battery" class="settings-category">
-                            <div class="settings-general-shell">
-                                <div class="settings-general-heading">
-                                    <h2 class="settings-general-title">Battery</h2>
-                                    <p class="settings-general-intro">Live battery telemetry from the robot power topics.</p>
-                                </div>
-
-                                <div class="settings-card">
-                                    <div class="settings-card-header">
-                                        <h4 class="settings-card-title">
-                                            <i class="fas fa-battery-half" style="margin-right:6px;"></i>Battery State
-                                        </h4>
-                                        <span id="battery-settings-updated" style="font-size:11px;color:var(--text-tertiary);">Waiting for data</span>
-                                    </div>
-
-                                    <div class="battery-dashboard">
-                                        <div class="battery-visual-panel">
-                                            <div>
-                                                <div class="battery-gauge" id="battery-settings-gauge">
-                                                    <span class="battery-gauge-value" id="battery-settings-percent">—</span>
-                                                </div>
-                                            </div>
-                                            <div class="battery-temp-meter" title="Battery temperature">
-                                                <div class="battery-temp-track">
-                                                    <div class="battery-temp-fill" id="battery-settings-temp-fill"></div>
-                                                </div>
-                                                <div class="battery-temp-labels">
-                                                    <span>80 °C</span>
-                                                    <span id="battery-settings-temp">—</span>
-                                                    <span>0 °C</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="battery-kv-grid">
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Voltage</span>
-                                                <span class="battery-kv-value" id="battery-settings-voltage">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Current</span>
-                                                <span class="battery-kv-value" id="battery-settings-current">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Status</span>
-                                                <span class="battery-kv-value" id="battery-settings-status">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Health</span>
-                                                <span class="battery-kv-value" id="battery-settings-health">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Present</span>
-                                                <span class="battery-kv-value" id="battery-settings-present">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Technology</span>
-                                                <span class="battery-kv-value" id="battery-settings-technology">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Charge</span>
-                                                <span class="battery-kv-value" id="battery-settings-charge">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Capacity</span>
-                                                <span class="battery-kv-value" id="battery-settings-capacity">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Design Capacity</span>
-                                                <span class="battery-kv-value" id="battery-settings-design-capacity">—</span>
-                                            </div>
-                                            <div class="battery-kv">
-                                                <span class="battery-kv-label">Charge Cycles</span>
-                                                <span class="battery-kv-value" id="battery-settings-cycles">—</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="settings-card" style="margin-top:12px;">
-                                    <div class="settings-card-header"><h4 class="settings-card-title">Topics</h4></div>
-                                    <div class="battery-kv-grid">
-                                        <div class="battery-kv">
-                                            <span class="battery-kv-label">Battery State</span>
-                                            <span class="battery-kv-value" id="battery-settings-state-topic">/battery_state</span>
-                                        </div>
-                                        <div class="battery-kv">
-                                            <span class="battery-kv-label">Temperature</span>
-                                            <span class="battery-kv-value" id="battery-settings-temp-topic">/battery_temperature</span>
-                                        </div>
-                                        <div class="battery-kv">
-                                            <span class="battery-kv-label">Charge Cycles</span>
-                                            <span class="battery-kv-value" id="battery-settings-cycles-topic">/battery_charge_cycles</span>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -32804,9 +30974,10 @@
 
             <section id="recognition-workspace">
                 <div class="rcg-stage-header">
-                    <div class="rcg-stage-header-title">
+                    <div>
                         <div class="rcg-pane-kicker">Configuration</div>
                         <div id="recognition-stage-title" class="rcg-stage-title">Select a file</div>
+                        <div id="recognition-stage-subtitle" class="rcg-stage-subtitle"></div>
                     </div>
                     <div class="rcg-stage-tools" aria-label="Recognition editor tools">
                         <button type="button" class="rcg-inline-btn active" data-rcg-tool="select" onclick="recognitionSetTool('select')" title="Select and move geometry">
@@ -32824,7 +30995,6 @@
                         <button type="button" class="rcg-inline-btn" data-rcg-tool="segment" onclick="recognitionSetTool('segment')" title="Draw measured span">
                             <i class="fas fa-ruler-horizontal"></i><span>Span</span>
                         </button>
-                        <div style="width:1px;height:16px;background:var(--border-chrome);margin:0 2px;flex-shrink:0;"></div>
                         <button type="button" class="rcg-inline-btn active" data-rcg-view="top" onclick="recognitionSetStageView('top')" title="Top view">
                             <i class="fas fa-border-all"></i><span>Top</span>
                         </button>
@@ -32835,7 +31005,7 @@
                             <i class="fas fa-cube"></i><span>Iso</span>
                         </button>
                     </div>
-                    <div class="rcg-stage-header-actions">
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                         <button id="rcg-save-btn" type="button" class="rcg-save-btn" onclick="recognitionSaveActive()" style="display:none;">
                             <i class="fas fa-save"></i> Save
                         </button>
@@ -32889,6 +31059,32 @@
     </div>
 
     <div id="device-config-tab" class="tab-content">
+
+        <!-- ══ COMMAND BAR ══════════════════════════════════════ -->
+        <div id="dc-cmdbar">
+            <!-- Active profile card -->
+            <div class="dc-cmdbar-profile" onclick="dcToggleProfileDropdown(event)" title="Click to switch profile">
+                <div class="dc-profile-icon"><i class="fas fa-cube"></i></div>
+                <div class="dc-profile-meta">
+                    <div id="dc-profile-name" class="dc-profile-name">Loading…</div>
+                    <div class="dc-profile-sub">
+                        <span id="dc-profile-ver" class="dc-profile-ver mono">—</span>
+                        <span id="dc-profile-chip" class="dc-profile-chip draft">Draft</span>
+                        <span id="dc-profile-saved" class="dc-t-caption"></span>
+                    </div>
+                </div>
+            </div>
+            <!-- Validation summary -->
+            <div class="dc-cmdbar-validation">
+                <span class="dc-t-label" style="margin-right:2px;">Issues</span>
+                <span id="dc-val-chip-error" class="dc-val-chip error" style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-times-circle"></i> <span id="dc-val-err-count">0</span></span>
+                <span id="dc-val-chip-warn"  class="dc-val-chip warn"  style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-exclamation-triangle"></i> <span id="dc-val-warn-count">0</span></span>
+                <span id="dc-val-chip-ok"    class="dc-val-chip ok"    style="display:none;" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> OK</span>
+            </div>
+            <div class="dc-cmdbar-spacer"></div>
+            <div id="dc-cmdbar-status" class="dc-cmdbar-status mono">Ready</div>
+        </div>
+
         <!-- ══ MAIN VIEWPORT: rail | canvas | inspector ═════════ -->
         <div id="dc-body">
 
@@ -32916,6 +31112,11 @@
                     <span class="dc-rail-label">Diagn.</span>
                 </button>
                 <div class="dc-rail-spacer"></div>
+                <div class="dc-rail-sep"></div>
+                <button class="dc-rail-btn" data-dc-mode="settings" onclick="dcSetMode('settings')" title="Config Settings">
+                    <i class="fas fa-cog"></i>
+                    <span class="dc-rail-label">Settings</span>
+                </button>
             </nav>
 
             <!-- ── Canvas Workspace ──────────────────────────────── -->
@@ -32933,7 +31134,7 @@
                         <button class="dc-cvs-view-btn" data-dc-view="iso" onclick="dcSetCanvasView('iso', this)">Iso</button>
                     </div>
                     <!-- Visual layer toggles -->
-                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
+                    <button class="dc-btn" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
                     <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-sensors" onclick="dcToggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
                     <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-safety" onclick="dcToggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
                     <div class="dc-cvs-spacer"></div>
@@ -33000,34 +31201,6 @@
                             <button class="dc-btn dc-btn-primary" style="flex:1;" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Import URDF</button>
                             <button class="dc-btn" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> Validate</button>
                         </div>
-                        <div class="dc-ov-panel">
-                            <div class="dc-ov-panel-head">
-                                <span class="dc-ov-panel-title">Model Inventory</span>
-                                <span class="dc-ov-panel-note">Click a section to inspect it</span>
-                            </div>
-                            <div class="dc-ov-list" id="dc-ov-inventory"></div>
-                        </div>
-                        <div class="dc-ov-panel">
-                            <div class="dc-ov-panel-head">
-                                <span class="dc-ov-panel-title">Model Sources</span>
-                                <span class="dc-ov-panel-note">Profile and file truth</span>
-                            </div>
-                            <div class="dc-ov-list" id="dc-ov-sources"></div>
-                        </div>
-                        <div class="dc-ov-panel">
-                            <div class="dc-ov-panel-head">
-                                <span class="dc-ov-panel-title">Interfaces & Deployment</span>
-                                <span class="dc-ov-panel-note">What this model feeds</span>
-                            </div>
-                            <div class="dc-ov-list" id="dc-ov-interfaces"></div>
-                        </div>
-                        <div class="dc-ov-panel">
-                            <div class="dc-ov-panel-head">
-                                <span class="dc-ov-panel-title">Actionable Checks</span>
-                                <span class="dc-ov-panel-note">Shortcuts to likely next steps</span>
-                            </div>
-                            <div class="dc-ov-actions" id="dc-ov-actions"></div>
-                        </div>
                         <!-- Base Link -->
                         <div class="dc-insp-section">Base Link</div>
                         <div class="dc-prop-row"><span class="dc-prop-lbl">Name</span><span class="dc-prop-val" id="dc-ov-base-link">—</span></div>
@@ -33045,9 +31218,8 @@
 
                 <!-- Hierarchy pane -->
                 <div class="dc-insp-pane" id="dc-pane-hierarchy">
-                    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;display:flex;align-items:center;gap:6px;">
-                        <input class="dc-prop-input" style="flex:1;" placeholder="Filter links…" oninput="dcFilterHierarchy(this.value)" id="dc-hier-search">
-                        <button class="dc-btn dc-btn-primary" style="height:26px;padding:0 10px;font-size:9px;flex-shrink:0;" onclick="addRobotEditorLink();dcOpenInspTab('hierarchy');" title="Add a new link"><i class="fas fa-plus"></i> Add Link</button>
+                    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;">
+                        <input class="dc-prop-input" style="width:100%;" placeholder="Filter links…" oninput="dcFilterHierarchy(this.value)" id="dc-hier-search">
                     </div>
                     <div id="dc-hier-tree" style="flex:1;overflow-y:auto;"></div>
                 </div>
@@ -33084,12 +31256,6 @@
                 <button class="dc-btn" style="height:20px;padding:0 8px;font-size:9px;" onclick="dcNewProfile()"><i class="fas fa-plus"></i> New</button>
             </div>
             <div id="dc-pd-list" class="dc-pd-list"></div>
-            <!-- New profile inline form (hidden by default) -->
-            <div id="dc-new-profile-form" style="display:none;padding:8px 10px;border-top:1px solid var(--border-chrome);gap:6px;display:none;align-items:center;">
-                <input id="dc-new-profile-name" class="dc-prop-input" style="flex:1;" placeholder="Profile name…" onkeydown="if(event.key==='Enter')dcCreateProfileFromForm();if(event.key==='Escape')dcHideNewProfileForm();">
-                <button class="dc-btn dc-btn-primary" style="height:26px;padding:0 8px;font-size:9px;flex-shrink:0;" onclick="dcCreateProfileFromForm()"><i class="fas fa-check"></i></button>
-                <button class="dc-btn" style="height:26px;padding:0 8px;font-size:9px;flex-shrink:0;" onclick="dcHideNewProfileForm()"><i class="fas fa-times"></i></button>
-            </div>
             <div class="dc-pd-footer">
                 <button class="dc-btn" style="flex:1;" onclick="dcManageProfiles()"><i class="fas fa-list"></i> Manage All</button>
             </div>
@@ -33129,15 +31295,15 @@
             // Show/hide the navigator top controls bar (only visible on Home tab)
             const navControls = document.getElementById('navigator-top-controls');
             if (navControls) {
-                navControls.style.display = (tabName === 'navigator') ? 'flex' : 'none';
+                navControls.style.display = (tabName === 'navigator') ? '' : 'none';
             }
             const deviceConfigControls = document.getElementById('device-config-top-controls');
             if (deviceConfigControls) {
-                deviceConfigControls.style.display = (tabName === 'device-config') ? 'flex' : 'none';
+                deviceConfigControls.style.display = (tabName === 'device-config') ? '' : 'none';
             }
             const recognitionControls = document.getElementById('recognition-top-controls');
             if (recognitionControls) {
-                recognitionControls.style.display = (tabName === 'recognition') ? 'flex' : 'none';
+                recognitionControls.style.display = (tabName === 'recognition') ? '' : 'none';
             }
 
             // Show selected tab
@@ -33188,12 +31354,6 @@
         let robotProfilesById = {};
         let activeRobotProfileId = '';
         let activeRobotProfile = null;
-        function syncRobotProfileGlobals() {
-            window.robotProfilesById = robotProfilesById;
-            window.activeRobotProfileId = activeRobotProfileId;
-            window.activeRobotProfile = activeRobotProfile;
-        }
-        syncRobotProfileGlobals();
         // Cross-script safety: both inline script blocks reference these symbols.
         // Keep startup/data loops alive even if one definition is missing.
         if (typeof window.initDraggableJoysticks !== 'function') {
@@ -34385,9 +32545,6 @@
                         currentTopics = {};
                     }
                     window.uiTopicConfig = currentTopics;
-                    if (rosbridgeConnected) {
-                        subscribeToBatteryTopics();
-                    }
 
                     ensureDefaultActionNodeMappings();
 
@@ -34415,98 +32572,6 @@
                 info: 'var(--text-secondary)',
             };
             statusEl.style.color = palette[level] || palette.info;
-        }
-
-        function resolveCurrentRobotProfileId(fallback = '') {
-            return String(
-                fallback
-                || activeRobotProfileId
-                || activeRobotProfile?.robot_id
-                || _robotYamlRobotId
-                || document.getElementById('robot-id-input')?.value
-                || ''
-            ).trim();
-        }
-
-        function getActiveRobotBuilderSnapshot(...sources) {
-            for (const source of sources) {
-                if (source && typeof source === 'object' && source.robot_builder && typeof source.robot_builder === 'object') {
-                    return source.robot_builder;
-                }
-            }
-            if (activeRobotProfile && typeof activeRobotProfile === 'object' && activeRobotProfile.robot_builder && typeof activeRobotProfile.robot_builder === 'object') {
-                return activeRobotProfile.robot_builder;
-            }
-            return {};
-        }
-
-        async function triggerParameterReload(options = {}) {
-            const {
-                profilePayload = null,
-                robotId = '',
-                reloadMappings = true,
-                reloadRobotParams = true,
-                reloadSafetyParamsView = true,
-                refreshDynamicBindings = true,
-                reselectProfile = false,
-            } = options || {};
-
-            const targetRobotId = String(
-                robotId
-                || profilePayload?.robot_id
-                || profilePayload?.active_robot_id
-                || profilePayload?.profile?.robot_id
-                || activeRobotProfileId
-                || ''
-            ).trim();
-
-            let payload = profilePayload && typeof profilePayload === 'object' ? profilePayload : null;
-
-            if (payload && payload.ok !== false) {
-                applyProfileSelectionPayload(payload);
-            } else if (reselectProfile && targetRobotId) {
-                try {
-                    const response = await fetch('/api/settings/robot_profiles/select', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ robot_id: targetRobotId, apply_map: false }),
-                    });
-                    const data = await response.json();
-                    if (data && typeof data === 'object' && data.ok !== false) {
-                        payload = data;
-                        applyProfileSelectionPayload(data);
-                    }
-                } catch (error) {
-                    console.warn('Failed to reselect active robot profile after parameter update:', error);
-                }
-            }
-
-            const reloadTasks = [];
-            if (reloadMappings && typeof loadCurrentMappings === 'function') {
-                reloadTasks.push(loadCurrentMappings());
-            }
-            if (reloadRobotParams && typeof loadRobotYamlParams === 'function') {
-                reloadTasks.push(loadRobotYamlParams());
-            }
-            if (reloadSafetyParamsView && typeof loadSafetyParams === 'function') {
-                reloadTasks.push(loadSafetyParams());
-            }
-            if (reloadTasks.length) {
-                await Promise.allSettled(reloadTasks);
-            }
-
-            if (refreshDynamicBindings && typeof refreshRosbridgeDynamicBindings === 'function') {
-                refreshRosbridgeDynamicBindings();
-            }
-
-            window.dispatchEvent(new CustomEvent('robot-parameters-updated', {
-                detail: {
-                    robotId: targetRobotId,
-                    profilePayload: payload,
-                },
-            }));
-
-            return payload;
         }
 
         function getConfiguredMapFrame() {
@@ -35374,24 +33439,15 @@
 
         function setNav2EditorStatus(message, level = 'info') {
             const el = document.getElementById('nav2-editor-status');
+            if (!el) return;
+            el.textContent = String(message || '');
             const palette = {
                 success: 'var(--accent-success)',
                 error: 'var(--accent-critical)',
                 warning: 'var(--accent-warning)',
                 info: 'var(--text-secondary)',
             };
-            const color = palette[level] || palette.info;
-            if (el) {
-                el.textContent = String(message || '');
-                el.style.color = color;
-            }
-            const popupBar = document.getElementById('nav2-status-bar');
-            const popupText = document.getElementById('nav2-status-text');
-            if (popupBar) popupBar.style.display = 'flex';
-            if (popupText) {
-                popupText.textContent = String(message || '');
-                popupText.style.color = color;
-            }
+            el.style.color = palette[level] || palette.info;
         }
 
         function setNav2ValidationPill(id, label, ok, detail = '') {
@@ -36026,8 +34082,8 @@
             }
         }
 
-        async function loadRobotUrdfSourceEditor(silent = true, robotIdOverride = '') {
-            const targetRobotId = resolveCurrentRobotProfileId(robotIdOverride);
+        async function loadRobotUrdfSourceEditor(silent = true) {
+            const targetRobotId = String(activeRobotProfileId || '').trim();
             if (!targetRobotId) {
                 return;
             }
@@ -36035,13 +34091,6 @@
             try {
                 const response = await fetch(`/api/settings/robot_profiles/urdf/source?robot_id=${encodeURIComponent(targetRobotId)}`);
                 const data = await response.json();
-                if (!data?.ok) {
-                    if (!silent) {
-                        setRobotProfileStatus(data?.message || 'Failed loading URDF source', 'error');
-                        showStatus(data?.message || 'Failed loading URDF source', 'error');
-                    }
-                    return;
-                }
                 const sourcePath = String(data?.source_path || '').trim();
                 const sourceText = String(data?.source_text || '');
                 const sourceType = String(data?.source_type || '').trim();
@@ -36074,7 +34123,7 @@
                     sourceMeta.textContent = `${typeSuffix}. ${resolvedSuffix}`;
                 }
 
-                if (sourcePath) {
+                if (data && data.ok && sourcePath) {
                     const profile = (robotProfilesById && typeof robotProfilesById === 'object')
                         ? robotProfilesById[targetRobotId]
                         : null;
@@ -36082,11 +34131,14 @@
                         profile.urdf_source = sourcePath;
                         if (activeRobotProfileId === targetRobotId) {
                             activeRobotProfile = profile;
-                            syncRobotProfileGlobals();
                         }
                     }
                 }
 
+                if (!data?.ok && !silent) {
+                    setRobotProfileStatus(data?.message || 'Failed loading URDF source', 'error');
+                    showStatus(data?.message || 'Failed loading URDF source', 'error');
+                }
             } catch (error) {
                 if (!silent) {
                     setRobotProfileStatus(`URDF source load error: ${error.message}`, 'error');
@@ -36096,7 +34148,7 @@
         }
 
         async function saveRobotUrdfSourceEditor() {
-            const targetRobotId = resolveCurrentRobotProfileId();
+            const targetRobotId = String(activeRobotProfileId || '').trim();
             if (!targetRobotId) {
                 setRobotProfileStatus('Select an active profile first', 'error');
                 return;
@@ -36139,7 +34191,6 @@
                     if (data.profile && typeof data.profile === 'object') {
                         robotProfilesById[targetRobotId] = data.profile;
                         activeRobotProfile = data.profile;
-                        syncRobotProfileGlobals();
                         renderUrdfValidationBadge(data.profile);
                     }
                     if (data.validation) {
@@ -36159,7 +34210,6 @@
                 if (data.profile && typeof data.profile === 'object') {
                     robotProfilesById[targetRobotId] = data.profile;
                     activeRobotProfile = data.profile;
-                    syncRobotProfileGlobals();
                 }
 
                 await loadRobotProfiles(targetRobotId);
@@ -36332,7 +34382,7 @@
 
             updateRobotId(effectiveRobotId, { persist: false, syncInput: false });
             renderUrdfValidationBadge(profile);
-            loadRobotUrdfSourceEditor(true, profileRobotId || effectiveRobotId);
+            loadRobotUrdfSourceEditor(true);
         }
 
         function collectRobotProfileFormData() {
@@ -37748,7 +35798,7 @@
         }
 
         async function exportRobotEditorUrdf() {
-            const targetRobotId = resolveCurrentRobotProfileId();
+            const targetRobotId = String(activeRobotProfileId || '').trim();
             if (!targetRobotId) {
                 setRobotEditorStatus('Select a robot profile first', 'warning');
                 return;
@@ -38442,29 +36492,29 @@
                     const linkSelected = Boolean(focusedLinkName) && linkName === focusedLinkName;
                     const isFocusMatch = isSelected || linkSelected;
 
-                    let alpha = 0.72;
+                    let alpha = 0.46;
                     let strokeColor = '#94a3b8';
-                    let fillColor = 'rgba(96, 165, 250, 0.38)';
+                    let fillColor = 'rgba(96, 165, 250, 0.22)';
                     if (shapeRole === 'body') {
-                        alpha = presetConfig.preset === 'structure' ? 0.96 : (presetConfig.preset === 'sensors' ? 0.36 : 0.72);
+                        alpha = presetConfig.preset === 'structure' ? 0.96 : (presetConfig.preset === 'sensors' ? 0.26 : 0.62);
                         strokeColor = '#e2e8f0';
-                        fillColor = 'rgba(203, 213, 225, 0.40)';
+                        fillColor = 'rgba(203, 213, 225, 0.18)';
                     } else if (shapeRole === 'wheel' || shapeRole === 'caster') {
-                        alpha = presetConfig.preset === 'motion' ? 0.94 : 0.72;
+                        alpha = presetConfig.preset === 'motion' ? 0.94 : 0.60;
                         strokeColor = '#93c5fd';
-                        fillColor = 'rgba(96, 165, 250, 0.38)';
+                        fillColor = 'rgba(96, 165, 250, 0.20)';
                     } else if (shapeRole === 'sensor') {
-                        alpha = presetConfig.preset === 'sensors' ? 0.98 : (presetConfig.preset === 'debug' ? 0.72 : 0.46);
+                        alpha = presetConfig.preset === 'sensors' ? 0.98 : (presetConfig.preset === 'debug' ? 0.62 : 0.26);
                         strokeColor = '#fbbf24';
-                        fillColor = 'rgba(251, 191, 36, 0.34)';
+                        fillColor = 'rgba(251, 191, 36, 0.16)';
                     } else if (isSafetyZone) {
-                        alpha = presetConfig.preset === 'debug' ? 0.64 : 0.32;
+                        alpha = presetConfig.preset === 'debug' ? 0.54 : 0.18;
                         strokeColor = '#fb7185';
-                        fillColor = 'rgba(244, 114, 182, 0.28)';
+                        fillColor = 'rgba(244, 114, 182, 0.18)';
                     }
 
                     if (focusActive && !isFocusMatch) {
-                        alpha *= 0.38;
+                        alpha *= 0.24;
                     }
                     if (isSelected) {
                         alpha = 1.0;
@@ -39736,7 +37786,6 @@
                             activeRobotProfile = data.profile;
                             fillRobotProfileForm(activeRobotProfile);
                         }
-                        syncRobotProfileGlobals();
                     }
                 }
 
@@ -39872,7 +37921,6 @@
                     activeRobotProfileId = String(data.profile.robot_id);
                 }
             }
-            syncRobotProfileGlobals();
 
             populateRobotProfileSelect(activeRobotProfileId);
 
@@ -39914,7 +37962,6 @@
                 currentTopics = data.topics;
                 window.uiTopicConfig = currentTopics;
                 if (rosbridgeConnected) {
-                    subscribeToBatteryTopics();
                     subscribeMappedVelocitySources();
                     if (cmdVelTopic) {
                         try {
@@ -39959,7 +38006,6 @@
                 robotProfilesById = (data.profiles_by_id && typeof data.profiles_by_id === 'object')
                     ? data.profiles_by_id
                     : {};
-                syncRobotProfileGlobals();
 
                 const activeId = String(preferredRobotId || data.active_robot_id || activeRobotProfileId || '').trim();
                 if (activeId && robotProfilesById[activeId]) {
@@ -40041,14 +38087,7 @@
                 }
 
                 const savedRobotId = String(data.robot_id || draftProfile.robot_id || targetRobotId).trim();
-                await triggerParameterReload({
-                    profilePayload: data,
-                    robotId: savedRobotId,
-                    reloadMappings: true,
-                    reloadRobotParams: true,
-                    reloadSafetyParamsView: true,
-                    refreshDynamicBindings: true,
-                });
+                await loadRobotProfiles(savedRobotId);
                 setRobotProfileStatus(data.message || `Saved profile "${savedRobotId}"`, 'success');
                 showStatus(data.message || `Saved profile "${savedRobotId}"`, 'success');
             } catch (error) {
@@ -40466,13 +38505,8 @@
 
                 const data = await response.json();
                 if (data.ok) {
-                    await triggerParameterReload({
-                        reloadMappings: true,
-                        reloadRobotParams: false,
-                        reloadSafetyParamsView: false,
-                        refreshDynamicBindings: true,
-                        reselectProfile: false,
-                    });
+                    await loadCurrentMappings();
+                    refreshRosbridgeDynamicBindings();
                     const restartHint = data.requires_restart ? ' Restart UI/backend nodes to apply endpoint rebinding.' : '';
                     const fileHint = settingsFilePath ? ` (${settingsFilePath})` : '';
                     showStatus(`Settings saved successfully${fileHint}.${restartHint}`.trim(), 'success');
