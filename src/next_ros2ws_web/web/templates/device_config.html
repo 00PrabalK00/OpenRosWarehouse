@@ -741,7 +741,7 @@
       <button class="btn" onclick="handleSaveDraft()"><i class="fas fa-save"></i> Save Draft</button>
       <button class="btn btn-primary" onclick="handleValidate()"><i class="fas fa-check-circle"></i> Validate</button>
       <button class="btn" onclick="handleExport()"><i class="fas fa-download"></i> Export</button>
-      <button class="btn btn-success" onclick="handlePublish()"><i class="fas fa-rocket"></i> Publish</button>
+      <button class="btn btn-success" id="publish-btn" onclick="handlePublish()"><i class="fas fa-rocket"></i> Publish</button>
       <!-- Secondary overflow -->
       <button class="cmdbar-more-btn" onclick="toggleOverflowMenu(event)" title="More actions"><i class="fas fa-ellipsis-v"></i></button>
     </div>
@@ -1293,9 +1293,15 @@
 <!-- Overflow (secondary actions) menu -->
 <div id="overflow-menu">
   <div class="om-hdr">Profile Actions</div>
+  <button class="om-item" onclick="handleNewProfile()"><i class="fas fa-plus"></i> New Model</button>
+  <button class="om-item" onclick="handleRefreshFromRobot()"><i class="fas fa-cloud-download-alt"></i> Pull / Refresh</button>
+  <button class="om-item" onclick="handleUndo()"><i class="fas fa-undo"></i> Undo</button>
+  <button class="om-item" onclick="handleRedo()"><i class="fas fa-redo"></i> Redo</button>
   <button class="om-item" onclick="handleDuplicateProfile()"><i class="fas fa-copy"></i> Duplicate Profile</button>
   <button class="om-item" onclick="handleCompareRevisions()"><i class="fas fa-code-branch"></i> Compare Revisions</button>
-  <button class="om-item" onclick="handleRestoreDefaults()"><i class="fas fa-undo"></i> Restore Defaults</button>
+  <button class="om-item" onclick="handlePreviewGeneratedBundle()"><i class="fas fa-layer-group"></i> Generated Bundle</button>
+  <button class="om-item" onclick="handleViewEvents()"><i class="fas fa-clipboard-list"></i> Event Log</button>
+  <button class="om-item" onclick="handleRestoreDefaults()"><i class="fas fa-sync"></i> Reopen Saved</button>
   <div class="om-sep"></div>
   <div class="om-hdr">File</div>
   <button class="om-item" onclick="handleExportUrdf()"><i class="fas fa-file-export"></i> Export URDF</button>
@@ -1351,7 +1357,231 @@ const DC = {
   zoom: 1.0,
   gridVisible: true,
   labelsVisible: true,
+  robotId: '',
+  profile: null,
+  model: null,
+  profiles: [],
+  dirty: false,
+  validation: { errors: [], warnings: [], suggestions: [] },
+  deployment: null,
+  permissions: { role: 'viewer', can_push: false, can_rollback: false, can_edit_model: false },
+  generatedBundle: null,
+  undoStack: [],
+  redoStack: [],
 };
+
+function dcText(value, fallback = '—') {
+  const text = String(value ?? '').trim();
+  return text || fallback;
+}
+
+function dcEscapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+}
+
+function dcAttr(value) {
+  return dcEscapeHtml(value);
+}
+
+function dcJsString(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function dcFetch(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+  const payload = await response.json().catch(() => ({ ok: false, message: response.statusText }));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.message || `Request failed (${response.status})`);
+  }
+  return payload;
+}
+
+function dcSetMessage(message, state = 'info') {
+  const last = document.querySelector('#bottom-bar .bseg:last-child .bseg-val');
+  const label = document.querySelector('#bottom-bar .bseg:last-child .bseg-lbl');
+  if (label) {
+    label.textContent = state === 'error' ? 'ERROR' : state === 'warn' ? 'WARNING' : 'STATUS';
+    label.style.color = state === 'error' ? 'var(--accent-critical)' : state === 'warn' ? 'var(--accent-warning)' : 'var(--accent-blue)';
+  }
+  if (last) {
+    last.textContent = message;
+    last.style.color = state === 'error' ? 'var(--accent-critical)' : state === 'warn' ? 'var(--accent-warning)' : 'var(--text-primary)';
+  }
+}
+
+function dcIssueText(item) {
+  if (typeof item === 'string') return item;
+  if (!item || typeof item !== 'object') return 'Unknown issue';
+  const parts = [];
+  if (item.object) parts.push(item.object);
+  if (item.field) parts.push(item.field);
+  if (item.message) parts.push(item.message);
+  if (item.action_required) parts.push(`Action: ${item.action_required}`);
+  return parts.join(' · ') || 'Unknown issue';
+}
+
+function dcNormalizeValidationReport(report) {
+  const data = report && typeof report === 'object' ? report : {};
+  return {
+    errors: Array.isArray(data.errors) ? data.errors : [],
+    warnings: Array.isArray(data.warnings) ? data.warnings : [],
+    suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+    ready_to_deploy: Boolean(data.ready_to_deploy),
+    summary: data.summary || {},
+  };
+}
+
+function renderPermissionState() {
+  const perms = DC.permissions || {};
+  const publish = document.getElementById('publish-btn');
+  if (publish) {
+    publish.disabled = !perms.can_push;
+    publish.title = perms.can_push ? 'Push validated model' : `Push requires Admin role (current: ${perms.role || 'viewer'})`;
+    publish.style.opacity = perms.can_push ? '' : '0.45';
+  }
+  document.querySelectorAll('.profile-state-chip').forEach(el => {
+    el.title = `Role: ${perms.role || 'viewer'} · ${DC.dirty ? 'Unsaved' : 'Saved'}`;
+  });
+}
+
+function dcMarkDirty(dirty = true) {
+  DC.dirty = Boolean(dirty);
+  document.querySelectorAll('.profile-state-chip').forEach(el => {
+    el.textContent = DC.dirty ? 'Unsaved' : (DC.deployment?.current_snapshot_id ? 'Deployed' : 'Draft');
+    el.classList.toggle('draft', !DC.deployment?.current_snapshot_id);
+  });
+  renderPermissionState();
+}
+
+function dcCurrentProfileFields() {
+  const profile = DC.profile || {};
+  return {
+    robot_id: DC.robotId || profile.robot_id || 'UGV-01',
+    namespace: profile.namespace || '/',
+    base_frame: DC.model?.base_link || profile.base_frame || 'base_link',
+    nav2_params_file: profile.nav2_params_file || '',
+    urdf_source: profile.urdf_source || '',
+    map_association: profile.map_association || {},
+    topics: profile.topics || {},
+    mappings: profile.mappings || {},
+  };
+}
+
+function dcDeepCopy(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function dcPushUndo() {
+  if (!DC.model) return;
+  DC.undoStack.push(dcDeepCopy(DC.model));
+  if (DC.undoStack.length > 50) DC.undoStack.shift();
+  DC.redoStack = [];
+}
+
+function dcModelLinks() {
+  return Array.isArray(DC.model?.links) ? DC.model.links : [];
+}
+
+function dcModelShapes() {
+  return Array.isArray(DC.model?.shapes) ? DC.model.shapes : [];
+}
+
+const DEVICE_CATEGORY_DEFS = [
+  ['Digital Input', 'digital_input', 64],
+  ['Digital Input Sensor', 'digital_input_sensor', 64],
+  ['Digital Output', 'digital_output', 64],
+  ['Digital Output Motor', 'digital_output_motor', 16],
+  ['Force Sensor', 'force_sensor', 8],
+  ['GNSS', 'gnss', 2],
+  ['Gripper', 'gripper', 4],
+  ['Indicator', 'indicator', 16],
+  ['Scanner', 'scanner', 8],
+  ['Trigger', 'trigger', 32],
+  ['Arm', 'arm', 2],
+  ['Battery', 'battery', 4],
+  ['Camera', 'camera', 8],
+  ['Charger', 'charger', 4],
+  ['Chassis', 'chassis', 1],
+  ['Collision Shape', 'collision', 8],
+  ['Condition', 'condition', 64],
+  ['Container', 'container', 16],
+  ['Controller', 'controller', 8],
+  ['Dispatcher Parameters', 'dispatcher_parameters', 8],
+  ['Distance Mode Group', 'distance_mode_group', 8],
+  ['Distance Sensor', 'distance_sensor', 16],
+  ['Fork', 'fork', 4],
+  ['Hook', 'hook', 4],
+  ['Jack', 'jack', 4],
+  ['Laser', 'laser', 8],
+  ['Laser Deduct Area', 'laser_deduct_area', 16],
+  ['Laser Group', 'laser_group', 8],
+  ['Laser Protection Area', 'laser_protection_area', 16],
+  ['Transform', 'frame', 128],
+  ['Custom Devices', 'device', 128],
+];
+
+function dcCategoryDefByName(name) {
+  return DEVICE_CATEGORY_DEFS.find(([label]) => label === name) || ['Custom Devices', 'device', 128];
+}
+
+function dcFindShape(id) {
+  return dcModelShapes().find(shape => String(shape?.id || shape?.name || '') === String(id || ''));
+}
+
+function dcFindLink(name) {
+  return dcModelLinks().find(link => String(link?.name || '') === String(name || ''));
+}
+
+function dcUniqueId(seed) {
+  const clean = String(seed || 'object').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'object';
+  const used = new Set([
+    ...dcModelShapes().map(shape => String(shape?.id || shape?.name || '')),
+    ...dcModelLinks().map(link => String(link?.name || '')),
+  ]);
+  if (!used.has(clean)) return clean;
+  let index = 2;
+  while (used.has(`${clean}_${index}`)) index += 1;
+  return `${clean}_${index}`;
+}
+
+function dcDefaultShapeForCategory(categoryName) {
+  const [label, semantic] = dcCategoryDefByName(categoryName);
+  const id = dcUniqueId(semantic);
+  const base = String(DC.model?.base_link || DC.profile?.base_frame || 'base_link');
+  const type = ['battery', 'charger', 'chassis', 'collision', 'safety', 'frame'].includes(semantic) ? 'box' : 'cylinder';
+  return {
+    id,
+    name: id,
+    type,
+    semantic_type: semantic,
+    role: label,
+    enabled: true,
+    link: base,
+    child_frame: semantic === 'frame' ? id : '',
+    x: 0,
+    y: 0,
+    z: semantic === 'chassis' || semantic === 'collision' ? 0.05 : 0.15,
+    yaw: 0,
+    width: semantic === 'chassis' || semantic === 'collision' ? 0.6 : 0.12,
+    length: semantic === 'chassis' || semantic === 'collision' ? 0.8 : 0.12,
+    height: semantic === 'chassis' || semantic === 'collision' ? 0.2 : 0.08,
+    radius: 0.06,
+    topic: semantic === 'laser' ? '/scan' : '',
+    driver: '',
+    color: '#60a5fa',
+    advanced: {},
+  };
+}
 
 /* ─── Mode Rail ───────────────────────────────────────────── */
 function setMode(mode) {
@@ -1426,7 +1656,7 @@ document.getElementById('robot-canvas-area').addEventListener('wheel', e => {
 }, { passive: false });
 
 /* ─── Part selection ──────────────────────────────────────── */
-const PART_DATA = {
+let PART_DATA = {
   wheel_left_front: {
     type: 'wheel',
     parentFrame: 'base_link',
@@ -1564,6 +1794,88 @@ function selectLink(linkName) {
   showDetailEditor(linkName);
 }
 
+function dcShapeKind(shape) {
+  const name = String(shape?.name || shape?.id || '').toLowerCase();
+  const type = String(shape?.semantic_type || shape?.device_type || shape?.type || '').toLowerCase();
+  if (/digital.*input/.test(name + type)) return 'digital_input';
+  if (/digital.*output.*motor/.test(name + type)) return 'digital_output_motor';
+  if (/digital.*output/.test(name + type)) return 'digital_output';
+  if (/force/.test(name + type)) return 'force_sensor';
+  if (/gnss|gps|rtk/.test(name + type)) return 'gnss';
+  if (/gripper/.test(name + type)) return 'gripper';
+  if (/indicator|buzzer|light|stack/.test(name + type)) return 'indicator';
+  if (/scanner|barcode|rfid|qr/.test(name + type)) return 'scanner';
+  if (/trigger/.test(name + type)) return 'trigger';
+  if (/\barm\b|manipulator/.test(name + type)) return 'arm';
+  if (/deduct|ignore/.test(name + type)) return 'laser_deduct_area';
+  if (/laser.*group/.test(name + type)) return 'laser_group';
+  if (/protection/.test(name + type)) return 'laser_protection_area';
+  if (/laser|lidar|scan/.test(name + type)) return 'laser';
+  if (/camera|depth|rgb/.test(name + type)) return 'camera';
+  if (/battery|bms/.test(name + type)) return 'battery';
+  if (/charger|dock/.test(name + type)) return 'charger';
+  if (/safety|protect|stop|slow/.test(name + type)) return 'safety';
+  if (/collision|footprint/.test(name + type)) return 'collision';
+  if (/wheel|motor/.test(name + type)) return 'wheel';
+  if (/condition/.test(name + type)) return 'condition';
+  if (/container/.test(name + type)) return 'container';
+  if (/controller/.test(name + type)) return 'controller';
+  if (/dispatcher/.test(name + type)) return 'dispatcher_parameters';
+  if (/distance.*group/.test(name + type)) return 'distance_mode_group';
+  if (/distance|ultrasonic|tof/.test(name + type)) return 'distance_sensor';
+  if (/fork|lift/.test(name + type)) return 'fork';
+  if (/hook|tow/.test(name + type)) return 'hook';
+  if (/jack/.test(name + type)) return 'jack';
+  return type || 'device';
+}
+
+function dcRebuildPartData() {
+  const base = String(DC.model?.base_link || 'base_link');
+  const next = {
+    [base]: {
+      type: 'chassis',
+      parentFrame: 'base_footprint',
+      jointType: 'fixed',
+      dimensions: dcChassisDimensionsLabel(),
+      mass: dcText(DC.profile?.mass_kg ? `${DC.profile.mass_kg} kg` : ''),
+      offset: '[0.000, 0.000, 0.000]',
+      hasError: false,
+    },
+  };
+  dcModelLinks().forEach(link => {
+    const name = String(link?.name || '').trim();
+    if (!name || next[name]) return;
+    const pose = link.pose || {};
+    next[name] = {
+      type: 'frame',
+      parentFrame: dcText(link.parent, base),
+      jointType: dcText(link.joint_type, 'fixed'),
+      offset: `[${Number(pose.x || 0).toFixed(3)}, ${Number(pose.y || 0).toFixed(3)}, ${Number(pose.z || 0).toFixed(3)}]`,
+      hasError: false,
+    };
+  });
+  dcModelShapes().forEach(shape => {
+    const id = String(shape?.id || shape?.name || '').trim();
+    if (!id) return;
+    const kind = dcShapeKind(shape);
+    next[id] = {
+      type: kind === 'laser' || kind === 'camera' ? 'sensor' : kind,
+      sensorType: kind === 'laser' ? 'LiDAR' : kind === 'camera' ? 'Camera' : dcText(kind, 'Device'),
+      parentFrame: dcText(shape.link, base),
+      mountFrame: dcText(shape.frame_id || shape.child_frame || shape.link, base),
+      position: `[${Number(shape.x || 0).toFixed(3)}, ${Number(shape.y || 0).toFixed(3)}, ${Number(shape.z || 0).toFixed(3)}]`,
+      range: shape.range_m ? `${Number(shape.range_m).toFixed(1)} m` : '',
+      fov: shape.fov_deg ? `${Number(shape.fov_deg).toFixed(0)}°` : '',
+      role: dcText(shape.usage || shape.role || kind),
+      topic: dcText(shape.topic || shape.scan_topic || shape.image_topic || ''),
+      dimensions: dcShapeDimensionsLabel(shape),
+      hasError: false,
+      enabled: shape.enabled !== false,
+    };
+  });
+  PART_DATA = next;
+}
+
 function handleCanvasClick(e) {
   const target = e.target.closest('[data-part]');
   if (target) {
@@ -1606,6 +1918,7 @@ function showOverview() {
 }
 
 function buildDetailHTML(name, d) {
+  const shape = dcFindShape(name);
   const issueBar = (d.hasError || d.isWarn) ? `
     <div style="margin:8px 10px 0;padding:6px 9px;border-radius:3px;
       background:${d.hasError ? 'rgba(196,43,43,0.1)' : 'rgba(168,84,0,0.1)'};
@@ -1617,9 +1930,9 @@ function buildDetailHTML(name, d) {
       <span style="font-size:10px;color:${d.hasError ? '#fc8181' : '#ed8936'};">${d.issue}</span>
     </div>` : '';
 
-  let sections = '';
+  let sections = shape ? buildShapeEditorHTML(name, shape, d) : '';
 
-  if (d.type === 'wheel') {
+  if (!shape && d.type === 'wheel') {
     sections = `
       <div class="insp-section">Geometry</div>
       ${propRow('Radius', d.radius, true)}
@@ -1632,7 +1945,7 @@ function buildDetailHTML(name, d) {
       <div class="insp-section">Drive</div>
       ${propRow('Motor ID', d.driveParam)}
     `;
-  } else if (d.type === 'caster') {
+  } else if (!shape && d.type === 'caster') {
     sections = `
       <div class="insp-section">Geometry</div>
       ${propRow('Radius', d.radius, true)}
@@ -1641,7 +1954,7 @@ function buildDetailHTML(name, d) {
       ${propRow('Parent Frame', d.parentFrame)}
       ${propRow('Offset XYZ', d.offset, true)}
     `;
-  } else if (d.type === 'sensor') {
+  } else if (!shape && d.type === 'sensor') {
     sections = `
       <div class="insp-section">Sensor</div>
       ${propRow('Type', d.sensorType)}
@@ -1655,7 +1968,7 @@ function buildDetailHTML(name, d) {
       ${d.range ? propRow('Range', d.range, true) : ''}
       ${d.fov   ? propRow('FOV',   d.fov,   true) : ''}
     `;
-  } else if (d.type === 'chassis') {
+  } else if (!shape && d.type === 'chassis') {
     sections = `
       <div class="insp-section">Geometry</div>
       ${propRow('Dimensions', d.dimensions, true)}
@@ -1665,7 +1978,7 @@ function buildDetailHTML(name, d) {
       ${propRow('Joint Type', d.jointType)}
       ${propRow('Origin', d.offset, true)}
     `;
-  } else {
+  } else if (!shape) {
     sections = `
       <div class="insp-section">Frame</div>
       ${propRow('Type', d.type)}
@@ -1684,6 +1997,9 @@ function buildDetailHTML(name, d) {
     ${sections}
     <div style="padding:8px 10px;border-top:1px solid var(--border-chrome);margin-top:4px;display:flex;gap:5px;flex-wrap:wrap;">
       <button class="btn btn-primary" style="flex:1;" onclick="handleApplyChanges('${name}')"><i class="fas fa-check"></i> Apply</button>
+      <button class="btn" onclick="handleToggleSelectedEnabled()"><i class="fas fa-power-off"></i> ${d.enabled === false ? 'Enable' : 'Disable'}</button>
+      <button class="btn" onclick="handleDuplicateSelected()"><i class="fas fa-copy"></i></button>
+      <button class="btn" onclick="handleDeleteSelected()"><i class="fas fa-trash"></i></button>
       <button class="btn" onclick="showOverview()"><i class="fas fa-arrow-left"></i> Back</button>
     </div>
   `;
@@ -1694,6 +2010,213 @@ function propRow(label, value, mono=false) {
     <span class="prop-lbl">${label}</span>
     <span class="prop-val${mono ? ' mono' : ''}">${value}</span>
   </div>`;
+}
+
+function editableRow(label, shapeId, field, value, kind = 'text') {
+  const inputType = kind === 'number' ? 'number' : 'text';
+  const step = kind === 'number' ? ' step="0.001"' : '';
+  return `<div class="prop-row">
+    <span class="prop-lbl">${dcEscapeHtml(label)}</span>
+    <input class="prop-input" type="${inputType}"${step} value="${dcAttr(value ?? '')}"
+      onchange="handleShapeFieldChange('${dcJsString(shapeId)}','${dcJsString(field)}',this.value,'${dcJsString(kind)}')">
+  </div>`;
+}
+
+function selectRow(label, shapeId, field, value, options) {
+  const rows = options.map(option => {
+    const selected = String(option) === String(value) ? ' selected' : '';
+    return `<option value="${dcAttr(option)}"${selected}>${dcEscapeHtml(option)}</option>`;
+  }).join('');
+  return `<div class="prop-row">
+    <span class="prop-lbl">${dcEscapeHtml(label)}</span>
+    <select class="prop-select" onchange="handleShapeFieldChange('${dcJsString(shapeId)}','${dcJsString(field)}',this.value,'text')">${rows}</select>
+  </div>`;
+}
+
+function buildShapeEditorHTML(name, shape, d) {
+  const shapeId = String(shape.id || shape.name || name);
+  return `
+    <div class="insp-section">Identity</div>
+    ${editableRow('Name', shapeId, 'name', shape.name || shapeId)}
+    ${selectRow('Object Type', shapeId, 'semantic_type', shape.semantic_type || dcShapeKind(shape), DEVICE_CATEGORY_DEFS.map(([_label, key]) => key))}
+    ${selectRow('Enabled', shapeId, 'enabled', shape.enabled === false ? 'false' : 'true', ['true', 'false'])}
+    <div class="insp-section">Geometry</div>
+    ${selectRow('Shape', shapeId, 'type', shape.type || 'box', ['box', 'cylinder', 'sphere'])}
+    ${editableRow('Length', shapeId, 'length', Number(shape.length || 0), 'number')}
+    ${editableRow('Width', shapeId, 'width', Number(shape.width || 0), 'number')}
+    ${editableRow('Height', shapeId, 'height', Number(shape.height || 0), 'number')}
+    ${editableRow('Radius', shapeId, 'radius', Number(shape.radius || 0), 'number')}
+    <div class="insp-section">Transform</div>
+    ${selectRow('Parent Frame', shapeId, 'link', shape.link || DC.model?.base_link || 'base_link', dcModelLinks().map(link => link.name).filter(Boolean))}
+    ${editableRow('Child Frame', shapeId, 'child_frame', shape.child_frame || shape.frame_id || '')}
+    ${editableRow('X', shapeId, 'x', Number(shape.x || 0), 'number')}
+    ${editableRow('Y', shapeId, 'y', Number(shape.y || 0), 'number')}
+    ${editableRow('Z', shapeId, 'z', Number(shape.z || 0), 'number')}
+    ${editableRow('Yaw', shapeId, 'yaw', Number(shape.yaw || 0), 'number')}
+    <div class="insp-section">Runtime Interface</div>
+    ${editableRow('Topic', shapeId, 'topic', shape.topic || shape.scan_topic || shape.image_topic || '')}
+    ${editableRow('Range m', shapeId, 'range_m', Number(shape.range_m || 0), 'number')}
+    ${editableRow('FOV deg', shapeId, 'fov_deg', Number(shape.fov_deg || 0), 'number')}
+    <div class="insp-section">Driver Settings</div>
+    ${editableRow('Driver', shapeId, 'driver', shape.driver || shape.driver_plugin || '')}
+    ${editableRow('Protocol', shapeId, 'protocol', shape.protocol || '')}
+    ${editableRow('Port', shapeId, 'port', shape.port || '')}
+    ${editableRow('IP Address', shapeId, 'ip_address', shape.ip_address || '')}
+    ${editableRow('Baud Rate', shapeId, 'baud_rate', Number(shape.baud_rate || 0), 'number')}
+    ${editableRow('Timeout s', shapeId, 'timeout_s', Number(shape.timeout_s || 0), 'number')}
+    <div class="insp-section">Safety Behavior</div>
+    ${editableRow('Safety', shapeId, 'safety_behavior', shape.safety_behavior || '')}
+    ${editableRow('Recovery', shapeId, 'recovery_behavior', shape.recovery_behavior || '')}
+    ${editableRow('Diagnostic', shapeId, 'diagnostic_source', shape.diagnostic_source || '')}
+  `;
+}
+
+function handleShapeFieldChange(shapeId, field, rawValue, kind = 'text') {
+  const shape = dcFindShape(shapeId);
+  if (!shape) return;
+  dcPushUndo();
+  let value = rawValue;
+  if (kind === 'number') {
+    const parsed = Number(rawValue);
+    value = Number.isFinite(parsed) ? parsed : 0;
+  } else if (field === 'enabled') {
+    value = String(rawValue) === 'true';
+  }
+  shape[field] = value;
+  if (field === 'name' && !shape.id) shape.id = String(value || shapeId);
+  if (field === 'topic') {
+    const semantic = dcShapeKind(shape);
+    if (semantic === 'laser') shape.scan_topic = value;
+    if (semantic === 'camera') shape.image_topic = value;
+  }
+  if (field === 'driver') shape.driver_plugin = value;
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  const selected = shape.id || shape.name || shapeId;
+  document.querySelectorAll('.tree-node').forEach(n => {
+    n.classList.toggle('selected', n.dataset.link === selected);
+  });
+  dcSetMessage(`Updated ${shapeId}.${field}`);
+}
+
+function dcShapeDimensionsLabel(shape) {
+  if (!shape) return '—';
+  const type = String(shape.type || '').toLowerCase();
+  if (type === 'cylinder' || type === 'sphere') {
+    return `r ${Number(shape.radius || 0).toFixed(3)} m`;
+  }
+  return `${Number(shape.length || shape.depth || 0).toFixed(3)} × ${Number(shape.width || 0).toFixed(3)} × ${Number(shape.height || 0).toFixed(3)} m`;
+}
+
+function dcChassisDimensionsLabel() {
+  const chassis = dcModelShapes().find(shape => /chassis|body|base/.test(String(shape?.name || shape?.id || '').toLowerCase())) || dcModelShapes()[0] || {};
+  return dcShapeDimensionsLabel(chassis);
+}
+
+function dcCategoryForPart(name, data) {
+  const type = String(data?.type || '').toLowerCase();
+  const match = DEVICE_CATEGORY_DEFS.find(([_label, key]) => key === type);
+  if (match) return match[0];
+  if (type === 'sensor') {
+    const sensorType = String(data?.sensorType || name || '').toLowerCase();
+    if (/camera/.test(sensorType)) return 'Camera';
+    if (/laser|lidar/.test(sensorType)) return 'Laser';
+    return 'Distance Sensor';
+  }
+  if (type === 'wheel') return 'Controller';
+  return 'Devices';
+}
+
+function renderHierarchyFromModel() {
+  dcRebuildPartData();
+  const tree = document.getElementById('hierarchy-tree');
+  if (!tree) return;
+  const groups = {};
+  DEVICE_CATEGORY_DEFS.forEach(([label]) => { groups[label] = []; });
+  Object.entries(PART_DATA).forEach(([name, data]) => {
+    const group = dcCategoryForPart(name, data);
+    if (!groups[group]) groups[group] = [];
+    groups[group].push([name, data]);
+  });
+  tree.innerHTML = Object.keys(groups).map(group => {
+    const [_label, _semantic, supported] = dcCategoryDefByName(group);
+    const enabledCount = groups[group].filter(([_name, data]) => data.enabled !== false).length;
+    const rows = groups[group].map(([name, data]) => `
+      <div class="tree-node${DC.selectedLink === name ? ' selected' : ''}" data-link="${dcAttr(name)}" onclick="selectLink('${dcJsString(name)}')">
+        <div class="tree-node-icon"><i class="fas fa-${data.enabled === false ? 'ban' : 'cube'}"></i></div>
+        <div class="tree-node-main">
+          <div class="tree-node-name">${dcEscapeHtml(name)}</div>
+          <div class="tree-node-sub">${dcEscapeHtml(dcText(data.type))} · ${dcEscapeHtml(dcText(data.parentFrame))}</div>
+        </div>
+        ${data.hasError ? '<span class="val-chip error"><i class="fas fa-times-circle"></i></span>' : ''}
+      </div>`).join('');
+    const empty = `<div class="tree-node" style="opacity:.55;" onclick="handleAddObject('${dcJsString(group)}')">
+      <div class="tree-node-icon"><i class="fas fa-plus"></i></div>
+      <div class="tree-node-main">
+        <div class="tree-node-name">Add ${dcEscapeHtml(group)}</div>
+        <div class="tree-node-sub">0 configured · supported ${supported}</div>
+      </div>
+    </div>`;
+    return `<div class="insp-section" style="display:flex;justify-content:space-between;gap:8px;">
+      <span>${dcEscapeHtml(group)} · ${groups[group].length}/${supported} · ${enabledCount} enabled</span>
+      <button class="btn" style="height:18px;padding:0 6px;font-size:9px;" onclick="handleAddObject('${dcJsString(group)}')"><i class="fas fa-plus"></i></button>
+    </div>${rows || empty}`;
+  }).join('');
+}
+
+function renderCanvasFromModel() {
+  const svg = document.getElementById('robot-svg');
+  if (!svg || !DC.model) return;
+  const shapes = dcModelShapes();
+  const bodyShapes = shapes.filter(shape => !/safety|protect|collision|footprint/.test(String(shape?.name || shape?.id || '').toLowerCase()));
+  const safetyShapes = shapes.filter(shape => /safety|protect/.test(String(shape?.name || shape?.id || '').toLowerCase()));
+  const collisionShapes = shapes.filter(shape => /collision|footprint/.test(String(shape?.name || shape?.id || '').toLowerCase()));
+  const px = 220;
+  const renderShape = (shape, cls, fillExtra = '') => {
+    const id = String(shape?.id || shape?.name || '').trim();
+    const x = Number(shape?.x || 0) * px;
+    const y = -Number(shape?.y || 0) * px;
+    const yaw = -Number(shape?.yaw || 0) * 180 / Math.PI;
+    const width = Math.max(8, Number(shape?.width || shape?.radius || 0.2) * px);
+    const length = Math.max(8, Number(shape?.length || shape?.depth || shape?.radius || 0.2) * px);
+    const type = String(shape?.type || 'box').toLowerCase();
+    if (type === 'cylinder' || type === 'sphere') {
+      const r = Math.max(5, Number(shape?.radius || 0.1) * px);
+      return `<circle class="${cls}" data-part="${dcAttr(id)}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" ${fillExtra}/>`;
+    }
+    return `<rect class="${cls}" data-part="${dcAttr(id)}" x="${(-width / 2).toFixed(2)}" y="${(-length / 2).toFixed(2)}" width="${width.toFixed(2)}" height="${length.toFixed(2)}" rx="6" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${yaw.toFixed(2)})" ${fillExtra}/>`;
+  };
+  const sensorLabels = bodyShapes.map(shape => {
+    const id = String(shape?.id || shape?.name || '').trim();
+    const kind = dcShapeKind(shape);
+    if (!/laser|camera|distance|sensor/.test(kind + id.toLowerCase())) return '';
+    const x = Number(shape?.x || 0) * px;
+    const y = -Number(shape?.y || 0) * px;
+    return `<text class="canvas-label" x="${(x + 14).toFixed(1)}" y="${(y - 10).toFixed(1)}">${dcEscapeHtml(id)}</text>`;
+  }).join('');
+  svg.innerHTML = `
+    <ellipse class="robot-safety-zone" cx="0" cy="0" rx="190" ry="165"/>
+    ${safetyShapes.map(shape => renderShape(shape, 'robot-safety-zone')).join('')}
+    ${collisionShapes.map(shape => renderShape(shape, 'robot-fov-arc', 'fill="none" stroke-dasharray="5,4"')).join('')}
+    ${bodyShapes.map(shape => renderShape(shape, dcShapeKind(shape) === 'wheel' ? 'robot-wheel' : dcShapeKind(shape) === 'laser' ? 'robot-sensor-lidar' : dcShapeKind(shape) === 'camera' ? 'robot-sensor-camera' : 'robot-chassis')).join('')}
+    <g class="robot-origin-cross">
+      <line x1="-24" y1="0" x2="48" y2="0" class="robot-axis-x"/>
+      <line x1="0" y1="24" x2="0" y2="-48" class="robot-axis-y"/>
+    </g>
+    <text class="canvas-label" x="52" y="4">X</text>
+    <text class="canvas-label" x="6" y="-52">Y</text>
+    ${sensorLabels}
+  `;
+  document.querySelectorAll('[data-part]').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      selectLink(el.getAttribute('data-part'));
+    });
+  });
+  applySvgScale();
 }
 
 function tagClass(type) {
@@ -1714,8 +2237,8 @@ function toggleProfileDropdown(e) {
 
 function selectProfile(id) {
   closeAllMenus();
-  console.log('Select profile:', id);
-  // In real implementation: load profile data, redraw canvas.
+  if (DC.dirty && !confirm('Discard unsaved model edits and switch profile?')) return;
+  loadRobotEditor(id).catch(exc => dcSetMessage(exc.message, 'error'));
 }
 
 /* ─── Overflow menu ───────────────────────────────────────── */
@@ -1744,22 +2267,577 @@ function filterHierarchy(query) {
   });
 }
 
-/* ─── Action stubs ────────────────────────────────────────── */
-function handleEstop()            { alert('EMERGENCY STOP triggered'); }
-function handleImportUrdf()       { console.log('Import URDF'); closeAllMenus(); }
-function handleSaveDraft()        { console.log('Save Draft'); }
-function handleValidate()         { openInspectorTab('validation'); }
-function handleExport()           { console.log('Export'); }
-function handlePublish()          { console.log('Publish — check errors first'); }
-function handleApplyChanges(n)    { console.log('Apply changes to', n); showOverview(); }
-function handleDuplicateProfile() { closeAllMenus(); console.log('Duplicate profile'); }
-function handleCompareRevisions() { closeAllMenus(); console.log('Compare revisions'); }
-function handleRestoreDefaults()  { closeAllMenus(); console.log('Restore defaults'); }
-function handleExportUrdf()       { closeAllMenus(); console.log('Export URDF'); }
-function handleExportJson()       { closeAllMenus(); console.log('Export JSON'); }
-function handleDeleteProfile()    { closeAllMenus(); if (confirm('Delete this profile?')) console.log('Deleted'); }
-function handleNewProfile()       { closeAllMenus(); console.log('New profile'); }
-function handleManageProfiles()   { closeAllMenus(); console.log('Manage profiles'); }
+/* ─── Connected actions ───────────────────────────────────── */
+function renderProfileChrome() {
+  const profile = DC.profile || {};
+  document.querySelectorAll('.hdr-robot-chip').forEach(el => {
+    el.innerHTML = `<div class="hdr-robot-dot"></div>${dcText(DC.robotId, 'No profile')}`;
+  });
+  document.querySelectorAll('.profile-name, .cvs-hdr-profile').forEach(el => {
+    el.textContent = `${dcText(DC.robotId, 'No profile')} · v${Number(profile.profile_version || 1)}`;
+  });
+  document.querySelectorAll('.profile-ver').forEach(el => {
+    el.textContent = `v${Number(profile.profile_version || 1)}`;
+  });
+  const stateText = DC.dirty ? 'Unsaved' : (DC.deployment?.current_snapshot_id ? 'Deployed' : 'Draft');
+  document.querySelectorAll('.profile-state-chip').forEach(el => { el.textContent = stateText; });
+}
+
+function renderProfileDropdown() {
+  const list = document.querySelector('#profile-dropdown .pd-list');
+  if (!list) return;
+  list.innerHTML = DC.profiles.map(profile => {
+    const robotId = String(profile.robot_id || '').trim();
+    const active = robotId === DC.robotId;
+    const state = profile.production ? 'Production' : profile.urdf_valid ? 'Validated' : 'Draft';
+    return `
+      <button class="pd-item ${active ? 'active' : ''}" onclick="selectProfile('${dcJsString(robotId)}')">
+        <div class="pd-item-dot" style="background:${active ? 'var(--accent-blue)' : 'var(--text-tertiary)'};"></div>
+        <div class="pd-item-meta">
+          <div class="pd-item-name">${dcEscapeHtml(robotId)}</div>
+          <div class="pd-item-ver">v${Number(profile.profile_version || 1)} · ${dcEscapeHtml(state)}</div>
+        </div>
+      </button>`;
+  }).join('');
+}
+
+function renderOverviewFromModel() {
+  const overview = document.getElementById('overview-state');
+  if (!overview) return;
+  const profile = DC.profile || {};
+  const errors = DC.validation.errors.length;
+  const warnings = DC.validation.warnings.length;
+  overview.querySelectorAll('.ov-cell .ov-val')[0].textContent = dcChassisDimensionsLabel().split('×')[0]?.trim() || '—';
+  overview.querySelectorAll('.ov-cell .ov-val')[1].textContent = dcChassisDimensionsLabel().split('×')[1]?.trim() || '—';
+  overview.querySelectorAll('.ov-cell .ov-val')[2].textContent = dcChassisDimensionsLabel().split('×')[2]?.trim() || '—';
+  overview.querySelectorAll('.ov-cell .ov-val')[3].textContent = dcText(profile.mass_kg ? `${profile.mass_kg} kg` : '');
+  overview.querySelectorAll('.ov-cell .ov-val')[4].textContent = String(dcModelLinks().length);
+  overview.querySelectorAll('.ov-cell .ov-val')[5].textContent = String(dcModelShapes().filter(s => /laser|camera|sensor|lidar/.test(`${dcShapeKind(s)} ${s?.name || ''}`.toLowerCase())).length);
+  document.querySelectorAll('.val-chip.error').forEach(el => { el.innerHTML = `<i class="fas fa-times-circle"></i> ${errors}`; });
+  document.querySelectorAll('.val-chip.warn').forEach(el => { el.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${warnings}`; });
+}
+
+function buildValidationReport() {
+  const errors = [];
+  const warnings = [];
+  const suggestions = [];
+  const base = String(DC.model?.base_link || '').trim();
+  const links = dcModelLinks();
+  const shapes = dcModelShapes();
+  const linkNames = new Set(links.map(link => String(link?.name || '').trim()).filter(Boolean));
+  if (!base) errors.push('Model has no base frame.');
+  if (base && !linkNames.has(base)) warnings.push(`Base frame "${base}" is not listed as a link.`);
+  if (!shapes.length) errors.push('Model has no chassis, devices, collision shape or sensor geometry.');
+  shapes.forEach(shape => {
+    const id = String(shape?.id || shape?.name || 'shape').trim();
+    const kind = dcShapeKind(shape);
+    const link = String(shape?.link || base || '').trim();
+    if (link && linkNames.size && !linkNames.has(link)) errors.push(`${id}: parent frame "${link}" is missing from transform tree.`);
+    if (shape.enabled !== false && (kind === 'laser' || kind === 'camera') && !String(shape.topic || shape.scan_topic || shape.image_topic || '').trim()) {
+      warnings.push(`${id}: enabled sensor has no runtime topic configured.`);
+    }
+    if (Number(shape.width || shape.radius || 0) <= 0 || Number(shape.length || shape.radius || 0) <= 0) {
+      errors.push(`${id}: geometry dimensions must be greater than zero.`);
+    }
+  });
+  if (!shapes.some(shape => /collision|footprint/.test(String(shape?.name || shape?.id || '').toLowerCase()))) {
+    warnings.push('No explicit collision footprint object found; generated footprint will use chassis fallback.');
+  }
+  if (!DC.profile?.nav2_params_file) warnings.push('Profile has no Nav2 params file path configured.');
+  if (!DC.profile?.urdf_artifact?.validation?.valid) warnings.push('URDF has not passed validation yet.');
+  if (!errors.length && !warnings.length) suggestions.push('Model is ready for deployment review.');
+  DC.validation = { errors, warnings, suggestions };
+  return DC.validation;
+}
+
+function renderValidationReport({ rebuild = true } = {}) {
+  if (rebuild) buildValidationReport();
+  renderOverviewFromModel();
+  const pane = document.getElementById('pane-validation');
+  if (!pane) return;
+  const section = (title, items, cls, icon) => `
+    <div class="insp-section">${title} · ${items.length}</div>
+    ${items.length ? items.map(item => `
+      <div class="prop-row" style="align-items:flex-start;gap:8px;">
+        <span class="prop-lbl"><i class="fas fa-${icon}" style="color:${cls === 'critical' ? 'var(--accent-critical)' : `var(--accent-${cls})`};"></i></span>
+        <span class="prop-val" style="white-space:normal;text-align:left;">${dcEscapeHtml(dcIssueText(item))}</span>
+      </div>`).join('') : `<div class="prop-row"><span class="prop-lbl">State</span><span class="prop-val">None</span></div>`}
+  `;
+  pane.innerHTML = [
+    section('Critical Errors', DC.validation.errors, 'critical', 'times-circle'),
+    section('Warnings', DC.validation.warnings, 'warning', 'exclamation-triangle'),
+    section('Suggestions', DC.validation.suggestions, 'blue', 'lightbulb'),
+  ].join('');
+}
+
+async function loadPermissions() {
+  try {
+    DC.permissions = await dcFetch('/api/next/permissions');
+  } catch (_exc) {
+    DC.permissions = { role: 'viewer', can_push: false, can_rollback: false, can_edit_model: false };
+  }
+  renderPermissionState();
+}
+
+async function runBackendValidation() {
+  const report = await dcFetch('/api/next/model/validate', {
+    method: 'POST',
+    body: JSON.stringify({ profile: DC.profile, robot_builder: DC.model }),
+  });
+  DC.validation = dcNormalizeValidationReport(report);
+  renderOverviewFromModel();
+  return DC.validation;
+}
+
+async function loadProfiles() {
+  await loadPermissions();
+  const data = await dcFetch('/api/settings/robot_profiles');
+  DC.profiles = Array.isArray(data.profiles) ? data.profiles : [];
+  const active = String(data.active_robot_id || DC.profiles[0]?.robot_id || '').trim();
+  renderProfileDropdown();
+  if (active) await loadRobotEditor(active);
+}
+
+async function loadRobotEditor(robotId, reloadFromUrdf = false) {
+  dcSetMessage(`Loading ${robotId || 'active profile'}...`);
+  const query = new URLSearchParams();
+  if (robotId) query.set('robot_id', robotId);
+  if (reloadFromUrdf) query.set('reload_from_urdf', 'true');
+  const data = await dcFetch(`/api/settings/robot_profiles/robot_editor?${query.toString()}`);
+  DC.robotId = String(data.robot_id || robotId || '').trim();
+  DC.profile = data.profile || {};
+  DC.model = data.robot_builder || { base_link: DC.profile.base_frame || 'base_link', links: [], shapes: [] };
+  DC.undoStack = [];
+  DC.redoStack = [];
+  dcMarkDirty(false);
+  try {
+    DC.deployment = await dcFetch(`/api/settings/robot_profiles/deployment?robot_id=${encodeURIComponent(DC.robotId)}`);
+  } catch (_exc) {
+    DC.deployment = null;
+  }
+  renderProfileChrome();
+  renderProfileDropdown();
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  try {
+    await runBackendValidation();
+  } catch (_exc) {
+    buildValidationReport();
+  }
+  renderValidationReport({ rebuild: false });
+  showOverview();
+  dcSetMessage(data.message || `Loaded ${DC.robotId}`);
+}
+
+async function saveCurrentModel({ compileUrdf = true } = {}) {
+  if (!DC.robotId || !DC.model) throw new Error('No robot model loaded');
+  const payload = {
+    robot_id: DC.robotId,
+    profile_fields: dcCurrentProfileFields(),
+    robot_builder: DC.model,
+    compile_urdf: Boolean(compileUrdf),
+    apply_runtime: false,
+  };
+  const data = await dcFetch('/api/settings/robot_profiles/robot_editor/save', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  DC.profile = data.profile || DC.profile;
+  if (data.robot_builder) DC.model = data.robot_builder;
+  dcMarkDirty(false);
+  renderProfileChrome();
+  renderValidationReport({ rebuild: false });
+  return data;
+}
+
+async function handleEstop() {
+  if (!confirm('Trigger emergency stop?')) return;
+  try {
+    const data = await dcFetch('/api/estop/activate', { method: 'POST', body: '{}' });
+    dcSetMessage(data.message || 'Emergency stop activated', 'warn');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleImportUrdf() {
+  closeAllMenus();
+  try {
+    await loadRobotEditor(DC.robotId, true);
+    dcSetMessage('Imported current URDF into the model editor');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleSaveDraft() {
+  try {
+    const data = await saveCurrentModel({ compileUrdf: true });
+    dcSetMessage(data.message || 'Draft saved');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleValidate() {
+  try {
+    await runBackendValidation();
+  } catch (exc) {
+    buildValidationReport();
+    dcSetMessage(exc.message, 'error');
+  }
+  renderValidationReport({ rebuild: false });
+  openInspectorTab('validation');
+  const errors = DC.validation.errors.length;
+  dcSetMessage(errors ? `${errors} validation error(s) block deployment` : 'Validation complete', errors ? 'error' : 'info');
+}
+
+async function handlePublish() {
+  if (!DC.permissions?.can_push) {
+    dcSetMessage(`Publish requires Admin role. Current role: ${DC.permissions?.role || 'viewer'}`, 'error');
+    return;
+  }
+  try {
+    await runBackendValidation();
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+  renderValidationReport({ rebuild: false });
+  if (DC.validation.errors.length) {
+    openInspectorTab('validation');
+    dcSetMessage('Fix validation errors before publish', 'error');
+    return;
+  }
+  try {
+    await saveCurrentModel({ compileUrdf: true });
+    const data = await dcFetch('/api/settings/robot_profiles/deployment/push', {
+      method: 'POST',
+      body: JSON.stringify({ robot_id: DC.robotId }),
+    });
+    DC.deployment = data;
+    dcMarkDirty(false);
+    renderProfileChrome();
+    dcSetMessage(data.message || 'Deployment snapshot created');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function handleExport() { handleExportJson(); }
+function handleApplyChanges(n) { dcPushUndo(); dcMarkDirty(true); renderValidationReport(); showOverview(); dcSetMessage(`Applied local changes to ${n}`); }
+
+function handleAddObject(categoryName) {
+  if (!DC.model) return;
+  dcPushUndo();
+  if (!Array.isArray(DC.model.shapes)) DC.model.shapes = [];
+  const shape = dcDefaultShapeForCategory(categoryName);
+  DC.model.shapes.push(shape);
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  selectLink(shape.id);
+  dcSetMessage(`Added ${categoryName}`);
+}
+
+function handleToggleSelectedEnabled() {
+  const shape = dcFindShape(DC.selectedLink);
+  if (!shape) {
+    dcSetMessage('Selected object does not support enable/disable', 'warn');
+    return;
+  }
+  dcPushUndo();
+  shape.enabled = shape.enabled === false;
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  selectLink(shape.id || shape.name);
+  dcSetMessage(`${shape.enabled ? 'Enabled' : 'Disabled'} ${shape.id || shape.name}`);
+}
+
+function handleDuplicateSelected() {
+  const shape = dcFindShape(DC.selectedLink);
+  if (!shape) {
+    dcSetMessage('Select a model object to duplicate', 'warn');
+    return;
+  }
+  dcPushUndo();
+  const copy = dcDeepCopy(shape);
+  copy.id = dcUniqueId(`${shape.id || shape.name}_copy`);
+  copy.name = copy.id;
+  copy.child_frame = copy.child_frame ? dcUniqueId(`${copy.child_frame}_copy`) : '';
+  copy.x = Number(copy.x || 0) + 0.05;
+  copy.y = Number(copy.y || 0) + 0.05;
+  DC.model.shapes.push(copy);
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  selectLink(copy.id);
+  dcSetMessage(`Duplicated ${shape.id || shape.name}`);
+}
+
+function handleDeleteSelected() {
+  const selected = DC.selectedLink;
+  const index = dcModelShapes().findIndex(shape => String(shape?.id || shape?.name || '') === String(selected || ''));
+  if (index < 0) {
+    dcSetMessage('Selected frame/object cannot be deleted from this panel', 'warn');
+    return;
+  }
+  const shape = DC.model.shapes[index];
+  if (!confirm(`Delete "${shape.id || shape.name}" from the local model?`)) return;
+  dcPushUndo();
+  DC.model.shapes.splice(index, 1);
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  showOverview();
+  dcSetMessage(`Deleted ${shape.id || shape.name}`);
+}
+
+async function handlePreviewGeneratedBundle() {
+  closeAllMenus();
+  try {
+    DC.generatedBundle = await dcFetch(`/api/settings/robot_profiles/generated_bundle?robot_id=${encodeURIComponent(DC.robotId)}`);
+    renderGeneratedBundlePreview();
+    dcSetMessage('Generated bundle preview loaded');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function renderGeneratedBundlePreview(selectedName = '') {
+  openInspectorTab('validation');
+  const pane = document.getElementById('pane-validation');
+  if (!pane) return;
+  const manifest = DC.generatedBundle?.manifest || {};
+  const files = DC.generatedBundle?.files || {};
+  const names = Object.keys(files).sort();
+  const active = selectedName && files[selectedName] !== undefined ? selectedName : (names[0] || '');
+  const content = active ? String(files[active] ?? '') : '';
+  const fileOptions = names.map(name => `
+    <option value="${dcAttr(name)}" ${name === active ? 'selected' : ''}>${dcEscapeHtml(name)}</option>
+  `).join('');
+  pane.innerHTML = `
+    <div class="insp-section">Deployment Manifest Preview</div>
+    ${propRow('Ready', manifest.ready_to_deploy ? 'yes' : 'no')}
+    ${propRow('Checksum', manifest.checksum || '—', true)}
+    ${propRow('Files', names.length ? String(names.length) : '—')}
+    <div class="insp-section">Generated Outputs</div>
+    ${propRow('Static TF', String((DC.generatedBundle.bundle?.static_transforms || []).length))}
+    ${propRow('Drivers', String(Object.keys(DC.generatedBundle.bundle?.driver_parameters || {}).length))}
+    ${propRow('Safety Zones', String((DC.generatedBundle.bundle?.safety_controller?.zones || []).length))}
+    <div class="insp-section">File Preview</div>
+    <div class="prop-row">
+      <span class="prop-lbl">File</span>
+      <select class="prop-input" onchange="renderGeneratedBundlePreview(this.value)">${fileOptions}</select>
+    </div>
+    <pre style="margin:8px 10px;padding:10px;max-height:240px;overflow:auto;border:1px solid var(--border-chrome);border-radius:5px;background:var(--bg-input);color:var(--text-secondary);font-size:10px;line-height:1.45;white-space:pre-wrap;">${dcEscapeHtml(content)}</pre>
+    <div style="padding:0 10px 8px;display:flex;gap:6px;">
+      <button class="btn" style="flex:1;" onclick="downloadGeneratedFile('${dcJsString(active)}')"><i class="fas fa-download"></i> Download File</button>
+      <button class="btn" onclick="handleValidate()"><i class="fas fa-check-circle"></i> Validate</button>
+    </div>
+  `;
+}
+
+function downloadGeneratedFile(name) {
+  const files = DC.generatedBundle?.files || {};
+  const content = files[name];
+  if (content === undefined) {
+    dcSetMessage('No generated file selected', 'warn');
+    return;
+  }
+  const blob = new Blob([String(content)], { type: 'text/plain' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${DC.robotId || 'robot'}_${name}`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  dcSetMessage(`Downloaded ${name}`);
+}
+
+async function handleDuplicateProfile() {
+  closeAllMenus();
+  if (!DC.robotId) return;
+  const seed = prompt('New profile id', `${DC.robotId}_copy`);
+  if (!seed) return;
+  try {
+    const data = await dcFetch('/api/settings/robot_profiles/clone', {
+      method: 'POST',
+      body: JSON.stringify({ source_robot_id: DC.robotId, overrides: { robot_id: seed }, activate: true }),
+    });
+    await loadProfiles();
+    dcSetMessage(data.message || 'Profile duplicated');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleCompareRevisions() {
+  closeAllMenus();
+  try {
+    DC.deployment = await dcFetch(`/api/settings/robot_profiles/deployment?robot_id=${encodeURIComponent(DC.robotId)}`);
+    openInspectorTab('validation');
+    const pane = document.getElementById('pane-validation');
+    const rows = (DC.deployment.recent_snapshots || []).map(s => `<div class="prop-row"><span class="prop-lbl">${dcEscapeHtml(s.snapshot_id || 'snapshot')}</span><span class="prop-val">${dcEscapeHtml(s.created_at || '')}</span></div>`).join('');
+    pane.innerHTML = `<div class="insp-section">Deployment History</div>${rows || '<div class="prop-row"><span class="prop-lbl">History</span><span class="prop-val">No snapshots yet</span></div>'}`;
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleViewEvents() {
+  closeAllMenus();
+  try {
+    const data = await dcFetch('/api/next/events?limit=50');
+    const events = Array.isArray(data.events) ? data.events.slice().reverse() : [];
+    openInspectorTab('validation');
+    const pane = document.getElementById('pane-validation');
+    const rows = events.map(event => {
+      const sev = String(event.severity || 'info').toLowerCase();
+      const color = sev === 'error' || sev === 'critical'
+        ? 'var(--accent-critical)'
+        : sev === 'warning' || sev === 'warn'
+          ? 'var(--accent-warning)'
+          : 'var(--accent-blue)';
+      const when = event.timestamp
+        ? new Date(Number(event.timestamp) * 1000).toLocaleString()
+        : '—';
+      const detail = [
+        event.reason,
+        event.action_required ? `Action: ${event.action_required}` : '',
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="prop-row" style="align-items:flex-start;gap:8px;">
+          <span class="prop-lbl" style="color:${color};">${dcEscapeHtml(sev.toUpperCase())}</span>
+          <span class="prop-val" style="white-space:normal;text-align:left;">
+            <strong>${dcEscapeHtml(event.source || 'web')}</strong> · ${dcEscapeHtml(when)}<br>
+            ${dcEscapeHtml(event.message || 'Event recorded')}
+            ${detail ? `<br><span style="color:var(--text-tertiary);">${dcEscapeHtml(detail)}</span>` : ''}
+          </span>
+        </div>`;
+    }).join('');
+    pane.innerHTML = `
+      <div class="insp-section">Structured Event Log · ${events.length}</div>
+      ${rows || '<div class="prop-row"><span class="prop-lbl">Events</span><span class="prop-val">No events recorded yet</span></div>'}
+    `;
+    dcSetMessage(`Loaded ${events.length} event(s)`);
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleRestoreDefaults() {
+  closeAllMenus();
+  if (!confirm('Reload the saved model and discard unsaved editor changes?')) return;
+  await loadRobotEditor(DC.robotId);
+}
+
+async function handleRefreshFromRobot() {
+  closeAllMenus();
+  if (DC.dirty && !confirm('Pull/refresh will reload the active robot model view. Continue?')) return;
+  try {
+    await loadRobotEditor(DC.robotId);
+    dcSetMessage('Pulled latest model state into the workspace view');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function handleUndo() {
+  closeAllMenus();
+  if (!DC.undoStack.length) {
+    dcSetMessage('Nothing to undo');
+    return;
+  }
+  DC.redoStack.push(dcDeepCopy(DC.model));
+  DC.model = DC.undoStack.pop();
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  dcSetMessage('Undo applied');
+}
+
+function handleRedo() {
+  closeAllMenus();
+  if (!DC.redoStack.length) {
+    dcSetMessage('Nothing to redo');
+    return;
+  }
+  DC.undoStack.push(dcDeepCopy(DC.model));
+  DC.model = DC.redoStack.pop();
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  dcSetMessage('Redo applied');
+}
+
+async function handleExportUrdf() {
+  closeAllMenus();
+  try {
+    const data = await dcFetch(`/api/settings/robot_profiles/urdf/source?robot_id=${encodeURIComponent(DC.robotId)}`);
+    const blob = new Blob([data.source || data.urdf_source || ''], { type: 'text/plain' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${DC.robotId || 'robot'}_source.urdf`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    dcSetMessage('URDF source exported');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function handleExportJson() {
+  closeAllMenus();
+  const blob = new Blob([JSON.stringify({ profile: DC.profile, robot_builder: DC.model, validation: DC.validation }, null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${DC.robotId || 'robot'}_model.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  dcSetMessage('Robot model JSON exported');
+}
+
+async function handleDeleteProfile() {
+  closeAllMenus();
+  if (!DC.robotId || !confirm(`Delete profile "${DC.robotId}"?`)) return;
+  try {
+    const data = await dcFetch('/api/settings/robot_profiles/delete', {
+      method: 'POST',
+      body: JSON.stringify({ robot_id: DC.robotId }),
+    });
+    await loadProfiles();
+    dcSetMessage(data.message || 'Profile deleted');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleNewProfile() {
+  closeAllMenus();
+  const robotId = prompt('Robot model id', 'UGV-01');
+  if (!robotId) return;
+  try {
+    const data = await dcFetch('/api/settings/robot_profiles/create', {
+      method: 'POST',
+      body: JSON.stringify({ robot_id: robotId, activate: true }),
+    });
+    await loadProfiles();
+    dcSetMessage(data.message || 'Profile created');
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function handleManageProfiles() {
+  closeAllMenus();
+  window.location = '/dev';
+}
 
 /* ─── Close menus on outside click ───────────────────────── */
 document.addEventListener('click', e => {
@@ -1786,6 +2864,13 @@ document.getElementById('robot-canvas-area').addEventListener('click', e => {
   if (!e.target.closest('[data-part]') && !e.target.closest('g[onclick]')) {
     showOverview();
   }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadProfiles().catch(exc => {
+    dcSetMessage(exc.message || 'Failed loading robot model workspace', 'error');
+    renderValidationReport();
+  });
 });
 </script>
 </body>

@@ -19924,7 +19924,7 @@
                         </div>
                         <div class="rcg-usage-section">
                             <div class="rcg-usage-h">AMB Setup Workflow</div>
-                            <ul class="rcg-usage-list"><li>Build map, scan charger into map</li><li>Manually drive robot to charger at 0.02 m/s (set ManualBlock=false)</li><li>Insert until Roboshop shows positive battery current</li><li>Right-click robot → Mark Special Workstation → CP point</li><li>Drive back ~1 m → right-click → LM point</li><li>Connect LM→CP: forward, path nav; CP→LM: backward, path nav</li><li>Set LM→CP and CP→LM as straight line</li><li>Select amb.charger as CP recognition file</li></ul>
+                            <ul class="rcg-usage-list"><li>Build map, scan charger into map</li><li>Manually drive robot to charger at 0.02 m/s (set ManualBlock=false)</li><li>Insert until Next shows positive battery current</li><li>Right-click robot → Mark Special Workstation → CP point</li><li>Drive back ~1 m → right-click → LM point</li><li>Connect LM→CP: forward, path nav; CP→LM: backward, path nav</li><li>Set LM→CP and CP→LM as straight line</li><li>Select amb.charger as CP recognition file</li></ul>
                         </div>
                         <div class="rcg-usage-section">
                             <div class="rcg-usage-h">Common Mistakes</div>
@@ -40193,6 +40193,78 @@
             <span class="bseg-val" style="color:#fc8181; letter-spacing:0.06em;">E-STOP ACTIVE</span>
         </div>
     </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px; background: #1a1a1a; border: 1px solid #333;">
+            <div class="modal-header" style="border-bottom: 1px solid #333; padding-bottom: 10px;">
+                <h3>Keyboard Shortcuts</h3>
+                <span class="close" onclick="document.getElementById('shortcuts-modal').style.display='none'">&times;</span>
+            </div>
+            <div class="modal-body" style="padding-top: 15px;">
+                <table style="width: 100%; color: #eee; border-collapse: collapse;">
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0; width: 40%;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">?</kbd></td>
+                            <td style="padding: 8px 0;">Show this help panel</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">V</kbd> or <kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">H</kbd></td>
+                            <td style="padding: 8px 0;">Map View Mode</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Z</kbd></td>
+                            <td style="padding: 8px 0;">Map Zones Mode</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">P</kbd></td>
+                            <td style="padding: 8px 0;">Map Paths Mode</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">E</kbd></td>
+                            <td style="padding: 8px 0;">Toggle Emergency Stop (Safe Action)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Space</kbd></td>
+                            <td style="padding: 8px 0;">Hold to Pan Map</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">+</kbd> / <kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">-</kbd></td>
+                            <td style="padding: 8px 0;">Zoom In / Out</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Ctrl+S</kbd></td>
+                            <td style="padding: 8px 0;">Save Current Tool (Zones/Paths)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #333;">
+                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Escape</kbd></td>
+                            <td style="padding: 8px 0;">Cancel Tool/Drawing</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer" style="border-top: none; text-align: right; padding-top: 15px;">
+                <button class="btn btn-secondary" onclick="document.getElementById('shortcuts-modal').style.display='none'">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === '?') {
+                document.getElementById('shortcuts-modal').style.display = 'block';
+                e.preventDefault();
+            }
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('shortcuts-modal');
+                if (modal && modal.style.display === 'block') {
+                    modal.style.display = 'none';
+                    e.preventDefault();
+                }
+            }
+        });
+    </script>
 
     <script src="/static/dev_recognition.js"></script>
 </body>

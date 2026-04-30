@@ -21,6 +21,11 @@ import yaml
 from next_ros2ws_web.ros_bridge import RosBridge
 
 try:
+    from next_ros2ws_web import next_ops
+except ImportError:
+    import next_ops
+
+try:
     from next_ros2ws_web.dotted_map import (
         DEFAULT_MAP_RESOLUTION_M_PER_PX as _DEFAULT_DOTTED_MAP_RESOLUTION,
         SUPPORTED_PRESETS as _DOTTED_PRESETS,
@@ -1885,6 +1890,25 @@ def get_robot_profile_deployment_status():
     return _status(result, fail_code=400)
 
 
+@app.route('/api/settings/robot_profiles/generated_bundle', methods=['GET'])
+def get_generated_bundle():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'generated:read'):
+        return jsonify(next_ops.permission_error(role, 'generated:read')), 403
+    
+    node, err = _node()
+    if err:
+        return err
+
+    robot_id = str(request.args.get('robot_id', '') or '').strip()
+    result = node.get_profile_robot_editor(robot_id=robot_id)
+    if not result.get('ok'):
+        return jsonify(result), 400
+    
+    profile = result.get('profile', {})
+    robot_builder = result.get('robot_builder', {})
+    return jsonify(next_ops.generated_bundle(profile, robot_builder))
+
 @app.route('/api/settings/robot_profiles/deployment/push', methods=['POST'])
 def push_robot_profile_deployment():
     node, err = _node()
@@ -1895,6 +1919,23 @@ def push_robot_profile_deployment():
     robot_id = str(data.get('robot_id', '') or '').strip()
     if not robot_id:
         return jsonify({'ok': False, 'message': 'robot_id is required'}), 400
+
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'deploy:push'):
+        return jsonify(next_ops.permission_error(role, 'deploy:push')), 403
+
+    editor_res = node.get_profile_robot_editor(robot_id=robot_id)
+    if editor_res.get('ok'):
+        validation = next_ops.validate_robot_model(
+            editor_res.get('profile', {}),
+            editor_res.get('robot_builder', {})
+        )
+        if not validation.get('ready_to_deploy'):
+            return jsonify({
+                'ok': False,
+                'message': 'Validation errors block deployment push',
+                'validation': validation
+            }), 400
 
     result = node.push_profile_config_to_robot(robot_id=robot_id)
     return _status(result, fail_code=400)
@@ -1910,6 +1951,10 @@ def rollback_robot_profile_deployment():
     robot_id = str(data.get('robot_id', '') or '').strip()
     if not robot_id:
         return jsonify({'ok': False, 'message': 'robot_id is required'}), 400
+
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'deploy:rollback'):
+        return jsonify(next_ops.permission_error(role, 'deploy:rollback')), 403
 
     snapshot_id = str(data.get('snapshot_id', '') or '').strip()
     result = node.rollback_profile_config_on_robot(robot_id=robot_id, snapshot_id=snapshot_id)
@@ -2221,6 +2266,69 @@ def get_settings_preview():
         'pose': 'OK' if pose else 'NO DATA',
     }
     return jsonify({'ok': True, 'preview': preview})
+
+
+@app.route('/api/next/permissions', methods=['GET'])
+def next_get_permissions():
+    role = next_ops.role_from_request(request, session)
+    return jsonify(next_ops.permission_payload(role))
+
+
+@app.route('/api/next/network_health', methods=['GET'])
+def next_network_health():
+    host = request.args.get('host', 'localhost')
+    return jsonify(next_ops.network_health(host))
+
+
+@app.route('/api/next/model/validate', methods=['POST'])
+def next_validate_model():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'validation:run'):
+        return jsonify(next_ops.permission_error(role, 'validation:run')), 403
+
+    data = _json_body()
+    profile = data.get('profile', {})
+    robot_builder = data.get('robot_builder', {})
+    validation = next_ops.validate_robot_model(profile, robot_builder)
+    return jsonify(validation)
+
+
+@app.route('/api/next/events', methods=['GET', 'POST'])
+def next_events():
+    role = next_ops.role_from_request(request, session)
+    if request.method == 'POST':
+        if not next_ops.has_permission(role, 'events:write'):
+            return jsonify(next_ops.permission_error(role, 'events:write')), 403
+        data = _json_body()
+        record = next_ops.record_event(
+            severity=data.get('severity', 'info'),
+            source=data.get('source', 'ui'),
+            message=data.get('message', ''),
+            obj=data.get('object', ''),
+            field=data.get('field', ''),
+            reason=data.get('reason', ''),
+            action_required=data.get('required_action', ''),
+        )
+        return jsonify({"ok": True, "event": record})
+    else:
+        if not next_ops.has_permission(role, 'events:read'):
+            return jsonify(next_ops.permission_error(role, 'events:read')), 403
+        limit = request.args.get('limit', 100, type=int)
+        severity = request.args.get('severity', '')
+        return jsonify(next_ops.list_events(limit=limit, severity=severity))
+
+
+@app.route('/api/settings/shortcuts', methods=['GET', 'POST', 'DELETE'])
+def next_shortcuts():
+    if request.method == 'GET':
+        return jsonify(next_ops.load_shortcuts())
+    elif request.method == 'POST':
+        data = _json_body()
+        if 'shortcuts' not in data:
+            return jsonify({'ok': False, 'message': 'Missing "shortcuts" key'}), 400
+        return jsonify(next_ops.save_shortcuts(data['shortcuts']))
+    elif request.method == 'DELETE':
+        return jsonify(next_ops.save_shortcuts(next_ops.DEFAULT_SHORTCUTS.copy()))
 
 
 def run_flask():

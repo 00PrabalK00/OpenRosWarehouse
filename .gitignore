@@ -48,3 +48,5 @@ ip
 src.zip
 src/ui_ws/config/robot_profiles/registry.yaml
 src/ui_ws/.map_editor_stage.yaml
+Next_Pro_Implementation_TODO.md
+Next_Pro_Feature_Spec_Analysis.md
