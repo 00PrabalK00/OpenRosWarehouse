@@ -1102,8 +1102,17 @@ class RosBridge(Node):
                 {
                     'id': shape_id,
                     'name': str(raw_shape.get('name', shape_id) or shape_id).strip() or shape_id,
+                        'semantic_type': str(raw_shape.get('semantic_type', '') or '').strip(),
                     'type': shape_type,
                     'link': link,
+                        'child_frame': str(raw_shape.get('child_frame', '') or raw_shape.get('frame_id', '') or '').strip(),
+                        'enabled': bool(raw_shape.get('enabled', True)),
+                        'topic': str(raw_shape.get('topic', '') or raw_shape.get('scan_topic', '') or raw_shape.get('image_topic', '') or '').strip(),
+                        'driver': str(raw_shape.get('driver', '') or raw_shape.get('driver_plugin', '') or '').strip(),
+                        'safety_behavior': str(raw_shape.get('safety_behavior', '') or '').strip(),
+                        'recovery_behavior': str(raw_shape.get('recovery_behavior', '') or '').strip(),
+                        'range_m': cls._safe_float(raw_shape.get('range_m', 0.0), 0.0),
+                        'fov_rad': cls._safe_float(raw_shape.get('fov_rad', 0.0), 0.0),
                     'x': round(cls._safe_float(raw_shape.get('x', 0.0), 0.0, min_value=-1000.0, max_value=1000.0), 6),
                     'y': round(cls._safe_float(raw_shape.get('y', 0.0), 0.0, min_value=-1000.0, max_value=1000.0), 6),
                     'z': round(cls._safe_float(raw_shape.get('z', 0.0), 0.0, min_value=-1000.0, max_value=1000.0), 6),
@@ -1113,6 +1122,7 @@ class RosBridge(Node):
                     'height': round(height, 6),
                     'radius': round(radius, 6),
                     'color': str(raw_shape.get('color', '#60a5fa') or '#60a5fa').strip() or '#60a5fa',
+                        'advanced_metadata': raw_shape.get('advanced_metadata', {}) if isinstance(raw_shape.get('advanced_metadata'), dict) else {},
                 }
             )
 
