@@ -9881,6 +9881,46 @@
             font-weight: 500;
         }
 
+        body.ui-density-compact {
+            font-size: 13px;
+        }
+
+        body.ui-density-default {
+            font-size: 14px;
+        }
+
+        body.ui-density-comfortable {
+            font-size: 15px;
+        }
+
+        body.ui-density-compact .settings-card {
+            padding: 16px;
+        }
+
+        body.ui-density-comfortable .settings-card {
+            padding: 24px;
+        }
+
+        body.ui-density-compact .toggle-grid {
+            gap: 8px;
+            padding: 12px;
+        }
+
+        body.ui-density-comfortable .toggle-grid {
+            gap: 16px;
+            padding: 20px;
+        }
+
+        body.screen-gestures-enabled #map-container,
+        body.screen-gestures-enabled canvas {
+            touch-action: pan-x pan-y pinch-zoom;
+        }
+
+        body.debug-mode-enabled #status {
+            outline: 1px solid rgba(66, 153, 225, 0.35);
+            outline-offset: 2px;
+        }
+
         .advanced-details summary {
             font-size: 12px;
             color: var(--text-secondary);
@@ -18601,34 +18641,166 @@
                         }
                     }
 
-                    function loadBasicSettings() {
+                    const SETTINGS_SHORTCUT_METADATA = {
+                        save: 'Save current editor state',
+                        validate: 'Run validation',
+                        search: 'Open browser search',
+                        cancel: 'Cancel current modal or action',
+                        zoom_in: 'Zoom in on the map',
+                        zoom_out: 'Zoom out on the map',
+                        pan: 'Hold to pan the map',
+                        map_view: 'Switch map to view mode',
+                        map_zones: 'Switch map to zones mode',
+                        map_paths: 'Switch map to paths mode',
+                        estop: 'Trigger emergency stop',
+                    };
+                    const SETTINGS_SHORTCUT_DEFAULTS = {
+                        save: 'ctrl+s',
+                        validate: 'ctrl+enter',
+                        search: 'ctrl+f',
+                        cancel: 'escape',
+                        zoom_in: 'ctrl+=',
+                        zoom_out: 'ctrl+-',
+                        pan: 'space',
+                        map_view: 'v',
+                        map_zones: 'z',
+                        map_paths: 'p',
+                        estop: 'e',
+                    };
+                    let settingsShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS };
+                    let homeRefreshIntervalId = null;
+                    let systemThemeMediaQuery = null;
+
+                    function getSavedBasicSettings() {
                         try {
-                            const saved = JSON.parse(localStorage.getItem('basicSettings') || '{}');
-                            Object.entries(_basicDefaults).forEach(([id, def]) => {
-                                const el = document.getElementById(id);
-                                if (el) el.checked = (id in saved) ? saved[id] : def;
-                            });
-                        } catch (e) {}
+                            return JSON.parse(localStorage.getItem('basicSettings') || '{}');
+                        } catch (_error) {
+                            return {};
+                        }
                     }
-                    function saveBasicSettings() {
+
+                    function collectBasicSettings() {
                         const result = {};
-                        Object.keys(_basicDefaults).forEach(id => {
+                        Object.keys(_basicDefaults).forEach((id) => {
                             const el = document.getElementById(id);
-                            if (el) result[id] = el.checked;
+                            result[id] = Boolean(el?.checked);
                         });
-                        localStorage.setItem('basicSettings', JSON.stringify(result));
+                        return result;
+                    }
+
+                    function refreshHomePageSnapshot({ silent = true } = {}) {
+                        const homeTab = document.getElementById('navigator-tab');
+                        if (!homeTab || !homeTab.classList.contains('active')) {
+                            return;
+                        }
+                        try { refreshActiveMap(); } catch (_error) {}
+                        try { loadMap(); } catch (_error) {}
+                        try { renderBatteryTelemetry(); } catch (_error) {}
+                        if (!silent) {
+                            showStatus('Home page refreshed', 'info');
+                        }
+                    }
+
+                    function syncHomeRefreshLoop(enabled) {
+                        if (homeRefreshIntervalId) {
+                            window.clearInterval(homeRefreshIntervalId);
+                            homeRefreshIntervalId = null;
+                        }
+                        if (!enabled) {
+                            return;
+                        }
+                        homeRefreshIntervalId = window.setInterval(() => {
+                            refreshHomePageSnapshot({ silent: true });
+                        }, 60000);
+                    }
+
+                    function applyBasicSettings(options = {}) {
+                        const { silent = true } = options;
+                        const saved = getSavedBasicSettings();
+                        const debugEnabled = Boolean(saved['basic-debug-mode']);
+                        const gesturesEnabled = Boolean(saved['basic-screen-gestures']);
+                        const refreshEnabled = Boolean(saved['basic-refresh-homepage']);
+
+                        document.body.classList.toggle('debug-mode-enabled', debugEnabled);
+                        document.body.classList.toggle('screen-gestures-enabled', gesturesEnabled);
+                        window.NEXT_DEBUG_MODE = debugEnabled;
+                        syncHomeRefreshLoop(refreshEnabled);
                         applySavedLanguagePreference({ silent: true });
+
+                        if (!silent) {
+                            showStatus('Basic settings applied', 'success');
+                        }
+                    }
+
+                    function loadBasicSettings() {
+                        const saved = getSavedBasicSettings();
+                        Object.entries(_basicDefaults).forEach(([id, def]) => {
+                            const el = document.getElementById(id);
+                            if (el) el.checked = (id in saved) ? Boolean(saved[id]) : def;
+                        });
+                        applyBasicSettings({ silent: true });
+                    }
+
+                    async function loadDesktopBackedBasicSettings() {
+                        if (!(window.desktopApi && typeof window.desktopApi.getSettings === 'function')) {
+                            return;
+                        }
+                        try {
+                            const desktopSettings = await window.desktopApi.getSettings();
+                            const saved = {
+                                ...getSavedBasicSettings(),
+                                'basic-auto-search-robot': Boolean(desktopSettings?.autoConnect),
+                                'basic-maximize-startup': Boolean(desktopSettings?.maximizeOnStartup),
+                                'basic-use-proxy': Boolean(desktopSettings?.proxyEnabled),
+                            };
+                            localStorage.setItem('basicSettings', JSON.stringify(saved));
+                            loadBasicSettings();
+                        } catch (error) {
+                            console.warn('Failed loading desktop-backed basic settings:', error);
+                        }
+                    }
+
+                    async function saveBasicSettings() {
+                        const result = collectBasicSettings();
+                        localStorage.setItem('basicSettings', JSON.stringify(result));
+
+                        if (window.desktopApi && typeof window.desktopApi.updateSettings === 'function') {
+                            try {
+                                await window.desktopApi.updateSettings({
+                                    autoConnect: result['basic-auto-search-robot'],
+                                    maximizeOnStartup: result['basic-maximize-startup'],
+                                    proxyEnabled: result['basic-use-proxy'],
+                                });
+                            } catch (error) {
+                                console.warn('Desktop settings bridge failed:', error);
+                            }
+                        }
+
+                        applyBasicSettings({ silent: true });
                         showStatus('Basic settings saved', 'success');
                     }
-                    function resetBasicSettings() {
+
+                    async function resetBasicSettings() {
                         Object.entries(_basicDefaults).forEach(([id, def]) => {
                             const el = document.getElementById(id);
                             if (el) el.checked = def;
                         });
                         localStorage.removeItem('basicSettings');
-                        applySavedLanguagePreference({ silent: true });
+                        if (window.desktopApi && typeof window.desktopApi.updateSettings === 'function') {
+                            try {
+                                await window.desktopApi.updateSettings({
+                                    autoConnect: _basicDefaults['basic-auto-search-robot'],
+                                    maximizeOnStartup: _basicDefaults['basic-maximize-startup'],
+                                    proxyEnabled: _basicDefaults['basic-use-proxy'],
+                                });
+                            } catch (error) {
+                                console.warn('Desktop settings reset bridge failed:', error);
+                            }
+                        }
+                        applyBasicSettings({ silent: true });
                         showStatus('Basic settings reset to defaults', 'info');
                     }
+
                     async function applyLanguage() {
                         ensureGoogleTranslateChromeSuppressed();
                         const sel = document.getElementById('language-select');
@@ -18664,8 +18836,254 @@
                             showStatus(`Automatic translation module failed: ${error}`, 'error');
                         }
                     }
-                    function exportAllConfig() { showStatus('Config export not yet implemented', 'info'); }
-                    function importAllConfig() { showStatus('Config import not yet implemented', 'info'); }
+
+                    function getSelectedSkinTheme() {
+                        return document.querySelector('input[name="skin-theme"]:checked')?.value || 'dark';
+                    }
+
+                    function resolveSystemTheme() {
+                        return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+                    }
+
+                    function setSkinThemeSelection(theme) {
+                        const target = document.querySelector(`input[name="skin-theme"][value="${theme}"]`);
+                        if (target) target.checked = true;
+                    }
+
+                    function saveSkinSettings() {
+                        changeTheme(getSelectedSkinTheme());
+                    }
+
+                    function attachSystemThemeListener() {
+                        if (!window.matchMedia) return;
+                        systemThemeMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+                        const handler = () => {
+                            if ((localStorage.getItem('theme') || 'dark') === 'system') {
+                                changeTheme('system', { silent: true });
+                            }
+                        };
+                        if (typeof systemThemeMediaQuery.addEventListener === 'function') {
+                            systemThemeMediaQuery.addEventListener('change', handler);
+                        } else if (typeof systemThemeMediaQuery.addListener === 'function') {
+                            systemThemeMediaQuery.addListener(handler);
+                        }
+                    }
+
+                    function loadDensitySetting() {
+                        const saved = localStorage.getItem('uiDensity') || 'default';
+                        const radio = document.querySelector(`input[name="style-density"][value="${saved}"]`) || document.getElementById('style-default');
+                        if (radio) radio.checked = true;
+                        applyDensitySetting(saved, { silent: true });
+                    }
+
+                    function applyDensitySetting(value, options = {}) {
+                        const { silent = false } = options;
+                        const safeValue = ['compact', 'default', 'comfortable'].includes(String(value)) ? String(value) : 'default';
+                        document.body.classList.remove('ui-density-compact', 'ui-density-default', 'ui-density-comfortable');
+                        document.body.classList.add(`ui-density-${safeValue}`);
+                        localStorage.setItem('uiDensity', safeValue);
+                        const radio = document.querySelector(`input[name="style-density"][value="${safeValue}"]`);
+                        if (radio) radio.checked = true;
+                        if (!silent) {
+                            showStatus(`Layout density set to ${safeValue}`, 'success');
+                        }
+                    }
+
+                    async function loadSettingsVersionInfo() {
+                        const uiEl = document.getElementById('settings-version-ui');
+                        const platformEl = document.getElementById('settings-version-platform');
+                        const targetEl = document.getElementById('settings-version-target');
+                        if (!uiEl || !platformEl || !targetEl) return;
+
+                        const fallbackTarget = `${window.location.origin}${window.location.pathname}`;
+                        uiEl.textContent = 'runtime template';
+                        platformEl.textContent = navigator.userAgentData?.platform || navigator.platform || 'browser';
+                        targetEl.textContent = fallbackTarget;
+
+                        if (window.desktopApi && typeof window.desktopApi.getBootstrap === 'function') {
+                            try {
+                                const payload = await window.desktopApi.getBootstrap();
+                                const config = payload?.config || {};
+                                const page = String(config.page || '/dev');
+                                uiEl.textContent = payload?.version || 'desktop shell';
+                                platformEl.textContent = `electron / ${navigator.platform || 'desktop'}`;
+                                targetEl.textContent = `${config.protocol || 'http'}://${config.host || 'localhost'}:${config.port || 5000}${page}`;
+                            } catch (error) {
+                                console.warn('Version info bridge failed:', error);
+                            }
+                        }
+                    }
+
+                    async function collectExportPayload() {
+                        let shortcuts = { ...settingsShortcuts };
+                        let mappings = currentMappings;
+                        let topics = currentTopics;
+                        let desktopSettings = null;
+
+                        try {
+                            const shortcutResponse = await fetch('/api/settings/shortcuts');
+                            const shortcutData = await shortcutResponse.json();
+                            if (shortcutData?.ok && shortcutData.shortcuts) {
+                                shortcuts = shortcutData.shortcuts;
+                            }
+                        } catch (_error) {}
+
+                        try {
+                            const mappingResponse = await fetch('/api/settings/mappings');
+                            const mappingData = await mappingResponse.json();
+                            mappings = mappingData?.mappings?.mappings || mappingData?.mappings || mappings || {};
+                            topics = mappingData?.topics || mappingData?.mappings?.topics || topics || {};
+                        } catch (_error) {}
+
+                        if (window.desktopApi && typeof window.desktopApi.getSettings === 'function') {
+                            try {
+                                desktopSettings = await window.desktopApi.getSettings();
+                            } catch (_error) {
+                                desktopSettings = null;
+                            }
+                        }
+
+                        return {
+                            schema_version: 1,
+                            exported_at: new Date().toISOString(),
+                            basicSettings: getSavedBasicSettings(),
+                            theme: localStorage.getItem('theme') || 'dark',
+                            language: localStorage.getItem('uiLanguage') || 'en',
+                            uiDensity: localStorage.getItem('uiDensity') || 'default',
+                            mapDisplayMode: localStorage.getItem('mapDisplayMode') || 'normal',
+                            dottedMapPreset: localStorage.getItem('dottedMapPreset') || 'balanced',
+                            showLidarScan: localStorage.getItem('showLidarScan') || 'true',
+                            lidarScanType: localStorage.getItem('lidarScanType') || 'point_cloud',
+                            lidarColorMode: localStorage.getItem('lidarColorMode') || 'range_gradient',
+                            lidarColor: localStorage.getItem('lidarColor') || 'cyan',
+                            shortcuts,
+                            mappings,
+                            topics,
+                            desktopSettings,
+                        };
+                    }
+
+                    async function exportAllConfig() {
+                        try {
+                            const payload = await collectExportPayload();
+                            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+                            const url = window.URL.createObjectURL(blob);
+                            const anchor = document.createElement('a');
+                            anchor.href = url;
+                            anchor.download = `next-settings-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                            document.body.appendChild(anchor);
+                            anchor.click();
+                            anchor.remove();
+                            window.URL.revokeObjectURL(url);
+                            showStatus('Settings export created', 'success');
+                        } catch (error) {
+                            showStatus(`Config export failed: ${error.message || error}`, 'error');
+                        }
+                    }
+
+                    function importAllConfig() {
+                        const input = document.getElementById('settings-config-import-file');
+                        if (!input) return;
+                        input.value = '';
+                        input.click();
+                    }
+
+                    async function applyImportedConfig(rawText) {
+                        const payload = JSON.parse(String(rawText || '{}'));
+                        if (!payload || typeof payload !== 'object') {
+                            throw new Error('Imported file is not a valid JSON object');
+                        }
+
+                        if (payload.basicSettings && typeof payload.basicSettings === 'object') {
+                            localStorage.setItem('basicSettings', JSON.stringify(payload.basicSettings));
+                        }
+                        if (payload.theme) {
+                            localStorage.setItem('theme', String(payload.theme));
+                        }
+                        if (payload.language) {
+                            localStorage.setItem('uiLanguage', String(payload.language));
+                        }
+                        if (payload.uiDensity) {
+                            localStorage.setItem('uiDensity', String(payload.uiDensity));
+                        }
+                        if (payload.mapDisplayMode) {
+                            localStorage.setItem('mapDisplayMode', String(payload.mapDisplayMode));
+                        }
+                        if (payload.dottedMapPreset) {
+                            localStorage.setItem('dottedMapPreset', String(payload.dottedMapPreset));
+                        }
+                        ['showLidarScan', 'lidarScanType', 'lidarColorMode', 'lidarColor'].forEach((key) => {
+                            if (Object.prototype.hasOwnProperty.call(payload, key)) {
+                                localStorage.setItem(key, String(payload[key]));
+                            }
+                        });
+
+                        if (payload.shortcuts) {
+                            const shortcutResponse = await fetch('/api/settings/shortcuts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ shortcuts: payload.shortcuts }),
+                            });
+                            const shortcutData = await shortcutResponse.json();
+                            if (!shortcutData?.ok) {
+                                throw new Error(shortcutData?.message || 'Failed to import shortcuts');
+                            }
+                            settingsShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS, ...(shortcutData.shortcuts || {}) };
+                        }
+
+                        if ((payload.mappings && typeof payload.mappings === 'object') || (payload.topics && typeof payload.topics === 'object')) {
+                            const mappingResponse = await fetch('/api/settings/mappings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    mappings: payload.mappings || {},
+                                    topics: payload.topics || {},
+                                    confirmed: true,
+                                }),
+                            });
+                            const mappingData = await mappingResponse.json();
+                            if (!mappingData?.ok) {
+                                throw new Error(mappingData?.message || 'Failed to import topic mappings');
+                            }
+                            await loadCurrentMappings();
+                        }
+
+                        if (payload.desktopSettings && window.desktopApi && typeof window.desktopApi.updateSettings === 'function') {
+                            await window.desktopApi.updateSettings(payload.desktopSettings);
+                        }
+
+                        loadBasicSettings();
+                        loadSavedTheme();
+                        loadLanguageSettings();
+                        loadDensitySetting();
+                        loadMapDisplayMode();
+                        if (typeof loadLidarSettingsFromStorage === 'function') {
+                            loadLidarSettingsFromStorage();
+                        }
+                        await loadSettingsShortcuts();
+                        await loadSettingsVersionInfo();
+                    }
+
+                    async function runFirmwareUpdate() {
+                        const statusEl = document.getElementById('settings-firmware-status');
+                        if (statusEl) {
+                            statusEl.textContent = 'Launching firmware update…';
+                        }
+                        try {
+                            const response = await fetch('/api/settings/update_firmware', { method: 'POST' });
+                            const data = await response.json();
+                            if (statusEl) {
+                                statusEl.textContent = data.message || (data.ok ? 'Firmware update launched' : 'Firmware update failed');
+                            }
+                            showStatus(data.message || 'Firmware update request sent', data.ok ? 'success' : 'error');
+                        } catch (error) {
+                            if (statusEl) {
+                                statusEl.textContent = `Firmware update failed: ${error}`;
+                            }
+                            showStatus(`Firmware update failed: ${error}`, 'error');
+                        }
+                    }
+
                     function clearAppCache() {
                         if (!confirm('Clear all cached app data?')) return;
                         localStorage.clear();
@@ -18675,9 +19093,30 @@
                     window.addEventListener('DOMContentLoaded', () => {
                         ensureGoogleTranslateChromeSuppressed();
                         loadBasicSettings();
+                        loadDesktopBackedBasicSettings().catch(() => {});
+                        loadSavedTheme();
                         loadLanguageSettings();
+                        loadDensitySetting();
                         applySavedLanguagePreference({ silent: true });
                         loadMapDisplayMode();
+                        loadSettingsVersionInfo().catch(() => {});
+                        attachSystemThemeListener();
+                        const importInput = document.getElementById('settings-config-import-file');
+                        if (importInput) {
+                            importInput.addEventListener('change', async (event) => {
+                                const file = event.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                    const text = await readFileAsText(file);
+                                    await applyImportedConfig(text);
+                                    showStatus(`Imported settings from ${file.name}`, 'success');
+                                } catch (error) {
+                                    showStatus(`Import failed: ${error.message || error}`, 'error');
+                                } finally {
+                                    event.target.value = '';
+                                }
+                            });
+                        }
                     });
 
                     // ── Parameters popup ────────────────────────────────────
@@ -20089,14 +20528,14 @@
                         if (!window.robotEditorState || typeof window.robotEditorState !== 'object') {
                             return {
                                 show_grid: true,
-                                show_labels: true,
+                                show_labels: false,
                                 view: 'top',
                             };
                         }
                         if (!window.robotEditorState.device_config_canvas || typeof window.robotEditorState.device_config_canvas !== 'object') {
                             window.robotEditorState.device_config_canvas = {
                                 show_grid: true,
-                                show_labels: true,
+                                show_labels: false,
                                 view: 'top',
                             };
                         }
@@ -20237,6 +20676,36 @@
                         if (mode === 'settings') {
                             if (typeof switchTab === 'function') switchTab('settings');
                             return;
+                        }
+                        if (window.robotEditorState && typeof window.robotEditorState === 'object') {
+                            const toggles = window.robotEditorState.view_toggles || {};
+                            if (mode === 'structure') {
+                                toggles.show_collision = true;
+                                toggles.show_lidar_fov = false;
+                                toggles.show_camera_fov = false;
+                                toggles.show_safety_zones = false;
+                            } else if (mode === 'sensors') {
+                                toggles.show_collision = true;
+                                toggles.show_lidar_fov = true;
+                                toggles.show_camera_fov = true;
+                                toggles.show_safety_zones = false;
+                            } else if (mode === 'motion') {
+                                toggles.show_collision = true;
+                                toggles.show_lidar_fov = false;
+                                toggles.show_camera_fov = false;
+                                toggles.show_safety_zones = false;
+                            } else if (mode === 'safety') {
+                                toggles.show_collision = true;
+                                toggles.show_lidar_fov = false;
+                                toggles.show_camera_fov = false;
+                                toggles.show_safety_zones = true;
+                            } else if (mode === 'diagnostics') {
+                                toggles.show_collision = true;
+                                toggles.show_lidar_fov = true;
+                                toggles.show_camera_fov = true;
+                                toggles.show_safety_zones = true;
+                            }
+                            window.robotEditorState.view_toggles = toggles;
                         }
                         if (typeof setRobotEditorVisualPreset === 'function' && presetMap[mode]) {
                             setRobotEditorVisualPreset(presetMap[mode]);
@@ -20464,7 +20933,7 @@
                         const model = (window.robotEditorState && window.robotEditorState.model) || {};
                         if (!Array.isArray(model.shapes) || shapeIdx < 0 || shapeIdx >= model.shapes.length) return;
                         if (typeof selectRobotEditorShape === 'function') {
-                            selectRobotEditorShape(shapeIdx);
+                            selectRobotEditorShape(String(model.shapes[shapeIdx].id || ''));
                         } else {
                             window.robotEditorState.selected_shape_id = String(model.shapes[shapeIdx].id || '');
                             if (typeof refreshRobotEditorUi === 'function') refreshRobotEditorUi();
@@ -30583,56 +31052,42 @@
                         // Don't trigger WASD if manual control is active
                         const manualActive = manualModeActive;
 
+                        if (matchesShortcut(e, 'map_view') || e.key === 'h' || e.key === 'H') {
+                            setMapMode('view');
+                            e.preventDefault();
+                            return;
+                        }
+                        if (matchesShortcut(e, 'map_zones')) {
+                            setMapMode('zones');
+                            e.preventDefault();
+                            return;
+                        }
+                        if (matchesShortcut(e, 'map_paths')) {
+                            setMapMode('paths');
+                            e.preventDefault();
+                            return;
+                        }
+                        if (matchesShortcut(e, 'estop')) {
+                            if (!manualActive) {
+                                toggleEStop();
+                                e.preventDefault();
+                            }
+                            return;
+                        }
+                        if (matchesShortcut(e, 'pan') || e.key === ' ') {
+                            if (!manualActive) {
+                                spaceKeyPressed = true;
+                                updateCursor();
+                                e.preventDefault();
+                            }
+                            return;
+                        }
                         switch (e.key) {
-                            case 'h':
-                            case 'H':
-                                setMapMode('view');
-                                e.preventDefault();
-                                break;
-                            case 'v':
-                            case 'V':
-                                setMapMode('view');
-                                e.preventDefault();
-                                break;
-                            case 'z':
-                            case 'Z':
-                                setMapMode('zones');
-                                e.preventDefault();
-                                break;
-                            case 'p':
-                            case 'P':
-                                setMapMode('paths');
-                                e.preventDefault();
-                                break;
-                            case 'e':
-                            case 'E':
-                                if (!manualActive) {
-                                    toggleEStop();
-                                    e.preventDefault();
-                                }
-                                break;
-                            case ' ':
-                                if (!manualActive) {
-                                    spaceKeyPressed = true;
-                                    updateCursor();
-                                    e.preventDefault();
-                                }
-                                break;
                             case 's':
                             case 'S':
                                 if (!manualActive) {
                                     zoneSnapHoldS = true;
                                 }
-                                break;
-                            case '+':
-                            case '=':
-                                zoomIn();
-                                e.preventDefault();
-                                break;
-                            case '-':
-                            case '_':
-                                zoomOut();
-                                e.preventDefault();
                                 break;
                             case 'r':
                             case 'R':
@@ -30648,6 +31103,15 @@
                                     e.preventDefault();
                                 }
                                 break;
+                        }
+                        if (matchesShortcut(e, 'zoom_in') || e.key === '+' || e.key === '=') {
+                            zoomIn();
+                            e.preventDefault();
+                            return;
+                        }
+                        if (matchesShortcut(e, 'zoom_out') || e.key === '-' || e.key === '_') {
+                            zoomOut();
+                            e.preventDefault();
                         }
                     });
 
@@ -30843,9 +31307,9 @@
                                 <div class="settings-card">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Theme</h4></div>
                                     <div class="toggle-grid">
-                                        <label class="toggle-item"><input type="radio" name="skin-theme" id="skin-dark" value="dark" checked><span>Dark</span></label>
-                                        <label class="toggle-item"><input type="radio" name="skin-theme" id="skin-light" value="light"><span>Light</span></label>
-                                        <label class="toggle-item"><input type="radio" name="skin-theme" id="skin-system" value="system"><span>Follow System</span></label>
+                                        <label class="toggle-item"><input type="radio" name="skin-theme" id="skin-dark" value="dark" checked onchange="saveSkinSettings()"><span>Dark</span></label>
+                                        <label class="toggle-item"><input type="radio" name="skin-theme" id="skin-light" value="light" onchange="saveSkinSettings()"><span>Light</span></label>
+                                        <label class="toggle-item"><input type="radio" name="skin-theme" id="skin-system" value="system" onchange="saveSkinSettings()"><span>Follow System</span></label>
                                     </div>
                                 </div>
                             </div>
@@ -30888,8 +31352,9 @@
                                 <div class="settings-card">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Density</h4></div>
                                     <div class="toggle-grid">
-                                        <label class="toggle-item"><input type="radio" name="style-density" id="style-compact" value="compact" checked><span>Compact</span></label>
-                                        <label class="toggle-item"><input type="radio" name="style-density" id="style-comfortable" value="comfortable"><span>Comfortable</span></label>
+                                        <label class="toggle-item"><input type="radio" name="style-density" id="style-compact" value="compact" onchange="applyDensitySetting('compact')"><span>Compact</span></label>
+                                        <label class="toggle-item"><input type="radio" name="style-density" id="style-default" value="default" checked onchange="applyDensitySetting('default')"><span>Default</span></label>
+                                        <label class="toggle-item"><input type="radio" name="style-density" id="style-comfortable" value="comfortable" onchange="applyDensitySetting('comfortable')"><span>Comfortable</span></label>
                                     </div>
                                 </div>
 
@@ -31114,10 +31579,42 @@
                                         <button class="btn" type="button" onclick="importAllConfig()"><i class="fas fa-file-import"></i> Import Config</button>
                                         <button class="btn" type="button" onclick="clearAppCache()" style="color:#f87171;"><i class="fas fa-trash"></i> Clear Cache</button>
                                     </div>
+                                    <input type="file" id="settings-config-import-file" accept=".json,application/json" style="display:none;">
+                                </div>
+                                <div class="settings-card" style="margin-top:12px;">
+                                    <div class="settings-card-header"><h4 class="settings-card-title">Push / Pull</h4></div>
+                                    <div class="profile-inline-actions" style="flex-wrap:wrap; gap:8px; padding-top:4px;">
+                                        <button class="btn" type="button" onclick="mapPullFromRobot()"><i class="fas fa-download"></i> Pull Map</button>
+                                        <button class="btn" type="button" onclick="mapPushToRobot()"><i class="fas fa-upload"></i> Push Map</button>
+                                        <button class="btn" type="button" onclick="recognitionPullAll()"><i class="fas fa-cloud-download-alt"></i> Pull Recognition</button>
+                                        <button class="btn" type="button" onclick="recognitionPushAll()"><i class="fas fa-cloud-upload-alt"></i> Push Recognition</button>
+                                    </div>
                                 </div>
                                 <div class="settings-card" style="margin-top:12px;">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Version</h4></div>
-                                    <div style="font-size:12px; color:var(--text-secondary);">UI build: runtime template</div>
+                                    <div class="battery-kv-grid">
+                                        <div class="battery-kv">
+                                            <span class="battery-kv-label">UI Build</span>
+                                            <span class="battery-kv-value" id="settings-version-ui">Loading…</span>
+                                        </div>
+                                        <div class="battery-kv">
+                                            <span class="battery-kv-label">Platform</span>
+                                            <span class="battery-kv-value" id="settings-version-platform">Loading…</span>
+                                        </div>
+                                        <div class="battery-kv">
+                                            <span class="battery-kv-label">Target</span>
+                                            <span class="battery-kv-value" id="settings-version-target">Loading…</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="settings-card" style="margin-top:8px;">
+                                    <div class="settings-card-header"><h4 class="settings-card-title">Firmware</h4></div>
+                                    <div class="profile-inline-actions" style="flex-wrap:wrap; gap:8px; padding-top:4px;">
+                                        <button class="btn" type="button" onclick="runFirmwareUpdate()"><i class="fas fa-microchip"></i> Update Firmware</button>
+                                    </div>
+                                    <div id="settings-firmware-status" style="margin-top:8px; font-size:12px; color:var(--text-secondary);">
+                                        Uses <code>NEXT_FIRMWARE_UPDATE_COMMAND</code> when configured on the host.
+                                    </div>
                                 </div>
                                 <div class="settings-card" style="margin-top:8px;">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Support</h4></div>
@@ -31148,32 +31645,14 @@
                                     <div class="settings-card-header">
                                         <h4 class="settings-card-title">Keyboard Shortcuts</h4>
                                     </div>
-                                    <div style="margin-top:8px;">
-                                        <table style="width: 100%; color: var(--text-secondary); border-collapse: collapse; font-size: 11px;">
-                                            <tbody>
-                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
-                                                    <td style="padding: 6px 0; width: 40%;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">?</kbd></td>
-                                                    <td style="padding: 6px 0;">Show shortcuts modal</td>
-                                                </tr>
-                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
-                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">V</kbd> / <kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">H</kbd></td>
-                                                    <td style="padding: 6px 0;">Map View Mode</td>
-                                                </tr>
-                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
-                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">Z</kbd></td>
-                                                    <td style="padding: 6px 0;">Map Zones Mode</td>
-                                                </tr>
-                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
-                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">P</kbd></td>
-                                                    <td style="padding: 6px 0;">Map Paths Mode</td>
-                                                </tr>
-                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
-                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">E</kbd></td>
-                                                    <td style="padding: 6px 0;">Emergency Stop</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                    <div id="settings-shortcuts-list" style="margin-top:8px;">
+                                        <div class="settings-list-item">Loading shortcuts...</div>
                                     </div>
+                                    <div class="profile-inline-actions" style="flex-wrap:wrap; gap:8px; padding-top:10px;">
+                                        <button class="btn" type="button" onclick="saveSettingsShortcuts()"><i class="fas fa-save"></i> Save Shortcuts</button>
+                                        <button class="btn" type="button" onclick="resetSettingsShortcuts()"><i class="fas fa-undo"></i> Reset Defaults</button>
+                                    </div>
+                                    <div id="settings-shortcuts-status" style="margin-top:8px; font-size:12px; color:var(--text-secondary);">Shortcut changes apply immediately after save.</div>
                                 </div>
 
                                 <div class="settings-card" style="margin-top:16px;">
@@ -32792,6 +33271,15 @@
 
             if (categoryName === 'system') {
                 loadSettingsUsers();
+                loadSettingsShortcuts();
+            }
+
+            if (categoryName === 'battery') {
+                renderBatteryTelemetry();
+            }
+
+            if (categoryName === 'filemanagement') {
+                loadSettingsVersionInfo();
             }
 
                         if (categoryName === 'maps') {
@@ -32824,7 +33312,7 @@
             if (!action) return;
 
             const statusEl = document.getElementById('settings-relaunch-status');
-            const buttons = Array.from(document.querySelectorAll('#settings-relaunch [data-relaunch-target]'));
+            const buttons = Array.from(document.querySelectorAll('[data-relaunch-target]'));
             buttons.forEach((btn) => { btn.disabled = true; });
 
             if (statusEl) {
@@ -35808,6 +36296,7 @@
                 const jointXyz = Array.isArray(entry.joint_xyz) ? entry.joint_xyz : [0, 0, 0];
                 const jointRpy = Array.isArray(entry.joint_rpy) ? entry.joint_rpy : [0, 0, 0];
                 model.links.push({
+                    ...entry, // Preserve all original metadata from backend
                     name,
                     parent: (parent === name) ? '' : parent,
                     joint_type: jointType,
@@ -35834,7 +36323,7 @@
                 });
             }
 
-            model.links = model.links.slice(0, 120);
+            model.links = model.links.slice(0, 150);
             model.links.forEach((link) => {
                 if (link.name === model.base_link) {
                     link.parent = '';
@@ -35865,6 +36354,7 @@
                 const height = Math.max(0.01, Number(entry.height || 0.25));
                 const radius = Math.max(0.005, Number(entry.radius || (Math.min(width, length) * 0.5)));
                 model.shapes.push({
+                    ...entry, // Preserve all original metadata (semantic_type, enabled, topic, etc.)
                     id: shapeId,
                     name: String(entry.name || shapeId).trim() || shapeId,
                     type: normalizedType,
@@ -36197,34 +36687,47 @@
             const base = String(model.base_link || 'base_link').trim() || 'base_link';
 
             const poses = {};
+            // Initialize root at origin
             poses[base] = { x: 0, y: 0, yaw: 0 };
-            let remaining = links.length * 3;
+
+            // BFS-like resolution of the link tree
             let progressed = true;
-            while (progressed && remaining > 0) {
+            let iterations = 0;
+            const maxIterations = links.length + 5;
+            
+            while (progressed && iterations < maxIterations) {
                 progressed = false;
-                remaining -= 1;
+                iterations += 1;
                 links.forEach((link) => {
                     const name = String(link?.name || '').trim();
                     if (!name || poses[name]) return;
-                    const parentName = String(link?.parent || '').trim() || base;
-                    const parentPose = poses[parentName];
-                    if (!parentPose) return;
-                    const jx = clampRobotEditorNumber(link?.joint_xyz?.[0], 0);
-                    const jy = clampRobotEditorNumber(link?.joint_xyz?.[1], 0);
-                    const jyaw = clampRobotEditorNumber(link?.joint_rpy?.[2], 0);
-                    const cosYaw = Math.cos(parentPose.yaw);
-                    const sinYaw = Math.sin(parentPose.yaw);
-                    const x = parentPose.x + (jx * cosYaw) - (jy * sinYaw);
-                    const y = parentPose.y + (jx * sinYaw) + (jy * cosYaw);
-                    poses[name] = { x, y, yaw: parentPose.yaw + jyaw };
-                    progressed = true;
+                    
+                    const parentName = String(link?.parent || '').trim();
+                    const actualParent = (parentName && parentName !== name) ? parentName : base;
+                    const parentPose = poses[actualParent];
+                    
+                    if (parentPose) {
+                        const jx = clampRobotEditorNumber(link?.joint_xyz?.[0], 0);
+                        const jy = clampRobotEditorNumber(link?.joint_xyz?.[1], 0);
+                        const jyaw = clampRobotEditorNumber(link?.joint_rpy?.[2], 0);
+                        const cosYaw = Math.cos(parentPose.yaw);
+                        const sinYaw = Math.sin(parentPose.yaw);
+                        poses[name] = {
+                            x: parentPose.x + (jx * cosYaw) - (jy * sinYaw),
+                            y: parentPose.y + (jx * sinYaw) + (jy * cosYaw),
+                            yaw: parentPose.yaw + jyaw
+                        };
+                        progressed = true;
+                    }
                 });
             }
 
+            // Fallback for any orphaned links (seat them at the base link)
             links.forEach((link) => {
                 const name = String(link?.name || '').trim();
-                if (!name || poses[name]) return;
-                poses[name] = { x: 0, y: 0, yaw: 0 };
+                if (name && !poses[name]) {
+                    poses[name] = { ...poses[base] };
+                }
             });
             return poses;
         }
@@ -37270,8 +37773,8 @@
                 const sensorKey = `${String(type || '').trim().toLowerCase()}:${canonical}`;
                 if (seen.has(sensorKey)) return;
                 seen.add(sensorKey);
-                const range = (type === 'camera') ? 4.0 : 8.0;
-                const fovDeg = (type === 'camera') ? 90.0 : 270.0;
+                const range = (type === 'camera') ? 1.8 : 2.4;
+                const fovDeg = (type === 'camera') ? 90.0 : 220.0;
                 sensors.push({
                     name: sensorName,
                     canonical_name: canonical,
@@ -37324,7 +37827,10 @@
                 const start = -(yaw + halfFov);
                 const end = -(yaw - halfFov);
                 const isFocused = !selectedLink || selectedLink === String(sensor.link || '').trim();
-                const layerAlpha = preset.preset === 'sensors' ? (isFocused ? 1.0 : 0.28) : (isFocused ? 0.58 : 0.18);
+                const deviceConfigCanvas = isRobotEditorDeviceConfigCanvas();
+                const layerAlpha = deviceConfigCanvas
+                    ? (preset.preset === 'sensors' ? (isFocused ? 0.42 : 0.14) : (isFocused ? 0.20 : 0.08))
+                    : (preset.preset === 'sensors' ? (isFocused ? 1.0 : 0.28) : (isFocused ? 0.58 : 0.18));
 
                 ctx.save();
                 ctx.globalAlpha = layerAlpha;
@@ -37806,7 +38312,7 @@
                     }
 
                     if (focusActive && !isFocusMatch) {
-                        alpha *= 0.38;
+                        alpha *= deviceConfigCanvas ? 0.62 : 0.38;
                     }
                     if (isSelected) {
                         alpha = 1.0;
@@ -37840,10 +38346,10 @@
                     const label = String(shape.name || shape.id || '').trim();
                     const showLabel = Boolean(label) && (
                         isSelected
-                        || linkSelected
                         || presetConfig.showDebugLabels
-                        || (presetConfig.preset === 'sensors' && shapeRole === 'sensor')
-                        || (presetConfig.preset === 'motion' && (shapeRole === 'wheel' || shapeRole === 'caster'))
+                        || (!deviceConfigCanvas && linkSelected)
+                        || (!deviceConfigCanvas && presetConfig.preset === 'sensors' && shapeRole === 'sensor')
+                        || (!deviceConfigCanvas && presetConfig.preset === 'motion' && (shapeRole === 'wheel' || shapeRole === 'caster'))
                     );
                     if (showLabel && showDeviceConfigLabels) {
                         ctx.save();
@@ -37875,7 +38381,7 @@
                     alpha = Math.max(alpha, 0.68);
                 }
                 if (focusActive && !isSelected) {
-                    alpha *= 0.22;
+                    alpha *= deviceConfigCanvas ? 0.48 : 0.22;
                 }
                 if (isSelected) {
                     alpha = 1.0;
@@ -37889,8 +38395,8 @@
 
                 const showLinkLabel = isSelected
                     || presetConfig.showDebugLabels
-                    || (presetConfig.preset === 'motion' && (categoryKey === 'wheels' || categoryKey === 'casters'))
-                    || (!focusActive && isBase);
+                    || (!deviceConfigCanvas && presetConfig.preset === 'motion' && (categoryKey === 'wheels' || categoryKey === 'casters'))
+                    || (!deviceConfigCanvas && !focusActive && isBase);
                 if (showLinkLabel && showDeviceConfigLabels) {
                     ctx.fillStyle = 'rgba(226, 232, 240, 0.8)';
                     ctx.font = `${10 * dpr}px Roboto Mono, monospace`;
@@ -39405,6 +39911,145 @@
             }
         }
 
+        function shortcutDisplayValue(value) {
+            return String(value || '').trim().toLowerCase();
+        }
+
+        function parseShortcutBinding(binding) {
+            const raw = shortcutDisplayValue(binding);
+            if (!raw) return null;
+            const parts = raw.split('+').map((part) => part.trim()).filter(Boolean);
+            if (parts.length === 0) return null;
+            const modifiers = {
+                ctrl: false,
+                alt: false,
+                shift: false,
+                meta: false,
+            };
+            let key = '';
+            parts.forEach((part) => {
+                if (part === 'ctrl' || part === 'control') {
+                    modifiers.ctrl = true;
+                } else if (part === 'alt' || part === 'option') {
+                    modifiers.alt = true;
+                } else if (part === 'shift') {
+                    modifiers.shift = true;
+                } else if (part === 'meta' || part === 'cmd' || part === 'command') {
+                    modifiers.meta = true;
+                } else {
+                    key = part;
+                }
+            });
+            return key ? { ...modifiers, key } : null;
+        }
+
+        function matchesShortcut(event, action) {
+            const binding = parseShortcutBinding(settingsShortcuts[action] || SETTINGS_SHORTCUT_DEFAULTS[action]);
+            if (!binding) return false;
+            const eventKey = String(event.key || '').toLowerCase();
+            const eventCode = String(event.code || '').toLowerCase();
+            const ctrlPressed = Boolean(event.ctrlKey || event.metaKey);
+            const metaPressed = Boolean(event.metaKey);
+            if (binding.ctrl !== ctrlPressed) return false;
+            if (binding.alt !== Boolean(event.altKey)) return false;
+            if (binding.shift !== Boolean(event.shiftKey)) return false;
+            if (binding.meta && !metaPressed) return false;
+            if (binding.key === 'space') return eventCode === 'space';
+            if (binding.key === 'escape' || binding.key === 'esc') return eventKey === 'escape';
+            if (binding.key === 'enter') return eventKey === 'enter';
+            return eventKey === binding.key || eventCode === binding.key;
+        }
+
+        function renderSettingsShortcuts() {
+            const listEl = document.getElementById('settings-shortcuts-list');
+            if (!listEl) return;
+            const rows = Object.entries(SETTINGS_SHORTCUT_METADATA).map(([action, description]) => `
+                <div class="settings-list-item" style="display:grid; grid-template-columns:minmax(160px, 1fr) minmax(180px, 1.2fr) minmax(120px, 0.8fr); gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border-chrome);">
+                    <div style="font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.04em;">${escapeHtml(action.replace(/_/g, ' '))}</div>
+                    <div style="font-size:12px; color:var(--text-primary);">${escapeHtml(description)}</div>
+                    <input
+                        type="text"
+                        class="settings-input"
+                        data-shortcut-action="${escapeHtml(action)}"
+                        value="${escapeHtml(settingsShortcuts[action] || SETTINGS_SHORTCUT_DEFAULTS[action])}"
+                        placeholder="${escapeHtml(SETTINGS_SHORTCUT_DEFAULTS[action])}"
+                        style="min-width:0;"
+                    >
+                </div>
+            `);
+            listEl.innerHTML = rows.join('') || '<div class="settings-list-item">No shortcuts configured</div>';
+        }
+
+        function collectShortcutInputs() {
+            const nextShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS };
+            document.querySelectorAll('[data-shortcut-action]').forEach((input) => {
+                const action = String(input.getAttribute('data-shortcut-action') || '').trim();
+                if (!action) return;
+                nextShortcuts[action] = shortcutDisplayValue(input.value) || SETTINGS_SHORTCUT_DEFAULTS[action];
+            });
+            return nextShortcuts;
+        }
+
+        async function loadSettingsShortcuts() {
+            const statusEl = document.getElementById('settings-shortcuts-status');
+            try {
+                const response = await fetch('/api/settings/shortcuts');
+                const data = await response.json();
+                if (data?.ok) {
+                    settingsShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS, ...(data.shortcuts || {}) };
+                    renderSettingsShortcuts();
+                    if (statusEl) statusEl.textContent = 'Loaded current shortcut bindings.';
+                } else {
+                    throw new Error(data?.message || 'Failed to load shortcuts');
+                }
+            } catch (error) {
+                settingsShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS };
+                renderSettingsShortcuts();
+                if (statusEl) statusEl.textContent = `Shortcut load failed: ${error.message || error}`;
+            }
+        }
+
+        async function saveSettingsShortcuts() {
+            const statusEl = document.getElementById('settings-shortcuts-status');
+            const nextShortcuts = collectShortcutInputs();
+            try {
+                const response = await fetch('/api/settings/shortcuts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shortcuts: nextShortcuts }),
+                });
+                const data = await response.json();
+                if (!data?.ok) {
+                    throw new Error(data?.message || 'Failed to save shortcuts');
+                }
+                settingsShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS, ...(data.shortcuts || {}) };
+                renderSettingsShortcuts();
+                if (statusEl) statusEl.textContent = 'Shortcut bindings saved.';
+                showStatus('Shortcut bindings saved', 'success');
+            } catch (error) {
+                if (statusEl) statusEl.textContent = `Shortcut save failed: ${error.message || error}`;
+                showStatus(`Shortcut save failed: ${error.message || error}`, 'error');
+            }
+        }
+
+        async function resetSettingsShortcuts() {
+            const statusEl = document.getElementById('settings-shortcuts-status');
+            try {
+                const response = await fetch('/api/settings/shortcuts', { method: 'DELETE' });
+                const data = await response.json();
+                if (!data?.ok) {
+                    throw new Error(data?.message || 'Failed to reset shortcuts');
+                }
+                settingsShortcuts = { ...SETTINGS_SHORTCUT_DEFAULTS, ...(data.shortcuts || {}) };
+                renderSettingsShortcuts();
+                if (statusEl) statusEl.textContent = 'Shortcut bindings reset to defaults.';
+                showStatus('Shortcut bindings reset', 'info');
+            } catch (error) {
+                if (statusEl) statusEl.textContent = `Shortcut reset failed: ${error.message || error}`;
+                showStatus(`Shortcut reset failed: ${error.message || error}`, 'error');
+            }
+        }
+
         async function loadRobotProfiles(preferredRobotId = '') {
             try {
                 const response = await fetch('/api/settings/robot_profiles');
@@ -40183,9 +40828,12 @@
         }
 
         // Theme changing function
-        function changeTheme(theme) {
-            console.log('Changing theme to:', theme);
-            if (theme === 'light') {
+        function changeTheme(theme, options = {}) {
+            const { silent = false } = options;
+            const savedTheme = String(theme || 'dark').trim().toLowerCase() || 'dark';
+            const resolvedTheme = savedTheme === 'system' ? resolveSystemTheme() : savedTheme;
+            console.log('Changing theme to:', savedTheme, 'resolved:', resolvedTheme);
+            if (resolvedTheme === 'light') {
                 document.documentElement.style.setProperty('--bg-primary', '#f5f5f5');
                 document.documentElement.style.setProperty('--bg-secondary', '#ffffff');
                 document.documentElement.style.setProperty('--bg-tertiary', '#fafafa');
@@ -40196,7 +40844,6 @@
                 document.documentElement.style.setProperty('--text-primary', '#212121');
                 document.documentElement.style.setProperty('--text-secondary', '#666666');
                 document.documentElement.style.setProperty('--text-tertiary', '#999999');
-                showStatus('Theme changed to Light', 'success');
             } else {
                 // Reset to dark theme (Industrial Dark)
                 document.documentElement.style.setProperty('--bg-primary', '#0a0e14');
@@ -40209,22 +40856,22 @@
                 document.documentElement.style.setProperty('--text-primary', '#e2e8f0');
                 document.documentElement.style.setProperty('--text-secondary', '#a0aec0');
                 document.documentElement.style.setProperty('--text-tertiary', '#718096');
-                showStatus('Theme changed to Industrial Dark', 'success');
             }
-            // Save preference
-            localStorage.setItem('theme', theme);
+            localStorage.setItem('theme', savedTheme);
+            setSkinThemeSelection(savedTheme);
+            if (!silent) {
+                const label = savedTheme === 'system'
+                    ? `Follow System (${resolvedTheme})`
+                    : (resolvedTheme === 'light' ? 'Light' : 'Dark');
+                showStatus(`Theme changed to ${label}`, 'success');
+            }
         }
 
         // Load saved theme on startup
         function loadSavedTheme() {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme) {
-                const themeSelect = document.getElementById('theme-select');
-                if (themeSelect) themeSelect.value = savedTheme;
-                if (savedTheme !== 'dark') {
-                    changeTheme(savedTheme);
-                }
-            }
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            setSkinThemeSelection(savedTheme);
+            changeTheme(savedTheme, { silent: true });
         }
     </script>
 

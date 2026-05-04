@@ -840,6 +840,7 @@ def generate_static_transforms(model: Dict[str, Any]) -> List[Dict[str, Any]]:
             {
                 "parent_frame": parent,
                 "child_frame": child,
+                "joint_type": _text(link.get("joint_type")) or "fixed",
                 "xyz": list(link.get("joint_xyz", [0.0, 0.0, 0.0]))[:3],
                 "rpy": list(link.get("joint_rpy", [0.0, 0.0, 0.0]))[:3],
             }
@@ -944,11 +945,12 @@ def _urdf_body(model: Dict[str, Any]) -> List[str]:
         child = _text(transform.get("child_frame"))
         if not parent or not child:
             continue
+        joint_type = _text(transform.get("joint_type")) or "fixed"
         xyz = transform.get("xyz", [0, 0, 0])
         rpy = transform.get("rpy", [0, 0, 0])
         lines.extend(
             [
-                f'  <joint name="{_xml(parent)}_to_{_xml(child)}" type="fixed">',
+                f'  <joint name="{_xml(parent)}_to_{_xml(child)}" type="{_xml(joint_type)}">',
                 f'    <parent link="{_xml(parent)}"/>',
                 f'    <child link="{_xml(child)}"/>',
                 (

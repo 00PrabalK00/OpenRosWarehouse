@@ -548,3 +548,35 @@ def test_safety_routes_allow_admin(monkeypatch, tmp_path):
     assert force_resume.status_code == 200
     assert override.status_code == 200
     assert override.get_json()["enabled"] is True
+
+
+def test_firmware_update_requires_configured_command(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    monkeypatch.delenv("NEXT_FIRMWARE_UPDATE_COMMAND", raising=False)
+    response = client.post("/api/settings/update_firmware")
+    payload = response.get_json()
+    assert response.status_code == 400
+    assert payload["ok"] is False
+    assert "NEXT_FIRMWARE_UPDATE_COMMAND" in payload["message"]
+
+
+def test_firmware_update_launches_configured_command(monkeypatch, tmp_path):
+    client = _client(monkeypatch, tmp_path)
+    monkeypatch.setenv("NEXT_FIRMWARE_UPDATE_COMMAND", "echo firmware")
+
+    launched = {}
+
+    def _fake_popen(cmd, stdout=None, stderr=None, start_new_session=None):
+        launched["cmd"] = cmd
+        launched["stdout"] = stdout
+        launched["stderr"] = stderr
+        launched["start_new_session"] = start_new_session
+        return object()
+
+    monkeypatch.setattr(zone_web_ui.subprocess, "Popen", _fake_popen)
+    response = client.post("/api/settings/update_firmware")
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert launched["cmd"] == ["/bin/bash", "-lc", "echo firmware"]
+    assert launched["start_new_session"] is True

@@ -2928,68 +2928,72 @@ class RosBridge(Node):
             link_names.add(link_name)
             link_collisions.setdefault(link_name, [])
 
-            for idx, collision_elem in enumerate(link_elem.findall('./collision')):
-                collision_name = self._normalize_frame_name(collision_elem.attrib.get('name', f'collision_{idx + 1}'))
-                origin_elem = collision_elem.find('origin')
-                xyz = self._parse_float_triplet(origin_elem.attrib.get('xyz', '0 0 0') if origin_elem is not None else '0 0 0')
-                rpy = self._parse_float_triplet(origin_elem.attrib.get('rpy', '0 0 0') if origin_elem is not None else '0 0 0')
-                origin_tf = self._transform_from_xyz_rpy(xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2])
+            # Parse BOTH visual and collision elements
+            for source_tag in ('visual', 'collision'):
+                for idx, geom_elem in enumerate(link_elem.findall(f'./{source_tag}')):
+                    name_attr = geom_elem.attrib.get('name', '')
+                    geom_name = self._normalize_frame_name(name_attr) if name_attr else f'{link_name}_{source_tag}_{idx + 1}'
+                    
+                    origin_elem = geom_elem.find('origin')
+                    xyz = self._parse_float_triplet(origin_elem.attrib.get('xyz', '0 0 0') if origin_elem is not None else '0 0 0')
+                    rpy = self._parse_float_triplet(origin_elem.attrib.get('rpy', '0 0 0') if origin_elem is not None else '0 0 0')
+                    origin_tf = self._transform_from_xyz_rpy(xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2])
 
-                geometry_elem = collision_elem.find('geometry')
-                if geometry_elem is None:
-                    continue
+                    geometry_elem = geom_elem.find('geometry')
+                    if geometry_elem is None:
+                        continue
 
-                shape_type = ''
-                size_x = 0.0
-                size_y = 0.0
+                    shape_type = ''
+                    size_x = 0.0
+                    size_y = 0.0
 
-                box_elem = geometry_elem.find('box')
-                cyl_elem = geometry_elem.find('cylinder')
-                sphere_elem = geometry_elem.find('sphere')
-                mesh_elem = geometry_elem.find('mesh')
+                    box_elem = geometry_elem.find('box')
+                    cyl_elem = geometry_elem.find('cylinder')
+                    sphere_elem = geometry_elem.find('sphere')
+                    mesh_elem = geometry_elem.find('mesh')
 
-                if box_elem is not None:
-                    box_size = self._parse_float_triplet(box_elem.attrib.get('size', '0 0 0'))
-                    size_x = abs(float(box_size[0]))
-                    size_y = abs(float(box_size[1]))
-                    shape_type = 'box'
-                elif cyl_elem is not None:
-                    try:
-                        radius = abs(float(cyl_elem.attrib.get('radius', '0') or 0.0))
-                    except Exception:
-                        radius = 0.0
-                    diameter = 2.0 * radius
-                    size_x = diameter
-                    size_y = diameter
-                    shape_type = 'cylinder'
-                elif sphere_elem is not None:
-                    try:
-                        radius = abs(float(sphere_elem.attrib.get('radius', '0') or 0.0))
-                    except Exception:
-                        radius = 0.0
-                    diameter = 2.0 * radius
-                    size_x = diameter
-                    size_y = diameter
-                    shape_type = 'sphere'
-                elif mesh_elem is not None:
-                    mesh_scale = self._parse_float_triplet(mesh_elem.attrib.get('scale', '1 1 1'), default=(1.0, 1.0, 1.0))
-                    # Mesh bounds are not available from raw URDF, so use conservative placeholders scaled from mesh scale.
-                    size_x = max(0.10, abs(float(mesh_scale[0])) * 0.35)
-                    size_y = max(0.10, abs(float(mesh_scale[1])) * 0.35)
-                    shape_type = 'mesh_bbox'
+                    if box_elem is not None:
+                        box_size = self._parse_float_triplet(box_elem.attrib.get('size', '0 0 0'))
+                        size_x = abs(float(box_size[0]))
+                        size_y = abs(float(box_size[1]))
+                        shape_type = 'box'
+                    elif cyl_elem is not None:
+                        try:
+                            radius = abs(float(cyl_elem.attrib.get('radius', '0') or 0.0))
+                        except Exception:
+                            radius = 0.0
+                        diameter = 2.0 * radius
+                        size_x = diameter
+                        size_y = diameter
+                        shape_type = 'cylinder'
+                    elif sphere_elem is not None:
+                        try:
+                            radius = abs(float(sphere_elem.attrib.get('radius', '0') or 0.0))
+                        except Exception:
+                            radius = 0.0
+                        diameter = 2.0 * radius
+                        size_x = diameter
+                        size_y = diameter
+                        shape_type = 'sphere'
+                    elif mesh_elem is not None:
+                        mesh_scale = self._parse_float_triplet(mesh_elem.attrib.get('scale', '1 1 1'), default=(1.0, 1.0, 1.0))
+                        size_x = max(0.10, abs(float(mesh_scale[0])) * 0.35)
+                        size_y = max(0.10, abs(float(mesh_scale[1])) * 0.35)
+                        shape_type = 'mesh_bbox'
 
-                if size_x <= 0.0 or size_y <= 0.0:
-                    continue
+                    if size_x <= 0.0 or size_y <= 0.0:
+                        continue
 
-                link_collisions[link_name].append(
-                    {
-                        'name': collision_name,
-                        'origin_transform': origin_tf,
-                        'geometry_type': shape_type,
-                        'size_x': size_x,
-                        'size_y': size_y,
-                    }
-                )
+                    link_collisions[link_name].append(
+                        {
+                            'name': geom_name,
+                            'origin_transform': origin_tf,
+                            'geometry_type': shape_type,
+                            'size_x': size_x,
+                            'size_y': size_y,
+                            'source': source_tag,
+                        }
+                    )
 
         internal_joints: List[Dict[str, Any]] = []
         urdf_edges: List[Dict[str, Any]] = []
@@ -3116,6 +3120,7 @@ class RosBridge(Node):
                         'size': {'x': round(size_x, 4), 'y': round(size_y, 4)},
                         'yaw': round(yaw, 4),
                         'points': points,
+                        'source': str(collision.get('source', 'collision')),
                     }
                 )
 
@@ -4366,6 +4371,25 @@ class RosBridge(Node):
         if requested_base in link_name_set:
             base_link = requested_base
 
+        # Compute absolute transforms for all links
+        link_adjacency: Dict[str, List[Tuple[str, List[List[float]]]]] = {name: [] for name in link_name_set}
+        for child, joint in joints_by_child.items():
+            parent = joint['parent']
+            tf = self._transform_from_xyz_rpy(*joint['joint_xyz'], *joint['joint_rpy'])
+            link_adjacency[parent].append((child, tf))
+
+        relative_transforms: Dict[str, List[List[float]]] = {base_link: self._transform_identity()}
+        queue = [base_link]
+        idx = 0
+        while idx < len(queue):
+            cur = queue[idx]
+            idx += 1
+            cur_tf = relative_transforms[cur]
+            for child, edge_tf in link_adjacency.get(cur, []):
+                if child in relative_transforms: continue
+                relative_transforms[child] = self._transform_multiply(cur_tf, edge_tf)
+                queue.append(child)
+
         links: List[Dict[str, Any]] = [
             {
                 'name': base_link,
@@ -4381,7 +4405,6 @@ class RosBridge(Node):
             joint = joints_by_child.get(link_name, {})
             parent = self._normalize_frame_name(joint.get('parent', ''))
             if not parent or parent not in link_name_set or parent == link_name:
-                # If disconnected, graft to base
                 parent = base_link
             links.append(
                 {
@@ -4503,6 +4526,7 @@ class RosBridge(Node):
                         'height': float(height),
                         'radius': float(radius),
                         'color': '#94a3b8' if source_kind == 'visual' else '#60a5fa',
+                        'source': source_kind,
                     }
                 )
                 if len(shapes) >= int(self.ROBOT_EDITOR_MAX_SHAPES):

@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import re
+import subprocess
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -2532,6 +2533,38 @@ def run_settings_relaunch():
 
     result = node.launch_relaunch_target(target=target)
     return _status(result, fail_code=400)
+
+
+@app.route('/api/settings/update_firmware', methods=['POST'])
+def run_firmware_update():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
+    command = str(os.getenv('NEXT_FIRMWARE_UPDATE_COMMAND', '') or '').strip()
+    if not command:
+        return jsonify({
+            'ok': False,
+            'message': 'Firmware update command is not configured. Set NEXT_FIRMWARE_UPDATE_COMMAND on the host.',
+        }), 400
+
+    try:
+        subprocess.Popen(
+            ['/bin/bash', '-lc', command],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        next_ops.record_event(
+            severity='warning',
+            source='settings',
+            message='Firmware update command launched',
+            reason='User requested firmware update',
+            details={'command': command},
+        )
+        return jsonify({'ok': True, 'message': 'Firmware update command launched'})
+    except Exception as exc:
+        return jsonify({'ok': False, 'message': f'Failed to launch firmware update: {exc}'}), 500
 
 
 

@@ -1,0 +1,146 @@
+<robot name="Robot1">
+  <link name="base_footprint">
+    <collision name="camera">
+      <origin xyz="0.346000 0.000000 0.150000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <cylinder radius="0.060000" length="0.080000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="base_link">
+    <collision name="base_link_shape_1">
+      <origin xyz="0.000000 0.000000 0.045000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <box size="0.800000 0.580000 0.090000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="left_wheel">
+    <collision name="left_wheel_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <sphere radius="0.100000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="right_wheel">
+    <collision name="right_wheel_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <sphere radius="0.100000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="caster_front_left">
+    <collision name="caster_front_left_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <sphere radius="0.038000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="caster_front_right">
+    <collision name="caster_front_right_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <sphere radius="0.038000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="caster_rear_left">
+    <collision name="caster_rear_left_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <sphere radius="0.038000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="caster_rear_right">
+    <collision name="caster_rear_right_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <sphere radius="0.038000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="imu_link">
+    <collision name="imu_link_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <box size="0.053800 0.048800 0.025200" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="laser_front_frame">
+    <collision name="laser_front_frame_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <cylinder radius="0.050000" length="0.040000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="laser_rear_frame">
+    <collision name="laser_rear_frame_shape_1">
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <cylinder radius="0.050000" length="0.040000" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="face_link" />
+  <joint name="base_footprint_to_base_link" type="fixed">
+    <parent link="base_footprint" />
+    <child link="base_link" />
+    <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_left_wheel" type="continuous">
+    <parent link="base_link" />
+    <child link="left_wheel" />
+    <origin xyz="0.000000 0.247500 0.000000" rpy="-1.570796 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_right_wheel" type="continuous">
+    <parent link="base_link" />
+    <child link="right_wheel" />
+    <origin xyz="0.000000 -0.247500 0.000000" rpy="1.570796 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_caster_front_left" type="fixed">
+    <parent link="base_link" />
+    <child link="caster_front_left" />
+    <origin xyz="0.350000 0.200000 -0.062000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_caster_front_right" type="fixed">
+    <parent link="base_link" />
+    <child link="caster_front_right" />
+    <origin xyz="0.350000 -0.200000 -0.062000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_caster_rear_left" type="fixed">
+    <parent link="base_link" />
+    <child link="caster_rear_left" />
+    <origin xyz="-0.350000 0.200000 -0.062000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_caster_rear_right" type="fixed">
+    <parent link="base_link" />
+    <child link="caster_rear_right" />
+    <origin xyz="-0.350000 -0.200000 -0.062000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_imu_link" type="fixed">
+    <parent link="base_link" />
+    <child link="imu_link" />
+    <origin xyz="0.000000 0.000000 0.100000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_laser_front_frame" type="fixed">
+    <parent link="base_link" />
+    <child link="laser_front_frame" />
+    <origin xyz="0.350000 0.000000 0.100000" rpy="0.000000 0.000000 3.141590" />
+  </joint>
+  <joint name="base_link_to_laser_rear_frame" type="fixed">
+    <parent link="base_link" />
+    <child link="laser_rear_frame" />
+    <origin xyz="-0.350000 0.000000 0.100000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="base_link_to_face_link" type="fixed">
+    <parent link="base_link" />
+    <child link="face_link" />
+    <origin xyz="0.400000 0.000000 0.045000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+</robot>

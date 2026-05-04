@@ -338,6 +338,14 @@
     .issue-marker.error { background: rgba(196,43,43,0.85); border: 1px solid #fc8181; color: #fff; }
     .issue-marker.warn  { background: rgba(168,84,0,0.85);  border: 1px solid #ed8936; color: #fff; }
 
+    /* Visual geometry and link frames */
+    .robot-visual { fill: #94a3b8; stroke: #cbd5e1; stroke-width: 0.5px; opacity: 0.75; pointer-events: none; }
+    .robot-visual.selected { stroke: #fff; stroke-width: 1.2px; opacity: 1; }
+    .link-marker circle { transition: r 0.1s; }
+    .link-marker:hover circle { r: 5 !important; }
+    .link-marker text { font-family: 'Roboto Mono', monospace; pointer-events: none; user-select: none; }
+    .robot-origin-cross line { stroke-width: 1.5px; }
+
     /* ── Inspector Panel (right side) ──────────────────────────── */
     #inspector {
       width: var(--inspector-w); min-width: var(--inspector-w); flex-shrink: 0;
@@ -792,7 +800,8 @@
         </div>
 
         <!-- Visual layer toggles -->
-        <button class="btn" style="height:24px;padding:0 8px;font-size:9px;margin-left:4px;" id="toggle-collision" onclick="toggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
+        <button class="btn" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-frames" onclick="toggleLayer('frames', this)"><i class="fas fa-crosshairs"></i> Frames</button>
+        <button class="btn" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-collision" onclick="toggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
         <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-sensors" onclick="toggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
         <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-safety" onclick="toggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
 
@@ -1357,10 +1366,10 @@ const DC = {
   mode: 'structure',
   canvasView: 'top',
   selectedLink: null,
-  layers: { collision: false, sensors: true, safety: true },
+  layers: { frames: true, collision: true, sensors: false, safety: false },
   zoom: 1.0,
   gridVisible: true,
-  labelsVisible: true,
+  labelsVisible: false,
   robotId: '',
   profile: null,
   model: null,
@@ -1559,6 +1568,41 @@ function dcModelShapes() {
   return Array.isArray(DC.model?.shapes) ? DC.model.shapes : [];
 }
 
+function dcComputeAbsoluteTransforms() {
+  const base = DC.model?.base_link || 'base_link';
+  const links = dcModelLinks();
+  const adjacency = {};
+  links.forEach(l => {
+    if (l.parent) {
+      if (!adjacency[l.parent]) adjacency[l.parent] = [];
+      adjacency[l.parent].push(l);
+    }
+  });
+
+  const abs = { [base]: { x: 0, y: 0, z: 0, yaw: 0 } };
+  const queue = [base];
+  let idx = 0;
+  while (idx < queue.length) {
+    const parent = queue[idx++];
+    const pAbs = abs[parent];
+    (adjacency[parent] || []).forEach(childLink => {
+      const cName = childLink.name;
+      const xyz = childLink.joint_xyz || [0,0,0];
+      const rpy = childLink.joint_rpy || [0,0,0];
+      const cosP = Math.cos(pAbs.yaw);
+      const sinP = Math.sin(pAbs.yaw);
+      abs[cName] = {
+        x: pAbs.x + (xyz[0] * cosP - xyz[1] * sinP),
+        y: pAbs.y + (xyz[0] * sinP + xyz[1] * cosP),
+        z: pAbs.z + (xyz[2] || 0),
+        yaw: pAbs.yaw + (rpy[2] || 0)
+      };
+      queue.push(cName);
+    });
+  }
+  return abs;
+}
+
 const DEVICE_CATEGORY_DEFS = [
   ['Digital Input', 'digital_input', 64],
   ['Digital Input Sensor', 'digital_input_sensor', 64],
@@ -1654,6 +1698,16 @@ function setMode(mode) {
   });
   const badge = document.getElementById('insp-mode-badge');
   if (badge) badge.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+  const presets = {
+    structure: { frames: true, collision: true, sensors: false, safety: false },
+    sensors: { frames: true, collision: true, sensors: true, safety: false },
+    motion: { frames: true, collision: true, sensors: false, safety: false },
+    safety: { frames: true, collision: true, sensors: false, safety: true },
+    diagnostics: { frames: true, collision: true, sensors: true, safety: true },
+  };
+  DC.layers = Object.assign({}, DC.layers, presets[mode] || {});
+  syncCanvasControlState();
+  renderCanvasFromModel();
 }
 
 /* ─── Inspector tabs ──────────────────────────────────────── */
@@ -1680,14 +1734,14 @@ function setCanvasView(view, btn) {
   const lbl = document.getElementById('canvas-view-label');
   const names = { top: 'Top View', side: 'Side View', iso: 'Isometric' };
   if (lbl) lbl.textContent = names[view] || view;
-  // In a real implementation, re-render the SVG here.
+  renderCanvasFromModel();
 }
 
 /* ─── Layer toggles ───────────────────────────────────────── */
 function toggleLayer(layer, btn) {
   DC.layers[layer] = !DC.layers[layer];
   btn.classList.toggle('active', DC.layers[layer]);
-  // In real code: show/hide SVG layer groups here.
+  renderCanvasFromModel();
 }
 
 /* ─── Zoom controls ───────────────────────────────────────── */
@@ -1697,9 +1751,15 @@ let svgScale = 1.0;
 function applySvgScale() {
   const svg = document.getElementById('robot-svg');
   if (!svg) return;
-  const hw = (SVG_VIEWBOX_W / 2) / svgScale;
-  const hh = (SVG_VIEWBOX_H / 2) / svgScale;
-  svg.setAttribute('viewBox', `${-hw} ${-hh} ${hw * 2} ${hh * 2}`);
+  const bounds = DC.canvasBounds || { minX: -SVG_VIEWBOX_W / 2, maxX: SVG_VIEWBOX_W / 2, minY: -SVG_VIEWBOX_H / 2, maxY: SVG_VIEWBOX_H / 2 };
+  const width = Math.max(220, bounds.maxX - bounds.minX);
+  const height = Math.max(180, bounds.maxY - bounds.minY);
+  const padding = Math.max(36, Math.max(width, height) * 0.16);
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  const hw = (width / 2 + padding) / svgScale;
+  const hh = (height / 2 + padding) / svgScale;
+  svg.setAttribute('viewBox', `${(cx - hw).toFixed(2)} ${(cy - hh).toFixed(2)} ${(hw * 2).toFixed(2)} ${(hh * 2).toFixed(2)}`);
 }
 function canvasZoomIn()  { svgScale = Math.min(svgScale * 1.2, 8); applySvgScale(); }
 function canvasZoomOut() { svgScale = Math.max(svgScale / 1.2, 0.3); applySvgScale(); }
@@ -1713,9 +1773,20 @@ function toggleGrid(btn) {
 function toggleLabels(btn) {
   DC.labelsVisible = !DC.labelsVisible;
   btn.classList.toggle('active', DC.labelsVisible);
-  document.querySelectorAll('.canvas-label').forEach(el => {
-    el.style.display = DC.labelsVisible ? '' : 'none';
-  });
+  renderCanvasFromModel();
+}
+
+function syncCanvasControlState() {
+  const framesBtn = document.getElementById('toggle-frames');
+  const collisionBtn = document.getElementById('toggle-collision');
+  const sensorsBtn = document.getElementById('toggle-sensors');
+  const safetyBtn = document.getElementById('toggle-safety');
+  const labelsBtn = document.getElementById('vc-labels');
+  if (framesBtn) framesBtn.classList.toggle('active', !!DC.layers.frames);
+  if (collisionBtn) collisionBtn.classList.toggle('active', !!DC.layers.collision);
+  if (sensorsBtn) sensorsBtn.classList.toggle('active', !!DC.layers.sensors);
+  if (safetyBtn) safetyBtn.classList.toggle('active', !!DC.layers.safety);
+  if (labelsBtn) labelsBtn.classList.toggle('active', !!DC.labelsVisible);
 }
 
 /* Mouse wheel zoom on canvas */
@@ -1846,6 +1917,7 @@ let PART_DATA = {
 
 function selectLink(linkName) {
   DC.selectedLink = linkName;
+  renderCanvasFromModel();
 
   // Highlight tree node
   document.querySelectorAll('.tree-node').forEach(n => {
@@ -1976,6 +2048,7 @@ function showDetailEditor(linkName) {
 
 function showOverview() {
   DC.selectedLink = null;
+  renderCanvasFromModel();
   document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('selected'));
   document.querySelectorAll('[data-part]').forEach(el => el.classList.remove('selected-highlight'));
   const overview = document.getElementById('overview-state');
@@ -2238,46 +2311,153 @@ function renderHierarchyFromModel() {
 function renderCanvasFromModel() {
   const svg = document.getElementById('robot-svg');
   if (!svg || !DC.model) return;
+  const absTransforms = dcComputeAbsoluteTransforms();
   const shapes = dcModelShapes();
-  const bodyShapes = shapes.filter(shape => !/safety|protect|collision|footprint/.test(String(shape?.name || shape?.id || '').toLowerCase()));
+  const bodyShapes = shapes.filter(shape => {
+    const name = String(shape?.name || shape?.id || '').toLowerCase();
+    const source = String(shape?.source || '').toLowerCase();
+    if (source === 'visual') return true;
+    return !/safety|protect|collision|footprint/.test(name);
+  });
   const safetyShapes = shapes.filter(shape => /safety|protect/.test(String(shape?.name || shape?.id || '').toLowerCase()));
   const collisionShapes = shapes.filter(shape => /collision|footprint/.test(String(shape?.name || shape?.id || '').toLowerCase()));
   const px = 220;
-  const renderShape = (shape, cls, fillExtra = '') => {
-    const id = String(shape?.id || shape?.name || '').trim();
-    const x = Number(shape?.x || 0) * px;
-    const y = -Number(shape?.y || 0) * px;
-    const yaw = -Number(shape?.yaw || 0) * 180 / Math.PI;
-    const width = Math.max(8, Number(shape?.width || shape?.radius || 0.2) * px);
-    const length = Math.max(8, Number(shape?.length || shape?.depth || shape?.radius || 0.2) * px);
-    const type = String(shape?.type || 'box').toLowerCase();
-    if (type === 'cylinder' || type === 'sphere') {
-      const r = Math.max(5, Number(shape?.radius || 0.1) * px);
-      return `<circle class="${cls}" data-part="${dcAttr(id)}" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" ${fillExtra}/>`;
+  const showFrames = !!DC.layers.frames;
+  const showCollision = !!DC.layers.collision;
+  const showSensors = !!DC.layers.sensors;
+  const showSafety = !!DC.layers.safety;
+  const selectedId = String(DC.selectedLink || '').trim();
+  const view = String(DC.canvasView || 'top');
+  const bounds = { minX: -110, maxX: 110, minY: -90, maxY: 90 };
+  const extendBounds = (x, y, rx = 0, ry = rx) => {
+    bounds.minX = Math.min(bounds.minX, x - rx);
+    bounds.maxX = Math.max(bounds.maxX, x + rx);
+    bounds.minY = Math.min(bounds.minY, y - ry);
+    bounds.maxY = Math.max(bounds.maxY, y + ry);
+  };
+  const project = (shapeOrLink, isLink = false) => {
+    const id = String(shapeOrLink?.id || shapeOrLink?.name || '').trim();
+    const linkName = isLink ? id : (shapeOrLink.link || DC.model.base_link || 'base_link');
+    const lAbs = absTransforms[linkName] || { x: 0, y: 0, z: 0, yaw: 0 };
+    
+    let wx = lAbs.x, wy = lAbs.y, wz = lAbs.z, wyaw = lAbs.yaw;
+    if (!isLink) {
+      const cosL = Math.cos(lAbs.yaw);
+      const sinL = Math.sin(lAbs.yaw);
+      wx = lAbs.x + (Number(shapeOrLink.x || 0) * cosL - Number(shapeOrLink.y || 0) * sinL);
+      wy = lAbs.y + (Number(shapeOrLink.x || 0) * sinL + Number(shapeOrLink.y || 0) * cosL);
+      wz = lAbs.z + Number(shapeOrLink.z || 0);
+      wyaw = lAbs.yaw + Number(shapeOrLink.yaw || 0);
     }
-    return `<rect class="${cls}" data-part="${dcAttr(id)}" x="${(-width / 2).toFixed(2)}" y="${(-length / 2).toFixed(2)}" width="${width.toFixed(2)}" height="${length.toFixed(2)}" rx="6" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${yaw.toFixed(2)})" ${fillExtra}/>`;
+
+    const x = wx * px;
+    const y = -wy * px;
+    const z = -wz * px;
+    const yaw = -wyaw * 180 / Math.PI;
+    const width = Math.max(8, Number(shapeOrLink?.width || shapeOrLink?.radius || 0.2) * px);
+    const length = Math.max(8, Number(shapeOrLink?.length || shapeOrLink?.depth || shapeOrLink?.radius || 0.2) * px);
+    const height = Math.max(8, Number(shapeOrLink?.height || shapeOrLink?.radius || 0.2) * px);
+    const radius = Math.max(5, Number(shapeOrLink?.radius || 0.1) * px);
+    
+    if (view === 'side') {
+      return { id, x, y: z, yaw: 0, width: length, length: height, height, radius };
+    }
+    if (view === 'iso') {
+      return {
+        id,
+        x: (x - (-y)) * 0.78,
+        y: ((x + (-y)) * -0.34) + (z * 0.92),
+        yaw: 0,
+        width,
+        length,
+        height,
+        radius,
+      };
+    }
+    return { id, x, y, yaw, width, length, height, radius };
+  };
+  const renderShape = (shape, cls, fillExtra = '') => {
+    const pose = project(shape);
+    const type = String(shape?.type || 'box').toLowerCase();
+    const selected = pose.id && pose.id === selectedId;
+    const source = String(shape?.source || '');
+    if (source === 'visual') cls = 'robot-visual' + (selected ? ' selected' : '');
+    const opacity = selectedId && !selected && source !== 'visual' ? ' opacity="0.58"' : '';
+    if (type === 'cylinder' || type === 'sphere') {
+      extendBounds(pose.x, pose.y, pose.radius);
+      return `<circle class="${cls}" data-part="${dcAttr(pose.id)}" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${pose.radius.toFixed(2)}"${opacity} ${fillExtra}/>`;
+    }
+    extendBounds(pose.x, pose.y, pose.width / 2, pose.length / 2);
+    return `<rect class="${cls}" data-part="${dcAttr(pose.id)}" x="${(-pose.width / 2).toFixed(2)}" y="${(-pose.length / 2).toFixed(2)}" width="${pose.width.toFixed(2)}" height="${pose.length.toFixed(2)}" rx="6" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"${opacity} ${fillExtra}/>`;
   };
   const sensorLabels = bodyShapes.map(shape => {
-    const id = String(shape?.id || shape?.name || '').trim();
+    const pose = project(shape);
+    const id = pose.id;
     const kind = dcShapeKind(shape);
+    if (!DC.labelsVisible && id !== selectedId) return '';
     if (!/laser|camera|distance|sensor/.test(kind + id.toLowerCase())) return '';
-    const x = Number(shape?.x || 0) * px;
-    const y = -Number(shape?.y || 0) * px;
-    return `<text class="canvas-label" x="${(x + 14).toFixed(1)}" y="${(y - 10).toFixed(1)}">${dcEscapeHtml(id)}</text>`;
+    return `<text class="canvas-label${id === selectedId ? ' canvas-label-highlight' : ''}" x="${(pose.x + 14).toFixed(1)}" y="${(pose.y - 10).toFixed(1)}">${dcEscapeHtml(id)}</text>`;
   }).join('');
+  const safetyLayer = showSafety
+    ? `${safetyShapes.length ? safetyShapes.map(shape => renderShape(shape, 'robot-safety-zone')).join('') : '<ellipse class="robot-safety-zone" cx="0" cy="0" rx="110" ry="96" opacity="0.42"/>'}`
+    : '';
+  if (showSafety && !safetyShapes.length) extendBounds(0, 0, 110, 96);
+  const collisionLayer = showCollision
+    ? collisionShapes.map(shape => renderShape(shape, 'robot-fov-arc', 'fill="none" stroke-dasharray="5,4"')).join('')
+    : '';
+  const sensorCoverage = showSensors ? bodyShapes.map(shape => {
+    const kind = dcShapeKind(shape);
+    const pose = project(shape);
+    const name = String(shape?.id || shape?.name || '').toLowerCase();
+    const isSensor = /laser|camera|distance|sensor/.test(`${kind} ${name}`);
+    if (!isSensor) return '';
+    const rangePx = Math.max(18, Number(shape?.range_m || shape?.range || (/camera/.test(kind) ? 1.8 : /laser|lidar/.test(kind) ? 2.4 : 1.0)) * px);
+    const fovDeg = Math.max(20, Number(shape?.fov_deg || (/camera/.test(kind) ? 84 : /laser|lidar/.test(kind) ? 220 : 60)));
+    const start = (-90 - fovDeg / 2) * Math.PI / 180;
+    const end = (-90 + fovDeg / 2) * Math.PI / 180;
+    const x1 = pose.x + Math.cos(start) * rangePx;
+    const y1 = pose.y + Math.sin(start) * rangePx;
+    const x2 = pose.x + Math.cos(end) * rangePx;
+    const y2 = pose.y + Math.sin(end) * rangePx;
+    const largeArc = fovDeg > 180 ? 1 : 0;
+    const selected = pose.id && pose.id === selectedId;
+    const opacity = selected ? 0.28 : 0.16;
+    extendBounds(pose.x, pose.y, rangePx, rangePx);
+    if (/camera/.test(kind)) {
+      return `<path class="robot-camera-fov" d="M ${pose.x.toFixed(2)},${pose.y.toFixed(2)} L ${x1.toFixed(2)},${y1.toFixed(2)} A ${rangePx.toFixed(2)},${rangePx.toFixed(2)} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" opacity="${opacity.toFixed(2)}"/>`;
+    }
+    return `<circle class="robot-fov-arc" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${rangePx.toFixed(2)}" opacity="${selected ? '0.32' : '0.18'}"/>`;
+  }).join('') : '';
+
+  const linkFrames = showFrames ? (DC.model.links || []).map(link => {
+    const pose = project(link, true);
+    const selected = link.name === selectedId;
+    const opacity = selectedId && !selected ? '0.4' : '1.0';
+    return `
+      <g class="link-marker" transform="translate(${pose.x.toFixed(2)}, ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"
+         opacity="${opacity}" style="cursor:pointer;" onclick="event.stopPropagation(); selectLink('${dcJsString(link.name)}')">
+        <circle r="3.5" fill="${selected ? 'var(--accent-blue)' : 'var(--text-tertiary)'}" />
+        <line x1="0" y1="0" x2="14" y2="0" stroke="rgba(252,129,129,0.85)" stroke-width="1.5" />
+        <line x1="0" y1="0" x2="0" y2="-14" stroke="rgba(134,239,172,0.85)" stroke-width="1.5" />
+        ${DC.labelsVisible || selected ? `<text class="canvas-label" x="6" y="-6" style="fill:${selected ? 'var(--accent-blue)' : 'var(--text-secondary)'};font-size:9px;">${dcEscapeHtml(link.name)}</text>` : ''}
+      </g>`;
+  }).join('') : '';
+
   svg.innerHTML = `
-    <ellipse class="robot-safety-zone" cx="0" cy="0" rx="190" ry="165"/>
-    ${safetyShapes.map(shape => renderShape(shape, 'robot-safety-zone')).join('')}
-    ${collisionShapes.map(shape => renderShape(shape, 'robot-fov-arc', 'fill="none" stroke-dasharray="5,4"')).join('')}
+    ${safetyLayer}
+    ${sensorCoverage}
+    ${collisionLayer}
     ${bodyShapes.map(shape => renderShape(shape, dcShapeKind(shape) === 'wheel' ? 'robot-wheel' : dcShapeKind(shape) === 'laser' ? 'robot-sensor-lidar' : dcShapeKind(shape) === 'camera' ? 'robot-sensor-camera' : 'robot-chassis')).join('')}
     <g class="robot-origin-cross">
-      <line x1="-24" y1="0" x2="48" y2="0" class="robot-axis-x"/>
-      <line x1="0" y1="24" x2="0" y2="-48" class="robot-axis-y"/>
+      <line x1="-24" y1="0" x2="48" y2="0" class="robot-axis-x" stroke="rgba(252,129,129,0.5)"/>
+      <line x1="0" y1="24" x2="0" y2="-48" class="robot-axis-y" stroke="rgba(134,239,172,0.5)"/>
     </g>
-    <text class="canvas-label" x="52" y="4">X</text>
-    <text class="canvas-label" x="6" y="-52">Y</text>
+    ${linkFrames}
+    <text class="canvas-label" x="52" y="4"${DC.labelsVisible ? '' : ' style="display:none;"'}>X</text>
+    <text class="canvas-label" x="6" y="-52"${DC.labelsVisible ? '' : ' style="display:none;"'}>Y</text>
     ${sensorLabels}
   `;
+  DC.canvasBounds = bounds;
   document.querySelectorAll('[data-part]').forEach(el => {
     el.style.cursor = 'pointer';
     el.addEventListener('click', e => {
@@ -3149,6 +3329,8 @@ document.getElementById('robot-canvas-area').addEventListener('click', e => {
 
 document.addEventListener('DOMContentLoaded', () => {
   dcCheckEmbedded();
+  syncCanvasControlState();
+  setMode(DC.mode);
   loadProfiles().catch(exc => {
     dcSetMessage(exc.message || 'Failed loading robot model workspace', 'error');
     renderValidationReport();

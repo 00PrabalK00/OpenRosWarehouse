@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, session } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -8,6 +8,9 @@ const DEFAULT_CONFIG = Object.freeze({
   port: 5000,
   page: '/dev',
   autoConnect: false,
+  maximizeOnStartup: false,
+  proxyEnabled: false,
+  proxyRules: '',
 });
 
 const CONNECT_WINDOW_SIZE = Object.freeze({
@@ -78,6 +81,9 @@ function sanitizeConfig(raw = {}) {
     port: sanitizePort(raw.port),
     page: sanitizePage(raw.page),
     autoConnect: Boolean(raw.autoConnect),
+    maximizeOnStartup: Boolean(raw.maximizeOnStartup),
+    proxyEnabled: Boolean(raw.proxyEnabled),
+    proxyRules: String(raw.proxyRules || '').trim(),
   };
 }
 
@@ -90,11 +96,32 @@ async function readConfig() {
   }
 }
 
-async function writeConfig(raw) {
-  const nextConfig = sanitizeConfig(raw);
+async function writeConfig(raw, { mergeExisting = true } = {}) {
+  const baseConfig = mergeExisting ? await readConfig() : { ...DEFAULT_CONFIG };
+  const nextConfig = sanitizeConfig({ ...baseConfig, ...(raw || {}) });
   await fs.mkdir(path.dirname(configFilePath()), { recursive: true });
   await fs.writeFile(configFilePath(), JSON.stringify(nextConfig, null, 2), 'utf-8');
   return nextConfig;
+}
+
+async function applyProxy(config, targetSession = null) {
+  const safe = sanitizeConfig(config);
+  const managedSession = targetSession || session.fromPartition(APP_PARTITION);
+  if (!managedSession || typeof managedSession.setProxy !== 'function') {
+    return safe;
+  }
+
+  if (safe.proxyEnabled) {
+    const proxyRules = String(safe.proxyRules || '').trim();
+    await managedSession.setProxy(
+      proxyRules
+        ? { mode: 'fixed_servers', proxyRules }
+        : { mode: 'system' }
+    );
+  } else {
+    await managedSession.setProxy({ mode: 'direct' });
+  }
+  return safe;
 }
 
 function buildBaseUrl(config) {
@@ -282,7 +309,11 @@ async function showMainWindow(config) {
     });
   }
 
+  await applyProxy(safe, mainWindow.webContents.session);
   await mainWindow.loadURL(targetUrl);
+  if (safe.maximizeOnStartup) {
+    mainWindow.maximize();
+  }
   mainWindow.focus();
   return mainWindow;
 }
@@ -308,6 +339,23 @@ function registerIpc() {
 
   ipcMain.handle('desktop:save-config', async (_event, rawConfig) => {
     return writeConfig(rawConfig);
+  });
+
+  ipcMain.handle('desktop:get-settings', async () => {
+    return readConfig();
+  });
+
+  ipcMain.handle('desktop:update-settings', async (_event, partialConfig) => {
+    const nextConfig = await writeConfig(partialConfig || {});
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      await applyProxy(nextConfig, mainWindow.webContents.session);
+      if (nextConfig.maximizeOnStartup) {
+        mainWindow.maximize();
+      } else if (mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+      }
+    }
+    return nextConfig;
   });
 
   ipcMain.handle('desktop:connect-target', async (_event, rawConfig) => {
