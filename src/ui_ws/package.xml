@@ -29,7 +29,7 @@
   <exec_depend>next_ros2ws_web</exec_depend>
   <exec_depend>next_ros2ws_interfaces</exec_depend>
   <exec_depend>next_ros2ws_tools</exec_depend>
-  <exec_depend>next2_shelf</exec_depend>
+  <exec_depend>next2_shelf_simple</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

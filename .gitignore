@@ -48,6 +48,7 @@ ip
 src.zip
 src/ui_ws/config/robot_profiles/registry.yaml
 src/ui_ws/.map_editor_stage.yaml
+src/next_ros2ws_web/web/static/resources/operator_access.local.yaml
 Next_Pro_Implementation_TODO.md
 Next_Pro_Feature_Spec_Analysis.md
 Roboshop_Pro_Implementation_TODO.md
@@ -60,3 +61,4 @@ VERIFICATION_PLANS.md
 ExtraThings/
 build.sh
 old_samples.csv
+DEVELOPERS_MANUAL.md

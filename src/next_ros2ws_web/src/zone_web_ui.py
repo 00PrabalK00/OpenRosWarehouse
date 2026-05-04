@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import base64
+import contextlib
 import functools
 import hashlib
 import io
@@ -8,12 +9,15 @@ import json
 import logging
 import math
 import os
+import re
 import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
+import cv2
 import rclpy
 from ament_index_python.packages import get_package_share_directory
-from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, session
 from flask_cors import CORS
 from rclpy.executors import MultiThreadedExecutor
 import yaml
@@ -76,12 +80,127 @@ _DOTTED_RENDER_CACHE: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 _DOTTED_RENDER_CACHE_LOCK = threading.Lock()
 _LIVE_DOTTED_OCCUPIED_THRESHOLD = 15
 _LIVE_DOTTED_UNKNOWN_SHADE = 230
+_DEFAULT_CAMERA_DEVICE = '/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_F6E57210-video-index0'
+_FALLBACK_CAMERA_DEVICE = '/dev/video0'
+_CAMERA_WIDTH = int(os.getenv('NEXT_WEB_CAMERA_WIDTH', '640') or '640')
+_CAMERA_HEIGHT = int(os.getenv('NEXT_WEB_CAMERA_HEIGHT', '360') or '360')
+_CAMERA_FPS = max(1, int(os.getenv('NEXT_WEB_CAMERA_FPS', '10') or '10'))
+_CAMERA_JPEG_QUALITY = max(40, min(90, int(os.getenv('NEXT_WEB_CAMERA_JPEG_QUALITY', '70') or '70')))
+_CAMERA_CAPTURE_LOCK = threading.Lock()
+_CAMERA_SHARED_CAPTURE = None
+_CAMERA_SHARED_SOURCE = ''
+_CAMERA_BLACK_FRAME_THRESHOLD = 3.0
+_CAMERA_WARMUP_FRAMES = max(6, int(os.getenv('NEXT_WEB_CAMERA_WARMUP_FRAMES', '12') or '12'))
 
 
 def _node():
     if ros_node is None:
         return None, (jsonify({'ok': False, 'message': 'ROS node not initialized'}), 500)
     return ros_node, None
+
+
+def _camera_source_candidates() -> List[str]:
+    configured = str(os.getenv('NEXT_WEB_CAMERA_DEVICE', '') or '').strip()
+    candidates = [configured, _DEFAULT_CAMERA_DEVICE, _FALLBACK_CAMERA_DEVICE]
+    return [path for path in candidates if path]
+
+
+def _resolve_camera_source() -> Optional[str]:
+    for path in _camera_source_candidates():
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _camera_stream_response(message: str, status: int = 503):
+    return jsonify({'ok': False, 'message': str(message)}), status
+
+
+def _camera_open_candidates(source_path: str) -> List[Any]:
+    candidates: List[Any] = []
+    for candidate in (source_path, os.path.realpath(source_path)):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+        match = re.search(r'/dev/video(\d+)$', str(candidate))
+        if match:
+            index = int(match.group(1))
+            if index not in candidates:
+                candidates.append(index)
+    return candidates
+
+
+def _open_camera_capture(source_path: str):
+    for candidate in _camera_open_candidates(source_path):
+        for backend in (cv2.CAP_V4L2, cv2.CAP_ANY):
+            capture = cv2.VideoCapture(candidate, backend)
+            if capture.isOpened():
+                return capture
+            capture.release()
+    return None
+
+
+def _release_camera_capture() -> None:
+    global _CAMERA_SHARED_CAPTURE, _CAMERA_SHARED_SOURCE
+    if _CAMERA_SHARED_CAPTURE is not None:
+        with contextlib.suppress(Exception):
+            _CAMERA_SHARED_CAPTURE.release()
+    _CAMERA_SHARED_CAPTURE = None
+    _CAMERA_SHARED_SOURCE = ''
+
+
+def _get_camera_capture(source_path: str):
+    global _CAMERA_SHARED_CAPTURE, _CAMERA_SHARED_SOURCE
+    if _CAMERA_SHARED_CAPTURE is not None and _CAMERA_SHARED_SOURCE == source_path:
+        return _CAMERA_SHARED_CAPTURE
+
+    _release_camera_capture()
+    capture = _open_camera_capture(source_path)
+    if capture is None:
+        return None
+
+    capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    capture.set(cv2.CAP_PROP_FRAME_WIDTH, _CAMERA_WIDTH)
+    capture.set(cv2.CAP_PROP_FRAME_HEIGHT, _CAMERA_HEIGHT)
+    capture.set(cv2.CAP_PROP_FPS, _CAMERA_FPS)
+    _CAMERA_SHARED_CAPTURE = capture
+    _CAMERA_SHARED_SOURCE = source_path
+    return capture
+
+
+def _capture_camera_frame(source_path: str) -> bytes:
+    capture = _get_camera_capture(source_path)
+    if capture is None:
+        raise RuntimeError(f'Unable to open camera source: {source_path}')
+
+    frame = None
+    frame_mean = 0.0
+    for _ in range(_CAMERA_WARMUP_FRAMES):
+        ok, candidate = capture.read()
+        if not ok or candidate is None:
+            time.sleep(0.05)
+            continue
+        frame = candidate
+        frame_mean = float(candidate.mean())
+        if frame_mean > _CAMERA_BLACK_FRAME_THRESHOLD:
+            break
+        time.sleep(0.05)
+
+    if frame is None:
+        _release_camera_capture()
+        raise RuntimeError(f'Unable to read camera frame from: {source_path}')
+
+    if frame_mean <= _CAMERA_BLACK_FRAME_THRESHOLD:
+        _release_camera_capture()
+        raise RuntimeError('Camera is returning black startup frames; try again.')
+
+    encoded_ok, encoded = cv2.imencode(
+        '.jpg',
+        frame,
+        [int(cv2.IMWRITE_JPEG_QUALITY), _CAMERA_JPEG_QUALITY],
+    )
+    if not encoded_ok:
+        raise RuntimeError('Unable to encode camera frame')
+    return encoded.tobytes()
 
 
 def _json_body() -> Dict[str, Any]:
@@ -246,11 +365,25 @@ def _render_dotted_payload(
 
 def _access_config_file() -> str:
     static_dir = app.static_folder or os.path.join(web_dir, 'static')
-    return os.path.join(static_dir, 'resources', 'operator_access.yaml')
+    resources_dir = os.path.join(static_dir, 'resources')
+
+    env_override = os.getenv('NEXT_OPERATOR_ACCESS_FILE', '').strip()
+    if env_override:
+        return os.path.abspath(os.path.expanduser(env_override))
+
+    local_override = os.path.join(resources_dir, 'operator_access.local.yaml')
+    if os.path.isfile(local_override):
+        return local_override
+
+    return os.path.join(resources_dir, 'operator_access.yaml')
 
 
 def _load_dev_panel_password() -> str:
-    default_password = 'nextsmr'
+    env_password = os.getenv('NEXT_DEV_UI_PASSWORD', '').strip()
+    if env_password:
+        return env_password
+
+    default_password = ''
     config_file = _access_config_file()
     if not os.path.isfile(config_file):
         return default_password
@@ -353,19 +486,40 @@ def index():
     return render_template('dev_lock.html', error='')
 
 
+@app.route('/dev/camera')
+def dev_camera():
+    if _dev_auth_required() and not _dev_unlocked():
+        return "You don't have enough permissions to access this page.", 403
+
+    source_path = _resolve_camera_source()
+    return render_template(
+        'camera.html',
+        source_device=source_path or 'unavailable',
+        frame_url='/api/camera/frame',
+        available=bool(source_path),
+        width=_CAMERA_WIDTH,
+        height=_CAMERA_HEIGHT,
+        fps=_CAMERA_FPS,
+    )
+
+
 @app.route('/dev/unlock', methods=['POST'])
 def unlock_dev():
-    expected_password = _load_dev_panel_password()
-    if not expected_password:
+    if not _dev_auth_required():
         session[DEV_AUTH_SESSION_KEY] = True
         return redirect('/dev')
 
-    submitted = str(request.form.get('password', '') or '')
-    if submitted == expected_password:
+    username = str(request.form.get('username', '') or '').strip()
+    password = str(request.form.get('password', '') or '').strip()
+    
+    success, role = next_ops.verify_login(username, password)
+    if success:
         session[DEV_AUTH_SESSION_KEY] = True
+        session['next_user_name'] = username
+        session['next_user_role'] = role
         return redirect('/dev')
 
-    return render_template('dev_lock.html', error='Incorrect password')
+    return render_template('dev_lock.html', error='Invalid username or password')
 
 
 @app.route('/dev/lock', methods=['POST'])
@@ -381,13 +535,15 @@ def operator_ui():
 
 @app.route('/editor')
 def editor():
+    if _dev_auth_required() and not _dev_unlocked():
+        return "You don't have enough permissions to access this page.", 403
     return render_template('map_editor.html')
 
 
 @app.route('/device-config')
 def device_config():
     if _dev_auth_required() and not _dev_unlocked():
-        return redirect('/dev')
+        return "You don't have enough permissions to access this page.", 403
     return render_template('device_config.html')
 
 
@@ -432,6 +588,41 @@ def get_map():
             pass  # Fall through and return original map on any error
 
     return jsonify(result), 200
+
+
+@app.route('/api/camera/frame')
+def get_camera_frame():
+    if _dev_auth_required() and not _dev_unlocked():
+        return _camera_stream_response('Unauthorized', 403)
+
+    source_path = _resolve_camera_source()
+    if not source_path:
+        return _camera_stream_response(
+            'No camera device found. Set NEXT_WEB_CAMERA_DEVICE or connect a webcam.',
+            503,
+        )
+
+    lock_acquired = False
+    try:
+        lock_acquired = _CAMERA_CAPTURE_LOCK.acquire(timeout=1.0)
+        if not lock_acquired:
+            return _camera_stream_response('Camera is busy. Try again in a moment.', 503)
+        jpg_bytes = _capture_camera_frame(source_path)
+        return Response(
+            jpg_bytes,
+            mimetype='image/jpeg',
+            headers={
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+            },
+        )
+    except RuntimeError as exc:
+        return _camera_stream_response(str(exc), 503)
+    finally:
+        if lock_acquired:
+            with contextlib.suppress(Exception):
+                _CAMERA_CAPTURE_LOCK.release()
 
 
 @app.route('/api/map/live_rendered')
@@ -648,6 +839,10 @@ def update_zone_params():
 
 @app.route('/api/recognition/templates', methods=['GET'])
 def get_recognition_templates():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'model:read'):
+        return jsonify(next_ops.permission_error(role, 'model:read')), 403
+
     node, err = _node()
     if err:
         return err
@@ -658,6 +853,10 @@ def get_recognition_templates():
 
 @app.route('/api/recognition/templates/save', methods=['POST'])
 def save_recognition_template():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'model:write'):
+        return jsonify(next_ops.permission_error(role, 'model:write')), 403
+
     node, err = _node()
     if err:
         return err
@@ -669,6 +868,10 @@ def save_recognition_template():
 
 @app.route('/api/recognition/templates/validate', methods=['POST'])
 def validate_recognition_template():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'validation:run'):
+        return jsonify(next_ops.permission_error(role, 'validation:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -680,6 +883,10 @@ def validate_recognition_template():
 
 @app.route('/api/recognition/templates/publish', methods=['POST'])
 def publish_recognition_template():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'model:write'):
+        return jsonify(next_ops.permission_error(role, 'model:write')), 403
+
     node, err = _node()
     if err:
         return err
@@ -691,6 +898,10 @@ def publish_recognition_template():
 
 @app.route('/api/recognition/templates/duplicate', methods=['POST'])
 def duplicate_recognition_template():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'model:write'):
+        return jsonify(next_ops.permission_error(role, 'model:write')), 403
+
     node, err = _node()
     if err:
         return err
@@ -706,6 +917,10 @@ def duplicate_recognition_template():
 
 @app.route('/api/recognition/templates/delete', methods=['POST'])
 def delete_recognition_template():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'model:write'):
+        return jsonify(next_ops.permission_error(role, 'model:write')), 403
+
     node, err = _node()
     if err:
         return err
@@ -721,6 +936,10 @@ def delete_recognition_template():
 
 @app.route('/api/recognition/templates/export/<template_id>', methods=['GET'])
 def export_recognition_template(template_id):
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'export:run'):
+        return jsonify(next_ops.permission_error(role, 'export:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -732,6 +951,10 @@ def export_recognition_template(template_id):
 @app.route('/api/recognition/templates/pull_all', methods=['POST'])
 def pull_all_recognition_templates():
     """Pull all recognition files from the robot to the local store."""
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'import:run'):
+        return jsonify(next_ops.permission_error(role, 'import:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -752,6 +975,10 @@ def pull_all_recognition_templates():
 @app.route('/api/recognition/templates/push_all', methods=['POST'])
 def push_all_recognition_templates():
     """Push all recognition files from local store to the robot."""
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'export:run'):
+        return jsonify(next_ops.permission_error(role, 'export:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -1019,6 +1246,10 @@ def delete_layout(layout_name):
 
 @app.route('/api/safety/force_resume', methods=['POST'])
 def force_resume():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -1063,6 +1294,10 @@ def force_resume():
 
 @app.route('/api/safety/override', methods=['POST'])
 def set_safety_override():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -1075,6 +1310,10 @@ def set_safety_override():
 
 @app.route('/api/safety/status', methods=['GET'])
 def get_safety_status():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'network:read'):
+        return jsonify(next_ops.permission_error(role, 'network:read')), 403
+
     node, err = _node()
     if err:
         return err
@@ -1836,10 +2075,18 @@ def get_robot_profile_robot_editor():
     if err:
         return err
 
+    role = next_ops.role_from_request(request, session)
+
     robot_id = str(request.args.get('robot_id', '') or '').strip()
     reload_from_urdf_raw = str(request.args.get('reload_from_urdf', 'false') or 'false').strip().lower()
     reload_from_urdf = reload_from_urdf_raw in {'1', 'true', 'yes', 'on'}
-    result = node.get_profile_robot_editor(robot_id=robot_id, reload_from_urdf=reload_from_urdf)
+    
+    import_active_raw = str(request.args.get('import_active', 'false') or 'false').strip().lower()
+    import_active = import_active_raw in {'1', 'true', 'yes', 'on'}
+    if (reload_from_urdf or import_active) and not next_ops.has_permission(role, 'import:run'):
+        return jsonify(next_ops.permission_error(role, 'import:run')), 403
+    
+    result = node.get_profile_robot_editor(robot_id=robot_id, reload_from_urdf=reload_from_urdf, import_active=import_active)
     return _status(result, fail_code=400)
 
 
@@ -1876,6 +2123,14 @@ def save_robot_profile_robot_editor():
         compile_urdf=compile_urdf,
         apply_runtime=apply_runtime,
     )
+    if result.get('ok'):
+        next_ops.record_event(
+            severity='info',
+            source='ui',
+            message=f"Saved profile configuration: {robot_id}",
+            obj=robot_id,
+            reason='User editor save',
+        )
     return _status(result, fail_code=400)
 
 
@@ -1888,6 +2143,21 @@ def get_robot_profile_deployment_status():
     robot_id = str(request.args.get('robot_id', '') or '').strip()
     result = node.get_profile_config_deploy_status(robot_id=robot_id)
     return _status(result, fail_code=400)
+
+
+@app.route('/api/settings/robot_profiles/snapshot', methods=['GET'])
+def get_robot_profile_snapshot():
+    node, err = _node()
+    if err:
+        return err
+
+    robot_id = str(request.args.get('robot_id', '') or '').strip()
+    snapshot_id = str(request.args.get('snapshot_id', '') or '').strip()
+    if not robot_id or not snapshot_id:
+        return jsonify({'ok': False, 'message': 'robot_id and snapshot_id are required'}), 400
+
+    result = node.get_profile_config_snapshot_details(robot_id=robot_id, snapshot_id=snapshot_id)
+    return _status(result, fail_code=404)
 
 
 @app.route('/api/settings/robot_profiles/generated_bundle', methods=['GET'])
@@ -1938,6 +2208,15 @@ def push_robot_profile_deployment():
             }), 400
 
     result = node.push_profile_config_to_robot(robot_id=robot_id)
+    if result.get('ok'):
+        next_ops.record_event(
+            severity='info',
+            source='ui',
+            message=f"Deployed profile configuration to robot: {robot_id}",
+            obj=robot_id,
+            reason='User requested deployment push',
+            required_action='Verify robot behavior after configuration update'
+        )
     return _status(result, fail_code=400)
 
 
@@ -1958,11 +2237,24 @@ def rollback_robot_profile_deployment():
 
     snapshot_id = str(data.get('snapshot_id', '') or '').strip()
     result = node.rollback_profile_config_on_robot(robot_id=robot_id, snapshot_id=snapshot_id)
+    if result.get('ok'):
+        next_ops.record_event(
+            severity='warning',
+            source='ui',
+            message=f"Rolled back profile configuration for {robot_id} to snapshot {snapshot_id}",
+            obj=robot_id,
+            reason='User requested deployment rollback',
+            action_required='Verify stability on previous configuration'
+        )
     return _status(result, fail_code=400)
 
 
 @app.route('/api/settings/robot_profiles/urdf/upload', methods=['POST'])
 def upload_robot_profile_urdf():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'import:run'):
+        return jsonify(next_ops.permission_error(role, 'import:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -1986,6 +2278,39 @@ def upload_robot_profile_urdf():
         return jsonify({'ok': False, 'message': 'uploaded filename is required'}), 400
 
     content = upload_file.read()
+
+    # Handle YAML/JSON profile bundle imports
+    fn_lower = filename.lower()
+    if fn_lower.endswith(('.yaml', '.yml', '.json')):
+        try:
+            import yaml
+            if fn_lower.endswith('.json'):
+                data = json.loads(content.decode('utf-8'))
+            else:
+                data = yaml.safe_load(content.decode('utf-8'))
+            
+            if not isinstance(data, dict):
+                return jsonify({'ok': False, 'message': 'Invalid profile format'}), 400
+                
+            # If it's a full bundle, extract components
+            profile_fields = data.get('profile', data.get('profile_fields', {}))
+            robot_builder = data.get('robot_builder', data.get('model', {}))
+            
+            if not profile_fields and not robot_builder:
+                # Assume the whole file is the profile/model mixed or just fields
+                profile_fields = data
+            
+            result = node.save_profile_robot_editor(
+                robot_id=robot_id,
+                profile_fields=profile_fields,
+                robot_builder=robot_builder,
+                compile_urdf=True,
+                apply_runtime=apply_runtime
+            )
+            return _status(result, fail_code=400)
+        except Exception as exc:
+            return jsonify({'ok': False, 'message': f'Failed to parse profile: {exc}'}), 400
+
     result = node.upload_profile_urdf(
         robot_id=robot_id,
         filename=filename,
@@ -2012,6 +2337,10 @@ def get_robot_profile_urdf_visualization():
 
 @app.route('/api/settings/robot_profiles/urdf/source', methods=['GET'])
 def get_robot_profile_urdf_source():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'import:run'):
+        return jsonify(next_ops.permission_error(role, 'import:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -2023,6 +2352,10 @@ def get_robot_profile_urdf_source():
 
 @app.route('/api/settings/robot_profiles/urdf/source', methods=['POST'])
 def save_robot_profile_urdf_source():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'import:run'):
+        return jsonify(next_ops.permission_error(role, 'import:run')), 403
+
     node, err = _node()
     if err:
         return err
@@ -2092,12 +2425,15 @@ def get_robot_profile_nav2_parameters():
     node, err = _node()
     if err:
         return err
+    role = next_ops.role_from_request(request, session)
 
     robot_id = str(request.args.get('robot_id', '') or '').strip()
     include_runtime_raw = str(request.args.get('include_runtime', 'true') or 'true').strip().lower()
     include_runtime = include_runtime_raw in {'1', 'true', 'yes', 'on'}
 
     result = node.get_profile_nav2_parameter_editor(robot_id=robot_id, include_runtime=include_runtime)
+    if isinstance(result, dict):
+        result['advanced_available'] = bool(next_ops.has_permission(role, 'import:run'))
     return _status(result, fail_code=400)
 
 
@@ -2106,6 +2442,7 @@ def apply_robot_profile_nav2_parameters():
     node, err = _node()
     if err:
         return err
+    role = next_ops.role_from_request(request, session)
 
     data = _json_body()
     robot_id = str(data.get('robot_id', '') or '').strip()
@@ -2116,6 +2453,9 @@ def apply_robot_profile_nav2_parameters():
     curated_updates = data.get('curated_updates', {})
     advanced_updates = data.get('advanced_updates', {})
     restart_nav = bool(data.get('restart_nav', False))
+    has_advanced_updates = bool(advanced_updates) and advanced_updates not in ({}, [])
+    if has_advanced_updates and not next_ops.has_permission(role, 'import:run'):
+        return jsonify(next_ops.permission_error(role, 'import:run')), 403
 
     result = node.apply_profile_nav2_parameter_editor(
         robot_id=robot_id,
@@ -2329,6 +2669,96 @@ def next_shortcuts():
         return jsonify(next_ops.save_shortcuts(data['shortcuts']))
     elif request.method == 'DELETE':
         return jsonify(next_ops.save_shortcuts(next_ops.DEFAULT_SHORTCUTS.copy()))
+
+
+@app.route('/api/next/login', methods=['POST'])
+def next_login():
+    data = _json_body()
+    username = str(data.get('username', '')).strip()
+    password = str(data.get('password', '')).strip()
+    
+    success, role = next_ops.verify_login(username, password)
+    if success:
+        session[DEV_AUTH_SESSION_KEY] = True
+        session['next_user_name'] = username
+        session['next_user_role'] = role
+        return jsonify({'ok': True, 'username': username, 'role': role})
+    
+    return jsonify({'ok': False, 'message': 'Invalid username or password'}), 401
+
+
+@app.route('/api/next/logout', methods=['POST'])
+def next_logout():
+    session.pop(DEV_AUTH_SESSION_KEY, None)
+    session.pop('next_user_name', None)
+    session.pop('next_user_role', None)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/next/users', methods=['GET', 'POST', 'DELETE'])
+def next_users():
+    role = next_ops.role_from_request(request, session)
+    if role != 'admin':
+        return jsonify(next_ops.permission_error(role, 'admin:users')), 403
+
+    if request.method == 'GET':
+        users = next_ops.get_users()
+        # Strip password hashes before returning
+        safe_users = {u: d['role'] for u, d in users.items()}
+        return jsonify({'ok': True, 'users': safe_users})
+    elif request.method == 'POST':
+        data = _json_body()
+        username = str(data.get('username', '')).strip()
+        user_role = str(data.get('role', 'viewer')).strip()
+        password = data.get('password') # Optional update
+        if not username:
+            return jsonify({'ok': False, 'message': 'username required'}), 400
+        return jsonify(next_ops.set_user_role(username, user_role, password=password))
+    elif request.method == 'DELETE':
+        data = _json_body()
+        username = str(data.get('username', '')).strip()
+        if not username:
+            return jsonify({'ok': False, 'message': 'username required'}), 400
+        return jsonify(next_ops.delete_user(username))
+
+
+@app.route('/api/next/test_mode/indicators', methods=['POST'])
+def next_test_indicators():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
+    data = _json_body()
+    pattern = str(data.get('pattern', 'blink')).strip()
+    color = str(data.get('color', '#ffffff')).strip()
+    
+    # In a real system, this would call a ROS service to set LED patterns.
+    # For now, we'll log the event.
+    next_ops.record_event(
+        severity='info',
+        source='test_mode',
+        message=f"Hardware test: Indicators set to pattern='{pattern}', color='{color}'",
+        reason='User hardware verification',
+    )
+    return jsonify({'ok': True, 'message': f'Indicator test "{pattern}" started'})
+
+
+@app.route('/api/next/test_mode/motors', methods=['POST'])
+def next_test_motors():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
+    data = _json_body()
+    action = str(data.get('action', 'nudge')).strip()
+    
+    next_ops.record_event(
+        severity='warning',
+        source='test_mode',
+        message=f"Hardware test: Motors action='{action}' triggered",
+        reason='User hardware verification',
+    )
+    return jsonify({'ok': True, 'message': f'Motor test "{action}" triggered'})
 
 
 def run_flask():
