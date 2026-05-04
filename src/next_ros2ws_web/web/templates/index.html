@@ -977,7 +977,8 @@
             background: #0b1119;
         }
 
-        body.editor-tab-active .tab-navigation {
+        body.editor-tab-active .tab-navigation,
+        body.device-config-tab-active .tab-navigation {
             display: none !important;
         }
 
@@ -4469,6 +4470,8 @@
             padding: 32px;
             border-radius: 8px;
             max-width: 450px;
+            max-height: 85vh;
+            overflow-y: auto;
             box-shadow: var(--shadow-lg);
             border: 1px solid var(--border-primary);
             animation: slideDown 0.2s;
@@ -9344,15 +9347,15 @@
             transform: translateY(-1px);
         }
 
-        #params-tab-nav2 {
+        #params-tab-nav2.active {
             display: flex;
             flex-direction: column;
             min-height: 0;
         }
 
-        #params-tab-nav2 #settings-navigation-nav-shell,
-        #params-tab-nav2 #settings-navigation-nav2-card,
-        #params-tab-nav2 #settings-nav2-editor {
+        #params-tab-nav2.active #settings-navigation-nav-shell,
+        #params-tab-nav2.active #settings-navigation-nav2-card,
+        #params-tab-nav2.active #settings-nav2-editor {
             display: flex;
             flex-direction: column;
             min-height: 0;
@@ -17776,10 +17779,14 @@
 
                     // ── Free Nav zone picker ──────────────────────────────────
                     function openFreeNavPicker(event) {
+                        const picker = document.getElementById('free-nav-picker');
+                        if (picker && picker.classList.contains('open')) {
+                            closeFreeNavPicker();
+                            return;
+                        }
                         pathModeEnabled = false;
                         pathModeSelectedPath = '';
                         updatePathModeUI();
-                        const picker = document.getElementById('free-nav-picker');
                         if (!picker) return;
                         const list = document.getElementById('free-nav-picker-list');
                         const zoneNames = zones ? Object.keys(zones) : [];
@@ -17809,6 +17816,17 @@
 
                     // ── Path Nav picker ──────────────────────────────────────
                     function handlePathNavRailClick(event) {
+                        const picker = document.getElementById('path-nav-picker');
+                        const poiPicker = document.getElementById('path-mode-poi-picker');
+                        const alreadyOpen = (picker && picker.classList.contains('open')) || (poiPicker && poiPicker.classList.contains('open'));
+
+                        if (alreadyOpen) {
+                            if (picker) picker.classList.remove('open');
+                            if (poiPicker) poiPicker.classList.remove('open');
+                            setWorkflowMode('');
+                            return;
+                        }
+
                         setWorkflowMode('path');
                         if (pathModeEnabled) {
                             openPathModePoiPicker(event);
@@ -29232,7 +29250,31 @@
                                 ${selectedSegmentLabel ? `
                                 <div class="property-group">
                                     <div class="property-label">Selected Segment</div>
-                                    <div class="property-value">${escapeHtml(selectedSegmentLabel)}</div>
+                                    <div class="property-value">
+                                        <strong>${escapeHtml(selectedSegmentLabel)}</strong>
+                                        ${source !== 'current' ? `
+                                        <div style="margin-top: 8px; border-top: 1px solid var(--border-chrome); padding-top: 8px;">
+                                            <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 4px;">Segment Direction</div>
+                                            <select class="prop-direction-sel" id="path-seg-prop-direction-sel" style="width: 100%; font-size: 10px;">
+                                                <option value="">(Inherit Path Default)</option>
+                                                <option value="uni">→ Unidirectional</option>
+                                                <option value="bi">⇄ Bidirectional</option>
+                                                <option value="reverse">← Reverse</option>
+                                            </select>
+                                            
+                                            <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 8px; margin-bottom: 4px;">Segment Max Speed (m/s)</div>
+                                            <input type="number" id="path-seg-prop-maxspeed" class="pattr-num" style="width: 100%; font-size: 10px; height: 24px;" min="0" step="0.1" placeholder="Default">
+                                            
+                                            <button id="path-seg-prop-save" class="property-action-btn primary" style="margin-top:8px; width:100%; font-size:10px;">
+                                                <i class="fas fa-save"></i> Save Segment Attrs
+                                            </button>
+                                        </div>
+                                        ` : `
+                                        <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
+                                            Use the <strong>Path Attributes</strong> sidebar card to edit this segment's overrides before saving the path.
+                                        </div>
+                                        `}
+                                    </div>
                                 </div>
                                 ` : ''}
                                 <div class="property-actions">
@@ -29244,6 +29286,7 @@
                                     `
                                     : `
                                         <button id="path-prop-load-saved" class="property-action-btn primary"><i class="fas fa-upload"></i> Load</button>
+                                        <button id="path-prop-edit-saved" class="property-action-btn primary"><i class="fas fa-pen"></i> Edit</button>
                                         <button id="path-prop-follow-saved" class="property-action-btn primary"><i class="fas fa-play"></i> Follow</button>
                                         <button id="path-prop-delete-saved" class="property-action-btn danger"><i class="fas fa-trash"></i> Del</button>
                                     `}
@@ -29415,9 +29458,11 @@
                             } else {
                                 const pathName = String(elementName || '').trim();
                                 const loadBtn = document.getElementById('path-prop-load-saved');
+                                const editBtn = document.getElementById('path-prop-edit-saved');
                                 const followBtn = document.getElementById('path-prop-follow-saved');
                                 const deleteBtn = document.getElementById('path-prop-delete-saved');
                                 if (loadBtn) loadBtn.onclick = () => { closePropertiesPanel(); loadSavedPathByName(pathName); };
+                                if (editBtn) editBtn.onclick = () => { closePropertiesPanel(); extendSavedPathByName(pathName); };
                                 if (followBtn) followBtn.onclick = () => { closePropertiesPanel(); followSavedPath(pathName); };
                                 if (deleteBtn) deleteBtn.onclick = () => { closePropertiesPanel(); deleteSavedPath(pathName); };
                                 const dirSel = document.getElementById('path-prop-direction-sel');
@@ -29431,6 +29476,64 @@
                                         savedPathSettingsCache[pathName] = currentSettings;
                                         showStatus('Direction saved for "' + pathName + '"', 'success');
                                         drawMap();
+                                    };
+                                }
+
+                                // Segment-wise property editor logic
+                                const segDirSel = document.getElementById('path-seg-prop-direction-sel');
+                                const segSpeedInp = document.getElementById('path-seg-prop-maxspeed');
+                                const segSaveBtn = document.getElementById('path-seg-prop-save');
+                                const selectedSegmentIndex = Number(elementData?.selected_segment_index);
+
+                                if (segSaveBtn && Number.isInteger(selectedSegmentIndex) && selectedSegmentIndex >= 0) {
+                                    const settings = (elementData?.settings && typeof elementData.settings === 'object') ? elementData.settings : {};
+                                    const segAttrs = (settings?.segment_attrs && typeof settings.segment_attrs === 'object') ? settings.segment_attrs : {};
+                                    const currentSegAttrs = segAttrs[String(selectedSegmentIndex)] || {};
+
+                                    if (segDirSel) segDirSel.value = currentSegAttrs.direction || '';
+                                    if (segSpeedInp) segSpeedInp.value = currentSegAttrs.maxspeed !== undefined ? currentSegAttrs.maxspeed : '';
+
+                                    segSaveBtn.onclick = async () => {
+                                        const pathName = String(elementName || '').trim();
+                                        const pts = savedPathsCache[pathName];
+                                        const fullSettings = JSON.parse(JSON.stringify(savedPathSettingsCache[pathName] || {}));
+                                        if (!fullSettings.segment_attrs) fullSettings.segment_attrs = {};
+
+                                        const newAttrs = Object.assign({}, fullSettings.segment_attrs[String(selectedSegmentIndex)] || {});
+                                        if (segDirSel && segDirSel.value) {
+                                            newAttrs.direction = segDirSel.value;
+                                        } else if (segDirSel) {
+                                            delete newAttrs.direction;
+                                        }
+
+                                        if (segSpeedInp) {
+                                            const speed = parseFloat(segSpeedInp.value);
+                                            if (Number.isFinite(speed)) {
+                                                newAttrs.maxspeed = speed;
+                                            } else {
+                                                delete newAttrs.maxspeed;
+                                            }
+                                        }
+
+                                        if (Object.keys(newAttrs).length > 0) {
+                                            fullSettings.segment_attrs[String(selectedSegmentIndex)] = newAttrs;
+                                        } else {
+                                            delete fullSettings.segment_attrs[String(selectedSegmentIndex)];
+                                        }
+
+                                        const res = await fetch('/api/path/save', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ name: pathName, path: pts, settings: fullSettings, overwrite: true })
+                                        });
+                                        const data = await res.json();
+                                        if (data.ok) {
+                                            savedPathSettingsCache[pathName] = fullSettings;
+                                            showStatus(`Segment ${selectedSegmentIndex + 1} properties saved for "${pathName}"`, 'success');
+                                            drawMap();
+                                        } else {
+                                            showStatus(`Failed to save segment properties: ${data.message}`, 'error');
+                                        }
                                     };
                                 }
                             }
@@ -30671,6 +30774,10 @@
                                 onclick="showSettingsCategory('filemanagement', this)">
                                 <i class="fas fa-folder-open"></i> File Management
                             </button>
+                            <button class="settings-menu-item" data-settings-category="system"
+                                onclick="showSettingsCategory('system', this)">
+                                <i class="fas fa-microchip"></i> System
+                            </button>
                         </div>
                     </div>
 
@@ -31015,6 +31122,72 @@
                                 <div class="settings-card" style="margin-top:8px;">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Support</h4></div>
                                     <div style="font-size:12px; color:var(--text-secondary);">NEXT Robot UI — use Developer → Diagnostics for technical troubleshooting.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="settings-system" class="settings-category">
+                            <div class="settings-general-shell">
+                                <div class="settings-general-heading">
+                                    <h2 class="settings-general-title">System & Security</h2>
+                                    <p class="settings-general-intro">Manage users, access control, shortcuts, and hardware tests.</p>
+                                </div>
+
+                                <div class="settings-card">
+                                    <div class="settings-card-header">
+                                        <h4 class="settings-card-title">User Management</h4>
+                                        <button class="btn btn-primary" style="height:20px; font-size:9px;" onclick="handleCreateUser()"><i class="fas fa-plus"></i> Add User</button>
+                                    </div>
+                                    <div id="settings-users-list" class="settings-list" style="margin-top:10px;">
+                                        <!-- Populated by JS -->
+                                        <div class="settings-list-item">Loading users...</div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card" style="margin-top:16px;">
+                                    <div class="settings-card-header">
+                                        <h4 class="settings-card-title">Keyboard Shortcuts</h4>
+                                    </div>
+                                    <div style="margin-top:8px;">
+                                        <table style="width: 100%; color: var(--text-secondary); border-collapse: collapse; font-size: 11px;">
+                                            <tbody>
+                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
+                                                    <td style="padding: 6px 0; width: 40%;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">?</kbd></td>
+                                                    <td style="padding: 6px 0;">Show shortcuts modal</td>
+                                                </tr>
+                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
+                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">V</kbd> / <kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">H</kbd></td>
+                                                    <td style="padding: 6px 0;">Map View Mode</td>
+                                                </tr>
+                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
+                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">Z</kbd></td>
+                                                    <td style="padding: 6px 0;">Map Zones Mode</td>
+                                                </tr>
+                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
+                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">P</kbd></td>
+                                                    <td style="padding: 6px 0;">Map Paths Mode</td>
+                                                </tr>
+                                                <tr style="border-bottom: 1px solid var(--border-chrome);">
+                                                    <td style="padding: 6px 0;"><kbd style="background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-chrome);">E</kbd></td>
+                                                    <td style="padding: 6px 0;">Emergency Stop</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card" style="margin-top:16px;">
+                                    <div class="settings-card-header">
+                                        <h4 class="settings-card-title">Hardware Test Mode</h4>
+                                        <span class="tag tag-amber" style="font-size:8px;">Danger</span>
+                                    </div>
+                                    <div style="padding-top:10px; display:flex; flex-direction:column; gap:8px;">
+                                        <div style="display:flex; gap:6px;">
+                                            <button class="btn btn-primary" style="flex:1; font-size:10px;" onclick="handleTestHardware('indicators', {pattern:'blink', color:'#00ff00'})"><i class="fas fa-lightbulb"></i> Blink Green</button>
+                                            <button class="btn btn-primary" style="flex:1; font-size:10px;" onclick="handleTestHardware('indicators', {pattern:'solid', color:'#ff0000'})"><i class="fas fa-lightbulb"></i> Solid Red</button>
+                                        </div>
+                                        <button class="btn btn-danger" style="width:100%; font-size:10px;" onclick="handleTestHardware('motors', {action:'nudge'})"><i class="fas fa-cog"></i> Nudge Motors (Safe Pulse)</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -32237,6 +32410,7 @@
                 <div class="rcg-inspector-tabs">
                     <button type="button" class="rcg-inspector-tab active" data-rcg-inspector-tab="usage" onclick="recognitionSetInspectorTab('usage')">Usage</button>
                     <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="validation" onclick="recognitionSetInspectorTab('validation')">Checks</button>
+                    <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="geometry" onclick="recognitionSetInspectorTab('geometry')">Elements</button>
                     <button type="button" class="rcg-inspector-tab" data-rcg-inspector-tab="properties" onclick="recognitionSetInspectorTab('properties')">Raw</button>
                 </div>
                 <div id="recognition-inspector-content" style="flex:1;min-height:0;overflow-y:auto;"></div>
@@ -32252,188 +32426,8 @@
         <input id="recognition-import-input" type="file" accept=".json,application/json,.shelf,.tag,.charger" style="display:none;">
     </div>
 
-    <div id="device-config-tab" class="tab-content">
-        <!-- ══ MAIN VIEWPORT: rail | canvas | inspector ═════════ -->
-        <div id="dc-body">
-
-            <!-- ── Mode Rail ────────────────────────────────────── -->
-            <nav id="dc-rail">
-                <button class="dc-rail-btn active" data-dc-mode="structure" onclick="dcSetMode('structure')" title="Structure">
-                    <i class="fas fa-sitemap"></i>
-                    <span class="dc-rail-label">Structure</span>
-                </button>
-                <button class="dc-rail-btn" data-dc-mode="sensors" onclick="dcSetMode('sensors')" title="Sensors">
-                    <i class="fas fa-broadcast-tower"></i>
-                    <span class="dc-rail-label">Sensors</span>
-                </button>
-                <button class="dc-rail-btn" data-dc-mode="motion" onclick="dcSetMode('motion')" title="Motion">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span class="dc-rail-label">Motion</span>
-                </button>
-                <div class="dc-rail-sep"></div>
-                <button class="dc-rail-btn" data-dc-mode="safety" onclick="dcSetMode('safety')" title="Safety">
-                    <i class="fas fa-shield-alt"></i>
-                    <span class="dc-rail-label">Safety</span>
-                </button>
-                <button class="dc-rail-btn" data-dc-mode="diagnostics" onclick="dcSetMode('diagnostics')" title="Diagnostics">
-                    <i class="fas fa-stethoscope"></i>
-                    <span class="dc-rail-label">Diagn.</span>
-                </button>
-                <div class="dc-rail-spacer"></div>
-            </nav>
-
-            <!-- ── Canvas Workspace ──────────────────────────────── -->
-            <div id="dc-canvas-zone">
-                <!-- Canvas header strip -->
-                <div id="dc-canvas-header">
-                    <span class="dc-cvs-view-label" id="dc-canvas-view-label">Top View</span>
-                    <div class="dc-cvs-sep"></div>
-                    <span class="dc-cvs-profile-ctx" id="dc-cvs-profile-ctx">No profile loaded</span>
-                    <div class="dc-cvs-sep"></div>
-                    <!-- View toggle -->
-                    <div class="dc-cvs-view-toggle">
-                        <button class="dc-cvs-view-btn active" data-dc-view="top" onclick="dcSetCanvasView('top', this)">Top</button>
-                        <button class="dc-cvs-view-btn" data-dc-view="side" onclick="dcSetCanvasView('side', this)">Side</button>
-                        <button class="dc-cvs-view-btn" data-dc-view="iso" onclick="dcSetCanvasView('iso', this)">Iso</button>
-                    </div>
-                    <!-- Visual layer toggles -->
-                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;margin-left:6px;" id="dc-toggle-collision" onclick="dcToggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
-                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-sensors" onclick="dcToggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
-                    <button class="dc-btn active" style="height:24px;padding:0 8px;font-size:9px;" id="dc-toggle-safety" onclick="dcToggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
-                    <div class="dc-cvs-spacer"></div>
-                    <!-- Canvas issue chip -->
-                    <span id="dc-cvs-issue-chip" class="dc-cvs-issue-chip" style="display:none;" onclick="dcOpenInspTab('validation')"></span>
-                </div>
-                <!-- Robot canvas area — robot-editor-visual-panel moved here -->
-                <div id="dc-canvas-main" onclick="dcHandleCanvasClick(event)">
-                    <!-- robot-editor-visual-panel adopted by adoptDevConfigContent() -->
-                    <div id="dc-view-controls" class="dc-view-controls">
-                        <button class="dc-vc-btn" type="button" onclick="dcCanvasZoomIn()" title="Zoom in"><i class="fas fa-plus"></i></button>
-                        <button class="dc-vc-btn" type="button" onclick="dcCanvasZoomOut()" title="Zoom out"><i class="fas fa-minus"></i></button>
-                        <div class="dc-vc-sep"></div>
-                        <button class="dc-vc-btn" type="button" onclick="dcCanvasFit()" title="Fit to view"><i class="fas fa-expand-arrows-alt"></i></button>
-                        <div class="dc-vc-sep"></div>
-                        <button class="dc-vc-btn active" id="dc-grid-btn" type="button" onclick="dcToggleCanvasGrid()" title="Toggle grid"><i class="fas fa-th"></i></button>
-                        <button class="dc-vc-btn active" id="dc-labels-btn" type="button" onclick="dcToggleCanvasLabels()" title="Toggle labels"><i class="fas fa-tag"></i></button>
-                    </div>
-                    <div class="dc-canvas-ruler">
-                        <div class="dc-canvas-ruler-bar"></div>
-                        <span id="dc-canvas-ruler-label" class="dc-canvas-ruler-label">0.5 m</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ── Inspector Panel ───────────────────────────────── -->
-            <aside id="dc-inspector">
-                <div class="dc-insp-header">
-                    <span class="dc-insp-header-title" id="dc-insp-title">Inspector</span>
-                    <span class="dc-insp-mode-badge" id="dc-insp-mode-badge">Structure</span>
-                </div>
-                <div class="dc-insp-tabs">
-                    <button class="dc-insp-tab active" data-dc-tab="properties" onclick="dcOpenInspTab('properties')">Properties</button>
-                    <button class="dc-insp-tab" data-dc-tab="hierarchy" onclick="dcOpenInspTab('hierarchy')">Hierarchy</button>
-                    <button class="dc-insp-tab" data-dc-tab="validation" onclick="dcOpenInspTab('validation')">Validation</button>
-                </div>
-
-                <!-- Properties pane -->
-                <div class="dc-insp-pane active" id="dc-pane-properties">
-                    <!-- Overview (shown when nothing selected) -->
-                    <div id="dc-overview-state">
-                        <div style="padding:10px 10px 4px;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                                <span id="dc-ov-profile-name" style="font-size:13px;font-weight:700;color:var(--text-primary);">No profile</span>
-                                <span id="dc-ov-profile-tag" class="dc-tag dc-tag-amber">Draft</span>
-                            </div>
-                            <div id="dc-ov-profile-sub" style="font-size:10px;color:var(--text-tertiary);margin-bottom:8px;">Select a profile to begin</div>
-                            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;" id="dc-ov-val-row">
-                                <span class="dc-val-chip error" id="dc-ov-err-chip" style="display:none;"></span>
-                                <span class="dc-val-chip warn"  id="dc-ov-warn-chip" style="display:none;"></span>
-                            </div>
-                        </div>
-                        <!-- Stats grid -->
-                        <div class="dc-overview-grid" id="dc-ov-stats-grid">
-                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Length</span><span class="dc-ov-val" id="dc-ov-length">—</span></div>
-                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Width</span><span class="dc-ov-val" id="dc-ov-width">—</span></div>
-                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Height</span><span class="dc-ov-val" id="dc-ov-height">—</span></div>
-                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Mass</span><span class="dc-ov-val" id="dc-ov-mass">—</span></div>
-                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Frames</span><span class="dc-ov-val" id="dc-ov-frames">—</span></div>
-                            <div class="dc-ov-cell"><span class="dc-ov-lbl">Sensors</span><span class="dc-ov-val" id="dc-ov-sensors">—</span></div>
-                        </div>
-                        <!-- Quick actions -->
-                        <div style="padding:4px 10px 8px;display:flex;gap:4px;flex-wrap:wrap;">
-                            <button class="dc-btn dc-btn-primary" style="flex:1;" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Import URDF</button>
-                            <button class="dc-btn" onclick="dcOpenInspTab('validation')"><i class="fas fa-check-circle"></i> Validate</button>
-                        </div>
-                        <!-- Base Link -->
-                        <div class="dc-insp-section">Base Link</div>
-                        <div class="dc-prop-row"><span class="dc-prop-lbl">Name</span><span class="dc-prop-val" id="dc-ov-base-link">—</span></div>
-                        <div class="dc-prop-row"><span class="dc-prop-lbl">Base Frame</span><span class="dc-prop-val" id="dc-ov-base-frame">—</span></div>
-                        <div class="dc-prop-row"><span class="dc-prop-lbl">Joint Type</span><span class="dc-prop-val" id="dc-ov-joint-type">—</span></div>
-                        <!-- Footprint -->
-                        <div class="dc-insp-section">Footprint</div>
-                        <div class="dc-prop-row"><span class="dc-prop-lbl">Shape</span><span class="dc-prop-val" id="dc-ov-fp-shape">—</span></div>
-                        <div class="dc-prop-row"><span class="dc-prop-lbl">Radius</span><span class="dc-prop-val dc-mono" id="dc-ov-fp-radius">—</span></div>
-                        <div class="dc-prop-row"><span class="dc-prop-lbl">Padding</span><span class="dc-prop-val dc-mono" id="dc-ov-fp-padding">—</span></div>
-                    </div>
-                    <!-- Detail editor (shown when a link is selected) -->
-                    <div id="dc-detail-state" style="display:none;"></div>
-                </div>
-
-                <!-- Hierarchy pane -->
-                <div class="dc-insp-pane" id="dc-pane-hierarchy">
-                    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;display:flex;align-items:center;gap:6px;">
-                        <input class="dc-prop-input" style="flex:1;" placeholder="Filter links…" oninput="dcFilterHierarchy(this.value)" id="dc-hier-search">
-                        <button class="dc-btn dc-btn-primary" style="height:26px;padding:0 10px;font-size:9px;flex-shrink:0;" onclick="addRobotEditorLink();dcOpenInspTab('hierarchy');" title="Add a new link"><i class="fas fa-plus"></i> Add Link</button>
-                    </div>
-                    <div id="dc-hier-tree" style="flex:1;overflow-y:auto;"></div>
-                </div>
-
-                <!-- Validation pane -->
-                <div class="dc-insp-pane" id="dc-pane-validation">
-                    <div class="dc-val-summary-bar" id="dc-val-summary-bar" style="display:none;">
-                        <div class="dc-val-health-dot" id="dc-val-health-dot"></div>
-                        <span class="dc-val-health-label" id="dc-val-health-label">No issues</span>
-                    </div>
-                    <div id="dc-val-list"></div>
-                </div>
-            </aside>
-
-        </div><!-- #dc-body -->
-
-        <!-- Overflow menu -->
-        <div id="dc-overflow-menu">
-            <div class="dc-om-hdr">Profile Actions</div>
-            <button class="dc-om-item" onclick="loadRobotEditor(false, false)"><i class="fas fa-sync"></i> Reload from Profile</button>
-            <button class="dc-om-item" onclick="loadRobotEditor(true, false)"><i class="fas fa-file-import"></i> Reimport from URDF</button>
-            <button class="dc-om-item" onclick="dcCloneProfile()"><i class="fas fa-copy"></i> Duplicate Profile</button>
-            <div class="dc-om-sep"></div>
-            <div class="dc-om-hdr">File</div>
-            <button class="dc-om-item" onclick="exportRobotEditorUrdf()"><i class="fas fa-file-export"></i> Export URDF</button>
-            <div class="dc-om-sep"></div>
-            <button class="dc-om-item dc-om-danger" onclick="dcDeleteProfile()"><i class="fas fa-trash"></i> Delete Profile</button>
-        </div>
-
-        <!-- Profile dropdown -->
-        <div id="dc-profile-dropdown">
-            <div class="dc-pd-hdr">
-                Robot Profiles
-                <button class="dc-btn" style="height:20px;padding:0 8px;font-size:9px;" onclick="dcNewProfile()"><i class="fas fa-plus"></i> New</button>
-            </div>
-            <div id="dc-pd-list" class="dc-pd-list"></div>
-            <!-- New profile inline form (hidden by default) -->
-            <div id="dc-new-profile-form" style="display:none;padding:8px 10px;border-top:1px solid var(--border-chrome);gap:6px;display:none;align-items:center;">
-                <input id="dc-new-profile-name" class="dc-prop-input" style="flex:1;" placeholder="Profile name…" onkeydown="if(event.key==='Enter')dcCreateProfileFromForm();if(event.key==='Escape')dcHideNewProfileForm();">
-                <button class="dc-btn dc-btn-primary" style="height:26px;padding:0 8px;font-size:9px;flex-shrink:0;" onclick="dcCreateProfileFromForm()"><i class="fas fa-check"></i></button>
-                <button class="dc-btn" style="height:26px;padding:0 8px;font-size:9px;flex-shrink:0;" onclick="dcHideNewProfileForm()"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="dc-pd-footer">
-                <button class="dc-btn" style="flex:1;" onclick="dcManageProfiles()"><i class="fas fa-list"></i> Manage All</button>
-            </div>
-        </div>
-
-        <!-- Backdrop for menus -->
-        <div id="dc-modal-backdrop" onclick="dcCloseAllMenus()"></div>
-
+    <div id="device-config-tab" class="tab-content" style="padding:0; margin:0; overflow:hidden;">
+        <iframe id="device-config-iframe" src="about:blank" style="width:100%; height:100%; border:none;" title="Device Config"></iframe>
     </div><!-- #device-config-tab -->
 
     <script>
@@ -32496,19 +32490,19 @@
                 }
             }
 
+            // Load device config iframe when switching
+            if (tabName === 'device-config') {
+                const iframe = document.getElementById('device-config-iframe');
+                const currentSrc = iframe ? String(iframe.getAttribute('src') || '').trim() : '';
+                if (iframe && (!currentSrc || currentSrc === 'about:blank')) {
+                    iframe.src = '/device-config?embed=1';
+                }
+            }
+
             // Initialize settings when switching to settings tab
             if (tabName === 'settings') {
                 ensureSettingsMenuButtons();
                 showSettingsCategory('basic');
-            }
-
-            if (tabName === 'device-config') {
-                if (typeof dcInitLoad === 'function') {
-                    dcInitLoad();
-                } else {
-                    if (typeof adoptDevConfigContent === 'function') adoptDevConfigContent();
-                    if (typeof focusDeviceConfigSection === 'function') focusDeviceConfigSection('visual');
-                }
             }
 
             if (tabName === 'recognition' && typeof recognitionInit === 'function') {
@@ -32794,6 +32788,10 @@
 
             if (categoryName === 'interface') {
                 loadLayoutsUI();
+            }
+
+            if (categoryName === 'system') {
+                loadSettingsUsers();
             }
 
                         if (categoryName === 'maps') {
@@ -33862,6 +33860,14 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function jsString(rawValue) {
+            return String(rawValue ?? '')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/\r/g, '\\r')
+                .replace(/\n/g, '\\n');
         }
 
         function setUrdfVisualizationStatus(message, level = 'info') {
@@ -35195,7 +35201,7 @@
             }
 
             const normalizedScope = String(scope || 'all').toLowerCase();
-            const applyMode = String(document.getElementById('nav2-apply-mode-select')?.value || 'offline').toLowerCase();
+            const applyMode = String(document.getElementById('nav2-apply-mode-select')?.value || 'both').toLowerCase();
             const restartNav = Boolean(document.getElementById('nav2-restart-after-apply')?.checked);
 
             const includeCurated = normalizedScope === 'all' || normalizedScope === 'curated';
@@ -39283,6 +39289,119 @@
             setRobotProfileStatus(message, level);
         }
 
+        async function loadSettingsUsers() {
+            const listEl = document.getElementById('settings-users-list');
+            if (!listEl) return;
+
+            try {
+                const res = await fetch('/api/next/users');
+                const data = await res.json();
+                if (data.ok) {
+                    const users = data.users || {};
+                    listEl.innerHTML = Object.entries(users).map(([username, role]) => `
+                        <div class="settings-list-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border-chrome);">
+                            <div style="display:flex; flex-direction:column; gap:2px;">
+                                <span style="font-weight:600; color:var(--text-primary); font-size:12px;">${escapeHtml(username)}</span>
+                                <span style="font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.04em;">${escapeHtml(role)}</span>
+                            </div>
+                            <div style="display:flex; gap:6px;">
+                                <button class="btn btn-icon" onclick="handleEditUser('${jsString(username)}', '${jsString(role)}')" title="Edit Role/Password"><i class="fas fa-edit"></i></button>
+                                <button class="btn btn-icon" style="color:var(--accent-critical);" onclick="handleDeleteUser('${jsString(username)}')" title="Delete User"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    `).join('') || '<div class="settings-list-item">No users configured</div>';
+                } else {
+                    listEl.innerHTML = `<div class="settings-list-item" style="color:var(--accent-critical)">Error: ${escapeHtml(data.message)}</div>`;
+                }
+            } catch (err) {
+                listEl.innerHTML = `<div class="settings-list-item" style="color:var(--accent-critical)">Failed to load users</div>`;
+            }
+        }
+
+        async function handleCreateUser() {
+            const username = prompt('Enter Username:');
+            if (!username) return;
+            const password = prompt('Enter Password (optional, default is username):');
+            const role = prompt('Enter Role (admin, editor, viewer):', 'viewer');
+            if (!role) return;
+
+            try {
+                const res = await fetch('/api/next/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, role }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    showStatus(`User ${username} created/updated`, 'success');
+                    loadSettingsUsers();
+                } else {
+                    showStatus(data.message, 'error');
+                }
+            } catch (err) {
+                showStatus('Failed to create user', 'error');
+            }
+        }
+
+        async function handleEditUser(username, currentRole) {
+            const role = prompt(`Update role for ${username}:`, currentRole);
+            if (!role) return;
+            const password = prompt(`Update password for ${username} (leave empty to keep current):`);
+
+            try {
+                const res = await fetch('/api/next/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, role, password: password || undefined }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    showStatus(`User ${username} updated`, 'success');
+                    loadSettingsUsers();
+                } else {
+                    showStatus(data.message, 'error');
+                }
+            } catch (err) {
+                showStatus('Failed to update user', 'error');
+            }
+        }
+
+        async function handleDeleteUser(username) {
+            if (!confirm(`Are you sure you want to delete user "${username}"?`)) return;
+
+            try {
+                const res = await fetch('/api/next/users', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    showStatus(`User ${username} deleted`, 'success');
+                    loadSettingsUsers();
+                } else {
+                    showStatus(data.message, 'error');
+                }
+            } catch (err) {
+                showStatus('Failed to delete user', 'error');
+            }
+        }
+
+        async function handleTestHardware(type, params) {
+            if (type === 'motors' && !confirm('Motors will briefly pulse. Ensure robot is clear of obstacles. Continue?')) return;
+            try {
+                const res = await fetch(`/api/next/test_mode/${type}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params),
+                });
+                const data = await res.json();
+                showStatus(data.message || 'Test started', data.ok ? 'success' : 'error');
+            } catch (err) {
+                showStatus('Failed to trigger hardware test', 'error');
+            }
+        }
+
         async function loadRobotProfiles(preferredRobotId = '') {
             try {
                 const response = await fetch('/api/settings/robot_profiles');
@@ -40194,74 +40313,17 @@
         </div>
     </div>
 
-    <!-- Keyboard Shortcuts Modal -->
-    <div id="shortcuts-modal" class="modal">
-        <div class="modal-content" style="max-width: 500px; background: #1a1a1a; border: 1px solid #333;">
-            <div class="modal-header" style="border-bottom: 1px solid #333; padding-bottom: 10px;">
-                <h3>Keyboard Shortcuts</h3>
-                <span class="close" onclick="document.getElementById('shortcuts-modal').style.display='none'">&times;</span>
-            </div>
-            <div class="modal-body" style="padding-top: 15px;">
-                <table style="width: 100%; color: #eee; border-collapse: collapse;">
-                    <tbody>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0; width: 40%;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">?</kbd></td>
-                            <td style="padding: 8px 0;">Show this help panel</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">V</kbd> or <kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">H</kbd></td>
-                            <td style="padding: 8px 0;">Map View Mode</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Z</kbd></td>
-                            <td style="padding: 8px 0;">Map Zones Mode</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">P</kbd></td>
-                            <td style="padding: 8px 0;">Map Paths Mode</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">E</kbd></td>
-                            <td style="padding: 8px 0;">Toggle Emergency Stop (Safe Action)</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Space</kbd></td>
-                            <td style="padding: 8px 0;">Hold to Pan Map</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">+</kbd> / <kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">-</kbd></td>
-                            <td style="padding: 8px 0;">Zoom In / Out</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Ctrl+S</kbd></td>
-                            <td style="padding: 8px 0;">Save Current Tool (Zones/Paths)</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #333;">
-                            <td style="padding: 8px 0;"><kbd style="background: #333; padding: 2px 6px; border-radius: 4px;">Escape</kbd></td>
-                            <td style="padding: 8px 0;">Cancel Tool/Drawing</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="modal-footer" style="border-top: none; text-align: right; padding-top: 15px;">
-                <button class="btn btn-secondary" onclick="document.getElementById('shortcuts-modal').style.display='none'">Close</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             if (e.key === '?') {
-                document.getElementById('shortcuts-modal').style.display = 'block';
-                e.preventDefault();
-            }
-            if (e.key === 'Escape') {
-                const modal = document.getElementById('shortcuts-modal');
-                if (modal && modal.style.display === 'block') {
-                    modal.style.display = 'none';
-                    e.preventDefault();
+                if (typeof setWorkflowMode === 'function') {
+                    setWorkflowMode('settings');
+                    if (typeof showSettingsCategory === 'function') {
+                        showSettingsCategory('system');
+                    }
                 }
+                e.preventDefault();
             }
         });
     </script>

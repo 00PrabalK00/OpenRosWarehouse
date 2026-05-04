@@ -82,13 +82,91 @@ def normalized_role(raw: Any) -> str:
     return role if role in ROLE_PERMISSIONS else "viewer"
 
 
+def _get_db() -> Any:
+    from next_ros2ws_core.db_manager import DatabaseManager
+    # Assume the default db path
+    return DatabaseManager()
+
+def get_users() -> Dict[str, Dict[str, str]]:
+    """Return a dictionary of username -> {role, password_hash}."""
+    try:
+        db = _get_db()
+        users = db.get_users()
+        if not users:
+            # Create default admin user if none exist
+            default_hash = hashlib.sha256("admin".encode()).hexdigest()
+            db.set_user("admin", "admin", default_hash)
+            return {"admin": {"role": "admin", "password_hash": default_hash}}
+        return users
+    except Exception as e:
+        print(f"Error getting users from DB: {e}")
+        return {"admin": {"role": "admin", "password_hash": hashlib.sha256("admin".encode()).hexdigest()}}
+
+
+def save_users(users: Dict[str, Any]) -> Dict[str, Any]:
+    """Deprecated: use set_user/delete_user instead."""
+    return {"ok": True, "users": users}
+
+
+def set_user_role(username: str, role: str, password: Optional[str] = None) -> Dict[str, Any]:
+    """Create or update a user's role and optionally password."""
+    if not username:
+        return {"ok": False, "message": "Username is required"}
+    try:
+        db = _get_db()
+        users = db.get_users()
+        current_hash = hashlib.sha256(username.encode()).hexdigest()
+        if username in users:
+            current_hash = users[username]["password_hash"]
+        
+        if password:
+            current_hash = hashlib.sha256(password.encode()).hexdigest()
+            
+        db.set_user(username, normalized_role(role), current_hash)
+        return {"ok": True, "users": db.get_users()}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def delete_user(username: str) -> Dict[str, Any]:
+    """Delete a user."""
+    try:
+        db = _get_db()
+        users = db.get_users()
+        if username in users:
+            if users[username]["role"] == "admin" and len([u for u, d in users.items() if d["role"] == "admin"]) <= 1:
+                return {"ok": False, "message": "Cannot delete the last admin user."}
+            db.delete_user(username)
+            return {"ok": True, "users": db.get_users()}
+        return {"ok": True, "users": users}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def verify_login(username: str, password: str) -> Tuple[bool, Optional[str]]:
+    """Verify credentials and return (success, role)."""
+    users = get_users()
+    if username in users:
+        stored_hash = users[username].get("password_hash")
+        if stored_hash == hashlib.sha256(password.encode()).hexdigest():
+            return True, users[username]["role"]
+    return False, None
+
+
 def role_from_request(req: Any, session: Optional[Dict[str, Any]] = None) -> str:
     """Resolve the effective UI role from request, session, or environment."""
+    username = ""
     header_role = ""
     try:
+        username = str(req.headers.get("X-NEXT-USER", "") or "").strip()
         header_role = str(req.headers.get("X-NEXT-ROLE", "") or "").strip()
     except Exception:
-        header_role = ""
+        pass
+
+    if username:
+        users = get_users()
+        if username in users:
+            return users[username]["role"]
 
     session_role = ""
     if isinstance(session, dict):
@@ -110,9 +188,12 @@ def permission_payload(role: str) -> Dict[str, Any]:
         "can_edit_model": "model:write" in permissions,
         "can_validate": "validation:run" in permissions,
         "can_export": "export:run" in permissions,
+        "can_import": "import:run" in permissions,
         "can_push": "deploy:push" in permissions,
         "can_rollback": "deploy:rollback" in permissions,
         "can_test_hardware": "test_mode:run" in permissions,
+        "can_view_generated": "generated:read" in permissions,
+        "can_edit_advanced_config": "import:run" in permissions,
     }
 
 
@@ -275,9 +356,12 @@ def _issue(
 
 
 def _shape_kind(shape: Dict[str, Any]) -> str:
+    semantic = _text(shape.get("semantic_type")).lower()
+    if semantic:
+        return semantic
+
     text = " ".join(
         [
-            _text(shape.get("semantic_type")),
             _text(shape.get("type")),
             _text(shape.get("name")),
             _text(shape.get("id")),
@@ -299,7 +383,7 @@ def _shape_kind(shape: Dict[str, Any]) -> str:
         return "safety"
     if "wheel" in text:
         return "wheel"
-    return _text(shape.get("semantic_type")) or _text(shape.get("type")) or "device"
+    return _text(shape.get("type")) or "device"
 
 
 def _enabled(shape: Dict[str, Any]) -> bool:
@@ -550,16 +634,42 @@ def validate_robot_model(profile: Dict[str, Any], robot_builder: Dict[str, Any])
                         action="Select a driver plugin or script for this device.",
                     )
                 )
-            if kind == "laser" and radius <= 0 and _float(shape.get("range_m")) <= 0:
+            if kind == "laser" and enabled:
+                range_m = _float(shape.get("range_m"))
+                if range_m <= 0 and radius <= 0:
+                    warnings.append(
+                        _issue(
+                            "warning",
+                            "laser_range_missing",
+                            f"{shape_id}: laser range is not configured.",
+                            obj=shape_id,
+                            field="range_m",
+                            why="Safety and obstacle layers need realistic detection range.",
+                            action="Set min/max/range values from the sensor datasheet.",
+                        )
+                    )
+                elif range_m > 40.0:
+                    warnings.append(
+                        _issue(
+                            "warning",
+                            "laser_range_extreme",
+                            f"{shape_id}: laser range {range_m}m is unusually high.",
+                            obj=shape_id,
+                            field="range_m",
+                            why="Extremely long range settings may increase computational load or reduce resolution.",
+                            action="Verify the effective reliable range in the operating environment.",
+                        )
+                    )
+                
                 warnings.append(
                     _issue(
                         "warning",
-                        "laser_range_missing",
-                        f"{shape_id}: laser range is not configured.",
+                        "laser_interference_risk",
+                        f"{shape_id}: ensure environment supports laser detection.",
                         obj=shape_id,
-                        field="range_m",
-                        why="Safety and obstacle layers need realistic detection range.",
-                        action="Set min/max/range values from the sensor datasheet.",
+                        field="advanced_metadata",
+                        why="Highly reflective, specular, or black objects, strong ambient light, and cross-laser interference can reduce reliability.",
+                        action="Document operational limits for reflectivity and sunlight in metadata and configure safety filters.",
                     )
                 )
 
@@ -1007,6 +1117,27 @@ def generate_safety_outputs(model: Dict[str, Any]) -> Dict[str, Any]:
     return {"zones": zones, "docking_override_policy": "expand_zone_do_not_disable"}
 
 
+def generate_diagnostics_outputs(model: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate ROS 2 diagnostics aggregator config suggestions."""
+    analyzers: Dict[str, Any] = {}
+    for shape in _sorted_shapes(model):
+        if not _enabled(shape):
+            continue
+        kind = _shape_kind(shape)
+        if kind not in {"laser", "camera", "battery"}:
+            continue
+        shape_id = _text(shape.get("id") or shape.get("name"))
+        analyzers[shape_id] = {
+            "type": "diagnostic_aggregator/GenericAnalyzer",
+            "path": kind,
+            "timeout": 5.0,
+            "find_and_remove_prefix": kind,
+            "num_items": 1,
+            "expected_names": [shape_id],
+        }
+    return {"pub_rate": 1.0, "analyzers": analyzers}
+
+
 def generated_bundle(profile: Dict[str, Any], model: Dict[str, Any]) -> Dict[str, Any]:
     """Build a deterministic generated configuration bundle preview."""
     validation = validate_robot_model(profile, model)
@@ -1016,6 +1147,7 @@ def generated_bundle(profile: Dict[str, Any], model: Dict[str, Any]) -> Dict[str
     driver_parameters = generate_driver_parameters(safe_model)
     nav2 = generate_nav2_outputs(safe_model, safe_profile)
     safety_controller = generate_safety_outputs(safe_model)
+    diagnostics = generate_diagnostics_outputs(safe_model)
     urdf = generate_urdf(safe_model, safe_profile)
     xacro = generate_xacro(safe_model, safe_profile)
     bundle = {
@@ -1025,6 +1157,7 @@ def generated_bundle(profile: Dict[str, Any], model: Dict[str, Any]) -> Dict[str
         "driver_parameters": driver_parameters,
         "nav2": nav2,
         "safety_controller": safety_controller,
+        "diagnostics": diagnostics,
         "urdf": urdf,
         "xacro": xacro,
         "validation": validation,
@@ -1044,6 +1177,7 @@ def generated_bundle(profile: Dict[str, Any], model: Dict[str, Any]) -> Dict[str
         "safety_controller.yaml": generate_ros2_param_yaml(
             "safety_controller", safety_controller
         ),
+        "diagnostics.yaml": generate_ros2_param_yaml("diagnostics", diagnostics),
         "validation_report.json": _json_file(validation),
     }
     manifest = {

@@ -1469,6 +1469,7 @@
                 kind: state.tool === 'endpoint' ? 'endpoint' : 'anchor',
             });
             state.selectedGeometry = { kind: 'points', id: state.editorTemplate.geometry.points[state.editorTemplate.geometry.points.length - 1].id };
+            state.inspectorTab = 'geometry';
             markDirty();
             return;
         }
@@ -1496,6 +1497,7 @@
                 const kind = String(target.getAttribute('data-geo-kind') || '');
                 const id = String(target.getAttribute('data-geo-id') || '');
                 state.selectedGeometry = { kind, id };
+                state.inspectorTab = 'geometry';
                 if (kind === 'points') {
                     const point = findSelection(kind, id);
                     state.interaction = { mode: 'drag-point', kind, id, origin: { x: Number(point && point.x || 0), y: Number(point && point.y || 0) } };
@@ -1601,6 +1603,7 @@
                 });
                 const latest = state.editorTemplate.geometry.rectangles[state.editorTemplate.geometry.rectangles.length - 1];
                 state.selectedGeometry = { kind: 'rectangles', id: latest.id };
+                state.inspectorTab = 'geometry';
                 if (!(Number(state.editorTemplate.dimensions.width) > 0)) state.editorTemplate.dimensions.width = Number(latest.width.toFixed(2));
                 if (!(Number(state.editorTemplate.dimensions.depth) > 0)) state.editorTemplate.dimensions.depth = Number(latest.height.toFixed(2));
                 markDirty();
@@ -1624,6 +1627,7 @@
                 });
                 const latest = state.editorTemplate.geometry.segments[state.editorTemplate.geometry.segments.length - 1];
                 state.selectedGeometry = { kind: 'segments', id: latest.id };
+                state.inspectorTab = 'geometry';
                 markDirty();
             }
         } else if (['drag-point', 'drag-rectangle', 'drag-annotation'].includes(state.interaction.mode)) {
