@@ -39045,6 +39045,9 @@
             }
             try {
                 if (!silent) setRobotEditorStatus('Loading ROBOT editor...', 'info');
+                robotEditorState.model = null; 
+                robotEditorState.rendered_shapes = [];
+                robotEditorState.rendered_link_poses = {};
                 const response = await fetch(
                     `/api/settings/robot_profiles/robot_editor?robot_id=${encodeURIComponent(targetRobotId)}&reload_from_urdf=${reloadFromUrdf ? 'true' : 'false'}`
                 );

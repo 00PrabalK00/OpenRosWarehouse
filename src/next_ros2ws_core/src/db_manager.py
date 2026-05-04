@@ -202,6 +202,17 @@ class DatabaseManager:
                 )
             ''')
 
+            # User management table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    username TEXT PRIMARY KEY,
+                    role TEXT NOT NULL DEFAULT 'viewer',
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS schema_meta (
                     key TEXT PRIMARY KEY,
@@ -222,7 +233,44 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_recognition_templates_family ON recognition_templates(family_key, version DESC)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_recognition_templates_category ON recognition_templates(category, status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_action_point_configs_template ON action_point_configs(template_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)')
             
+            conn.commit()
+
+    # ---------- User Management ----------
+
+    def get_users(self) -> Dict[str, Dict[str, Any]]:
+        """Return dict of username -> {role, password_hash}."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT username, role, password_hash FROM users')
+            return {
+                row['username']: {
+                    'role': row['role'],
+                    'password_hash': row['password_hash']
+                }
+                for row in cursor.fetchall()
+            }
+
+    def set_user(self, username: str, role: str, password_hash: str):
+        """Insert or update a user."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO users (username, role, password_hash, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(username) DO UPDATE SET
+                    role = excluded.role,
+                    password_hash = excluded.password_hash,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (username, role, password_hash))
+            conn.commit()
+
+    def delete_user(self, username: str):
+        """Remove a user by username."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM users WHERE username = ?', (username,))
             conn.commit()
 
     @staticmethod
