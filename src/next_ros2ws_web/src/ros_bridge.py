@@ -852,16 +852,57 @@ class RosBridge(Node):
         source = raw if isinstance(raw, dict) else {}
         production = bool(source.get('production', False))
         production_marked_at = 0
+        published_profile_version = 0
         try:
             production_marked_at = max(0, int(source.get('production_marked_at', 0) or 0))
         except Exception:
             production_marked_at = 0
+        try:
+            published_profile_version = max(0, int(source.get('published_profile_version', 0) or 0))
+        except Exception:
+            published_profile_version = 0
         if not production:
             production_marked_at = 0
         return {
             'production': production,
             'production_marked_at': production_marked_at,
             'production_note': str(source.get('production_note', '') or '').strip(),
+            'published_profile_version': published_profile_version if production else 0,
+            'published_snapshot_id': str(source.get('published_snapshot_id', '') or '').strip() if production else '',
+        }
+
+    @classmethod
+    def _sanitize_nav2_profile_config(cls, raw: Any) -> Dict[str, Any]:
+        source = raw if isinstance(raw, dict) else {}
+        curated = source.get('curated', {}) if isinstance(source.get('curated', {}), dict) else {}
+        advanced = source.get('advanced_overrides', {})
+        if isinstance(advanced, list):
+            advanced_payload: Any = []
+            for item in advanced:
+                if not isinstance(item, dict):
+                    continue
+                path = str(item.get('path', '') or '').strip().strip('/')
+                if not path:
+                    continue
+                advanced_payload.append({'path': path, 'value': copy.deepcopy(item.get('value'))})
+        elif isinstance(advanced, dict):
+            advanced_payload = {
+                str(key or '').strip().strip('/'): copy.deepcopy(value)
+                for key, value in advanced.items()
+                if str(key or '').strip().strip('/')
+            }
+        else:
+            advanced_payload = {}
+
+        try:
+            updated_at = max(0, int(source.get('updated_at', 0) or 0))
+        except Exception:
+            updated_at = 0
+
+        return {
+            'curated': copy.deepcopy(curated),
+            'advanced_overrides': advanced_payload,
+            'updated_at': updated_at,
         }
 
     @staticmethod
@@ -1123,6 +1164,14 @@ class RosBridge(Node):
                     'radius': round(radius, 6),
                     'color': str(raw_shape.get('color', '#60a5fa') or '#60a5fa').strip() or '#60a5fa',
                         'advanced_metadata': raw_shape.get('advanced_metadata', {}) if isinstance(raw_shape.get('advanced_metadata'), dict) else {},
+                        'protocol': str(raw_shape.get('protocol', '') or '').strip(),
+                        'port': str(raw_shape.get('port', '') or '').strip(),
+                        'ip_address': str(raw_shape.get('ip_address', '') or '').strip(),
+                        'baud_rate': int(cls._safe_float(raw_shape.get('baud_rate', 0.0), 0.0)),
+                        'timeout_s': cls._safe_float(raw_shape.get('timeout_s', 0.0), 0.0),
+                        'diagnostic_source': str(raw_shape.get('diagnostic_source', '') or '').strip(),
+                        'parameters': raw_shape.get('parameters', {}) if isinstance(raw_shape.get('parameters'), dict) else {},
+                        'validation_records': raw_shape.get('validation_records', []) if isinstance(raw_shape.get('validation_records'), list) else [],
                 }
             )
 
@@ -1202,9 +1251,18 @@ class RosBridge(Node):
         except Exception:
             profile_version = 1
 
+        migration_warnings: List[str] = []
         schema_version = cls.PROFILE_SCHEMA_VERSION
         try:
-            schema_version = max(1, int(source.get('schema_version', cls.PROFILE_SCHEMA_VERSION) or cls.PROFILE_SCHEMA_VERSION))
+            raw_version_value = source.get('schema_version', cls.PROFILE_SCHEMA_VERSION)
+            raw_version = int(
+                cls.PROFILE_SCHEMA_VERSION
+                if raw_version_value is None or raw_version_value == ''
+                else raw_version_value
+            )
+            if raw_version < cls.PROFILE_SCHEMA_VERSION:
+                migration_warnings.append(f"Migrated profile from schema v{raw_version} to v{cls.PROFILE_SCHEMA_VERSION}.")
+            schema_version = max(1, raw_version)
         except Exception:
             schema_version = cls.PROFILE_SCHEMA_VERSION
 
@@ -1214,9 +1272,11 @@ class RosBridge(Node):
         robot_builder = cls._sanitize_robot_builder(source.get('robot_builder', {}), fallback_base_link=base_frame)
         release = cls._sanitize_profile_release(source.get('release', {}))
         bringup = cls._sanitize_profile_bringup(source.get('bringup', {}))
+        nav2_config = cls._sanitize_nav2_profile_config(source.get('nav2_config', {}))
 
         return {
-            'schema_version': schema_version,
+            'schema_version': cls.PROFILE_SCHEMA_VERSION,
+            'migration_warnings': migration_warnings,
             'profile_version': profile_version,
             'robot_id': robot_id,
             'namespace': namespace,
@@ -1232,6 +1292,7 @@ class RosBridge(Node):
             'robot_builder': robot_builder,
             'release': release,
             'bringup': bringup,
+            'nav2_config': nav2_config,
         }
 
     @classmethod
@@ -1433,6 +1494,39 @@ class RosBridge(Node):
         with open(path, 'w', encoding='utf-8') as f:
             yaml.safe_dump(payload, f, sort_keys=False)
 
+    def _export_profile_mirror(self, profile: Dict[str, Any], *, allow_overwrite: bool = True) -> str:
+        self._ensure_robot_profiles_storage(recover=True)
+        normalized = self._sanitize_profile_payload(
+            profile,
+            fallback_robot_id=str(profile.get('robot_id', '') or ''),
+        )
+        robot_id = str(normalized.get('robot_id', '') or '').strip()
+        if not robot_id:
+            return ''
+
+        target_path = str(self.robot_profile_files.get(robot_id, '') or '').strip() or self._profile_file_path(robot_id)
+        if (not allow_overwrite) and os.path.exists(target_path):
+            raise ValueError(f'Robot profile "{robot_id}" already exists')
+
+        self._write_profile_payload(target_path, self._profile_for_storage(normalized))
+        self.robot_profile_files[robot_id] = target_path
+        return target_path
+
+    def _import_legacy_robot_profiles_from_files(self) -> Dict[str, Dict[str, Any]]:
+        imported: Dict[str, Dict[str, Any]] = {}
+        profile_files: Dict[str, str] = {}
+        for path in self._list_profile_paths():
+            fallback_robot_id = os.path.splitext(os.path.basename(path))[0]
+            payload = self._load_profile_payload(path)
+            profile = self._sanitize_profile_payload(payload, fallback_robot_id=fallback_robot_id)
+            robot_id = str(profile.get('robot_id', '') or '').strip()
+            if not robot_id:
+                continue
+            imported[robot_id] = profile
+            profile_files[robot_id] = path
+        self.robot_profile_files.update(profile_files)
+        return imported
+
     def _ensure_robot_profiles_storage(self, *, recover: bool = True) -> str:
         configured = str(getattr(self, 'robot_profiles_dir', '') or '').strip()
         preferred = os.path.abspath(
@@ -1462,35 +1556,27 @@ class RosBridge(Node):
 
     def _load_robot_profiles(self) -> Dict[str, Dict[str, Any]]:
         profiles: Dict[str, Dict[str, Any]] = {}
-        profile_files: Dict[str, str] = {}
-        for path in self._list_profile_paths():
-            fallback_robot_id = os.path.splitext(os.path.basename(path))[0]
-            payload = self._load_profile_payload(path)
-            profile = self._sanitize_profile_payload(payload, fallback_robot_id=fallback_robot_id)
-            robot_id = str(profile.get('robot_id', '') or '').strip()
-            if not robot_id:
-                continue
-            storage_payload = self._profile_for_storage(profile)
-            raw_topics = self._sanitize_topics(payload.get('topics', {}))
-            stored_topics = storage_payload.get('topics', {})
-            if raw_topics != stored_topics:
+        self.robot_profile_files = {}
+
+        db_profiles = self._load_robot_profiles_from_db()
+        if db_profiles:
+            profiles.update(db_profiles)
+            for robot_id, profile in profiles.items():
                 try:
-                    self._write_profile_payload(path, storage_payload)
+                    self._export_profile_mirror(profile, allow_overwrite=True)
                 except Exception as exc:
-                    self.get_logger().warn(f'Failed to normalize robot profile "{path}": {exc}')
-            profiles[robot_id] = profile
-            profile_files[robot_id] = path
+                    self.get_logger().warn(f'Failed exporting robot profile mirror "{robot_id}": {exc}')
+            return profiles
 
-        if not profiles:
-            db_profiles = self._load_robot_profiles_from_db()
-            if db_profiles:
-                for robot_id, profile in db_profiles.items():
-                    profiles[robot_id] = profile
-
-        if profiles:
+        imported = self._import_legacy_robot_profiles_from_files()
+        if imported:
+            profiles.update(imported)
             self._save_all_profiles_to_db(profiles)
-
-        self.robot_profile_files = profile_files
+            for robot_id, profile in profiles.items():
+                try:
+                    self._export_profile_mirror(profile, allow_overwrite=True)
+                except Exception as exc:
+                    self.get_logger().warn(f'Failed normalizing imported robot profile mirror "{robot_id}": {exc}')
         return profiles
 
     def _resolve_profile_map_path(self, active_map: str) -> str:
@@ -1529,6 +1615,7 @@ class RosBridge(Node):
             'profile': copy.deepcopy(profile),
             'mappings': copy.deepcopy(profile.get('mappings', {})),
             'topics': copy.deepcopy(self._merge_topics_with_defaults(profile.get('topics', {}))),
+            'config_state': self._profile_config_state(profile),
             'frames': {
                 'namespace': str(profile.get('namespace', '/') or '/'),
                 'base_frame': str(profile.get('base_frame', 'base_link') or 'base_link'),
@@ -1573,34 +1660,102 @@ class RosBridge(Node):
         if not robot_id:
             raise ValueError('robot_id is required')
 
-        existing_path = self.robot_profile_files.get(robot_id, '')
-        if existing_path and os.path.exists(existing_path):
-            target_path = existing_path
-            if not allow_overwrite:
-                raise ValueError(f'Robot profile "{robot_id}" already exists')
-            if increment_version:
-                try:
-                    normalized['profile_version'] = max(1, int(normalized.get('profile_version', 1) or 1)) + 1
-                except Exception:
-                    normalized['profile_version'] = 2
-        else:
-            target_path = self._profile_file_path(robot_id)
-            if os.path.exists(target_path) and not allow_overwrite:
-                raise ValueError(f'Robot profile "{robot_id}" already exists')
+        existing_profiles = self._load_robot_profiles_from_db()
+        exists_in_db = robot_id in existing_profiles
+        existing_path = str(self.robot_profile_files.get(robot_id, '') or '').strip() or self._profile_file_path(robot_id)
+        exists_in_file = bool(existing_path and os.path.exists(existing_path))
+        if (exists_in_db or exists_in_file) and not allow_overwrite:
+            raise ValueError(f'Robot profile "{robot_id}" already exists')
 
-        try:
-            self._write_profile_payload(target_path, self._profile_for_storage(normalized))
-            self.robot_profile_files[robot_id] = target_path
-        except FileNotFoundError:
-            # Recover from broken install/share symlink paths by switching to fallback storage.
-            self._ensure_robot_profiles_storage(recover=True)
-            recovered_target = self._profile_file_path(robot_id)
-            self._write_profile_payload(recovered_target, self._profile_for_storage(normalized))
-            self.robot_profile_files[robot_id] = recovered_target
+        if increment_version:
+            try:
+                normalized['profile_version'] = max(1, int(normalized.get('profile_version', 1) or 1)) + 1
+            except Exception:
+                normalized['profile_version'] = 2
+
         self._save_robot_profile_to_db(normalized)
+        try:
+            self._export_profile_mirror(normalized, allow_overwrite=True)
+        except FileNotFoundError:
+            self._ensure_robot_profiles_storage(recover=True)
+            self._export_profile_mirror(normalized, allow_overwrite=True)
         return normalized
 
+    def _profile_config_state(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        safe_profile = self._sanitize_profile_payload(
+            profile,
+            fallback_robot_id=str(profile.get('robot_id', '') or ''),
+        )
+        robot_id = str(safe_profile.get('robot_id', '') or '').strip()
+        profile_version = max(1, int(safe_profile.get('profile_version', 1) or 1))
+        release = self._sanitize_profile_release(safe_profile.get('release', {}))
+        bringup = self._sanitize_profile_bringup(safe_profile.get('bringup', {}))
+
+        registry = self._load_config_deploy_registry()
+        robots = registry.get('robots', {}) if isinstance(registry.get('robots', {}), dict) else {}
+        deploy_record = self._sanitize_deploy_record(robots.get(robot_id, {}))
+        current_snapshot_id = str(deploy_record.get('current_snapshot_id', '') or '').strip()
+        deployed_profile_version = 0
+        hash_match = False
+        if robot_id and current_snapshot_id:
+            manifest = self._load_deploy_manifest(robot_id, current_snapshot_id)
+            try:
+                deployed_profile_version = max(0, int(manifest.get('profile_version', 0) or 0))
+            except Exception:
+                deployed_profile_version = 0
+            expected_hashes = self._manifest_expected_hashes(manifest)
+            active_hashes = self._collect_hashes_for_dir(self._deploy_active_dir(robot_id))
+            hash_match = self._hashes_match(active_hashes, expected_hashes) if expected_hashes else False
+
+        runtime_active = bool(robot_id and str(self.active_robot_profile_id or '').strip() == robot_id)
+        runtime_ready = bool(
+            safe_profile.get('urdf_artifact', {}).get('validation', {}).get('valid', False)
+        )
+        published_profile_version = max(0, int(release.get('published_profile_version', 0) or 0))
+        published_snapshot_id = str(release.get('published_snapshot_id', '') or '').strip()
+        published = bool(release.get('production', False) and published_profile_version > 0)
+        draft_dirty_vs_published = bool(published and profile_version != published_profile_version)
+        deployed_matches_published = bool(
+            published and current_snapshot_id and deployed_profile_version == published_profile_version and hash_match
+        )
+        draft_dirty = bool(deployed_profile_version and deployed_profile_version != profile_version)
+
+        return {
+            'robot_id': robot_id,
+            'profile_version': profile_version,
+            'draft_version': profile_version,
+            'published': published,
+            'published_at': int(release.get('production_marked_at', 0) or 0),
+            'published_note': str(release.get('production_note', '') or ''),
+            'published_profile_version': published_profile_version,
+            'published_snapshot_id': published_snapshot_id,
+            'bringup_passed': bool(bringup.get('last_pass', False)),
+            'bringup_last_run_at': int(bringup.get('last_run_at', 0) or 0),
+            'runtime_active': runtime_active,
+            'runtime_ready': runtime_ready,
+            'deployed_snapshot_id': current_snapshot_id,
+            'deployed_profile_version': deployed_profile_version,
+            'deploy_hash_match': hash_match,
+            'draft_dirty_vs_deployed': draft_dirty,
+            'draft_dirty_vs_published': draft_dirty_vs_published,
+            'deployed_matches_published': deployed_matches_published,
+            'summary': (
+                'draft_only'
+                if not published
+                else 'published_pending_deploy'
+                if not current_snapshot_id
+                else 'runtime_drift'
+                if draft_dirty_vs_published or draft_dirty or not hash_match or not deployed_matches_published
+                else 'deployed'
+            ),
+            'publish_required': bool(not published or draft_dirty_vs_published),
+            'deploy_required': bool(published and not deployed_matches_published),
+        }
+
     def _ensure_profile_registry_bootstrap(self):
+        existing_profiles = self._load_robot_profiles_from_db()
+        if existing_profiles:
+            return
         if self._list_profile_paths():
             return
 
@@ -1624,8 +1779,11 @@ class RosBridge(Node):
             'topics': copy.deepcopy(getattr(self, 'topic_config', self._merge_topics_with_defaults({}))),
         }
         normalized = self._sanitize_profile_payload(default_profile, fallback_robot_id='UGV-01')
-        self._write_profile_payload(self._profile_file_path('UGV-01'), self._profile_for_storage(normalized))
         self._save_robot_profile_to_db(normalized)
+        try:
+            self._export_profile_mirror(normalized, allow_overwrite=True)
+        except Exception as exc:
+            self.get_logger().warn(f'Failed exporting bootstrap robot profile mirror: {exc}')
 
     def _initialize_profile_registry(self):
         configured_dir = str(
@@ -1676,6 +1834,33 @@ class RosBridge(Node):
             self._save_profile_registry_state(active_robot_id)
         except Exception as exc:
             self.get_logger().warn(f'Failed syncing active robot profile: {exc}')
+
+    def _persist_profile_backed_mappings(
+        self,
+        mappings: Dict[str, Dict[str, str]],
+        topics: Dict[str, str],
+    ) -> Tuple[Optional[Dict[str, Any]], str]:
+        active_robot_id = str(getattr(self, 'active_robot_profile_id', '') or '').strip()
+        if not active_robot_id:
+            self.cached_settings_mappings = copy.deepcopy(mappings)
+            self.topic_config = copy.deepcopy(topics)
+            return None, ''
+
+        profiles = self._load_robot_profiles()
+        profile = profiles.get(active_robot_id)
+        if not profile:
+            self.cached_settings_mappings = copy.deepcopy(mappings)
+            self.topic_config = copy.deepcopy(topics)
+            return None, ''
+
+        profile['mappings'] = self._merge_mappings_with_defaults(self._sanitize_mappings(mappings))
+        profile['topics'] = self._merge_topics_with_defaults(topics)
+        profile['profile_version'] = max(1, int(profile.get('profile_version', 1) or 1)) + 1
+
+        saved = self._save_profile_to_disk(profile, allow_overwrite=True, increment_version=False)
+        self._apply_profile_config_to_memory(saved)
+        self._save_profile_registry_state(active_robot_id)
+        return saved, active_robot_id
 
     def _artifact_relative_path(self, absolute_path: str) -> str:
         raw = str(absolute_path or '').strip()
@@ -4148,13 +4333,15 @@ class RosBridge(Node):
         base_link = requested_base if requested_base in link_name_set else links_in_order[0]
 
         joints_by_child: Dict[str, Dict[str, Any]] = {}
+        child_to_parent: Dict[str, str] = {}
         for joint_elem in root.findall('./joint'):
             parent_elem = joint_elem.find('parent')
             child_elem = joint_elem.find('child')
             parent = self._normalize_frame_name(parent_elem.attrib.get('link', '') if parent_elem is not None else '')
             child = self._normalize_frame_name(child_elem.attrib.get('link', '') if child_elem is not None else '')
-            if not parent or not child or child in joints_by_child:
+            if not parent or not child:
                 continue
+            child_to_parent[child] = parent
 
             origin_elem = joint_elem.find('origin')
             xyz = self._parse_float_triplet(origin_elem.attrib.get('xyz', '0 0 0') if origin_elem is not None else '0 0 0')
@@ -4170,6 +4357,15 @@ class RosBridge(Node):
                 'joint_rpy': [float(rpy[0]), float(rpy[1]), float(rpy[2])],
             }
 
+        # Find the real root of the URDF tree
+        root_links = [l for l in links_in_order if l not in child_to_parent]
+        base_link = root_links[0] if root_links else links_in_order[0]
+        
+        # Override with requested base if valid
+        requested_base = self._normalize_frame_name(profile.get('base_frame', 'base_link')) or 'base_link'
+        if requested_base in link_name_set:
+            base_link = requested_base
+
         links: List[Dict[str, Any]] = [
             {
                 'name': base_link,
@@ -4183,8 +4379,9 @@ class RosBridge(Node):
             if link_name == base_link:
                 continue
             joint = joints_by_child.get(link_name, {})
-            parent = self._normalize_frame_name(joint.get('parent', '')) or base_link
-            if parent not in link_name_set or parent == link_name:
+            parent = self._normalize_frame_name(joint.get('parent', ''))
+            if not parent or parent not in link_name_set or parent == link_name:
+                # If disconnected, graft to base
                 parent = base_link
             links.append(
                 {
@@ -4204,13 +4401,20 @@ class RosBridge(Node):
             link_name = self._normalize_frame_name(link_elem.attrib.get('name', ''))
             if not link_name:
                 continue
+            
+            # Prefer collision, fall back to visual if missing
+            geometry_sources = link_elem.findall('./collision')
+            source_kind = 'collision'
+            if not geometry_sources:
+                geometry_sources = link_elem.findall('./visual')
+                source_kind = 'visual'
 
-            for idx, collision_elem in enumerate(link_elem.findall('./collision')):
-                origin_elem = collision_elem.find('origin')
+            for idx, geom_elem in enumerate(geometry_sources):
+                origin_elem = geom_elem.find('origin')
                 xyz = self._parse_float_triplet(origin_elem.attrib.get('xyz', '0 0 0') if origin_elem is not None else '0 0 0')
                 rpy = self._parse_float_triplet(origin_elem.attrib.get('rpy', '0 0 0') if origin_elem is not None else '0 0 0')
 
-                geometry_elem = collision_elem.find('geometry')
+                geometry_elem = geom_elem.find('geometry')
                 if geometry_elem is None:
                     continue
 
@@ -4223,6 +4427,8 @@ class RosBridge(Node):
                 box_elem = geometry_elem.find('box')
                 cyl_elem = geometry_elem.find('cylinder')
                 sphere_elem = geometry_elem.find('sphere')
+                mesh_elem = geometry_elem.find('mesh')
+                
                 if box_elem is not None:
                     size = self._parse_float_triplet(box_elem.attrib.get('size', '0.1 0.1 0.1'), default=(0.1, 0.1, 0.1))
                     width = abs(float(size[0]))
@@ -4242,10 +4448,17 @@ class RosBridge(Node):
                     width = 2.0 * radius
                     length = 2.0 * radius
                     shape_type = 'sphere'
+                elif mesh_elem is not None:
+                    # Placeholder for mesh
+                    width = 0.2
+                    length = 0.2
+                    height = 0.2
+                    radius = 0.1
+                    shape_type = 'box'
                 else:
                     continue
 
-                base_id = str(collision_elem.attrib.get('name', '') or f'{link_name}_shape_{idx + 1}').strip()
+                base_id = str(geom_elem.attrib.get('name', '') or f'{link_name}_shape_{idx + 1}').strip()
                 base_id = re.sub(r'[^a-zA-Z0-9_-]+', '_', base_id).strip('_') or f'{link_name}_shape_{idx + 1}'
                 shape_id = base_id
                 suffix = 2
@@ -4254,12 +4467,33 @@ class RosBridge(Node):
                     suffix += 1
                 used_ids.add(shape_id)
 
+                # Heuristic for semantic type based on name if it's a collision/visual
+                semantic = source_kind
+                lower_id = shape_id.lower()
+                lower_link = link_name.lower()
+                is_enabled = True
+                
+                if any(t in lower_id or t in lower_link for t in ('laser', 'lidar', 'scan')):
+                    semantic = 'laser'
+                    is_enabled = False # Disable by default to avoid topic/driver errors
+                elif any(t in lower_id or t in lower_link for t in ('camera', 'depth', 'rgb')):
+                    semantic = 'camera'
+                    is_enabled = False
+                elif 'wheel' in lower_id or 'wheel' in lower_link:
+                    semantic = 'wheel'
+                elif 'chassis' in lower_id or 'body' in lower_id or link_name == base_link:
+                    semantic = 'chassis'
+                elif 'collision' in lower_id or 'footprint' in lower_id:
+                    semantic = 'collision'
+
                 shapes.append(
                     {
                         'id': shape_id,
                         'name': shape_id,
                         'type': shape_type,
+                        'semantic_type': semantic,
                         'link': link_name,
+                        'enabled': is_enabled,
                         'x': float(xyz[0]),
                         'y': float(xyz[1]),
                         'z': float(xyz[2]),
@@ -4268,7 +4502,7 @@ class RosBridge(Node):
                         'length': float(length),
                         'height': float(height),
                         'radius': float(radius),
-                        'color': '#60a5fa',
+                        'color': '#94a3b8' if source_kind == 'visual' else '#60a5fa',
                     }
                 )
                 if len(shapes) >= int(self.ROBOT_EDITOR_MAX_SHAPES):
@@ -4346,7 +4580,11 @@ class RosBridge(Node):
             for shape_idx, shape in enumerate(local_shapes):
                 shape_name = str(shape.get('name', '') or shape.get('id', '') or f'{link_name}_shape_{shape_idx + 1}').strip() or f'{link_name}_shape_{shape_idx + 1}'
                 shape_name = re.sub(r'[^a-zA-Z0-9_-]+', '_', shape_name).strip('_') or f'{link_name}_shape_{shape_idx + 1}'
-                collision_elem = ET.SubElement(link_elem, 'collision', {'name': shape_name})
+                
+                is_visual = (str(shape.get('semantic_type', '')).lower() == 'visual')
+                elem_tag = 'visual' if is_visual else 'collision'
+                shape_elem = ET.SubElement(link_elem, elem_tag, {'name': shape_name})
+                
                 xyz = [
                     self._safe_float(shape.get('x', 0.0), 0.0, min_value=-1000.0, max_value=1000.0),
                     self._safe_float(shape.get('y', 0.0), 0.0, min_value=-1000.0, max_value=1000.0),
@@ -4354,20 +4592,21 @@ class RosBridge(Node):
                 ]
                 yaw = self._safe_float(shape.get('yaw', 0.0), 0.0, min_value=-1.0e6, max_value=1.0e6)
                 ET.SubElement(
-                    collision_elem,
+                    shape_elem,
                     'origin',
                     {
                         'xyz': f'{xyz[0]:.6f} {xyz[1]:.6f} {xyz[2]:.6f}',
                         'rpy': f'0.000000 0.000000 {yaw:.6f}',
                     },
                 )
-                geometry_elem = ET.SubElement(collision_elem, 'geometry')
+                geometry_elem = ET.SubElement(shape_elem, 'geometry')
 
                 shape_type = str(shape.get('type', 'box') or 'box').strip().lower()
                 width = self._safe_float(shape.get('width', 0.40), 0.40, min_value=0.01, max_value=100.0)
                 length = self._safe_float(shape.get('length', 0.30), 0.30, min_value=0.01, max_value=100.0)
                 height = self._safe_float(shape.get('height', 0.25), 0.25, min_value=0.01, max_value=100.0)
                 radius = self._safe_float(shape.get('radius', 0.15), 0.15, min_value=0.005, max_value=100.0)
+                
                 if shape_type == 'sphere':
                     ET.SubElement(geometry_elem, 'sphere', {'radius': f'{radius:.6f}'})
                 elif shape_type == 'cylinder':
@@ -4428,7 +4667,7 @@ class RosBridge(Node):
             robot_builder=model,
         )
 
-    def get_profile_robot_editor(self, robot_id: str = '', reload_from_urdf: bool = False):
+    def get_profile_robot_editor(self, robot_id: str = '', reload_from_urdf: bool = False, import_active: bool = False):
         target_robot_id = str(robot_id or '').strip()
         profiles = self._load_robot_profiles()
         if not profiles:
@@ -4452,8 +4691,29 @@ class RosBridge(Node):
         artifact = profile.get('urdf_artifact', {}) if isinstance(profile.get('urdf_artifact', {}), dict) else {}
         has_profile_urdf_source = bool(str(profile.get('urdf_source', '') or '').strip()) or bool(str(artifact.get('compiled_urdf_path', '') or '').strip())
         builder_source = str(builder.get('source', '') or '').strip().lower()
-        should_autoload_from_urdf = has_profile_urdf_source and builder_source not in {'robot_editor', 'urdf_import'}
-        if bool(reload_from_urdf) or len(builder.get('shapes', [])) == 0 or should_autoload_from_urdf:
+        
+        if import_active:
+            active_dir = self._deploy_active_dir(target_robot_id)
+            urdf_path = os.path.join(active_dir, 'robot_model.urdf')
+            if os.path.exists(urdf_path):
+                try:
+                    with open(urdf_path, 'r', encoding='utf-8') as f:
+                        urdf_content = f.read()
+                    imported = self._import_robot_builder_from_urdf(urdf_content, profile=profile)
+                    if bool(imported.get('ok')):
+                        builder = self._sanitize_robot_builder(
+                            imported.get('robot_builder', {}),
+                            fallback_base_link=str(profile.get('base_frame', 'base_link') or 'base_link'),
+                        )
+                        imported_from_urdf = True
+                        import_message = f"Imported active URDF from {active_dir}"
+                    else:
+                        import_message = str(imported.get('message', '') or 'Unable to import active URDF')
+                except Exception as exc:
+                    import_message = f"Failed to read active URDF: {exc}"
+            else:
+                import_message = "Active URDF not found for this robot profile."
+        elif bool(reload_from_urdf):
             loaded = self._load_compiled_urdf_artifact(profile)
             if bool(loaded.get('ok')):
                 imported = self._import_robot_builder_from_urdf(str(loaded.get('compiled_urdf', '') or ''), profile=profile)
@@ -4473,6 +4733,17 @@ class RosBridge(Node):
                 'source_type': str(loaded.get('source_type', '') or ''),
                 'source_path': str(loaded.get('source_path', '') or ''),
                 'compiled_urdf_path': str(loaded.get('compiled_urdf_path', '') or ''),
+            }
+        elif has_profile_urdf_source and builder_source not in {'robot_editor', 'urdf_import'}:
+            import_message = (
+                'Stored URDF artifact is available, but the robot editor draft remains the source of truth '
+                'until you explicitly reload from URDF.'
+            )
+            source_payload = {
+                'source_type': str(artifact.get('source_type', '') or ''),
+                'source_path': str(artifact.get('source_path', profile.get('urdf_source', '')) or profile.get('urdf_source', '')),
+                'compiled_urdf_path': str(artifact.get('compiled_urdf_path', '') or ''),
+                'autoload_disabled': True,
             }
 
         safety_payload = self._load_robot_yaml_safety_config()
@@ -8287,7 +8558,11 @@ class RosBridge(Node):
             else:
                 indices = list(range(current_idx, target_idx - 1, -1))
 
-        segment_points = [dict(points[i]) for i in indices]
+        segment_points = []
+        for i in indices:
+            p = dict(points[i])
+            p['_original_index'] = i
+            segment_points.append(p)
 
         loop_label = "Closed" if self._loop_type == "closed" else "Ping-pong"
         state_message = (
@@ -8302,6 +8577,7 @@ class RosBridge(Node):
             display_total=self._loop_display_waypoint_count if self._loop_display_waypoint_count > 0 else total,
             state_current_index=current_idx,
             state_message=state_message,
+            segment_attrs=self._loop_path_settings.get('segment_attrs') if isinstance(self._loop_path_settings, dict) else None,
         )
 
         if not start_result.get("ok"):
@@ -8695,6 +8971,11 @@ class RosBridge(Node):
                     continue
                 if end_idx >= start_idx:
                     geometry = self._slice_path_points(points, start_idx, end_idx)
+                    for i, pt in enumerate(geometry):
+                        orig_idx = start_idx + i
+                        pt['_original_index'] = orig_idx
+                        seg_dir = self._segment_direction_for_path(settings, orig_idx)
+                        pt['segment_bidirectional'] = seg_dir == 'bi'
                 else:
                     # Closed directed paths wrap from the last POI through the
                     # end of the saved path and back to the first POI.  Without
@@ -8703,6 +8984,11 @@ class RosBridge(Node):
                         [dict(point) for point in points[start_idx:]]
                         + [dict(point) for point in points[:end_idx + 1]]
                     )
+                    for i, pt in enumerate(geometry):
+                        orig_idx = (start_idx + i) % len(points)
+                        pt['_original_index'] = orig_idx
+                        seg_dir = self._segment_direction_for_path(settings, orig_idx)
+                        pt['segment_bidirectional'] = seg_dir == 'bi'
                 cost = 0.0
                 for geo_idx in range(1, len(geometry)):
                     cost += self._path_point_distance(geometry[geo_idx - 1], geometry[geo_idx])
@@ -8931,7 +9217,16 @@ class RosBridge(Node):
                 continue
             for idx, point in enumerate(points):
                 if idx == 0 and merged:
-                    continue
+                    last_pt = merged[-1]
+                    try:
+                        dist = math.hypot(
+                            float(last_pt.get('x', 0.0)) - float(point.get('x', 0.0)),
+                            float(last_pt.get('y', 0.0)) - float(point.get('y', 0.0))
+                        )
+                        if dist < 0.05:
+                            continue
+                    except Exception:
+                        pass
                 merged.append(dict(point))
         return merged
 
@@ -9097,9 +9392,11 @@ class RosBridge(Node):
         points: Any,
         *,
         path_mode_context: Optional[Dict[str, Any]] = None,
+        segment_attrs: Optional[Dict[str, Any]] = None,
     ):
         goal = FollowPathAction.Goal()
-        for point in points:
+        attrs = segment_attrs if isinstance(segment_attrs, dict) else {}
+        for idx, point in enumerate(points):
             x = float(point.get('x', 0.0))
             y = float(point.get('y', 0.0))
             pose = PoseStamped()
@@ -9111,6 +9408,7 @@ class RosBridge(Node):
             # Path waypoints are geometry only; POIs own heading semantics.
             pose.pose.orientation.w = 1.0
             goal.waypoints.append(pose)
+
         goal.zone_names = [
             str(point.get('zone_name', point.get('zoneName', '')) or '')
             for point in points
@@ -9119,10 +9417,46 @@ class RosBridge(Node):
             bool(self._as_bool(point.get('shelf_check', point.get('shelfCheck', False))))
             for point in points
         ]
-        goal.segment_bidirectional = [
-            bool(self._as_bool(point.get('segment_bidirectional', point.get('segmentBidirectional', False))))
-            for point in points
-        ]
+
+        # Build segment_bidirectional from point-level data or segment-level overrides.
+        bidirectional = []
+        for idx, point in enumerate(points):
+            # Arriving segment index for waypoint idx is calculated based on original indices if available.
+            is_bi = bool(self._as_bool(point.get('segment_bidirectional', point.get('segmentBidirectional', False))))
+            
+            orig_idx = point.get('_original_index')
+            if orig_idx is not None:
+                # If we have original indices, the segment ARRIVING at this point i is (original_index[i-1] -> original_index[i]).
+                # But segment_attrs are keyed by the STARTING point index of the segment.
+                # In a forward path, segment i is points[i]->points[i+1].
+                # So the segment arriving at points[idx] is points[idx-1]->points[idx].
+                # Its segment index is orig_idx_prev.
+                if idx > 0:
+                    orig_idx_prev = points[idx-1].get('_original_index')
+                    if orig_idx_prev is not None:
+                        seg_override = attrs.get(str(orig_idx_prev))
+                        if isinstance(seg_override, dict):
+                            direction = str(seg_override.get('direction', '')).strip().lower()
+                            if direction == 'bi':
+                                is_bi = True
+                            elif direction in {'uni', 'reverse'}:
+                                is_bi = False
+            else:
+                # Fallback to local index if no original index info (e.g. non-loop path)
+                seg_idx = idx - 1
+                if seg_idx >= 0:
+                    seg_override = attrs.get(str(seg_idx))
+                    if isinstance(seg_override, dict):
+                        direction = str(seg_override.get('direction', '')).strip().lower()
+                        if direction == 'bi':
+                            is_bi = True
+                        elif direction in {'uni', 'reverse'}:
+                            is_bi = False
+            
+            bidirectional.append(is_bi)
+        
+        goal.segment_bidirectional = bidirectional
+
         context = path_mode_context if isinstance(path_mode_context, dict) else {}
         if hasattr(goal, 'path_mode_selected_path'):
             goal.path_mode_selected_path = str(context.get('selected_path', '') or '')
@@ -9142,6 +9476,7 @@ class RosBridge(Node):
         state_current_index: int = 0,
         state_message: Optional[str] = None,
         path_mode_context: Optional[Dict[str, Any]] = None,
+        segment_attrs: Optional[Dict[str, Any]] = None,
     ):
         if restart and self._loop_stop_requested:
             return self._ok(False, 'Loop stop requested')
@@ -9150,7 +9485,11 @@ class RosBridge(Node):
         if not self.follow_path_action_client.wait_for_server(timeout_sec=wait_timeout):
             return self._ok(False, 'FollowPath action server not available')
     
-        goal = self._build_follow_path_goal(points, path_mode_context=path_mode_context)
+        goal = self._build_follow_path_goal(
+            points, 
+            path_mode_context=path_mode_context,
+            segment_attrs=segment_attrs
+        )
         ok = self._send_followpath_goal(goal)
         if not ok:
             return self._ok(False, 'FollowPath goal already in-flight')
@@ -9263,11 +9602,13 @@ class RosBridge(Node):
                 self._loop_display_waypoint_count = 0
                 return self._ok(False, 'Loop path must have at least 2 distinct waypoints')
             self._loop_path_points = list(execution_points)
+            self._loop_path_settings = settings if isinstance(settings, dict) else {}
             self._loop_current_index = 0
             self._loop_target_index = 1
             self._loop_direction = 1
         else:
             self._loop_path_points = []
+            self._loop_path_settings = {}
 
         if self._loop_enabled:
             start_result = self._start_next_loop_segment(restart=False, retry_same_target=False)
@@ -9278,17 +9619,18 @@ class RosBridge(Node):
                 restart=False,
                 display_total=len(execution_points),
                 path_mode_context=path_mode_context,
+                segment_attrs=settings.get('segment_attrs') if isinstance(settings, dict) else None,
             )
         if not start_result.get('ok'):
             self._loop_enabled = False
             self._loop_type = 'none'
             self._loop_path_points = []
+            self._loop_path_settings = {}
             self._loop_display_waypoint_count = 0
             self._loop_current_index = 0
             self._loop_target_index = 1
             self._loop_direction = 1
             return start_result
-
         if self._loop_enabled:
             if self._loop_type == 'closed':
                 self.path_state['message'] = 'Path loop active (closed): last point reconnects to first'
@@ -10874,6 +11216,61 @@ class RosBridge(Node):
 
         return updates, footprint_payload
 
+    @staticmethod
+    def _normalize_nav2_advanced_updates(raw: Any) -> Any:
+        if isinstance(raw, dict):
+            normalized: Dict[str, Any] = {}
+            for key, value in raw.items():
+                path = str(key or '').strip().strip('/')
+                if path:
+                    normalized[path] = copy.deepcopy(value)
+            return normalized
+        if isinstance(raw, list):
+            normalized_list: List[Dict[str, Any]] = []
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                path = str(item.get('path', '') or '').strip().strip('/')
+                if not path:
+                    continue
+                normalized_list.append({'path': path, 'value': copy.deepcopy(item.get('value'))})
+            return normalized_list
+        return {}
+
+    def _runtime_apply_footprint_only(self, profile: Dict[str, Any], normalized: Dict[str, Any]) -> Dict[str, Any]:
+        runtime_apply: Dict[str, Any] = {'applied': False, 'scopes': {}}
+        node_names = self._resolve_costmap_node_names(profile)
+        apply_ok = True
+        footprint_text = str(normalized.get('footprint_text', '[]') or '[]')
+        for scope in self.NAV2_COSTMAP_SCOPES:
+            node_name = node_names.get(scope, '')
+            updates: Dict[str, Any] = {
+                'footprint_padding': float(normalized['footprint_padding']),
+            }
+            if normalized['mode'] == 'polygon':
+                updates['footprint'] = footprint_text
+            else:
+                updates['robot_radius'] = float(normalized['robot_radius'])
+                updates['footprint'] = '[]'
+            set_result = self._set_runtime_node_parameters(node_name, updates)
+            runtime_apply['scopes'][scope] = set_result
+            apply_ok = apply_ok and bool(set_result.get('ok'))
+
+        runtime_apply['applied'] = bool(apply_ok)
+        if apply_ok:
+            clear_ok, clear_msg = self._clear_nav2_costmaps()
+            runtime_apply['costmap_clear'] = {'ok': bool(clear_ok), 'message': clear_msg}
+        runtime_snapshot = self._runtime_footprint_snapshot(profile)
+        verification = self._footprint_runtime_verification(normalized, runtime_snapshot)
+        return {
+            'ok': bool(apply_ok),
+            'message': 'Runtime footprint applied' if apply_ok else 'Runtime footprint apply/readback has warnings',
+            'config': normalized,
+            'runtime_apply': runtime_apply,
+            'runtime_readback': runtime_snapshot,
+            'verification': verification,
+        }
+
     def get_profile_nav2_parameter_editor(self, robot_id: str = '', include_runtime: bool = True):
         target_robot_id = str(robot_id or '').strip()
         profiles = self._load_robot_profiles()
@@ -10926,6 +11323,14 @@ class RosBridge(Node):
             footprint_verification = {'ok': False, 'scopes': {}}
 
         curated = self._extract_nav2_curated_subset(nav2_payload, footprint_config, profile)
+        profile_nav2_config = self._sanitize_nav2_profile_config(profile.get('nav2_config', {}))
+        curated_draft = (
+            profile_nav2_config.get('curated', {})
+            if isinstance(profile_nav2_config.get('curated', {}), dict)
+            else {}
+        )
+        if curated_draft:
+            curated = copy.deepcopy(curated_draft)
         diff = self._build_tree_diff(nav2_payload, template_payload)
         full_tree = self._flatten_tree_entries(nav2_payload)
         template_tree = self._flatten_tree_entries(template_payload)
@@ -10948,6 +11353,8 @@ class RosBridge(Node):
             nav2_params_file=nav2_params_path,
             template_params_file=template_path,
             curated=curated,
+            curated_source='profile_draft' if curated_draft else 'nav2_yaml',
+            draft_nav2_config=profile_nav2_config,
             full_tree=full_tree,
             template_tree=template_tree,
             diff=diff,
@@ -10985,14 +11392,6 @@ class RosBridge(Node):
         if not os.path.exists(nav2_params_path):
             return self._ok(False, f'Nav2 params file does not exist: {nav2_params_path}')
 
-        try:
-            with open(nav2_params_path, 'r', encoding='utf-8') as f:
-                nav2_payload = yaml.safe_load(f) or {}
-        except Exception as exc:
-            return self._ok(False, f'Failed reading Nav2 params file: {exc}')
-        if not isinstance(nav2_payload, dict):
-            nav2_payload = {}
-
         path_updates: Dict[str, Any] = {}
         curated_path_updates, curated_footprint = self._curated_subset_to_path_updates(curated_updates)
         path_updates.update(curated_path_updates)
@@ -11013,35 +11412,70 @@ class RosBridge(Node):
                     continue
                 path_updates[path] = copy.deepcopy(item.get('value'))
 
-        applied_yaml_paths: List[str] = []
-        skipped_yaml_paths: List[str] = []
-        for path, value in path_updates.items():
-            if self._tree_path_set(nav2_payload, path, value, create=True):
-                applied_yaml_paths.append(path)
-            else:
-                skipped_yaml_paths.append(path)
-
-        try:
-            with open(nav2_params_path, 'w', encoding='utf-8') as f:
-                yaml.safe_dump(nav2_payload, f, sort_keys=False)
-        except Exception as exc:
-            return self._ok(False, f'Failed writing Nav2 params file: {exc}')
-
         online_enabled = mode in {'online', 'both'}
         runtime_results: Dict[str, Any] = {'enabled': online_enabled, 'applied': {}, 'skipped': []}
-        safe_bindings = self._nav2_safe_live_param_bindings()
         runtime_nodes = self._resolve_nav2_runtime_nodes(profile)
+        nav2_payload: Dict[str, Any] = {}
+        applied_yaml_paths: List[str] = []
+        skipped_yaml_paths: List[str] = []
+        saved_profile: Optional[Dict[str, Any]] = None
+
+        if mode in {'offline', 'both'}:
+            try:
+                with open(nav2_params_path, 'r', encoding='utf-8') as f:
+                    nav2_payload = yaml.safe_load(f) or {}
+            except Exception as exc:
+                return self._ok(False, f'Failed reading Nav2 params file: {exc}')
+            if not isinstance(nav2_payload, dict):
+                nav2_payload = {}
+
+            for path, value in path_updates.items():
+                if self._tree_path_set(nav2_payload, path, value, create=True):
+                    applied_yaml_paths.append(path)
+                else:
+                    skipped_yaml_paths.append(path)
+
+            try:
+                with open(nav2_params_path, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(nav2_payload, f, sort_keys=False)
+            except Exception as exc:
+                return self._ok(False, f'Failed writing Nav2 params file: {exc}')
+
+            profile['nav2_config'] = self._sanitize_nav2_profile_config(
+                {
+                    'curated': curated_updates if isinstance(curated_updates, dict) else {},
+                    'advanced_overrides': self._normalize_nav2_advanced_updates(advanced_updates),
+                    'updated_at': int(time.time()),
+                }
+            )
+            try:
+                saved_profile = self._save_profile_to_disk(profile, allow_overwrite=True, increment_version=True)
+                profile = saved_profile
+                if str(self.active_robot_profile_id or '').strip() == target_robot_id:
+                    self._apply_profile_config_to_memory(saved_profile)
+                    self._save_profile_registry_state(target_robot_id)
+            except Exception as exc:
+                return self._ok(False, f'Failed saving profile Nav2 draft: {exc}')
 
         footprint_runtime_result: Dict[str, Any] = {}
         if curated_footprint:
-            footprint_set = self.set_profile_nav2_footprint(
-                robot_id=target_robot_id,
-                mode=curated_footprint.get('mode', 'circle'),
-                robot_radius=curated_footprint.get('robot_radius', 0.30),
-                footprint=curated_footprint.get('footprint', []),
-                footprint_padding=curated_footprint.get('footprint_padding', 0.0),
-                apply_runtime=online_enabled,
-            )
+            if mode == 'online':
+                normalized_footprint = self._normalize_footprint_config(
+                    curated_footprint.get('mode', 'circle'),
+                    curated_footprint.get('robot_radius', 0.30),
+                    curated_footprint.get('footprint', []),
+                    curated_footprint.get('footprint_padding', 0.0),
+                )
+                footprint_set = self._runtime_apply_footprint_only(profile, normalized_footprint)
+            else:
+                footprint_set = self.set_profile_nav2_footprint(
+                    robot_id=target_robot_id,
+                    mode=curated_footprint.get('mode', 'circle'),
+                    robot_radius=curated_footprint.get('robot_radius', 0.30),
+                    footprint=curated_footprint.get('footprint', []),
+                    footprint_padding=curated_footprint.get('footprint_padding', 0.0),
+                    apply_runtime=online_enabled,
+                )
             footprint_runtime_result = footprint_set
             if not bool(footprint_set.get('ok')):
                 return self._ok(False, f'Failed applying footprint settings: {footprint_set.get("message", "")}')
@@ -11049,12 +11483,24 @@ class RosBridge(Node):
         if online_enabled:
             grouped_updates: Dict[str, Dict[str, Any]] = {}
             for path, value in path_updates.items():
-                binding = safe_bindings.get(path)
-                if not binding:
-                    runtime_results['skipped'].append({'path': path, 'reason': 'not_live_safe'})
+                if '/ros__parameters/' not in path:
+                    runtime_results['skipped'].append({'path': path, 'reason': 'not_a_ros_parameter'})
                     continue
 
-                alias, param_name = binding
+                parts = path.split('/ros__parameters/')
+                if len(parts) != 2:
+                    runtime_results['skipped'].append({'path': path, 'reason': 'invalid_path_format'})
+                    continue
+
+                prefix = parts[0]
+                param_path = parts[1]
+                
+                # Derive node alias from prefix
+                alias = prefix.split('/')[0] if '/' in prefix else prefix
+                
+                # Derive param name (convert slashes to dots for ROS 2 set_parameters)
+                param_name = param_path.replace('/', '.')
+
                 node_name = runtime_nodes.get(alias, '')
                 if not node_name:
                     runtime_results['skipped'].append({'path': path, 'reason': f'node_alias_unresolved:{alias}'})
@@ -11100,6 +11546,8 @@ class RosBridge(Node):
             message = f'{message}. Online apply attempted for live-safe params.'
         if mode in {'offline', 'both'}:
             message = f'{message}. Offline apply complete; restart required for non-live-safe params.'
+        if mode == 'online':
+            message = f'{message}. Runtime changes are temporary until saved to draft.'
 
         return self._ok(
             True,
@@ -11107,6 +11555,9 @@ class RosBridge(Node):
             robot_id=target_robot_id,
             apply_mode=mode,
             nav2_params_file=nav2_params_path,
+            profile_version=int(profile.get('profile_version', 1) or 1),
+            draft_saved=bool(mode in {'offline', 'both'}),
+            runtime_only=bool(mode == 'online'),
             yaml_updates=sorted(applied_yaml_paths),
             yaml_skipped=sorted(skipped_yaml_paths),
             runtime=runtime_results,
@@ -11114,6 +11565,8 @@ class RosBridge(Node):
             restart=restart_result,
             editor=editor_snapshot,
             validation=editor_snapshot.get('validation', {}),
+            draft_nav2_config=self._sanitize_nav2_profile_config(profile.get('nav2_config', {})),
+            profile=copy.deepcopy(profile),
         )
 
     # ---------- bringup wizard ----------
@@ -11655,9 +12108,14 @@ class RosBridge(Node):
                 production_allowed=False,
             )
 
+        target_published_version = 0
+        if desired:
+            target_published_version = max(1, int(profile.get('profile_version', 1) or 1)) + 1
         release['production'] = desired
         release['production_marked_at'] = int(time.time()) if desired else 0
         release['production_note'] = str(note or '').strip()
+        release['published_profile_version'] = target_published_version if desired else 0
+        release['published_snapshot_id'] = ''
         profile['release'] = release
 
         try:
@@ -11681,6 +12139,7 @@ class RosBridge(Node):
             profile_version=int(saved_profile.get('profile_version', 1) or 1),
             bringup=self._sanitize_profile_bringup(saved_profile.get('bringup', {})),
             release=self._sanitize_profile_release(saved_profile.get('release', {})),
+            config_state=self._profile_config_state(saved_profile),
             profile=copy.deepcopy(saved_profile),
             production_allowed=bool(bringup.get('last_pass', False)),
         )
@@ -11698,6 +12157,28 @@ class RosBridge(Node):
         profile = profiles.get(target_robot_id)
         if not isinstance(profile, dict):
             return self._ok(False, f'Robot profile "{target_robot_id}" not found')
+        release = self._sanitize_profile_release(profile.get('release', {}))
+        profile_version = max(1, int(profile.get('profile_version', 1) or 1))
+        published_profile_version = max(0, int(release.get('published_profile_version', 0) or 0))
+        if not bool(release.get('production', False)) or published_profile_version <= 0:
+            return self._ok(
+                False,
+                f'Profile "{target_robot_id}" must be published before deploy',
+                robot_id=target_robot_id,
+                profile_version=profile_version,
+                release=release,
+                config_state=self._profile_config_state(profile),
+            )
+        if published_profile_version != profile_version:
+            return self._ok(
+                False,
+                f'Profile "{target_robot_id}" has unpublished draft changes; publish version {profile_version} before deploy',
+                robot_id=target_robot_id,
+                profile_version=profile_version,
+                published_profile_version=published_profile_version,
+                release=release,
+                config_state=self._profile_config_state(profile),
+            )
 
         profile_file = str(self.robot_profile_files.get(target_robot_id, '') or '').strip()
         if not profile_file or not os.path.exists(profile_file):
@@ -11725,7 +12206,6 @@ class RosBridge(Node):
         if not compiled_urdf.strip():
             return self._ok(False, 'Compiled URDF artifact is empty')
 
-        profile_version = max(1, int(profile.get('profile_version', 1) or 1))
         snapshot_id = self._next_deploy_snapshot_id(target_robot_id, profile_version)
         snapshot_dir = self._deploy_snapshot_dir(target_robot_id, snapshot_id)
         os.makedirs(snapshot_dir, exist_ok=False)
@@ -11805,6 +12285,16 @@ class RosBridge(Node):
         registry['robots'] = robots
         self._save_config_deploy_registry(registry)
 
+        release['published_snapshot_id'] = snapshot_id
+        profile['release'] = release
+        try:
+            saved_profile = self._save_profile_to_disk(profile, allow_overwrite=True, increment_version=False)
+            if str(self.active_robot_profile_id or '').strip() == target_robot_id:
+                self._apply_profile_config_to_memory(saved_profile)
+                self._save_profile_registry_state(target_robot_id)
+        except Exception as exc:
+            self.get_logger().warn(f'Failed to persist published snapshot id for "{target_robot_id}": {exc}')
+
         return self._ok(
             True,
             f'Pushed profile "{target_robot_id}" config to robot deploy folder',
@@ -11821,6 +12311,8 @@ class RosBridge(Node):
             current_snapshot_id=record.get('current_snapshot_id', ''),
             last_known_good_snapshot_id=record.get('last_known_good_snapshot_id', ''),
             previous_snapshot_id=record.get('previous_snapshot_id', ''),
+            release=release,
+            config_state=self._profile_config_state(profile),
             recent_snapshots=self._collect_recent_deploy_snapshots(target_robot_id, limit=10),
         )
 
@@ -11900,10 +12392,45 @@ class RosBridge(Node):
             recent_snapshots=self._collect_recent_deploy_snapshots(requested_robot_id, limit=10),
         )
 
+    def get_profile_config_snapshot_details(self, robot_id: str, snapshot_id: str) -> Dict[str, Any]:
+        """Return full manifest and file contents for a specific deployment snapshot."""
+        target_robot_id = str(robot_id or '').strip()
+        target_snapshot_id = str(snapshot_id or '').strip()
+        
+        snapshot_dir = self._deploy_snapshot_dir(target_robot_id, target_snapshot_id)
+        if not os.path.isdir(snapshot_dir):
+            return self._ok(False, f'Snapshot "{target_snapshot_id}" not found for "{target_robot_id}"')
+            
+        manifest = self._load_deploy_manifest(target_robot_id, target_snapshot_id)
+        if not manifest:
+            return self._ok(False, f'Snapshot manifest missing or corrupt: {target_snapshot_id}')
+            
+        files_content = {}
+        for key, filename in self.DEPLOY_REQUIRED_FILES.items():
+            path = os.path.join(snapshot_dir, filename)
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        files_content[key] = f.read()
+                except Exception:
+                    pass
+                    
+        return self._ok(
+            True,
+            f'Snapshot details for "{target_snapshot_id}"',
+            snapshot_id=target_snapshot_id,
+            manifest=manifest,
+            files=files_content
+        )
+
     def get_profile_config_deploy_status(self, robot_id: str = ''):
         target_robot_id = str(robot_id or '').strip()
         if not target_robot_id:
             target_robot_id = str(self.active_robot_profile_id or '').strip()
+        profiles = self._load_robot_profiles()
+        profile = profiles.get(target_robot_id, {}) if target_robot_id else {}
+        release = self._sanitize_profile_release(profile.get('release', {})) if isinstance(profile, dict) else self._sanitize_profile_release({})
+        published_profile_version = max(0, int(release.get('published_profile_version', 0) or 0))
 
         registry = self._load_config_deploy_registry()
         robots = registry.get('robots', {}) if isinstance(registry.get('robots', {}), dict) else {}
@@ -11947,11 +12474,18 @@ class RosBridge(Node):
             last_known_good_snapshot_id=last_known_good_snapshot_id,
             previous_snapshot_id=previous_snapshot_id,
             profile_version=profile_version,
+            published_profile_version=published_profile_version,
+            published_snapshot_id=str(release.get('published_snapshot_id', '') or ''),
             snapshot_dir=snapshot_dir,
             manifest_file=manifest_file,
             expected_hashes=expected_hashes,
             active_hashes=active_hashes,
             hash_match=hash_match,
+            deployed_matches_published=bool(
+                published_profile_version > 0 and current_snapshot_id and profile_version == published_profile_version and hash_match
+            ),
+            release=release,
+            config_state=self._profile_config_state(profile) if isinstance(profile, dict) and profile else {},
             recent_snapshots=self._collect_recent_deploy_snapshots(target_robot_id, limit=10) if target_robot_id else [],
         )
 
@@ -12000,6 +12534,7 @@ class RosBridge(Node):
                     'bringup_last_pass': bool(bringup.get('last_pass', False)),
                     'bringup_last_run_at': int(bringup.get('last_run_at', 0) or 0),
                     'bringup_last_report_file': str(bringup.get('last_report_file', '') or ''),
+                    'config_state': self._profile_config_state(profile),
                 }
             )
 
@@ -12049,6 +12584,9 @@ class RosBridge(Node):
                 entry.update(value)
                 current[key] = entry
             merged['mappings'] = self._merge_mappings_with_defaults(current)
+
+        if 'nav2_config' in overrides:
+            merged['nav2_config'] = self._sanitize_nav2_profile_config(overrides.get('nav2_config', {}))
 
         return merged
 
@@ -12398,6 +12936,7 @@ class RosBridge(Node):
             settings_file=self.settings_file,
             active_robot_profile_id=str(self.active_robot_profile_id or ''),
             active_robot_profile=copy.deepcopy(self.active_robot_profile) if isinstance(self.active_robot_profile, dict) else {},
+            config_state=self._profile_config_state(active_profile) if active_profile else {},
         )
 
     def save_ui_mappings(self, mappings: Any, confirmed: bool = True, *, sync_active_profile: bool = True):
@@ -12414,6 +12953,16 @@ class RosBridge(Node):
         merged_mappings = self._merge_mappings_with_defaults(sanitized_mappings)
         merged_topics = self._merge_topics_with_defaults(sanitized_topics)
 
+        saved_profile: Optional[Dict[str, Any]] = None
+        if sync_active_profile:
+            try:
+                saved_profile, _ = self._persist_profile_backed_mappings(merged_mappings, merged_topics)
+            except Exception as exc:
+                return self._ok(False, f'Failed saving profile-backed mappings: {exc}', require_confirmation=False)
+        else:
+            self.cached_settings_mappings = merged_mappings
+            self.topic_config = merged_topics
+
         req = SaveUiMappings.Request()
         req.mappings_json = json.dumps(
             {
@@ -12425,23 +12974,42 @@ class RosBridge(Node):
 
         response, err = self._call_service(self.save_ui_mappings_client, req, wait_timeout=1.0, response_timeout=4.0)
         if err == 'service_not_available':
-            return self._ok(False, 'SettingsManager save_mappings service not available', require_confirmation=False)
+            return self._ok(
+                bool(saved_profile is not None),
+                'Profile updated, but SettingsManager save_mappings service is not available',
+                require_confirmation=False,
+                requires_restart=False,
+                config_state=self._profile_config_state(saved_profile) if saved_profile else {},
+            )
         if err == 'timeout':
-            return self._ok(False, 'SettingsManager save_mappings timed out', require_confirmation=False)
+            return self._ok(
+                bool(saved_profile is not None),
+                'Profile updated, but SettingsManager save_mappings timed out',
+                require_confirmation=False,
+                requires_restart=False,
+                config_state=self._profile_config_state(saved_profile) if saved_profile else {},
+            )
         if response is None:
-            return self._ok(False, 'Save settings mappings failed', require_confirmation=False)
+            return self._ok(
+                bool(saved_profile is not None),
+                'Profile updated, but saving settings mappings failed',
+                require_confirmation=False,
+                requires_restart=False,
+                config_state=self._profile_config_state(saved_profile) if saved_profile else {},
+            )
 
         if bool(response.ok):
             self.cached_settings_mappings = merged_mappings
             self.topic_config = merged_topics
-            if sync_active_profile:
-                self._sync_active_profile_from_mappings(merged_mappings, merged_topics)
+        elif sync_active_profile and saved_profile is not None:
+            self._apply_profile_config_to_memory(saved_profile)
 
         return self._ok(
             bool(response.ok),
             str(response.message),
             require_confirmation=bool(response.require_confirmation),
             requires_restart=True,
+            config_state=self._profile_config_state(saved_profile) if saved_profile else {},
         )
     # ---------- safety ----------
 

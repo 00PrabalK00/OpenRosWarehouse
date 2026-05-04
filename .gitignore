@@ -50,3 +50,13 @@ src/ui_ws/config/robot_profiles/registry.yaml
 src/ui_ws/.map_editor_stage.yaml
 Next_Pro_Implementation_TODO.md
 Next_Pro_Feature_Spec_Analysis.md
+Roboshop_Pro_Implementation_TODO.md
+Roboshop_Pro_Feature_Spec_Analysis.md
+ENGINEERING_SPECS.md
+OPERATOR_GUIDE.md
+SAFETY_NOTES.md
+TROUBLESHOOTING.md
+VERIFICATION_PLANS.md
+ExtraThings/
+build.sh
+old_samples.csv
