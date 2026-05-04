@@ -1,5 +1,6 @@
 schema_version: 1
-profile_version: 8
+migration_warnings: []
+profile_version: 14
 robot_id: Robot1
 namespace: /
 base_frame: base_footprint
@@ -235,8 +236,17 @@ robot_builder:
   shapes:
   - id: base_link_shape_1
     name: base_link_shape_1
+    semantic_type: ''
     type: box
     link: base_link
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.045
@@ -246,10 +256,28 @@ robot_builder:
     height: 0.09
     radius: 0.29
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: left_wheel_shape_1
     name: left_wheel_shape_1
+    semantic_type: ''
     type: sphere
     link: left_wheel
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -259,10 +287,28 @@ robot_builder:
     height: 0.2
     radius: 0.1
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: right_wheel_shape_1
     name: right_wheel_shape_1
+    semantic_type: ''
     type: sphere
     link: right_wheel
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -272,10 +318,28 @@ robot_builder:
     height: 0.2
     radius: 0.1
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: caster_front_left_shape_1
     name: caster_front_left_shape_1
+    semantic_type: ''
     type: sphere
     link: caster_front_left
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -285,10 +349,28 @@ robot_builder:
     height: 0.076
     radius: 0.038
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: caster_front_right_shape_1
     name: caster_front_right_shape_1
+    semantic_type: ''
     type: sphere
     link: caster_front_right
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -298,10 +380,28 @@ robot_builder:
     height: 0.076
     radius: 0.038
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: caster_rear_left_shape_1
     name: caster_rear_left_shape_1
+    semantic_type: ''
     type: sphere
     link: caster_rear_left
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -311,10 +411,28 @@ robot_builder:
     height: 0.076
     radius: 0.038
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: caster_rear_right_shape_1
     name: caster_rear_right_shape_1
+    semantic_type: ''
     type: sphere
     link: caster_rear_right
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -324,10 +442,28 @@ robot_builder:
     height: 0.076
     radius: 0.038
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: imu_link_shape_1
     name: imu_link_shape_1
+    semantic_type: ''
     type: box
     link: imu_link
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -337,10 +473,28 @@ robot_builder:
     height: 0.0252
     radius: 0.0244
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: laser_front_frame_shape_1
     name: laser_front_frame_shape_1
+    semantic_type: ''
     type: cylinder
     link: laser_front_frame
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -350,10 +504,28 @@ robot_builder:
     height: 0.04
     radius: 0.05
     color: '#60a5fa'
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
   - id: laser_rear_frame_shape_1
     name: laser_rear_frame_shape_1
+    semantic_type: ''
     type: cylinder
     link: laser_rear_frame
+    child_frame: ''
+    enabled: true
+    topic: ''
+    driver: ''
+    safety_behavior: ''
+    recovery_behavior: ''
+    range_m: 0.0
+    fov_rad: 0.0
     x: 0.0
     y: 0.0
     z: 0.0
@@ -363,11 +535,22 @@ robot_builder:
     height: 0.04
     radius: 0.05
     color: '#60a5fa'
-  updated_at: 1777446901
+    advanced_metadata: {}
+    protocol: ''
+    port: ''
+    ip_address: ''
+    baud_rate: 0
+    timeout_s: 0.0
+    diagnostic_source: ''
+    parameters: {}
+    validation_records: []
+  updated_at: 1777862355
 release:
   production: false
   production_marked_at: 0
   production_note: ''
+  published_profile_version: 0
+  published_snapshot_id: ''
 bringup:
   last_run_at: 0
   last_pass: false
@@ -378,3 +561,7 @@ bringup:
   last_report_file: ''
   last_log_file: ''
   last_run_message: ''
+nav2_config:
+  curated: {}
+  advanced_overrides: {}
+  updated_at: 0

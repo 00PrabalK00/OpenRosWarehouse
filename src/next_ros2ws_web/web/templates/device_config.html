@@ -702,10 +702,7 @@
 
     <!-- Right controls -->
     <div class="hdr-right">
-      <button class="hdr-icon-btn btn-icon" title="Notifications"><i class="fas fa-bell"></i></button>
-      <button class="hdr-icon-btn btn-icon" title="Help"><i class="fas fa-question-circle"></i></button>
-      <button class="hdr-icon-btn btn-icon" title="Home" onclick="window.location='/'"><i class="fas fa-home"></i></button>
-      <button class="hdr-estop" onclick="handleEstop()"><i class="fas fa-stop-circle"></i> E-STOP</button>
+      <!-- Buttons removed because this page is embedded in the main /dev application -->
     </div>
   </header>
 
@@ -737,7 +734,7 @@
 
     <!-- Primary actions -->
     <div class="cmdbar-actions">
-      <button class="btn" onclick="handleImportUrdf()"><i class="fas fa-file-import"></i> Import URDF</button>
+      <button class="btn" onclick="handleImportActiveUrdf()"><i class="fas fa-file-import"></i> Import Active URDF</button>
       <button class="btn" onclick="handleSaveDraft()"><i class="fas fa-save"></i> Save Draft</button>
       <button class="btn btn-primary" onclick="handleValidate()"><i class="fas fa-check-circle"></i> Validate</button>
       <button class="btn" onclick="handleExport()"><i class="fas fa-download"></i> Export</button>
@@ -776,11 +773,6 @@
         <span class="rail-label">Diagn.</span>
       </button>
       <div class="rail-spacer"></div>
-      <div class="rail-sep"></div>
-      <button class="rail-btn" title="Settings" onclick="setMode('settings')">
-        <i class="fas fa-cog"></i>
-        <span class="rail-label">Settings</span>
-      </button>
     </nav>
 
     <!-- ── Robot Canvas Workspace ──────────────────────────────── -->
@@ -933,7 +925,8 @@
       <div class="insp-tabs">
         <button class="insp-tab active" data-tab="properties" onclick="openInspectorTab('properties')">Properties</button>
         <button class="insp-tab" data-tab="hierarchy" onclick="openInspectorTab('hierarchy')">Hierarchy</button>
-        <button class="insp-tab" data-tab="validation" onclick="openInspectorTab('validation')">Validation</button>
+        <button class="insp-tab" data-tab="validation" onclick="openInspectorTab('validation')">Check</button>
+        <button class="insp-tab" data-tab="history" onclick="openInspectorTab('history')">History</button>
       </div>
 
       <!-- ── PROPERTIES TAB ───────────────────────────────────── -->
@@ -1234,7 +1227,18 @@
 
       </div><!-- #pane-validation -->
 
-    </aside><!-- #inspector -->
+      <!-- ── HISTORY TAB ──────────────────────────────────────── -->
+      <div class="insp-pane" id="pane-history">
+       <div class="insp-section">Deployment History</div>
+       <div id="history-list">
+         <!-- Populated by JS -->
+       </div>
+      </div>
+
+      <!-- ── SYSTEM TAB (Removed) ───────────────────────────────── -->
+      </aside>
+
+<!-- #inspector -->
 
   </div><!-- #main-viewport -->
 
@@ -1370,6 +1374,32 @@ const DC = {
   redoStack: [],
 };
 
+function dcConfigState() {
+  return (DC.profile && typeof DC.profile.config_state === 'object' && DC.profile.config_state)
+    || (DC.deployment && typeof DC.deployment.config_state === 'object' && DC.deployment.config_state)
+    || {};
+}
+
+function dcConfigStateMeta(state = dcConfigState()) {
+  const summary = String(state.summary || '').trim();
+  if (DC.dirty) {
+    return { label: 'Unsaved', cls: 'draft', subtitle: 'Local edits not saved to draft' };
+  }
+  if (summary === 'deployed') {
+    return { label: 'Deployed', cls: 'published', subtitle: `Published v${Number(state.published_profile_version || state.profile_version || 1)} matches runtime` };
+  }
+  if (summary === 'runtime_drift') {
+    return { label: 'Drift', cls: 'draft', subtitle: 'Published/deployed/runtime do not match' };
+  }
+  if (summary === 'published_pending_deploy') {
+    return { label: 'Ready to Deploy', cls: 'published', subtitle: `Published v${Number(state.published_profile_version || state.profile_version || 1)} is waiting for deploy` };
+  }
+  if (state.published) {
+    return { label: 'Published', cls: 'published', subtitle: `Published v${Number(state.published_profile_version || state.profile_version || 1)}` };
+  }
+  return { label: 'Draft', cls: 'draft', subtitle: `Draft v${Number(state.profile_version || 1)}` };
+}
+
 function dcText(value, fallback = '—') {
   const text = String(value ?? '').trim();
   return text || fallback;
@@ -1407,8 +1437,8 @@ async function dcFetch(url, options = {}) {
 }
 
 function dcSetMessage(message, state = 'info') {
-  const last = document.querySelector('#bottom-bar .bseg:last-child .bseg-val');
-  const label = document.querySelector('#bottom-bar .bseg:last-child .bseg-lbl');
+  const last = document.querySelector('#status-bar .bseg:last-child .bseg-val');
+  const label = document.querySelector('#status-bar .bseg:last-child .bseg-lbl');
   if (label) {
     label.textContent = state === 'error' ? 'ERROR' : state === 'warn' ? 'WARNING' : 'STATUS';
     label.style.color = state === 'error' ? 'var(--accent-critical)' : state === 'warn' ? 'var(--accent-warning)' : 'var(--accent-blue)';
@@ -1419,15 +1449,35 @@ function dcSetMessage(message, state = 'info') {
   }
 }
 
+function dcCheckEmbedded() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('embed') === '1') {
+    document.body.classList.add('embedded');
+    const header = document.getElementById('global-header');
+    if (header) header.style.display = 'none';
+    const status = document.getElementById('status-bar');
+    if (status) status.style.display = 'none';
+  }
+}
+
 function dcIssueText(item) {
-  if (typeof item === 'string') return item;
+  if (typeof item === 'string') return dcEscapeHtml(item);
   if (!item || typeof item !== 'object') return 'Unknown issue';
+  
   const parts = [];
-  if (item.object) parts.push(item.object);
-  if (item.field) parts.push(item.field);
-  if (item.message) parts.push(item.message);
-  if (item.action_required) parts.push(`Action: ${item.action_required}`);
-  return parts.join(' · ') || 'Unknown issue';
+  if (item.message) parts.push(`<strong>${dcEscapeHtml(item.message)}</strong>`);
+  
+  const meta = [];
+  if (item.object) meta.push(`Object: ${dcEscapeHtml(item.object)}`);
+  if (item.field) meta.push(`Field: ${dcEscapeHtml(item.field)}`);
+  if (meta.length) parts.push(`<div style="color:var(--text-tertiary);font-size:9px;margin-top:2px;">${meta.join(' · ')}</div>`);
+  
+  if (item.why) parts.push(`<div style="color:var(--text-tertiary);margin-top:4px;font-style:italic;line-height:1.3;">${dcEscapeHtml(item.why)}</div>`);
+  if (item.action_required || item.action) {
+    parts.push(`<div style="color:var(--accent-blue);margin-top:4px;font-weight:500;"><i class="fas fa-wrench" style="font-size:8px;margin-right:4px;"></i>${dcEscapeHtml(item.action_required || item.action)}</div>`);
+  }
+  
+  return parts.join('') || 'Unknown issue';
 }
 
 function dcNormalizeValidationReport(report) {
@@ -1452,13 +1502,26 @@ function renderPermissionState() {
   document.querySelectorAll('.profile-state-chip').forEach(el => {
     el.title = `Role: ${perms.role || 'viewer'} · ${DC.dirty ? 'Unsaved' : 'Saved'}`;
   });
+
+  const advancedBlockedTitle = `Advanced config requires Engineer/Admin role (current: ${perms.role || 'viewer'})`;
+  document.querySelectorAll('[onclick*="handleImportActiveUrdf"], [onclick*="handleImportUrdf"], [onclick*="handleExportUrdf"], [onclick*="handlePreviewGeneratedBundle"]').forEach(el => {
+    const allowed =
+      (String(el.getAttribute('onclick') || '').includes('handlePreviewGeneratedBundle') && perms.can_view_generated) ||
+      (!String(el.getAttribute('onclick') || '').includes('handlePreviewGeneratedBundle') && perms.can_import);
+    el.disabled = !allowed;
+    el.title = allowed ? (el.title || '') : advancedBlockedTitle;
+    el.style.opacity = allowed ? '' : '0.45';
+    el.style.pointerEvents = allowed ? '' : 'none';
+  });
 }
 
 function dcMarkDirty(dirty = true) {
   DC.dirty = Boolean(dirty);
+  const meta = dcConfigStateMeta();
   document.querySelectorAll('.profile-state-chip').forEach(el => {
-    el.textContent = DC.dirty ? 'Unsaved' : (DC.deployment?.current_snapshot_id ? 'Deployed' : 'Draft');
-    el.classList.toggle('draft', !DC.deployment?.current_snapshot_id);
+    el.textContent = meta.label;
+    el.classList.toggle('draft', meta.cls === 'draft');
+    el.classList.toggle('published', meta.cls === 'published');
   });
   renderPermissionState();
 }
@@ -1601,6 +1664,12 @@ function openInspectorTab(tab) {
   document.querySelectorAll('.insp-pane').forEach(p => {
     p.classList.toggle('active', p.id === 'pane-' + tab);
   });
+  
+  if (tab === 'history') loadHistory();
+  if (tab === 'system') {
+    loadSystemUsers();
+    loadSystemEvents();
+  }
 }
 
 /* ─── Canvas view ─────────────────────────────────────────── */
@@ -2270,6 +2339,8 @@ function filterHierarchy(query) {
 /* ─── Connected actions ───────────────────────────────────── */
 function renderProfileChrome() {
   const profile = DC.profile || {};
+  const state = dcConfigState();
+  const meta = dcConfigStateMeta(state);
   document.querySelectorAll('.hdr-robot-chip').forEach(el => {
     el.innerHTML = `<div class="hdr-robot-dot"></div>${dcText(DC.robotId, 'No profile')}`;
   });
@@ -2279,8 +2350,21 @@ function renderProfileChrome() {
   document.querySelectorAll('.profile-ver').forEach(el => {
     el.textContent = `v${Number(profile.profile_version || 1)}`;
   });
-  const stateText = DC.dirty ? 'Unsaved' : (DC.deployment?.current_snapshot_id ? 'Deployed' : 'Draft');
-  document.querySelectorAll('.profile-state-chip').forEach(el => { el.textContent = stateText; });
+  document.querySelectorAll('.profile-state-chip').forEach(el => {
+    el.textContent = meta.label;
+    el.classList.toggle('draft', meta.cls === 'draft');
+    el.classList.toggle('published', meta.cls === 'published');
+    el.title = meta.subtitle;
+  });
+  document.querySelectorAll('.t-caption').forEach(el => {
+    if (el.textContent.includes('saved')) {
+      el.textContent = `· ${meta.subtitle}`;
+    }
+  });
+  const publish = document.getElementById('publish-btn');
+  if (publish) {
+    publish.innerHTML = state.publish_required ? '<i class="fas fa-rocket"></i> Publish' : '<i class="fas fa-check-double"></i> Published';
+  }
 }
 
 function renderProfileDropdown() {
@@ -2289,13 +2373,13 @@ function renderProfileDropdown() {
   list.innerHTML = DC.profiles.map(profile => {
     const robotId = String(profile.robot_id || '').trim();
     const active = robotId === DC.robotId;
-    const state = profile.production ? 'Production' : profile.urdf_valid ? 'Validated' : 'Draft';
+    const meta = dcConfigStateMeta(profile.config_state || {});
     return `
       <button class="pd-item ${active ? 'active' : ''}" onclick="selectProfile('${dcJsString(robotId)}')">
         <div class="pd-item-dot" style="background:${active ? 'var(--accent-blue)' : 'var(--text-tertiary)'};"></div>
         <div class="pd-item-meta">
           <div class="pd-item-name">${dcEscapeHtml(robotId)}</div>
-          <div class="pd-item-ver">v${Number(profile.profile_version || 1)} · ${dcEscapeHtml(state)}</div>
+          <div class="pd-item-ver">v${Number(profile.profile_version || 1)} · ${dcEscapeHtml(meta.label)}</div>
         </div>
       </button>`;
   }).join('');
@@ -2358,9 +2442,9 @@ function renderValidationReport({ rebuild = true } = {}) {
   const section = (title, items, cls, icon) => `
     <div class="insp-section">${title} · ${items.length}</div>
     ${items.length ? items.map(item => `
-      <div class="prop-row" style="align-items:flex-start;gap:8px;">
-        <span class="prop-lbl"><i class="fas fa-${icon}" style="color:${cls === 'critical' ? 'var(--accent-critical)' : `var(--accent-${cls})`};"></i></span>
-        <span class="prop-val" style="white-space:normal;text-align:left;">${dcEscapeHtml(dcIssueText(item))}</span>
+      <div class="prop-row" style="align-items:flex-start;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span class="prop-lbl" style="flex:0 0 14px;padding-top:2px;"><i class="fas fa-${icon}" style="color:${cls === 'critical' ? 'var(--accent-critical)' : `var(--accent-${cls})`};"></i></span>
+        <div style="flex:1;min-width:0;font-size:10px;line-height:1.4;">${dcIssueText(item)}</div>
       </div>`).join('') : `<div class="prop-row"><span class="prop-lbl">State</span><span class="prop-val">None</span></div>`}
   `;
   pane.innerHTML = [
@@ -2398,11 +2482,12 @@ async function loadProfiles() {
   if (active) await loadRobotEditor(active);
 }
 
-async function loadRobotEditor(robotId, reloadFromUrdf = false) {
+async function loadRobotEditor(robotId, reloadFromUrdf = false, importActive = false) {
   dcSetMessage(`Loading ${robotId || 'active profile'}...`);
   const query = new URLSearchParams();
   if (robotId) query.set('robot_id', robotId);
   if (reloadFromUrdf) query.set('reload_from_urdf', 'true');
+  if (importActive) query.set('import_active', 'true');
   const data = await dcFetch(`/api/settings/robot_profiles/robot_editor?${query.toString()}`);
   DC.robotId = String(data.robot_id || robotId || '').trim();
   DC.profile = data.profile || {};
@@ -2414,6 +2499,9 @@ async function loadRobotEditor(robotId, reloadFromUrdf = false) {
     DC.deployment = await dcFetch(`/api/settings/robot_profiles/deployment?robot_id=${encodeURIComponent(DC.robotId)}`);
   } catch (_exc) {
     DC.deployment = null;
+  }
+  if (DC.deployment?.config_state && (!DC.profile.config_state || typeof DC.profile.config_state !== 'object')) {
+    DC.profile.config_state = DC.deployment.config_state;
   }
   renderProfileChrome();
   renderProfileDropdown();
@@ -2460,11 +2548,16 @@ async function handleEstop() {
   }
 }
 
-async function handleImportUrdf() {
+async function handleImportActiveUrdf() {
+  if (!DC.permissions?.can_import) {
+    dcSetMessage(`Import Active URDF requires Engineer/Admin role. Current role: ${DC.permissions?.role || 'viewer'}`, 'error');
+    return;
+  }
+  if (!confirm('This will overwrite the current editor with the URDF from the active robot deployment. Unsaved changes will be lost. Continue?')) return;
   closeAllMenus();
   try {
-    await loadRobotEditor(DC.robotId, true);
-    dcSetMessage('Imported current URDF into the model editor');
+    await loadRobotEditor(DC.robotId, false, true);
+    dcSetMessage('Imported Active Robot URDF into the model editor', 'success');
   } catch (exc) {
     dcSetMessage(exc.message, 'error');
   }
@@ -2509,15 +2602,21 @@ async function handlePublish() {
     return;
   }
   try {
-    await saveCurrentModel({ compileUrdf: true });
-    const data = await dcFetch('/api/settings/robot_profiles/deployment/push', {
+    const saveData = await saveCurrentModel({ compileUrdf: true });
+    DC.profile = saveData.profile || DC.profile;
+    const publishData = await dcFetch('/api/settings/robot_profiles/production', {
+      method: 'POST',
+      body: JSON.stringify({ robot_id: DC.robotId, production: true, note: 'Published from device config UI' }),
+    });
+    DC.profile = publishData.profile || DC.profile;
+    DC.deployment = await dcFetch('/api/settings/robot_profiles/deployment/push', {
       method: 'POST',
       body: JSON.stringify({ robot_id: DC.robotId }),
     });
-    DC.deployment = data;
     dcMarkDirty(false);
     renderProfileChrome();
-    dcSetMessage(data.message || 'Deployment snapshot created');
+    await loadProfiles();
+    dcSetMessage(DC.deployment.message || 'Published and deployed');
   } catch (exc) {
     dcSetMessage(exc.message, 'error');
   }
@@ -2675,14 +2774,223 @@ async function handleDuplicateProfile() {
   }
 }
 
-async function handleCompareRevisions() {
-  closeAllMenus();
+async function loadHistory() {
+  if (!DC.robotId) return;
+  const list = document.getElementById('history-list');
+  if (!list) return;
   try {
-    DC.deployment = await dcFetch(`/api/settings/robot_profiles/deployment?robot_id=${encodeURIComponent(DC.robotId)}`);
-    openInspectorTab('validation');
-    const pane = document.getElementById('pane-validation');
-    const rows = (DC.deployment.recent_snapshots || []).map(s => `<div class="prop-row"><span class="prop-lbl">${dcEscapeHtml(s.snapshot_id || 'snapshot')}</span><span class="prop-val">${dcEscapeHtml(s.created_at || '')}</span></div>`).join('');
-    pane.innerHTML = `<div class="insp-section">Deployment History</div>${rows || '<div class="prop-row"><span class="prop-lbl">History</span><span class="prop-val">No snapshots yet</span></div>'}`;
+    const data = await dcFetch(`/api/settings/robot_profiles/deployment?robot_id=${encodeURIComponent(DC.robotId)}`);
+    const snapshots = data.recent_snapshots || [];
+    const activeId = data.current_snapshot_id;
+    const lkgId = data.last_known_good_snapshot_id;
+    const verified = !!data.hash_match;
+    
+    let summaryHtml = `
+      <div style="padding:10px;background:var(--bg-elevated);border-bottom:1px solid var(--border-chrome);margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+           <span class="t-label">Status</span>
+           <span class="tag ${verified ? 'tag-green' : 'tag-amber'}">${verified ? 'Verified' : 'Modified'}</span>
+        </div>
+        <div class="t-caption">Active: <span class="mono" style="color:var(--text-secondary)">${dcEscapeHtml(activeId || 'None')}</span></div>
+        ${lkgId && lkgId !== activeId ? `<div class="t-caption">LKG: <span class="mono">${dcEscapeHtml(lkgId)}</span></div>` : ''}
+      </div>
+    `;
+
+    list.innerHTML = summaryHtml + snapshots.map(s => {
+      const isActive = s.snapshot_id === activeId;
+      const isLkg = s.snapshot_id === lkgId;
+      return `
+        <div class="prop-row" style="flex-direction:column;align-items:flex-start;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.03);">
+          <div style="display:flex;width:100%;justify-content:space-between;align-items:center;">
+            <span class="t-value" style="color:${isActive ? 'var(--accent-success)' : 'inherit'}">${dcEscapeHtml(s.snapshot_id)}</span>
+            <div style="display:flex;gap:4px;">
+              ${isActive ? '<span class="tag tag-green">Active</span>' : ''}
+              ${isLkg ? '<span class="tag tag-blue">LKG</span>' : ''}
+            </div>
+          </div>
+          <div class="t-caption" style="margin-top:2px;">${dcEscapeHtml(s.created_at ? new Date(s.created_at * 1000).toLocaleString() : '—')}</div>
+          <div style="display:flex;gap:4px;margin-top:6px;width:100%;">
+            <button class="btn" style="flex:1;font-size:8px;height:20px;" onclick="handleCompareSnapshot('${dcJsString(s.snapshot_id)}')">Compare</button>
+            ${!isActive ? `<button class="btn btn-primary" style="flex:1;font-size:8px;height:20px;" onclick="handleRollbackSnapshot('${dcJsString(s.snapshot_id)}')">Rollback</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('') || '<div class="prop-row"><span class="t-caption">No history found</span></div>';
+  } catch (exc) {
+    list.innerHTML = `<div class="prop-row"><span class="t-caption" style="color:var(--accent-critical)">Error: ${dcEscapeHtml(exc.message)}</span></div>`;
+  }
+}
+
+async function loadSystemUsers() {
+  const list = document.getElementById('system-users-list');
+  if (!list) return;
+  try {
+    const data = await dcFetch('/api/next/users');
+    const users = data.users || {};
+    list.innerHTML = Object.entries(users).map(([username, role]) => `
+      <div class="prop-row" style="justify-content:space-between;">
+        <span class="prop-lbl">${dcEscapeHtml(username)}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="insp-mode-badge" style="background:none;border-color:var(--border-chrome);">${dcEscapeHtml(role)}</span>
+          <button class="btn btn-icon btn-danger" style="width:18px;height:18px;font-size:8px;" onclick="handleDeleteUser('${dcJsString(username)}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+    `).join('') || '<div class="prop-row"><span class="t-caption">No users configured</span></div>';
+  } catch (exc) {
+    list.innerHTML = `<div class="prop-row"><span class="t-caption">Could not load users</span></div>`;
+  }
+}
+
+async function loadSystemEvents() {
+  const list = document.getElementById('system-events-list');
+  if (!list) return;
+  try {
+    const data = await dcFetch('/api/next/events?limit=30');
+    const events = Array.isArray(data.events) ? data.events.slice().reverse() : [];
+    list.innerHTML = events.map(event => {
+      const sev = String(event.severity || 'info').toLowerCase();
+      const color = sev === 'error' || sev === 'critical' ? 'var(--accent-critical)' : (sev === 'warning' || sev === 'warn' ? 'var(--accent-warning)' : 'var(--accent-blue)');
+      return `
+        <div class="prop-row" style="align-items:flex-start;gap:8px;padding:6px 10px;">
+          <span class="val-issue-dot ${sev === 'error' ? 'error' : (sev.startsWith('warn') ? 'warn' : 'pass')}" style="margin-top:4px;"></span>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-tertiary);">
+              <strong>${dcEscapeHtml(event.source || 'web')}</strong>
+              <span>${event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString() : ''}</span>
+            </div>
+            <div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">${dcEscapeHtml(event.message)}</div>
+          </div>
+        </div>
+      `;
+    }).join('') || '<div class="prop-row"><span class="t-caption">No events recorded</span></div>';
+  } catch (exc) {
+    list.innerHTML = `<div class="prop-row"><span class="t-caption">Could not load events</span></div>`;
+  }
+}
+
+async function handleCreateUser() {
+  const username = prompt('Username:');
+  if (!username) return;
+  const role = prompt('Role (admin/editor/viewer):', 'viewer');
+  if (!role) return;
+  try {
+    await dcFetch('/api/next/users', {
+      method: 'POST',
+      body: JSON.stringify({ username, role }),
+    });
+    loadSystemUsers();
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleDeleteUser(username) {
+  if (!confirm(`Delete user "${username}"?`)) return;
+  try {
+    await dcFetch('/api/next/users', {
+      method: 'DELETE',
+      body: JSON.stringify({ username }),
+    });
+    loadSystemUsers();
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleRollbackSnapshot(snapshotId) {
+  if (!confirm(`Rollback to snapshot ${snapshotId}? This will restart robot services.`)) return;
+  try {
+    const data = await dcFetch('/api/settings/robot_profiles/deployment/rollback', {
+      method: 'POST',
+      body: JSON.stringify({ robot_id: DC.robotId, snapshot_id: snapshotId }),
+    });
+    dcSetMessage(data.message || 'Rollback successful');
+    loadHistory();
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+async function handleCompareSnapshot(snapshotId) {
+  try {
+    const [snapshot, current] = await Promise.all([
+      dcFetch(`/api/settings/robot_profiles/snapshot?robot_id=${encodeURIComponent(DC.robotId)}&snapshot_id=${encodeURIComponent(snapshotId)}`),
+      dcFetch(`/api/settings/robot_profiles/generated_bundle?robot_id=${encodeURIComponent(DC.robotId)}`)
+    ]);
+
+    const pane = document.getElementById('pane-history');
+    const snapFiles = snapshot.files || {};
+    const curFiles = current.files || {};
+    const allKeys = Array.from(new Set([...Object.keys(snapFiles), ...Object.keys(curFiles)])).sort();
+
+    const diffRows = allKeys.map(key => {
+      const snapVal = snapFiles[key] || '';
+      const curVal = curFiles[key] || '';
+      const changed = snapVal !== curVal;
+      const status = !snapVal ? 'New' : (!curVal ? 'Removed' : (changed ? 'Changed' : 'Identical'));
+      const color = changed ? 'var(--accent-warning)' : 'var(--accent-success)';
+      
+      return `
+        <div class="prop-row" style="flex-direction:column;align-items:flex-start;border-bottom:1px solid var(--border-chrome);padding:8px 10px;">
+          <div style="display:flex;width:100%;justify-content:space-between;font-size:10px;">
+            <strong style="color:var(--text-secondary);">${dcEscapeHtml(key)}</strong>
+            <span style="color:${color};font-weight:700;font-size:9px;">${status.toUpperCase()}</span>
+          </div>
+          ${changed ? `
+            <div style="margin-top:6px;width:100%;display:flex;gap:4px;">
+               <button class="btn" style="flex:1;font-size:8px;height:18px;" onclick="showFileDiff('${dcJsString(key)}', '${dcJsString(snapVal)}', '${dcJsString(curVal)}')">View Diff</button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+
+    pane.innerHTML = `
+      <div class="insp-section">
+        <button class="btn btn-icon" onclick="loadHistory()" style="width:16px;height:16px;margin-right:8px;"><i class="fas fa-arrow-left"></i></button>
+        Diff: ${dcEscapeHtml(snapshotId)}
+      </div>
+      <div style="padding:10px;font-size:10px;color:var(--text-tertiary);background:var(--bg-elevated);border-bottom:1px solid var(--border-chrome);">
+        Comparing snapshot against current <strong>unsaved</strong> editor state.
+      </div>
+      ${diffRows}
+    `;
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function showFileDiff(filename, oldText, newText) {
+  // Simple side-by-side or combined diff view in a temporary overlay or hijacked pane.
+  // For now, let's just show an alert or a simple pre block.
+  const pane = document.getElementById('pane-history');
+  pane.innerHTML = `
+    <div class="insp-section">
+      <button class="btn btn-icon" onclick="loadHistory()" style="width:16px;height:16px;margin-right:8px;"><i class="fas fa-arrow-left"></i></button>
+      Diff: ${dcEscapeHtml(filename)}
+    </div>
+    <div style="padding:10px;display:flex;flex-direction:column;gap:10px;flex:1;overflow:hidden;">
+       <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+         <div class="t-label" style="margin-bottom:4px;">Snapshot Version</div>
+         <pre style="flex:1;overflow:auto;background:#2a1a1a;color:#ff8888;padding:8px;border-radius:4px;font-size:9px;white-space:pre-wrap;">${dcEscapeHtml(oldText || '(empty)')}</pre>
+       </div>
+       <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+         <div class="t-label" style="margin-bottom:4px;">Current Editor</div>
+         <pre style="flex:1;overflow:auto;background:#1a2a1a;color:#88ff88;padding:8px;border-radius:4px;font-size:9px;white-space:pre-wrap;">${dcEscapeHtml(newText || '(empty)')}</pre>
+       </div>
+    </div>
+  `;
+}
+
+async function handleTestHardware(type, params) {
+  if (type === 'motors' && !confirm('Motors will briefly pulse. Ensure robot is clear of obstacles. Continue?')) return;
+  try {
+    const data = await dcFetch(`/api/next/test_mode/${type}`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    dcSetMessage(data.message || 'Test started');
+    loadSystemEvents();
   } catch (exc) {
     dcSetMessage(exc.message, 'error');
   }
@@ -2690,43 +2998,12 @@ async function handleCompareRevisions() {
 
 async function handleViewEvents() {
   closeAllMenus();
-  try {
-    const data = await dcFetch('/api/next/events?limit=50');
-    const events = Array.isArray(data.events) ? data.events.slice().reverse() : [];
-    openInspectorTab('validation');
-    const pane = document.getElementById('pane-validation');
-    const rows = events.map(event => {
-      const sev = String(event.severity || 'info').toLowerCase();
-      const color = sev === 'error' || sev === 'critical'
-        ? 'var(--accent-critical)'
-        : sev === 'warning' || sev === 'warn'
-          ? 'var(--accent-warning)'
-          : 'var(--accent-blue)';
-      const when = event.timestamp
-        ? new Date(Number(event.timestamp) * 1000).toLocaleString()
-        : '—';
-      const detail = [
-        event.reason,
-        event.action_required ? `Action: ${event.action_required}` : '',
-      ].filter(Boolean).join(' · ');
-      return `
-        <div class="prop-row" style="align-items:flex-start;gap:8px;">
-          <span class="prop-lbl" style="color:${color};">${dcEscapeHtml(sev.toUpperCase())}</span>
-          <span class="prop-val" style="white-space:normal;text-align:left;">
-            <strong>${dcEscapeHtml(event.source || 'web')}</strong> · ${dcEscapeHtml(when)}<br>
-            ${dcEscapeHtml(event.message || 'Event recorded')}
-            ${detail ? `<br><span style="color:var(--text-tertiary);">${dcEscapeHtml(detail)}</span>` : ''}
-          </span>
-        </div>`;
-    }).join('');
-    pane.innerHTML = `
-      <div class="insp-section">Structured Event Log · ${events.length}</div>
-      ${rows || '<div class="prop-row"><span class="prop-lbl">Events</span><span class="prop-val">No events recorded yet</span></div>'}
-    `;
-    dcSetMessage(`Loaded ${events.length} event(s)`);
-  } catch (exc) {
-    dcSetMessage(exc.message, 'error');
-  }
+  openInspectorTab('system');
+}
+
+async function handleCompareRevisions() {
+  closeAllMenus();
+  openInspectorTab('history');
 }
 
 async function handleRestoreDefaults() {
@@ -2778,6 +3055,10 @@ function handleRedo() {
 
 async function handleExportUrdf() {
   closeAllMenus();
+  if (!DC.permissions?.can_import) {
+    dcSetMessage(`Export URDF requires Engineer/Admin role. Current role: ${DC.permissions?.role || 'viewer'}`, 'error');
+    return;
+  }
   try {
     const data = await dcFetch(`/api/settings/robot_profiles/urdf/source?robot_id=${encodeURIComponent(DC.robotId)}`);
     const blob = new Blob([data.source || data.urdf_source || ''], { type: 'text/plain' });
@@ -2867,6 +3148,7 @@ document.getElementById('robot-canvas-area').addEventListener('click', e => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  dcCheckEmbedded();
   loadProfiles().catch(exc => {
     dcSetMessage(exc.message || 'Failed loading robot model workspace', 'error');
     renderValidationReport();

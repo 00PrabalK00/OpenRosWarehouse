@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dev Camera</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef2e8;
+      --panel: #f9fbf5;
+      --ink: #182016;
+      --muted: #52604e;
+      --accent: #1f6b4f;
+      --border: rgba(24, 32, 22, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(31, 107, 79, 0.12), transparent 28rem),
+        linear-gradient(180deg, #f6f8f1 0%, var(--bg) 100%);
+      color: var(--ink);
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .panel {
+      background: rgba(249, 251, 245, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 18px 50px rgba(30, 50, 32, 0.08);
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px 12px;
+      align-items: baseline;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      letter-spacing: -0.03em;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .stream {
+      padding: 0 24px 24px;
+      position: relative;
+    }
+
+    .frame {
+      width: 100%;
+      max-width: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: #101512;
+      display: block;
+      object-fit: cover;
+    }
+
+    .frame-placeholder {
+      position: absolute;
+      inset: 0 24px 24px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      color: rgba(255, 255, 255, 0.72);
+      background: rgba(16, 21, 18, 0.84);
+      font-size: 0.98rem;
+      letter-spacing: 0.01em;
+    }
+
+    .frame-placeholder.hidden {
+      display: none;
+    }
+
+    .status {
+      padding: 0 24px 18px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      min-height: 1.25rem;
+    }
+
+    .status.error {
+      color: #a53a2a;
+    }
+
+    .empty {
+      padding: 48px 24px;
+      color: var(--muted);
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <div class="header">
+        <div>
+          <h1>Camera Feed</h1>
+          <div class="meta">Source: {{ source_device }}</div>
+        </div>
+        <div class="meta">{{ width }}x{{ height }} at {{ fps }} fps</div>
+      </div>
+      {% if available %}
+      <div class="stream">
+        <img class="frame" id="camera-frame" src="" alt="Live camera feed">
+        <div class="frame-placeholder" id="camera-placeholder">Waiting for camera…</div>
+      </div>
+      <div class="status" id="camera-status">Connecting…</div>
+      {% else %}
+      <div class="empty">
+        No camera source was found. Set <code>NEXT_WEB_CAMERA_DEVICE</code> or connect the webcam.
+      </div>
+      {% endif %}
+    </section>
+  </main>
+  {% if available %}
+  <script>
+    (function () {
+      const imageEl = document.getElementById('camera-frame');
+      const statusEl = document.getElementById('camera-status');
+      const placeholderEl = document.getElementById('camera-placeholder');
+      if (!imageEl || !statusEl || !placeholderEl) return;
+
+      const frameUrl = {{ frame_url | tojson }};
+      const pollMs = Math.max(500, Math.round(1000 / Math.max(1, {{ fps|int }})));
+      let timer = null;
+      let currentObjectUrl = null;
+      let inFlight = false;
+
+      function releaseCurrentObjectUrl() {
+        if (currentObjectUrl) {
+          URL.revokeObjectURL(currentObjectUrl);
+          currentObjectUrl = null;
+        }
+      }
+
+      function scheduleNext(delayMs) {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(requestFrame, delayMs);
+      }
+
+      async function requestFrame() {
+        if (inFlight) return;
+        inFlight = true;
+        const nextUrl = `${frameUrl}?t=${Date.now()}`;
+        let objectUrl = null;
+        try {
+          const response = await fetch(nextUrl, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+          });
+
+          const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+          if (!response.ok || !contentType.startsWith('image/jpeg')) {
+            let message = `Camera request failed (${response.status})`;
+            try {
+              const payload = await response.json();
+              if (payload && payload.message) {
+                message = String(payload.message);
+              }
+            } catch (error) {
+              // Leave fallback message in place.
+            }
+            releaseCurrentObjectUrl();
+            imageEl.removeAttribute('src');
+            placeholderEl.classList.remove('hidden');
+            placeholderEl.textContent = message;
+            statusEl.textContent = message;
+            statusEl.classList.add('error');
+            scheduleNext(1000);
+            return;
+          }
+
+          const blob = await response.blob();
+          objectUrl = URL.createObjectURL(blob);
+          await new Promise((resolve, reject) => {
+            const preload = new Image();
+            preload.onload = () => resolve();
+            preload.onerror = () => reject(new Error('decode failed'));
+            preload.src = objectUrl;
+          });
+
+          const previousObjectUrl = currentObjectUrl;
+          currentObjectUrl = objectUrl;
+          imageEl.src = objectUrl;
+          placeholderEl.classList.add('hidden');
+          statusEl.textContent = 'Live';
+          statusEl.classList.remove('error');
+          if (previousObjectUrl) {
+            URL.revokeObjectURL(previousObjectUrl);
+          }
+          inFlight = false;
+          scheduleNext(pollMs);
+          return;
+        } catch (error) {
+          if (objectUrl) {
+            try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+          }
+          releaseCurrentObjectUrl();
+          imageEl.removeAttribute('src');
+          placeholderEl.classList.remove('hidden');
+          const message = (error && error.message === 'decode failed')
+            ? 'Camera frame decode failed'
+            : 'Camera unavailable';
+          placeholderEl.textContent = message;
+          statusEl.textContent = message;
+          statusEl.classList.add('error');
+          inFlight = false;
+          scheduleNext(1000);
+        }
+      }
+
+      requestFrame();
+    })();
+  </script>
+  {% endif %}
+</body>
+</html>

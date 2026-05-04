@@ -123,19 +123,30 @@
         <div class="logo-wrap">
             <img src="{{ url_for('static', filename='logo.jpg') }}" alt="NEXT logo">
         </div>
-        <h1>Engineer Panel Locked</h1>
-        <p>Enter the developer password to open <code>/dev</code>.</p>
+        <h1>Engineer Login</h1>
+        <p>Login to your account to access <code>/dev</code>.</p>
         <form method="post" action="/dev/unlock">
-            <div class="row">
+            <div style="display:flex; flex-direction:column; gap:12px;">
                 <input
-                    type="password"
-                    name="password"
-                    autocomplete="off"
-                    placeholder="Password"
+                    type="text"
+                    name="username"
+                    autocomplete="username"
+                    placeholder="Username"
                     required
                     autofocus
+                    style="border: 1px solid #3b5f96; border-radius: 10px; padding: 10px 12px; background: #0f1b33; color: #fff; font-size: 14px;"
                 >
-                <button type="submit">Unlock</button>
+                <div class="row">
+                    <input
+                        type="password"
+                        name="password"
+                        autocomplete="current-password"
+                        placeholder="Password"
+                        required
+                        style="flex: 1; border: 1px solid #3b5f96; border-radius: 10px; padding: 10px 12px; background: #0f1b33; color: #fff; font-size: 14px;"
+                    >
+                    <button type="submit">Login</button>
+                </div>
             </div>
         </form>
         <div class="err">{{ error }}</div>

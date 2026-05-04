@@ -111,7 +111,7 @@ controller_server:
     FollowPath:
       plugin: next_nav2_controller::NextNav2Controller
       control_mode: rpp
-      max_v: 0.5
+      max_v: 1.5
       max_w: 0.55
       acc_lim_v: 2.5
       decel_lim_v: 1.5
@@ -166,12 +166,12 @@ controller_server:
       abort_on_progress_stall: true
       blocked_timeout: 3.0
       abort_on_blocked_timeout: true
-      max_vel_x: 0.5
+      max_vel_x: 1.5
       desired_linear_vel: 0.5
       min_vel_x: 0.0
-      max_vel_theta: 0.55
+      max_vel_theta: 1.5
       min_speed_xy: 0.05
-      max_speed_xy: 0.5
+      max_speed_xy: 1.5
       acc_lim_x: 2.5
       acc_lim_theta: 1.5
       decel_lim_x: -2.5

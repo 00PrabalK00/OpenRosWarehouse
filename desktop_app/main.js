@@ -116,6 +116,9 @@ async function probeRobot(config) {
     buildTargetUrl(safe),
   ];
 
+  let lastError = null;
+  let lastStatus = null;
+
   for (const target of probeTargets) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
@@ -134,15 +137,28 @@ async function probeRobot(config) {
           status: response.status,
         };
       }
-    } catch (_error) {
+      lastStatus = response.status;
+    } catch (error) {
       clearTimeout(timeout);
+      lastError = error;
     }
+  }
+
+  let failureReason = 'Could not reach the robot UI. Make sure zone_web_ui is running and the IP/port are correct.';
+  if (lastError && lastError.name === 'AbortError') {
+    failureReason = 'Network timeout. The robot did not respond within the time limit. Check if the robot is online and reachable.';
+  } else if (lastError && lastError.message && lastError.message.includes('ECONNREFUSED')) {
+    failureReason = 'Connection refused. The daemon or web server might be unavailable or not running on this port.';
+  } else if (lastStatus === 404) {
+    failureReason = 'API endpoint not found (404). This might indicate a wrong robot software version or stale backend state.';
+  } else if (lastStatus >= 500) {
+    failureReason = `Robot API rejected the request with a server error (${lastStatus}).`;
   }
 
   return {
     ok: false,
     targetUrl: buildTargetUrl(safe),
-    message: 'Could not reach the robot UI. Make sure zone_web_ui is running and the IP/port are correct.',
+    message: failureReason,
   };
 }
 
