@@ -26,7 +26,7 @@ setup(
     maintainer='aun',
     maintainer_email='aun@todo.todo',
     description='Tools/experiments for next_ros2ws (may use heavy deps like OpenCV/numpy).',
-    license='TODO',
+    license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

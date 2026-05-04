@@ -27,15 +27,71 @@ except ImportError:
     from dotted_map import generate_dotted_map
 
 
+def _resolve_map_editor_map_path(explicit_path: str = '') -> str:
+    """Resolve a usable map YAML path without assuming a developer-specific home dir."""
+    candidates = []
+
+    raw_explicit = os.path.expanduser(str(explicit_path or '').strip())
+    if raw_explicit:
+        candidates.append(raw_explicit)
+
+    env_override = os.path.expanduser(os.getenv('MAP_EDITOR_MAP_PATH', '').strip())
+    if env_override:
+        candidates.append(env_override)
+
+    bringup_roots = []
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        bringup_roots.append(get_package_share_directory('ugv_bringup'))
+    except Exception:
+        pass
+
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+    bringup_roots.append(os.path.normpath(os.path.join(module_dir, '..', '..', 'ui_ws')))
+
+    for root in bringup_roots:
+        maps_dir = os.path.join(root, 'maps')
+        active_cfg = os.path.join(root, 'config', 'active_map_config.yaml')
+        if os.path.isfile(active_cfg):
+            try:
+                with open(active_cfg, 'r', encoding='utf-8') as f:
+                    active_payload = yaml.safe_load(f) or {}
+                active_map = str(active_payload.get('active_map', '') or '').strip()
+                if active_map:
+                    if os.path.isabs(active_map):
+                        candidates.append(active_map)
+                    else:
+                        candidates.append(os.path.join(maps_dir, active_map))
+            except Exception:
+                pass
+        candidates.append(os.path.join(maps_dir, 'smr_map.yaml'))
+
+    seen = set()
+    normalized = []
+    for candidate in candidates:
+        expanded = os.path.abspath(os.path.expanduser(candidate))
+        if expanded in seen:
+            continue
+        seen.add(expanded)
+        normalized.append(expanded)
+
+    for candidate in normalized:
+        if os.path.isfile(candidate):
+            return candidate
+
+    return normalized[0] if normalized else os.path.abspath(os.path.expanduser('~/smr_map.yaml'))
+
+
 class MapEditorServer(Node):
     def __init__(self):
         super().__init__('map_editor_server')
         
         # Map storage
-        self.map_path = os.path.expanduser('/home/aun/Downloads/smr300l_gazebo_ros2control-main/maps/smr_map.yaml')
-        self.map_info = self.load_map_info()
+        configured_map = str(self.declare_parameter('map_yaml_path', '').value or '').strip()
+        self.map_path = _resolve_map_editor_map_path(configured_map)
         self.original_map = None
         self.edited_map = None
+        self.map_info = self.load_map_info()
         
         # Map layers (separate editable layers)
         self.layers = {

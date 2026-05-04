@@ -1,2 +1,13 @@
-dev_ui:
-  password: nextsmr
+# Optional local developer-panel auth.
+#
+# Do not commit real credentials here.
+# Preferred configuration:
+#   1. export NEXT_DEV_UI_PASSWORD='your-secret'
+#   2. or create operator_access.local.yaml next to this file
+#      with:
+#        dev_ui:
+#          password: your-secret
+#
+# This tracked file is intentionally left without a password so the
+# repository does not ship a plaintext secret.
+dev_ui: {}
