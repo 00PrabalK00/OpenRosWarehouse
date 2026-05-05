@@ -2520,18 +2520,19 @@ def set_robot_profile_production():
     return _status(result, fail_code=400)
 
 
-@app.route('/api/settings/relaunch', methods=['POST'])
-def run_settings_relaunch():
+@app.route('/api/device_config/restart_component', methods=['POST'])
+def restart_device_config_component():
     node, err = _node()
     if err:
         return err
 
     data = _json_body()
-    target = str(data.get('target', '') or '').strip()
-    if not target:
-        return jsonify({'ok': False, 'message': 'target is required'}), 400
+    component = str(data.get('component', '') or '').strip()
+    if not component:
+        return jsonify({'ok': False, 'message': 'component is required'}), 400
 
-    result = node.launch_relaunch_target(target=target)
+    enabled = _as_bool(data.get('enabled', True), True)
+    result = node.restart_device_config_component(component=component, enabled=enabled)
     return _status(result, fail_code=400)
 
 

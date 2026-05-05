@@ -13,7 +13,10 @@ import os
 import re
 import shlex
 import shutil
+import socket
+import signal
 import subprocess
+import struct
 import tempfile
 import time
 import threading
@@ -715,29 +718,26 @@ class RosBridge(Node):
     ROBOT_EDITOR_MAX_SHAPES = 800
     ROBOT_EDITOR_ALLOWED_SHAPES = {'box', 'cylinder', 'sphere'}
     ROBOT_EDITOR_ALLOWED_JOINT_TYPES = {'fixed', 'revolute', 'continuous', 'prismatic', 'floating', 'planar'}
-    RELAUNCH_TARGETS: Dict[str, Dict[str, str]] = {
+    DEVICE_CONFIG_RUNTIME_TARGETS: Dict[str, Dict[str, str]] = {
         'lidar_front': {
             'label': 'LiDAR Front',
-            'workspace': 'next_ros2',
-            'launch_command': 'ros2 launch sllidar_ros2 sllidar_t1_launch.py',
+            'start_command': '/bin/bash /home/next/system.sh lidar_front',
+            'pidfiles': ('/tmp/next_runtime/lidar_front.watch.pid', '/tmp/next_runtime/lidar_front.proc.pid'),
+            'process_patterns': ('ros2 launch sllidar_ros2 sllidar_t1_launch.py',),
         },
         'lidar_rear': {
             'label': 'LiDAR Rear',
-            'workspace': 'next_ros2',
-            'launch_command': 'ros2 launch sllidar_ros2 sllidar_s2e_launch.py',
+            'start_command': '/bin/bash /home/next/system.sh lidar_rear',
+            'pidfiles': ('/tmp/next_runtime/lidar_rear.watch.pid', '/tmp/next_runtime/lidar_rear.proc.pid'),
+            'process_patterns': ('ros2 launch sllidar_ros2 sllidar_s2e_launch.py',),
         },
         'imu': {
             'label': 'IMU Localization',
-            'workspace': 'next_EKF',
-            'launch_command': 'ros2 launch ugv_localization localization.launch.py',
-        },
-        'shelf_detection': {
-            'label': 'Shelf Detection',
-            'workspace': 'testBuild',
-            'launch_command': 'ros2 launch next2_shelf lidar_ros2_launch.py',
+            'start_command': '/bin/bash /home/next/odom.sh imu',
+            'pidfiles': ('/tmp/next_runtime/imu.proc.pid',),
+            'process_patterns': ('ros2 launch ugv_localization localization.launch.py',),
         },
     }
-
     @staticmethod
     def _sanitize_topics(raw: Any) -> Dict[str, str]:
         return sanitize_topic_overrides(raw)
@@ -4285,6 +4285,28 @@ class RosBridge(Node):
             safety=copy.deepcopy(params),
         )
 
+    def _apply_runtime_safety_config(self, profile: Dict[str, Any], overrides: Any) -> Dict[str, Any]:
+        payload = overrides if isinstance(overrides, dict) else {}
+        runtime_updates: Dict[str, Any] = {}
+        for raw_key, raw_value in payload.items():
+            key = str(raw_key or '').strip()
+            if not key:
+                continue
+            runtime_updates[key] = raw_value
+
+        if not runtime_updates:
+            return self._ok(True, 'No runtime safety parameter updates requested', node_name='', applied={})
+
+        namespace = self._normalize_namespace(profile.get('namespace', '/'))
+        node_name = self._join_namespace(namespace, '/safety_controller')
+        set_result = self._set_runtime_node_parameters(node_name, runtime_updates)
+        return self._ok(
+            bool(set_result.get('ok')),
+            str(set_result.get('message', '') or 'Safety runtime apply finished'),
+            node_name=node_name,
+            applied=copy.deepcopy(runtime_updates),
+        )
+
     @classmethod
     def _apply_profile_field_overrides(cls, profile: Dict[str, Any], overrides: Any) -> Dict[str, Any]:
         source_profile = profile if isinstance(profile, dict) else {}
@@ -4844,6 +4866,7 @@ class RosBridge(Node):
         validation: Dict[str, Any] = {}
         generated_urdf_text = ''
         runtime_result: Optional[Dict[str, Any]] = None
+        safety_runtime_result: Optional[Dict[str, Any]] = None
 
         if compile_requested:
             rendered = self._render_robot_builder_urdf(target_robot_id, updated_builder)
@@ -4949,6 +4972,12 @@ class RosBridge(Node):
             self._apply_profile_config_to_memory(saved_profile)
             self._save_profile_registry_state(saved_robot_id)
 
+        if safety_payload and bool(safety_payload.get('ok')):
+            safety_runtime_result = self._apply_runtime_safety_config(
+                saved_profile,
+                safety_payload.get('safety', {}),
+            )
+
         profiles_by_id = self._load_robot_profiles()
         if saved_robot_id in profiles_by_id:
             saved_profile = profiles_by_id[saved_robot_id]
@@ -4964,6 +4993,15 @@ class RosBridge(Node):
                 message = f'Robot editor draft saved for "{saved_robot_id}". URDF not updated: {detail}'
         else:
             message = f'Robot editor draft saved for "{saved_robot_id}"'
+
+        if safety_runtime_result:
+            if bool(safety_runtime_result.get('ok')):
+                message = f'{message}. Safety params applied live.'
+            else:
+                message = (
+                    f'{message}. Safety params saved to robot.yaml, '
+                    f'but live apply failed: {safety_runtime_result.get("message", "")}'
+                )
 
         return self._ok(
             True,
@@ -4982,6 +5020,7 @@ class RosBridge(Node):
             compile_message=compile_message,
             validation=validation,
             runtime=runtime_result or {},
+            safety_runtime=safety_runtime_result or {},
         )
 
     def _load_settings_payload_from_disk(self) -> Dict[str, Any]:
@@ -5450,7 +5489,7 @@ class RosBridge(Node):
         self.pose_prefer_tf = bool(self.declare_parameter('pose_prefer_tf', True).value)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self._last_pose_tf_miss_log_sec = 0.0
+        self._pose_tf_miss_active = False
         self.pose_source_fallback_timeout_sec = max(
             0.1,
             float(self.declare_parameter('pose_source_fallback_timeout_sec', 1.5).value),
@@ -5631,7 +5670,7 @@ class RosBridge(Node):
         raw = (mode or '').strip().lower()
         return RosBridge.MODE_ALIASES.get(raw, raw)
 
-    def _relaunch_workspace_candidates(self, workspace_name: str) -> List[str]:
+    def _workspace_candidates(self, workspace_name: str) -> List[str]:
         raw_name = str(workspace_name or '').strip()
         if not raw_name:
             return []
@@ -5658,8 +5697,8 @@ class RosBridge(Node):
             candidates.append(absolute)
         return candidates
 
-    def _resolve_relaunch_workspace(self, workspace_name: str) -> str:
-        for candidate in self._relaunch_workspace_candidates(workspace_name):
+    def _resolve_workspace_dir(self, workspace_name: str) -> str:
+        for candidate in self._workspace_candidates(workspace_name):
             if os.path.isdir(candidate):
                 return candidate
         return ''
@@ -5701,10 +5740,7 @@ class RosBridge(Node):
     def _launch_command_in_new_terminal(self, *, title: str, command: str, cwd: str) -> Dict[str, Any]:
         has_display = bool(os.getenv('DISPLAY') or os.getenv('WAYLAND_DISPLAY'))
         if not has_display:
-            return self._ok(
-                False,
-                'No graphical display detected. Cannot open a new terminal window.',
-            )
+            return self._ok(False, 'No graphical display detected. Cannot open a new terminal window.')
 
         terminal_order = [
             'x-terminal-emulator',
@@ -5751,87 +5787,236 @@ class RosBridge(Node):
                 'No supported terminal emulator found (tried x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, mate-terminal, lxterminal, xterm).',
             )
 
-        return self._ok(
-            False,
-            'Failed to open terminal emulator',
-            attempts=attempts,
-        )
+        return self._ok(False, 'Failed to open terminal emulator', attempts=attempts)
 
-    def launch_relaunch_target(self, target: str):
+    @staticmethod
+    def _send_socketcan_frame(sock: socket.socket, arbitration_id: int, data: bytes) -> None:
+        payload = bytes(data[:8]).ljust(8, b'\x00')
+        frame = struct.pack('=IB3x8s', int(arbitration_id), len(data[:8]), payload)
+        sock.send(frame)
+
+    def _restart_kinco_motor(self, motor_id: int, *, can_interface: str = 'can0') -> Dict[str, Any]:
+        motor_id = int(motor_id)
+        if motor_id <= 0:
+            return self._ok(False, 'Invalid motor id')
+
+        try:
+            sock = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+            sock.bind((str(can_interface),))
+        except Exception as exc:
+            return self._ok(False, f'Failed to open CAN interface {can_interface}: {exc}')
+
+        try:
+            # Match the drive flow from next_HI:
+            # NMT reset node -> NMT start node -> mode of operation -> fault reset -> 0x06/0x07/0x0F.
+            self._send_socketcan_frame(sock, 0x000, bytes([0x81, motor_id]))
+            time.sleep(0.20)
+            self._send_socketcan_frame(sock, 0x000, bytes([0x01, motor_id]))
+            time.sleep(0.10)
+            self._send_socketcan_frame(sock, 0x600 + motor_id, bytes([0x2F, 0x60, 0x60, 0x00, 0x03, 0x00, 0x00, 0x00]))
+            time.sleep(0.10)
+            self._send_socketcan_frame(sock, 0x600 + motor_id, bytes([0x2B, 0x40, 0x60, 0x00, 0x80, 0x00, 0x00, 0x00]))
+            time.sleep(0.10)
+            for controlword in (0x06, 0x07, 0x0F):
+                self._send_socketcan_frame(sock, 0x600 + motor_id, bytes([0x2B, 0x40, 0x60, 0x00, controlword, 0x00, 0x00, 0x00]))
+                time.sleep(0.12 if controlword != 0x0F else 0.20)
+        except Exception as exc:
+            return self._ok(False, f'Failed to reset motor {motor_id} on {can_interface}: {exc}')
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+        return self._ok(True, f'Reset motor {motor_id} on {can_interface}', motor_id=motor_id, can_interface=can_interface)
+
+    @staticmethod
+    def _read_pidfile(path: str) -> int:
+        try:
+            raw = open(path, 'r', encoding='utf-8').read().strip()
+            pid = int(raw)
+            return pid if pid > 0 else 0
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _pid_exists(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+    def _terminate_pid(self, pid: int, *, include_group: bool = True) -> bool:
+        if pid <= 0:
+            return False
+        stopped = False
+        if include_group:
+            try:
+                os.killpg(pid, signal.SIGTERM)
+                stopped = True
+            except Exception:
+                pass
+        try:
+            os.kill(pid, signal.SIGTERM)
+            stopped = True
+        except Exception:
+            pass
+
+        deadline = time.time() + 2.0
+        while self._pid_exists(pid) and time.time() < deadline:
+            time.sleep(0.1)
+
+        if self._pid_exists(pid):
+            if include_group:
+                try:
+                    os.killpg(pid, signal.SIGKILL)
+                except Exception:
+                    pass
+            try:
+                os.kill(pid, signal.SIGKILL)
+                stopped = True
+            except Exception:
+                pass
+        return stopped
+
+    @staticmethod
+    def _pgrep_pids(pattern: str) -> List[int]:
+        if not pattern:
+            return []
+        try:
+            output = subprocess.check_output(['pgrep', '-f', pattern], text=True, stderr=subprocess.DEVNULL)
+        except Exception:
+            return []
+        pids: List[int] = []
+        for line in output.splitlines():
+            try:
+                pid = int(line.strip())
+            except Exception:
+                continue
+            if pid > 0 and pid != os.getpid():
+                pids.append(pid)
+        return pids
+
+    def _stop_component_processes(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+        stopped_pids: Set[int] = set()
+
+        for path in spec.get('pidfiles', ()) or ():
+            pid = self._read_pidfile(str(path))
+            if pid > 0 and self._terminate_pid(pid):
+                stopped_pids.add(pid)
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+        for pattern in spec.get('process_patterns', ()) or ():
+            for pid in self._pgrep_pids(str(pattern)):
+                if pid not in stopped_pids and self._terminate_pid(pid, include_group=False):
+                    stopped_pids.add(pid)
+
+        return self._ok(True, 'Stopped component processes', stopped_pids=sorted(stopped_pids))
+
+    def _start_component_process(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+        command = str(spec.get('start_command', '') or '').strip()
+        label = str(spec.get('label', 'component'))
+        if not command:
+            return self._ok(False, f'No start command configured for {label}')
+        try:
+            proc = subprocess.Popen(
+                ['/bin/bash', '-lc', f'exec {command}'],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as exc:
+            return self._ok(False, f'Failed to start {label}: {exc}')
+        return self._ok(True, f'Started {label}', pid=int(proc.pid), start_command=command)
+
+    def _set_kinco_motor_enabled(self, motor_id: int, enabled: bool, *, can_interface: str = 'can0') -> Dict[str, Any]:
+        motor_id = int(motor_id)
+        if enabled:
+            return self._restart_kinco_motor(motor_id, can_interface=can_interface)
+
+        try:
+            sock = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+            sock.bind((str(can_interface),))
+        except Exception as exc:
+            return self._ok(False, f'Failed to open CAN interface {can_interface}: {exc}')
+
+        try:
+            self._send_socketcan_frame(sock, 0x600 + motor_id, bytes([0x2B, 0x40, 0x60, 0x00, 0x06, 0x00, 0x00, 0x00]))
+            time.sleep(0.10)
+            self._send_socketcan_frame(sock, 0x000, bytes([0x02, motor_id]))
+        except Exception as exc:
+            return self._ok(False, f'Failed to disable motor {motor_id} on {can_interface}: {exc}')
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+        return self._ok(True, f'Disabled motor {motor_id} on {can_interface}', motor_id=motor_id, can_interface=can_interface)
+
+    def restart_device_config_component(self, component: str, enabled: bool = True):
         aliases = {
-            'front': 'lidar_front',
+            'lidar_main': 'lidar_front',
             'lidar_front': 'lidar_front',
-            'lidar-front': 'lidar_front',
-            'rear': 'lidar_rear',
+            'laser_front_frame': 'lidar_front',
+            'lidar': 'lidar_front',
             'lidar_rear': 'lidar_rear',
-            'lidar-rear': 'lidar_rear',
+            'laser_rear_frame': 'lidar_rear',
+            'rear_lidar': 'lidar_rear',
+            'rear_laser': 'lidar_rear',
             'imu': 'imu',
-            'imu_localization': 'imu',
-            'imu-localization': 'imu',
-            'shelf': 'shelf_detection',
-            'shelf_detection': 'shelf_detection',
-            'shelf-detection': 'shelf_detection',
-            'shelf_detector': 'shelf_detection',
-            'next2_shelf': 'shelf_detection',
+            'imu_link': 'imu',
         }
-        normalized_target = aliases.get(str(target or '').strip().lower(), '')
-        if not normalized_target:
+        motor_targets = {
+            'wheel_left_front': 2,
+            'wheel_left_rear': 2,
+            'wheel_right_front': 1,
+            'wheel_right_rear': 1,
+            'left_wheel': 2,
+            'right_wheel': 1,
+            'left_wheel_shape_1': 2,
+            'right_wheel_shape_1': 1,
+            'left_motor': 2,
+            'right_motor': 1,
+        }
+        raw_component = str(component or '').strip().lower()
+        if raw_component in motor_targets:
+            return self._set_kinco_motor_enabled(motor_targets[raw_component], bool(enabled), can_interface='can0')
+
+        normalized_component = aliases.get(raw_component, '')
+        if not normalized_component:
             return self._ok(
                 False,
-                'Unknown relaunch target',
-                available_targets=sorted(list(self.RELAUNCH_TARGETS.keys())),
+                'Unknown device-config component',
+                available_targets=sorted(list(self.DEVICE_CONFIG_RUNTIME_TARGETS.keys())),
             )
 
-        spec = self.RELAUNCH_TARGETS.get(normalized_target, {})
-        label = str(spec.get('label', normalized_target))
-        workspace_name = str(spec.get('workspace', '') or '').strip()
-        launch_command = str(spec.get('launch_command', '') or '').strip()
-        if not workspace_name or not launch_command:
-            return self._ok(False, f'Relaunch target "{normalized_target}" is not configured')
+        spec = self.DEVICE_CONFIG_RUNTIME_TARGETS.get(normalized_component, {})
+        if not spec:
+            return self._ok(False, f'Device-config component "{normalized_component}" is not configured')
 
-        workspace_dir = self._resolve_relaunch_workspace(workspace_name)
-        if not workspace_dir:
-            return self._ok(
-                False,
-                f'Workspace "{workspace_name}" not found',
-                workspace_candidates=self._relaunch_workspace_candidates(workspace_name),
-            )
+        if not enabled:
+            stopped = self._stop_component_processes(spec)
+            label = str(spec.get('label', normalized_component))
+            return self._ok(True, f'Disabled {label}', component=normalized_component, stopped_pids=stopped.get('stopped_pids', []))
 
-        setup_script = self._resolve_workspace_setup_script(workspace_dir)
-        if not setup_script:
-            return self._ok(
-                False,
-                f'No setup script found in workspace "{workspace_dir}"',
-                expected=[
-                    os.path.join(workspace_dir, 'install', 'setup.bash'),
-                    os.path.join(workspace_dir, 'install', 'local_setup.bash'),
-                    os.path.join(workspace_dir, 'devel', 'setup.bash'),
-                ],
-            )
-
-        shell_command = (
-            f'cd {shlex.quote(workspace_dir)}'
-            f' && source {shlex.quote(setup_script)}'
-            f' && {launch_command}; rc=$?; echo; '
-            f'echo "[relaunch] {label} exited with code ${rc}"; exec bash'
-        )
-        launch_result = self._launch_command_in_new_terminal(
-            title=f'Relaunch: {label}',
-            command=shell_command,
-            cwd=workspace_dir,
-        )
-        if not bool(launch_result.get('ok')):
-            return launch_result
-
+        self._stop_component_processes(spec)
+        started = self._start_component_process(spec)
+        if not bool(started.get('ok')):
+            return started
         return self._ok(
             True,
-            f'Relaunch started for {label}',
-            target=normalized_target,
-            workspace=workspace_dir,
-            setup_script=setup_script,
-            launch_command=launch_command,
-            terminal=str(launch_result.get('terminal', '')),
-            terminal_pid=launch_result.get('pid'),
+            f'Enabled {spec.get("label", normalized_component)}',
+            component=normalized_component,
+            pid=started.get('pid'),
+            start_command=started.get('start_command', ''),
         )
 
     def _wait_future(self, future, timeout_sec: float):
@@ -6374,15 +6559,17 @@ class RosBridge(Node):
         return None
 
     def _log_pose_tf_miss(self, source: str, frame_hint: Optional[str] = None):
-        now = time.time()
-        if (now - float(getattr(self, '_last_pose_tf_miss_log_sec', 0.0))) < 2.0:
+        if bool(getattr(self, '_pose_tf_miss_active', False)):
             return
-        self._last_pose_tf_miss_log_sec = now
+        self._pose_tf_miss_active = True
         map_frame = self._normalize_frame_name(self._map_frame()) or 'map'
         hint = self._normalize_frame_name(frame_hint) or '<unknown>'
         self.get_logger().warn(
             f'Pose update skipped for source="{source}" (missing TF {map_frame} -> {hint})'
         )
+
+    def _clear_pose_tf_miss(self):
+        self._pose_tf_miss_active = False
 
     def _update_pose_from_covariance_msg(self, msg: PoseWithCovarianceStamped, source: str):
         pose = msg.pose.pose
@@ -6397,6 +6584,7 @@ class RosBridge(Node):
             if tf_pose is None:
                 self._log_pose_tf_miss(source, source_frame)
                 return
+            self._clear_pose_tf_miss()
             x, y, theta = tf_pose
 
         if not self._apply_robot_pose(x, y, theta, source):
@@ -6427,6 +6615,7 @@ class RosBridge(Node):
             if tf_pose is None:
                 self._log_pose_tf_miss(source, child_frame)
                 return
+            self._clear_pose_tf_miss()
             x, y, theta = tf_pose
 
         if not self._apply_robot_pose(x, y, theta, source):
@@ -11439,6 +11628,7 @@ class RosBridge(Node):
         online_enabled = mode in {'online', 'both'}
         runtime_results: Dict[str, Any] = {'enabled': online_enabled, 'applied': {}, 'skipped': []}
         runtime_nodes = self._resolve_nav2_runtime_nodes(profile)
+        safe_live_bindings = self._nav2_safe_live_param_bindings()
         nav2_payload: Dict[str, Any] = {}
         applied_yaml_paths: List[str] = []
         skipped_yaml_paths: List[str] = []
@@ -11506,25 +11696,14 @@ class RosBridge(Node):
 
         if online_enabled:
             grouped_updates: Dict[str, Dict[str, Any]] = {}
+            grouped_paths: Dict[str, List[str]] = {}
             for path, value in path_updates.items():
-                if '/ros__parameters/' not in path:
-                    runtime_results['skipped'].append({'path': path, 'reason': 'not_a_ros_parameter'})
+                binding = safe_live_bindings.get(path)
+                if not binding:
+                    runtime_results['skipped'].append({'path': path, 'reason': 'restart_required'})
                     continue
 
-                parts = path.split('/ros__parameters/')
-                if len(parts) != 2:
-                    runtime_results['skipped'].append({'path': path, 'reason': 'invalid_path_format'})
-                    continue
-
-                prefix = parts[0]
-                param_path = parts[1]
-                
-                # Derive node alias from prefix
-                alias = prefix.split('/')[0] if '/' in prefix else prefix
-                
-                # Derive param name (convert slashes to dots for ROS 2 set_parameters)
-                param_name = param_path.replace('/', '.')
-
+                alias, param_name = binding
                 node_name = runtime_nodes.get(alias, '')
                 if not node_name:
                     runtime_results['skipped'].append({'path': path, 'reason': f'node_alias_unresolved:{alias}'})
@@ -11535,24 +11714,46 @@ class RosBridge(Node):
                     grouped_updates.setdefault(node_name, {})[param_name] = self._format_footprint_param(parsed_points)
                 else:
                     grouped_updates.setdefault(node_name, {})[param_name] = value
+                grouped_paths.setdefault(node_name, []).append(path)
 
             for node_name in sorted(grouped_updates.keys()):
                 set_result = self._set_runtime_node_parameters(node_name, grouped_updates.get(node_name, {}))
                 runtime_results['applied'][node_name] = set_result
+                if not bool(set_result.get('ok')):
+                    for path in grouped_paths.get(node_name, []):
+                        runtime_results['skipped'].append({'path': path, 'reason': f'runtime_apply_failed:{node_name}'})
 
             needs_costmap_refresh = bool(curated_footprint) or any('inflation_radius' in path for path in path_updates.keys())
             if needs_costmap_refresh:
                 clear_ok, clear_msg = self._clear_nav2_costmaps()
                 runtime_results['costmap_clear'] = {'ok': bool(clear_ok), 'message': clear_msg}
 
-        restart_result: Dict[str, Any] = {'requested': bool(restart_nav), 'performed': False}
-        if mode in {'offline', 'both'} and bool(restart_nav):
+        runtime_failed_paths: List[str] = []
+        if online_enabled:
+            runtime_failed_paths.extend(
+                str(item.get('path', '') or '').strip()
+                for item in runtime_results.get('skipped', [])
+                if str(item.get('reason', '') or '') == 'restart_required'
+                or str(item.get('reason', '') or '').startswith('node_alias_unresolved:')
+                or str(item.get('reason', '') or '').startswith('runtime_apply_failed:')
+            )
+        auto_restart_required = mode == 'both' and bool(runtime_failed_paths)
+        restart_requested = bool(restart_nav) or bool(auto_restart_required)
+        restart_result: Dict[str, Any] = {
+            'requested': restart_requested,
+            'performed': False,
+            'automatic': bool(auto_restart_required and not restart_nav),
+            'reason_paths': sorted({path for path in runtime_failed_paths if path}),
+        }
+        if mode in {'offline', 'both'} and restart_requested:
             stack_before = self.get_stack_status()
             stop_result = self.set_stack_mode('stop')
             nav_result = self.set_stack_mode('nav')
             restart_result = {
                 'requested': True,
                 'performed': True,
+                'automatic': bool(auto_restart_required and not restart_nav),
+                'reason_paths': sorted({path for path in runtime_failed_paths if path}),
                 'stack_before': stack_before,
                 'stop': stop_result,
                 'nav': nav_result,
@@ -11569,7 +11770,15 @@ class RosBridge(Node):
         if online_enabled:
             message = f'{message}. Online apply attempted for live-safe params.'
         if mode in {'offline', 'both'}:
-            message = f'{message}. Offline apply complete; restart required for non-live-safe params.'
+            if bool(restart_result.get('performed')):
+                message = f'{message}. Offline apply complete.'
+            else:
+                message = f'{message}. Offline apply complete; restart required for non-live-safe params.'
+        if bool(restart_result.get('performed')):
+            if bool(restart_result.get('automatic')):
+                message = f'{message} Nav stack restarted automatically for non-live-safe params.'
+            else:
+                message = f'{message} Nav stack restarted.'
         if mode == 'online':
             message = f'{message}. Runtime changes are temporary until saved to draft.'
 

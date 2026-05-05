@@ -73,7 +73,7 @@ safety_controller:
 
     # Master switch for distance-based obstacle safety in both manual and autonomous modes.
     # This is the single on/off authority for obstacle distance/TTC stop and slowdown.
-    distance_safety_enabled: false
+    distance_safety_enabled: true
 
     # Safety-only path: prefer the merged dual-lidar union cloud.
     # If that goes stale, fall back directly to raw /scan + /scan2.

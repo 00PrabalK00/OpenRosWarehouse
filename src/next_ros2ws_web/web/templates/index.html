@@ -31425,42 +31425,18 @@
                                 </div>
 
                                 <div class="settings-card" style="margin-top:12px;">
-                                    <div class="settings-card-header"><h4 class="settings-card-title">Relaunch — LiDAR</h4></div>
-                                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                                        <button class="btn" type="button" data-relaunch-target="lidar_front" onclick="runRelaunchAction('lidar_front', this)">Relaunch Lidar Front</button>
-                                        <button class="btn" type="button" data-relaunch-target="lidar_rear" onclick="runRelaunchAction('lidar_rear', this)">Relaunch Lidar Rear</button>
-                                    </div>
-                                    <div style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
-                                        Workspace: <code>~/next_ros2</code><br>
-                                        Front: <code>ros2 launch sllidar_ros2 sllidar_t1_launch.py</code><br>
-                                        Rear: <code>ros2 launch sllidar_ros2 sllidar_s2e_launch.py</code>
-                                    </div>
-                                </div>
-
-                                <div class="settings-card" style="margin-top:12px;">
-                                    <div class="settings-card-header"><h4 class="settings-card-title">Relaunch — IMU</h4></div>
-                                    <button class="btn" type="button" data-relaunch-target="imu" onclick="runRelaunchAction('imu', this)">Relaunch IMU Localization</button>
-                                    <div style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
-                                        Workspace: <code>~/next_EKF</code><br>
-                                        Command: <code>ros2 launch ugv_localization localization.launch.py</code>
-                                    </div>
-                                </div>
-
-                                <div class="settings-card" style="margin-top:12px;">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Shelf Detection</h4></div>
                                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                                        <button class="btn" type="button" data-relaunch-target="shelf_detection" onclick="runRelaunchAction('shelf_detection', this)">Relaunch Shelf Detector</button>
                                         <button class="btn" type="button" onclick="openShelfPopup()">Open Shelf Controls</button>
                                     </div>
                                     <div style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
-                                        Workspace: <code>~/testBuild</code><br>
-                                        Detector launch: <code>ros2 launch next2_shelf lidar_ros2_launch.py</code><br>
-                                        Shelf detection now stays off until you enable it from the Shelf popup.
+                                        Use disable then enable to relaunch shelf detection when needed.<br>
+                                        Sensor restarts now follow the same disable/enable flow instead of separate relaunch buttons.
                                     </div>
                                 </div>
 
                                 <div id="settings-relaunch-status" class="nav2-editor-status" style="margin-top:10px;">
-                                    Ready. Select a relaunch action.
+                                    Disable then enable a sensor or motor here to relaunch that component.
                                 </div>
                             </div>
                         </div>
@@ -31786,6 +31762,60 @@
                                     <div class="form-group"><label>Global Inflation</label><input type="number"
                                             id="nav2-curated-inflation-global" step="0.01"></div>
                                 </div>
+                            </div>
+
+                            <div class="nav2-params-section-group" style="margin-top: 12px;">
+                                <span class="nav2-param-group-label">Operator Quick Controls</span>
+                                <p style="font-size:11px; color:var(--text-field-label); margin:0 0 10px 0;">
+                                    Use these first when you need to tune robot speed live. They map to the common Nav2
+                                    controller limits without hiding the full parameter tree below.
+                                </p>
+                                <div class="form-row" style="margin-bottom: 0;">
+                                    <div class="form-group">
+                                        <label title="Main forward speed cap for autonomous driving.">Max Forward Speed (m/s)</label>
+                                        <input type="number" id="nav2-curated-max-vel-x" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label title="Upper XY speed limit used by the controller. Usually keep near Max Forward Speed.">Max XY Speed (m/s)</label>
+                                        <input type="number" id="nav2-curated-max-speed-xy" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label title="Maximum turning speed for Nav2 path following.">Max Turn Speed (rad/s)</label>
+                                        <input type="number" id="nav2-curated-max-vel-theta" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="form-row" style="margin-bottom: 0;">
+                                    <div class="form-group">
+                                        <label title="Minimum forward speed the controller will command.">Min Forward Speed (m/s)</label>
+                                        <input type="number" id="nav2-curated-min-vel-x" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label title="Minimum XY speed / tracking floor.">Min XY Speed (m/s)</label>
+                                        <input type="number" id="nav2-curated-min-speed-xy" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label title="How quickly the robot accelerates forward.">Forward Accel Limit (m/s²)</label>
+                                        <input type="number" id="nav2-curated-acc-lim-x" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="form-row" style="margin-bottom: 0;">
+                                    <div class="form-group">
+                                        <label title="How quickly the robot decelerates forward. Usually negative.">Forward Decel Limit (m/s²)</label>
+                                        <input type="number" id="nav2-curated-decel-lim-x" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label title="Angular acceleration limit for turning.">Turn Accel Limit (rad/s²)</label>
+                                        <input type="number" id="nav2-curated-acc-lim-theta" step="0.01">
+                                    </div>
+                                    <div class="form-group">
+                                        <label title="Angular deceleration limit for turning. Usually negative.">Turn Decel Limit (rad/s²)</label>
+                                        <input type="number" id="nav2-curated-decel-lim-theta" step="0.01">
+                                    </div>
+                                </div>
+                                <p style="font-size:11px; color:var(--text-field-label); margin:10px 0 0 0;">
+                                    If you only need to slow the robot down, start with <strong>Max Forward Speed</strong>
+                                    and <strong>Max XY Speed</strong>. Use <strong>Max Turn Speed</strong> if cornering is too aggressive.
+                                </p>
                             </div>
 
                             <div class="nav2-params-section-group" style="margin-top: 12px;">
@@ -33304,47 +33334,6 @@
             }
             if (settingsLayoutGrid) {
                 settingsLayoutGrid.classList.toggle('maps-expanded', mapsExpanded);
-            }
-        }
-
-        async function runRelaunchAction(target, button = null) {
-            const action = String(target || '').trim();
-            if (!action) return;
-
-            const statusEl = document.getElementById('settings-relaunch-status');
-            const buttons = Array.from(document.querySelectorAll('[data-relaunch-target]'));
-            buttons.forEach((btn) => { btn.disabled = true; });
-
-            if (statusEl) {
-                statusEl.textContent = `Launching ${action} in new terminal...`;
-            }
-
-            try {
-                const response = await fetch('/api/settings/relaunch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ target: action }),
-                });
-                const data = await response.json();
-                if (data.ok) {
-                    if (statusEl) {
-                        const terminal = String(data.terminal || 'terminal');
-                        statusEl.textContent = `${data.message} (${terminal})`;
-                    }
-                    showStatus(data.message || 'Relaunch command started', 'success');
-                } else {
-                    if (statusEl) {
-                        statusEl.textContent = data.message || 'Failed to start relaunch command';
-                    }
-                    showStatus(data.message || 'Failed to start relaunch command', 'error');
-                }
-            } catch (error) {
-                if (statusEl) {
-                    statusEl.textContent = `Error: ${error}`;
-                }
-                showStatus(`Error: ${error}`, 'error');
-            } finally {
-                buttons.forEach((btn) => { btn.disabled = false; });
             }
         }
 

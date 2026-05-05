@@ -2819,20 +2819,79 @@ function handleAddObject(categoryName) {
   dcSetMessage(`Added ${categoryName}`);
 }
 
-function handleToggleSelectedEnabled() {
-  const shape = dcFindShape(DC.selectedLink);
-  if (!shape) {
-    dcSetMessage('Selected object does not support enable/disable', 'warn');
-    return;
+function dcRuntimeComponentForShape(shape) {
+  if (!shape) return '';
+  const id = String(shape.id || shape.name || '').trim().toLowerCase();
+  const link = String(shape.link || '').trim().toLowerCase();
+  const type = String(shape.type || '').trim().toLowerCase();
+  const sensorType = String(shape.sensorType || '').trim().toLowerCase();
+  const descriptor = `${id} ${link} ${type} ${sensorType}`;
+  if (/imu/.test(descriptor)) return 'imu_link';
+  if (/(lidar|laser|scan)/.test(descriptor)) {
+    if (/rear/.test(descriptor)) return 'laser_rear_frame';
+    return 'lidar_main';
   }
-  dcPushUndo();
-  shape.enabled = shape.enabled === false;
+  if (/(wheel|motor|drive)/.test(descriptor)) return link || id;
+  return '';
+}
+
+function dcApplyShapeEnabled(shape, enabled) {
+  shape.enabled = Boolean(enabled);
   dcMarkDirty(true);
   renderHierarchyFromModel();
   renderCanvasFromModel();
   renderValidationReport();
   selectLink(shape.id || shape.name);
-  dcSetMessage(`${shape.enabled ? 'Enabled' : 'Disabled'} ${shape.id || shape.name}`);
+}
+
+async function handleToggleSelectedEnabled() {
+  const shape = dcFindShape(DC.selectedLink);
+  if (!shape) {
+    dcSetMessage('Selected object does not support enable/disable', 'warn');
+    return;
+  }
+
+  const nextEnabled = shape.enabled === false;
+  const targetName = shape.id || shape.name || 'component';
+  dcPushUndo();
+
+  const runtimeComponent = dcRuntimeComponentForShape(shape);
+
+  if (!nextEnabled) {
+    if (!runtimeComponent) {
+      dcApplyShapeEnabled(shape, false);
+      dcSetMessage(`Disabled ${targetName}`);
+      return;
+    }
+    try {
+      const data = await dcFetch('/api/device_config/restart_component', {
+        method: 'POST',
+        body: JSON.stringify({ component: runtimeComponent, enabled: false }),
+      });
+      dcApplyShapeEnabled(shape, false);
+      dcSetMessage(data.message || `Disabled ${targetName}`, 'success');
+    } catch (exc) {
+      dcSetMessage(`Failed to disable ${targetName}: ${exc.message}`, 'error');
+    }
+    return;
+  }
+
+  if (!runtimeComponent) {
+    dcApplyShapeEnabled(shape, true);
+    dcSetMessage(`Enabled ${targetName}`);
+    return;
+  }
+
+  try {
+    const data = await dcFetch('/api/device_config/restart_component', {
+      method: 'POST',
+      body: JSON.stringify({ component: runtimeComponent, enabled: true }),
+    });
+    dcApplyShapeEnabled(shape, true);
+    dcSetMessage(data.message || `Enabled ${targetName}`, 'success');
+  } catch (exc) {
+    dcSetMessage(`Failed to enable ${targetName}: ${exc.message}`, 'error');
+  }
 }
 
 function handleDuplicateSelected() {
