@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXT Access Portal</title>
+    <style>
+        :root {
+            --bg: #060c15;
+            --bg-2: #0a1322;
+            --panel: rgba(13, 20, 33, 0.94);
+            --line: rgba(111, 145, 205, 0.22);
+            --line-strong: rgba(111, 145, 205, 0.34);
+            --text: #eef4ff;
+            --muted: #97a8c5;
+            --blue: #4f8dff;
+            --blue-deep: #2758d6;
+            --green: #23b57f;
+            --green-deep: #138760;
+            --danger: #ff8a8a;
+            --shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(44, 100, 190, 0.22), transparent 32%),
+                linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 18px;
+        }
+
+        .shell {
+            width: min(880px, 100%);
+            display: grid;
+            gap: 18px;
+        }
+
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .card {
+            padding: 28px;
+            display: grid;
+            gap: 18px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-logo {
+            width: 22px;
+            height: 22px;
+            border-radius: 7px;
+            object-fit: cover;
+            vertical-align: middle;
+            margin-right: 8px;
+            border: 1px solid rgba(111, 145, 205, 0.18);
+        }
+
+        .brand-copy strong {
+            display: block;
+            font-size: 15px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .brand-copy span {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            line-height: 1;
+            letter-spacing: -0.04em;
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        form {
+            display: grid;
+            gap: 14px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field span {
+            color: #c8d4ea;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            min-height: 54px;
+            border-radius: 18px;
+            border: 1px solid rgba(111, 145, 205, 0.22);
+            background: #08111d;
+            color: var(--text);
+            padding: 0 16px;
+            font-size: 15px;
+        }
+
+        .field input:focus,
+        .field select:focus {
+            outline: none;
+            border-color: var(--line-strong);
+            box-shadow: 0 0 0 4px rgba(79, 141, 255, 0.1);
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .btn {
+            appearance: none;
+            min-height: 52px;
+            border: 1px solid transparent;
+            border-radius: 18px;
+            padding: 0 18px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--blue) 0%, var(--blue-deep) 100%);
+            color: #fff;
+            box-shadow: 0 18px 34px rgba(39, 88, 214, 0.32);
+        }
+
+        .btn-viewer {
+            background: linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%);
+            color: #fff;
+            box-shadow: 0 18px 34px rgba(19, 135, 96, 0.24);
+        }
+
+        .resume {
+            display: grid;
+            gap: 10px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .resume p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .resume-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .btn-ghost {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: var(--muted);
+        }
+
+        .status-line {
+            min-height: 18px;
+            color: var(--danger);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .footer-banner {
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            background: rgba(9, 15, 25, 0.92);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            padding: 10px 16px 0;
+            min-height: 172px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .footer-banner img {
+            width: 100%;
+            height: auto;
+            max-height: 180px;
+            object-fit: contain;
+            object-position: center bottom;
+            display: block;
+        }
+
+        @media (max-width: 640px) {
+            .card {
+                padding: 20px;
+            }
+
+            .actions,
+            .resume-actions {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <section class="panel">
+            <div class="card">
+                <div class="brand">
+                    <div class="brand-copy">
+                        <strong><img class="brand-logo" src="/static/logo.jpg" alt="NEXT Robotics logo">NEXT Robotics</strong>
+                        <span>Access portal</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h1>Sign In</h1>
+                    <p class="sub">Login for editor or admin. Viewer opens directly.</p>
+                </div>
+
+                {% if logged_in %}
+                <div class="resume">
+                    <p>Signed in as <strong>{{ current_user }}</strong> with <strong>{{ current_role|upper }}</strong> access.</p>
+                    <div class="resume-actions">
+                        <a class="btn btn-primary" href="{{ current_home }}">Continue</a>
+                        <form method="post" action="/dev/lock" style="display:contents;">
+                            <button class="btn btn-ghost" type="submit">Sign Out</button>
+                        </form>
+                    </div>
+                </div>
+                {% endif %}
+
+                <form method="post" action="/dev/unlock">
+                    <input type="hidden" name="next_path" value="{{ next_path }}">
+
+                    <label class="field">
+                        <span>Workspace</span>
+                        <select name="target">
+                            <option value="editor" {% if selected_target == 'editor' %}selected{% endif %}>Editor</option>
+                            <option value="admin" {% if selected_target == 'admin' %}selected{% endif %}>Admin</option>
+                        </select>
+                    </label>
+
+                    <label class="field">
+                        <span>Username</span>
+                        <input type="text" name="username" autocomplete="username" placeholder="Enter username" required>
+                    </label>
+
+                    <label class="field">
+                        <span>Password</span>
+                        <input type="password" name="password" autocomplete="current-password" placeholder="Enter password" required>
+                    </label>
+
+                    <div class="actions">
+                        <button class="btn btn-primary" type="submit">Login</button>
+                        <a class="btn btn-viewer" href="/user">Viewer</a>
+                    </div>
+                </form>
+
+                <div class="status-line">{{ error }}</div>
+            </div>
+        </section>
+
+        <section class="footer-banner">
+            <img src="/static/next_robotics_footer.svg" alt="NEXT Robotics footer animation">
+        </section>
+    </main>
+</body>
+</html>
