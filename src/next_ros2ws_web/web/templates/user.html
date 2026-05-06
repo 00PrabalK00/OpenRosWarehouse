@@ -1632,7 +1632,8 @@
                 <span class="top-map-name-indicator" id="top-map-name-indicator">Map not loaded</span>
             </div>
             <div class="topbar-right">
-                <button type="button" class="lock-btn header-aux-btn" id="lock-btn">Lock</button>
+                <a href="/" class="lock-btn header-aux-btn" id="access-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Access</a>
+                <a href="/editor" class="lock-btn header-aux-btn" id="editor-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Editor</a>
                 <button type="button" class="stop-btn header-estop-btn" id="stop-btn">
                     <span class="stop-btn-label" id="stop-btn-label">Emergency Stop</span>
                     <span class="global-estop-state" id="global-estop-state">Inactive</span>
@@ -1781,24 +1782,7 @@
         </div>
     </div>
 
-    <div class="auth-overlay" id="auth-overlay">
-        <div class="auth-card">
-            <h2>Next Robotics Access</h2>
-            <p>Enter the access password to use this screen.</p>
-            <div class="auth-row">
-                <input id="auth-password" type="password" autocomplete="off" placeholder="Password">
-                <button type="button" id="auth-unlock">Unlock</button>
-            </div>
-            <div id="auth-message"></div>
-        </div>
-    </div>
-
     <script>
-        const AUTH_STORAGE_KEY = 'next_operator_ui_unlocked';
-        const AUTH_CONFIG_URL = '/static/resources/operator_access.yaml';
-        const FALLBACK_PASSWORD = 'nextsmr';
-        const OPERATOR_LOCK_ENABLED = false;
-
         let appInitialized = false;
         let pollingTimer = null;
         let pollingFastTimer = null;
@@ -1807,8 +1791,6 @@
         let missionRefreshTimer = null;
         let fastUiRequestInFlight = false;
         let scanRequestInFlight = false;
-        let expectedPassword = FALLBACK_PASSWORD;
-
         let mapData = null;
         let mapImage = null;
         let mapTransform = { scale: 1, offsetX: 0, offsetY: 0 };
@@ -2186,39 +2168,6 @@
                 .replace(/['"]$/, '')
                 .trim();
             return cleaned;
-        }
-
-        async function loadOperatorPassword() {
-            try {
-                const response = await fetch(`${AUTH_CONFIG_URL}?t=${Date.now()}`, { cache: 'no-store' });
-                if (!response.ok) {
-                    expectedPassword = FALLBACK_PASSWORD;
-                    return;
-                }
-                const yamlText = await response.text();
-                const parsed = parsePasswordFromYaml(yamlText);
-                expectedPassword = parsed || FALLBACK_PASSWORD;
-            } catch (error) {
-                expectedPassword = FALLBACK_PASSWORD;
-            }
-        }
-
-        function isUnlocked() {
-            return sessionStorage.getItem(AUTH_STORAGE_KEY) === '1';
-        }
-
-        function setUnlocked(value) {
-            if (value) {
-                sessionStorage.setItem(AUTH_STORAGE_KEY, '1');
-            } else {
-                sessionStorage.removeItem(AUTH_STORAGE_KEY);
-            }
-        }
-
-        function showAuthOverlay(show) {
-            const overlay = document.getElementById('auth-overlay');
-            if (!overlay) return;
-            overlay.style.display = show ? 'flex' : 'none';
         }
 
         function openConfirm(destination) {
@@ -3799,55 +3748,11 @@
                 }
             });
 
-            const lockBtn = document.getElementById('lock-btn');
-            if (lockBtn && !OPERATOR_LOCK_ENABLED) {
-                lockBtn.style.display = 'none';
-            }
-            if (OPERATOR_LOCK_ENABLED) {
-                lockBtn?.addEventListener('click', () => {
-                    setUnlocked(false);
-                    showAuthOverlay(true);
-                    const authInput = document.getElementById('auth-password');
-                    if (authInput) {
-                        authInput.value = '';
-                        authInput.focus();
-                    }
-                });
-            }
-
             document.getElementById('confirm-cancel-btn')?.addEventListener('click', closeConfirm);
             document.getElementById('confirm-go-btn')?.addEventListener('click', () => startDestination(selectedDestination));
             document.getElementById('confirm-backdrop')?.addEventListener('click', (event) => {
                 if (event.target && event.target.id === 'confirm-backdrop') {
                     closeConfirm();
-                }
-            });
-
-            const authInput = document.getElementById('auth-password');
-            const authBtn = document.getElementById('auth-unlock');
-            const tryUnlock = () => {
-                const messageEl = document.getElementById('auth-message');
-                const value = String(authInput?.value || '');
-                if (!value) {
-                    if (messageEl) messageEl.textContent = 'Enter password';
-                    return;
-                }
-                if (value === expectedPassword) {
-                    if (messageEl) messageEl.textContent = '';
-                    if (authInput) authInput.value = '';
-                    setUnlocked(true);
-                    showAuthOverlay(false);
-                    initApp();
-                    return;
-                }
-                if (messageEl) messageEl.textContent = 'Incorrect password';
-            };
-
-            authBtn?.addEventListener('click', tryUnlock);
-            authInput?.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    tryUnlock();
                 }
             });
 
@@ -3900,25 +3805,7 @@
 
         async function boot() {
             bindEvents();
-
-            if (!OPERATOR_LOCK_ENABLED) {
-                setUnlocked(true);
-                showAuthOverlay(false);
-                initApp();
-                return;
-            }
-
-            await loadOperatorPassword();
-
-            if (isUnlocked()) {
-                showAuthOverlay(false);
-                initApp();
-                return;
-            }
-
-            showAuthOverlay(true);
-            const authInput = document.getElementById('auth-password');
-            if (authInput) authInput.focus();
+            initApp();
         }
 
         boot();

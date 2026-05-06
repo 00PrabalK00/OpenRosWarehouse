@@ -132,6 +132,22 @@
       display: flex; align-items: center; gap: 5px;
       padding-left: 8px; border-left: 1px solid var(--border-chrome);
     }
+    .hdr-role-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 3px;
+      border: 1px solid var(--border-chrome);
+      background: var(--bg-canvas);
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
     .hdr-icon-btn {
       width: 28px; height: 28px; border-radius: 3px; border: 1px solid transparent;
       color: var(--text-tertiary); font-size: 12px; transition: color 0.12s, background 0.12s;
@@ -710,7 +726,12 @@
 
     <!-- Right controls -->
     <div class="hdr-right">
-      <!-- Buttons removed because this page is embedded in the main /dev application -->
+      <span class="hdr-role-chip">{{ (current_user or 'viewer') }} · {{ (current_role or 'viewer')|upper }}</span>
+      <a class="btn" href="/user" style="text-decoration:none;"><i class="fas fa-gamepad"></i> Viewer</a>
+      <a class="btn" href="/" style="text-decoration:none;"><i class="fas fa-house"></i> Access</a>
+      <form method="post" action="/dev/lock" style="display:inline-flex;">
+        <button class="btn" type="submit"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+      </form>
     </div>
   </header>
 
@@ -1690,24 +1711,127 @@ function dcDefaultShapeForCategory(categoryName) {
   };
 }
 
-/* ─── Mode Rail ───────────────────────────────────────────── */
-function setMode(mode) {
+function dcModeConfig(mode) {
+  const configs = {
+    structure: {
+      label: 'Structure',
+      preferredView: 'top',
+      preferredTab: 'hierarchy',
+      layers: { frames: true, collision: true, sensors: false, safety: false },
+      labelsByDefault: false,
+      categories: ['Chassis', 'Collision Shape', 'Transform'],
+      fallbackMatch: /(base|chassis|collision|footprint|frame|wheel|caster)/,
+    },
+    sensors: {
+      label: 'Sensors',
+      preferredView: 'iso',
+      preferredTab: 'properties',
+      layers: { frames: true, collision: true, sensors: true, safety: false },
+      labelsByDefault: false,
+      categories: ['Camera', 'Laser', 'Distance Sensor', 'GNSS', 'Scanner', 'Trigger', 'Force Sensor'],
+      fallbackMatch: /(lidar|laser|scan|camera|sensor|imu|gnss|gps|rfid|barcode|trigger|distance)/,
+    },
+    motion: {
+      label: 'Motion',
+      preferredView: 'side',
+      preferredTab: 'properties',
+      layers: { frames: true, collision: true, sensors: false, safety: false },
+      labelsByDefault: false,
+      categories: ['Controller', 'Fork', 'Jack', 'Hook', 'Arm'],
+      fallbackMatch: /(wheel|motor|drive|fork|lift|caster|steer|suspension|hook|jack|arm)/,
+    },
+    safety: {
+      label: 'Safety',
+      preferredView: 'top',
+      preferredTab: 'properties',
+      layers: { frames: true, collision: true, sensors: true, safety: true },
+      labelsByDefault: false,
+      categories: ['Laser Protection Area', 'Laser Deduct Area', 'Laser Group', 'Collision Shape', 'Distance Sensor'],
+      fallbackMatch: /(safety|protect|stop|slow|collision|footprint|laser|distance)/,
+    },
+    diagnostics: {
+      label: 'Diagnostics',
+      preferredView: 'iso',
+      preferredTab: 'validation',
+      layers: { frames: true, collision: true, sensors: true, safety: true },
+      labelsByDefault: true,
+      categories: ['Camera', 'Laser', 'Distance Sensor', 'Collision Shape', 'Transform'],
+      fallbackMatch: /.*/,
+    },
+  };
+  return configs[mode] || configs.structure;
+}
+
+function dcPartNamesForMode(mode) {
+  const cfg = dcModeConfig(mode);
+  return Object.entries(PART_DATA).filter(([name, data]) => {
+    const group = dcCategoryForPart(name, data);
+    if (cfg.categories.includes(group)) return true;
+    const descriptor = `${name} ${data?.type || ''} ${data?.sensorType || ''} ${data?.role || ''}`.toLowerCase();
+    return cfg.fallbackMatch.test(descriptor);
+  }).map(([name]) => name);
+}
+
+function dcHierarchyFilterInput() {
+  return document.querySelector('#pane-hierarchy input.prop-input');
+}
+
+function dcApplyHierarchyFocus(mode) {
+  const input = dcHierarchyFilterInput();
+  if (!input) return;
+  const cfg = dcModeConfig(mode);
+  input.placeholder = `Filter ${String(cfg.label || 'device').toLowerCase()} links…`;
+  input.value = '';
+  filterHierarchy('');
+}
+
+function dcSelectionMatchesMode(mode, linkName) {
+  if (!linkName) return false;
+  return dcPartNamesForMode(mode).includes(String(linkName));
+}
+
+function dcFocusModeSelection(mode) {
+  const relevantNames = dcPartNamesForMode(mode);
+  if (!relevantNames.length) {
+    showOverview();
+    return;
+  }
+  if (dcSelectionMatchesMode(mode, DC.selectedLink)) {
+    selectLink(DC.selectedLink);
+    return;
+  }
+  selectLink(relevantNames[0]);
+}
+
+function dcApplyModePreset(mode, { updateView = true } = {}) {
+  const cfg = dcModeConfig(mode);
   DC.mode = mode;
+  DC.labelsVisible = !!cfg.labelsByDefault;
   document.querySelectorAll('.rail-btn[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
   const badge = document.getElementById('insp-mode-badge');
-  if (badge) badge.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-  const presets = {
-    structure: { frames: true, collision: true, sensors: false, safety: false },
-    sensors: { frames: true, collision: true, sensors: true, safety: false },
-    motion: { frames: true, collision: true, sensors: false, safety: false },
-    safety: { frames: true, collision: true, sensors: false, safety: true },
-    diagnostics: { frames: true, collision: true, sensors: true, safety: true },
-  };
-  DC.layers = Object.assign({}, DC.layers, presets[mode] || {});
+  if (badge) badge.textContent = cfg.label;
+  DC.layers = Object.assign({}, DC.layers, cfg.layers || {});
   syncCanvasControlState();
+  renderHierarchyFromModel();
+  dcApplyHierarchyFocus(mode);
+  if (cfg.preferredTab) openInspectorTab(cfg.preferredTab);
+  if (mode === 'diagnostics' || mode === 'structure') {
+    showOverview();
+  } else {
+    dcFocusModeSelection(mode);
+  }
+  if (updateView && cfg.preferredView) {
+    setCanvasView(cfg.preferredView);
+    return;
+  }
   renderCanvasFromModel();
+}
+
+/* ─── Mode Rail ───────────────────────────────────────────── */
+function setMode(mode) {
+  dcApplyModePreset(mode, { updateView: true });
 }
 
 /* ─── Inspector tabs ──────────────────────────────────────── */
@@ -1730,11 +1854,17 @@ function openInspectorTab(tab) {
 function setCanvasView(view, btn) {
   DC.canvasView = view;
   document.querySelectorAll('.cvs-view-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  const targetBtn = btn || document.querySelector(`.cvs-view-btn[onclick*="setCanvasView('${view}'"]`);
+  if (targetBtn) targetBtn.classList.add('active');
   const lbl = document.getElementById('canvas-view-label');
   const names = { top: 'Top View', side: 'Side View', iso: 'Isometric' };
   if (lbl) lbl.textContent = names[view] || view;
+  if (view === 'iso') {
+    DC.layers = Object.assign({}, DC.layers, { frames: true, collision: true });
+  }
+  syncCanvasControlState();
   renderCanvasFromModel();
+  canvasFit();
 }
 
 /* ─── Layer toggles ───────────────────────────────────────── */
@@ -2282,11 +2412,19 @@ function renderHierarchyFromModel() {
     if (!groups[group]) groups[group] = [];
     groups[group].push([name, data]);
   });
-  tree.innerHTML = Object.keys(groups).map(group => {
+  const modeCategories = new Set(dcModeConfig(DC.mode).categories || []);
+  const orderedGroups = Object.keys(groups).sort((a, b) => {
+    const aScore = modeCategories.has(a) ? 0 : 1;
+    const bScore = modeCategories.has(b) ? 0 : 1;
+    if (aScore !== bScore) return aScore - bScore;
+    return a.localeCompare(b);
+  });
+  tree.innerHTML = orderedGroups.map(group => {
     const [_label, _semantic, supported] = dcCategoryDefByName(group);
     const enabledCount = groups[group].filter(([_name, data]) => data.enabled !== false).length;
+    const relevantGroup = modeCategories.has(group);
     const rows = groups[group].map(([name, data]) => `
-      <div class="tree-node${DC.selectedLink === name ? ' selected' : ''}" data-link="${dcAttr(name)}" onclick="selectLink('${dcJsString(name)}')">
+      <div class="tree-node${DC.selectedLink === name ? ' selected' : ''}" data-link="${dcAttr(name)}" onclick="selectLink('${dcJsString(name)}')"${relevantGroup ? '' : ' style="opacity:0.72;"'}>
         <div class="tree-node-icon"><i class="fas fa-${data.enabled === false ? 'ban' : 'cube'}"></i></div>
         <div class="tree-node-main">
           <div class="tree-node-name">${dcEscapeHtml(name)}</div>
@@ -2301,7 +2439,7 @@ function renderHierarchyFromModel() {
         <div class="tree-node-sub">0 configured · supported ${supported}</div>
       </div>
     </div>`;
-    return `<div class="insp-section" style="display:flex;justify-content:space-between;gap:8px;">
+    return `<div class="insp-section" style="display:flex;justify-content:space-between;gap:8px;${relevantGroup ? '' : 'opacity:0.8;'}">
       <span>${dcEscapeHtml(group)} · ${groups[group].length}/${supported} · ${enabledCount} enabled</span>
       <button class="btn" style="height:18px;padding:0 6px;font-size:9px;" onclick="handleAddObject('${dcJsString(group)}')"><i class="fas fa-plus"></i></button>
     </div>${rows || empty}`;
@@ -2328,6 +2466,7 @@ function renderCanvasFromModel() {
   const showSafety = !!DC.layers.safety;
   const selectedId = String(DC.selectedLink || '').trim();
   const view = String(DC.canvasView || 'top');
+  const mode = String(DC.mode || 'structure');
   const bounds = { minX: -110, maxX: 110, minY: -90, maxY: 90 };
   const extendBounds = (x, y, rx = 0, ry = rx) => {
     bounds.minX = Math.min(bounds.minX, x - rx);
@@ -2376,6 +2515,64 @@ function renderCanvasFromModel() {
     }
     return { id, x, y, yaw, width, length, height, radius };
   };
+  const shapeIsSensor = (shape) => {
+    const kind = dcShapeKind(shape);
+    const name = String(shape?.id || shape?.name || '').toLowerCase();
+    return /laser|camera|distance|sensor|gnss|scanner|trigger|force/.test(`${kind} ${name}`);
+  };
+  const shapeIsMotion = (shape) => {
+    const kind = dcShapeKind(shape);
+    const name = String(shape?.id || shape?.name || '').toLowerCase();
+    return /wheel|fork|lift|hook|jack|arm|controller|motor|drive|caster/.test(`${kind} ${name}`);
+  };
+  const shapeIsStructure = (shape) => {
+    const kind = dcShapeKind(shape);
+    const name = String(shape?.id || shape?.name || '').toLowerCase();
+    return /chassis|collision|frame|wheel|caster|body|base/.test(`${kind} ${name}`);
+  };
+  const shapeIsSafety = (shape) => {
+    const kind = dcShapeKind(shape);
+    const name = String(shape?.id || shape?.name || '').toLowerCase();
+    return /safety|protect|collision|footprint|laser|distance|sensor/.test(`${kind} ${name}`);
+  };
+  const shouldRenderShapeInMode = (shape) => {
+    const id = String(shape?.id || shape?.name || '').trim();
+    const source = String(shape?.source || '').toLowerCase();
+    const summary = `${dcShapeKind(shape)} ${id}`.toLowerCase();
+    if (id && id === selectedId) return true;
+    if (source === 'visual') return mode !== 'safety';
+    if (mode === 'structure') return shapeIsStructure(shape) && !shapeIsSensor(shape);
+    if (mode === 'sensors') return shapeIsSensor(shape) || /chassis|collision|body|base/.test(summary);
+    if (mode === 'motion') return shapeIsMotion(shape) || /chassis|collision|body|base/.test(summary);
+    if (mode === 'safety') return shapeIsSafety(shape) || /chassis|body|base/.test(summary);
+    return true;
+  };
+  const shouldRenderLinkInMode = (link) => {
+    const name = String(link?.name || '').trim().toLowerCase();
+    if (name && name === selectedId.toLowerCase()) return true;
+    if (mode === 'diagnostics') return true;
+    if (mode === 'structure') return /base|chassis|frame|wheel|caster/.test(name);
+    if (mode === 'sensors') return /laser|camera|imu|gnss|sensor|scan|face/.test(name);
+    if (mode === 'motion') return /wheel|caster|fork|lift|motor|drive|base/.test(name);
+    if (mode === 'safety') return /laser|camera|sensor|base|safety|collision|protect/.test(name);
+    return false;
+  };
+  const shouldShowShapeLabel = (shape) => {
+    const id = String(shape?.id || shape?.name || '').trim();
+    if (!id) return false;
+    if (id === selectedId) return true;
+    if (!DC.labelsVisible) return false;
+    if (view !== 'top' && mode !== 'diagnostics') return false;
+    return mode === 'sensors' || mode === 'diagnostics';
+  };
+  const shouldShowLinkLabel = (link) => {
+    const id = String(link?.name || '').trim();
+    if (!id) return false;
+    if (id === selectedId) return true;
+    if (!DC.labelsVisible) return false;
+    return mode === 'diagnostics' && view === 'top';
+  };
+  const visibleBodyShapes = bodyShapes.filter(shouldRenderShapeInMode);
   const renderShape = (shape, cls, fillExtra = '') => {
     const pose = project(shape);
     const type = String(shape?.type || 'box').toLowerCase();
@@ -2390,22 +2587,22 @@ function renderCanvasFromModel() {
     extendBounds(pose.x, pose.y, pose.width / 2, pose.length / 2);
     return `<rect class="${cls}" data-part="${dcAttr(pose.id)}" x="${(-pose.width / 2).toFixed(2)}" y="${(-pose.length / 2).toFixed(2)}" width="${pose.width.toFixed(2)}" height="${pose.length.toFixed(2)}" rx="6" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"${opacity} ${fillExtra}/>`;
   };
-  const sensorLabels = bodyShapes.map(shape => {
+  const sensorLabels = visibleBodyShapes.map(shape => {
     const pose = project(shape);
     const id = pose.id;
     const kind = dcShapeKind(shape);
-    if (!DC.labelsVisible && id !== selectedId) return '';
+    if (!shouldShowShapeLabel(shape)) return '';
     if (!/laser|camera|distance|sensor/.test(kind + id.toLowerCase())) return '';
     return `<text class="canvas-label${id === selectedId ? ' canvas-label-highlight' : ''}" x="${(pose.x + 14).toFixed(1)}" y="${(pose.y - 10).toFixed(1)}">${dcEscapeHtml(id)}</text>`;
   }).join('');
   const safetyLayer = showSafety
-    ? `${safetyShapes.length ? safetyShapes.map(shape => renderShape(shape, 'robot-safety-zone')).join('') : '<ellipse class="robot-safety-zone" cx="0" cy="0" rx="110" ry="96" opacity="0.42"/>'}`
+    ? `${safetyShapes.filter(shouldRenderShapeInMode).length ? safetyShapes.filter(shouldRenderShapeInMode).map(shape => renderShape(shape, 'robot-safety-zone')).join('') : '<ellipse class="robot-safety-zone" cx="0" cy="0" rx="110" ry="96" opacity="0.42"/>'}`
     : '';
   if (showSafety && !safetyShapes.length) extendBounds(0, 0, 110, 96);
   const collisionLayer = showCollision
-    ? collisionShapes.map(shape => renderShape(shape, 'robot-fov-arc', 'fill="none" stroke-dasharray="5,4"')).join('')
+    ? collisionShapes.filter(shouldRenderShapeInMode).map(shape => renderShape(shape, 'robot-fov-arc', 'fill="none" stroke-dasharray="5,4"')).join('')
     : '';
-  const sensorCoverage = showSensors ? bodyShapes.map(shape => {
+  const sensorCoverage = showSensors ? visibleBodyShapes.map(shape => {
     const kind = dcShapeKind(shape);
     const pose = project(shape);
     const name = String(shape?.id || shape?.name || '').toLowerCase();
@@ -2429,7 +2626,7 @@ function renderCanvasFromModel() {
     return `<circle class="robot-fov-arc" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${rangePx.toFixed(2)}" opacity="${selected ? '0.32' : '0.18'}"/>`;
   }).join('') : '';
 
-  const linkFrames = showFrames ? (DC.model.links || []).map(link => {
+  const linkFrames = showFrames ? (DC.model.links || []).filter(shouldRenderLinkInMode).map(link => {
     const pose = project(link, true);
     const selected = link.name === selectedId;
     const opacity = selectedId && !selected ? '0.4' : '1.0';
@@ -2439,7 +2636,7 @@ function renderCanvasFromModel() {
         <circle r="3.5" fill="${selected ? 'var(--accent-blue)' : 'var(--text-tertiary)'}" />
         <line x1="0" y1="0" x2="14" y2="0" stroke="rgba(252,129,129,0.85)" stroke-width="1.5" />
         <line x1="0" y1="0" x2="0" y2="-14" stroke="rgba(134,239,172,0.85)" stroke-width="1.5" />
-        ${DC.labelsVisible || selected ? `<text class="canvas-label" x="6" y="-6" style="fill:${selected ? 'var(--accent-blue)' : 'var(--text-secondary)'};font-size:9px;">${dcEscapeHtml(link.name)}</text>` : ''}
+        ${shouldShowLinkLabel(link) ? `<text class="canvas-label" x="6" y="-6" style="fill:${selected ? 'var(--accent-blue)' : 'var(--text-secondary)'};font-size:9px;">${dcEscapeHtml(link.name)}</text>` : ''}
       </g>`;
   }).join('') : '';
 
@@ -2447,7 +2644,7 @@ function renderCanvasFromModel() {
     ${safetyLayer}
     ${sensorCoverage}
     ${collisionLayer}
-    ${bodyShapes.map(shape => renderShape(shape, dcShapeKind(shape) === 'wheel' ? 'robot-wheel' : dcShapeKind(shape) === 'laser' ? 'robot-sensor-lidar' : dcShapeKind(shape) === 'camera' ? 'robot-sensor-camera' : 'robot-chassis')).join('')}
+    ${visibleBodyShapes.map(shape => renderShape(shape, dcShapeKind(shape) === 'wheel' ? 'robot-wheel' : dcShapeKind(shape) === 'laser' ? 'robot-sensor-lidar' : dcShapeKind(shape) === 'camera' ? 'robot-sensor-camera' : 'robot-chassis')).join('')}
     <g class="robot-origin-cross">
       <line x1="-24" y1="0" x2="48" y2="0" class="robot-axis-x" stroke="rgba(252,129,129,0.5)"/>
       <line x1="0" y1="24" x2="0" y2="-48" class="robot-axis-y" stroke="rgba(134,239,172,0.5)"/>

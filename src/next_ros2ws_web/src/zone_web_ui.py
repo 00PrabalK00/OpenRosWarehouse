@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import rclpy
 from ament_index_python.packages import get_package_share_directory
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, session
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, send_from_directory, session
 from flask_cors import CORS
 from rclpy.executors import MultiThreadedExecutor
 import yaml
@@ -464,6 +464,9 @@ def _check_motion_auth():
     # Auth not configured → open (dev/test environment without password file).
     if not _dev_auth_required():
         return None
+    session_role = str(session.get('next_user_role', '') or '').strip().lower()
+    if session_role in {'viewer', 'editor', 'admin', 'engineer', 'service'}:
+        return None
     # Valid browser session → allow.
     if _dev_unlocked():
         return None
@@ -474,17 +477,104 @@ def _check_motion_auth():
     return jsonify({'ok': False, 'message': 'Unauthorized: session or X-API-Token required'}), 401
 
 
+def _current_user_name() -> str:
+    return str(session.get('next_user_name', '') or '').strip()
+
+
+def _current_role_name() -> str:
+    return next_ops.role_from_request(request, session)
+
+
+def _role_home_path(role: str) -> str:
+    clean_role = next_ops.normalized_role(role)
+    if clean_role in {'admin', 'engineer', 'service'}:
+        return '/dev'
+    if clean_role == 'editor':
+        return '/editor'
+    return '/user'
+
+
+def _role_can_access_editor(role: str) -> bool:
+    clean_role = next_ops.normalized_role(role)
+    return clean_role in {'admin', 'engineer', 'service'} or clean_role == 'editor'
+
+
+def _role_can_access_admin(role: str) -> bool:
+    clean_role = next_ops.normalized_role(role)
+    return clean_role in {'admin', 'engineer', 'service'}
+
+
+def _path_allowed_for_role(next_path: str, role: str) -> bool:
+    path_value = str(next_path or '').strip()
+    clean_role = next_ops.normalized_role(role)
+    if not path_value or not path_value.startswith('/'):
+        return False
+    if path_value == '/user':
+        return True
+    if path_value == '/editor':
+        return _role_can_access_editor(clean_role)
+    if path_value in {'/dev', '/device-config'}:
+        return _role_can_access_admin(clean_role)
+    return False
+
+
+def _redirect_for_role(role: str, fallback_target: str = '', next_path: str = ''):
+    clean_role = next_ops.normalized_role(role)
+    candidate = str(next_path or '').strip()
+    if _path_allowed_for_role(candidate, clean_role):
+        return redirect(candidate)
+
+    target = str(fallback_target or '').strip().lower()
+    if target == 'editor' and _role_can_access_editor(clean_role):
+        return redirect('/editor')
+    if target == 'admin' and _role_can_access_admin(clean_role):
+        return redirect('/dev')
+    return redirect(_role_home_path(clean_role))
+
+
+def _render_access_portal(error: str = '', selected_target: str = '', next_path: str = ''):
+    current_role = _current_role_name()
+    current_user = _current_user_name()
+    return render_template(
+        'access_portal.html',
+        error=str(error or ''),
+        selected_target=str(selected_target or 'editor'),
+        next_path=str(next_path or ''),
+        current_role=current_role,
+        current_user=current_user,
+        current_home=_role_home_path(current_role),
+        logged_in=bool(current_user),
+    )
+
+
 
 @app.route('/')
 def root():
-    return redirect('/dev')
+    return _render_access_portal(
+        selected_target=request.args.get('target', 'editor'),
+        next_path=request.args.get('next', ''),
+    )
+
+
+@app.route('/next_robotics_footer.svg')
+def next_robotics_footer():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+    svg_path = os.path.join(repo_root, 'next_robotics_footer.svg')
+    if not os.path.exists(svg_path):
+        return jsonify({'ok': False, 'message': 'SVG asset not found'}), 404
+    return send_file(svg_path, mimetype='image/svg+xml')
 
 
 @app.route('/dev')
 def index():
-    if not _dev_auth_required() or _dev_unlocked():
-        return render_template('index.html', user_page=False)
-    return render_template('dev_lock.html', error='')
+    role = _current_role_name()
+    if _role_can_access_admin(role):
+        return render_template('index.html', user_page=False, current_role=role, current_user=_current_user_name())
+    return _render_access_portal(
+        error='Admin access is required for the full control workspace.',
+        selected_target='admin',
+        next_path='/dev',
+    )
 
 
 @app.route('/dev/camera')
@@ -508,44 +598,73 @@ def dev_camera():
 def unlock_dev():
     if not _dev_auth_required():
         session[DEV_AUTH_SESSION_KEY] = True
+        session['next_user_name'] = 'admin'
+        session['next_user_role'] = 'admin'
         return redirect('/dev')
 
     username = str(request.form.get('username', '') or '').strip()
     password = str(request.form.get('password', '') or '').strip()
+    target = str(request.form.get('target', '') or '').strip()
+    next_path = str(request.form.get('next_path', '') or '').strip()
     
     success, role = next_ops.verify_login(username, password)
     if success:
         session[DEV_AUTH_SESSION_KEY] = True
         session['next_user_name'] = username
         session['next_user_role'] = role
-        return redirect('/dev')
+        return _redirect_for_role(role, fallback_target=target, next_path=next_path)
 
-    return render_template('dev_lock.html', error='Invalid username or password')
+    return _render_access_portal(
+        error='Invalid username or password',
+        selected_target=target or 'editor',
+        next_path=next_path,
+    )
 
 
 @app.route('/dev/lock', methods=['POST'])
 def lock_dev():
     session.pop(DEV_AUTH_SESSION_KEY, None)
-    return redirect('/dev')
+    session.pop('next_user_name', None)
+    session.pop('next_user_role', None)
+    return redirect('/')
 
 
 @app.route('/user')
 def operator_ui():
-    return render_template('index.html', user_page=True)
+    if not session.get('next_user_name'):
+        session['next_user_name'] = 'viewer'
+    if not session.get('next_user_role'):
+        session['next_user_role'] = 'viewer'
+    return render_template(
+        'index.html',
+        user_page=True,
+        current_role=_current_role_name(),
+        current_user=_current_user_name(),
+    )
 
 
 @app.route('/editor')
 def editor():
-    if _dev_auth_required() and not _dev_unlocked():
-        return "You don't have enough permissions to access this page.", 403
-    return render_template('map_editor.html')
+    role = _current_role_name()
+    if _role_can_access_editor(role):
+        return render_template('map_editor.html', current_role=role, current_user=_current_user_name())
+    return _render_access_portal(
+        error='Editor access is required to open the map editor.',
+        selected_target='editor',
+        next_path='/editor',
+    )
 
 
 @app.route('/device-config')
 def device_config():
-    if _dev_auth_required() and not _dev_unlocked():
-        return "You don't have enough permissions to access this page.", 403
-    return render_template('device_config.html')
+    role = _current_role_name()
+    if _role_can_access_editor(role):
+        return render_template('device_config.html', current_role=role, current_user=_current_user_name())
+    return _render_access_portal(
+        error='Editor access is required to open device configuration.',
+        selected_target='editor',
+        next_path='/device-config',
+    )
 
 
 @app.route('/api/map')
@@ -2654,6 +2773,81 @@ def next_network_health():
     return jsonify(next_ops.network_health(host))
 
 
+@app.route('/api/next/network/status', methods=['GET'])
+def next_network_status():
+    node, err = _node()
+    if err:
+        return err
+
+    result = node.get_network_manager_status()
+    return jsonify(result), (200 if result.get('ok') else 503)
+
+
+@app.route('/api/next/network/wifi/scan', methods=['GET'])
+def next_network_wifi_scan():
+    node, err = _node()
+    if err:
+        return err
+
+    interface = request.args.get('interface', '')
+    rescan = _as_bool(request.args.get('rescan', '1'), True)
+    result = node.scan_wifi_networks(interface=interface, rescan=rescan)
+    return jsonify(result), (200 if result.get('ok') else 503)
+
+
+@app.route('/api/next/network/wifi/connect', methods=['POST'])
+def next_network_wifi_connect():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    result = node.connect_wifi_network(
+        ssid=str(data.get('ssid', '') or '').strip(),
+        password=str(data.get('password', '') or ''),
+        interface=str(data.get('interface', '') or '').strip(),
+    )
+    return jsonify(result), (200 if result.get('ok') else 503)
+
+
+@app.route('/api/next/network/interface/configure', methods=['POST'])
+def next_network_interface_configure():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    dns_servers = data.get('dns_servers', [])
+    if isinstance(dns_servers, str):
+        dns_servers = [part.strip() for part in dns_servers.split(',') if part.strip()]
+    elif not isinstance(dns_servers, list):
+        dns_servers = []
+
+    result = node.configure_interface_ipv4(
+        interface=str(data.get('interface', '') or '').strip(),
+        use_dhcp=_as_bool(data.get('use_dhcp', True), True),
+        address=str(data.get('address', '') or '').strip(),
+        subnet_mask=str(data.get('subnet_mask', '') or '').strip(),
+        gateway=str(data.get('gateway', '') or '').strip(),
+        dns_servers=[str(item or '').strip() for item in dns_servers if str(item or '').strip()],
+    )
+    return jsonify(result), (200 if result.get('ok') else 503)
+
+
+@app.route('/api/next/network/wifi/enabled', methods=['POST'])
+def next_network_wifi_enabled():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    result = node.set_wireless_interface_enabled(
+        enabled=_as_bool(data.get('enabled', True), True),
+        interface=str(data.get('interface', '') or '').strip(),
+    )
+    return jsonify(result), (200 if result.get('ok') else 503)
+
+
 @app.route('/api/next/model/validate', methods=['POST'])
 def next_validate_model():
     role = next_ops.role_from_request(request, session)
@@ -2710,13 +2904,20 @@ def next_login():
     data = _json_body()
     username = str(data.get('username', '')).strip()
     password = str(data.get('password', '')).strip()
+    target = str(data.get('target', '') or '').strip()
+    next_path = str(data.get('next_path', '') or '').strip()
     
     success, role = next_ops.verify_login(username, password)
     if success:
         session[DEV_AUTH_SESSION_KEY] = True
         session['next_user_name'] = username
         session['next_user_role'] = role
-        return jsonify({'ok': True, 'username': username, 'role': role})
+        redirect_path = next_path if _path_allowed_for_role(next_path, role) else _role_home_path(role)
+        if target == 'editor' and _role_can_access_editor(role):
+            redirect_path = next_path if _path_allowed_for_role(next_path, role) else '/editor'
+        elif target == 'admin' and _role_can_access_admin(role):
+            redirect_path = next_path if _path_allowed_for_role(next_path, role) else '/dev'
+        return jsonify({'ok': True, 'username': username, 'role': role, 'redirect_path': redirect_path})
     
     return jsonify({'ok': False, 'message': 'Invalid username or password'}), 401
 
@@ -2727,6 +2928,22 @@ def next_logout():
     session.pop('next_user_name', None)
     session.pop('next_user_role', None)
     return jsonify({'ok': True})
+
+
+@app.route('/api/next/session', methods=['GET'])
+def next_session():
+    role = _current_role_name()
+    username = _current_user_name()
+    return jsonify(
+        {
+            'ok': True,
+            'logged_in': bool(username and username != 'viewer'),
+            'username': username,
+            'role': role,
+            'home': _role_home_path(role),
+            'permissions': next_ops.permission_payload(role),
+        }
+    )
 
 
 @app.route('/api/next/users', methods=['GET', 'POST', 'DELETE'])
@@ -2754,6 +2971,28 @@ def next_users():
         if not username:
             return jsonify({'ok': False, 'message': 'username required'}), 400
         return jsonify(next_ops.delete_user(username))
+
+
+@app.route('/api/next/database/download', methods=['GET'])
+def next_database_download():
+    role = _current_role_name()
+    if not next_ops.has_permission(role, 'db:download'):
+        return jsonify(next_ops.permission_error(role, 'db:download')), 403
+
+    from next_ros2ws_core.db_manager import DatabaseManager
+
+    db = DatabaseManager()
+    db_path = str(db.db_path or '').strip()
+    if not db_path or not os.path.exists(db_path):
+        return jsonify({'ok': False, 'message': 'Database file not found'}), 404
+
+    return send_file(
+        db_path,
+        as_attachment=True,
+        download_name=os.path.basename(db_path),
+        mimetype='application/x-sqlite3',
+        conditional=True,
+    )
 
 
 @app.route('/api/next/test_mode/indicators', methods=['POST'])

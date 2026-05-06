@@ -9,7 +9,7 @@ import re
 import socket
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 ROLE_PERMISSIONS: Dict[str, Sequence[str]] = {
@@ -53,6 +53,8 @@ ROLE_PERMISSIONS: Dict[str, Sequence[str]] = {
         "events:write",
         "network:read",
         "test_mode:run",
+        "admin:users",
+        "db:download",
     ),
     "service": (
         "model:read",
@@ -67,6 +69,7 @@ ROLE_PERMISSIONS: Dict[str, Sequence[str]] = {
         "events:write",
         "network:read",
         "test_mode:run",
+        "db:download",
     ),
 }
 
@@ -172,8 +175,8 @@ def role_from_request(req: Any, session: Optional[Dict[str, Any]] = None) -> str
     if isinstance(session, dict):
         session_role = str(session.get("next_user_role", "") or "").strip()
 
-    env_role = os.getenv("NEXT_WEB_UI_ROLE", "admin")
-    return normalized_role(header_role or session_role or env_role)
+    env_role = str(os.getenv("NEXT_WEB_UI_ROLE", "") or "").strip()
+    return normalized_role(header_role or session_role or env_role or "viewer")
 
 
 def permission_payload(role: str) -> Dict[str, Any]:
@@ -194,6 +197,8 @@ def permission_payload(role: str) -> Dict[str, Any]:
         "can_test_hardware": "test_mode:run" in permissions,
         "can_view_generated": "generated:read" in permissions,
         "can_edit_advanced_config": "import:run" in permissions,
+        "can_manage_users": "admin:users" in permissions,
+        "can_download_database": "db:download" in permissions,
     }
 
 
