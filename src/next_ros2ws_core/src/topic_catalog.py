@@ -107,6 +107,11 @@ DEFAULT_TOPICS: Dict[str, str] = {
     'ui_battery_charge_cycles_topic': '/battery_charge_cycles',
 }
 
+_UNSAFE_MANUAL_CMD_VEL_TARGETS = {
+    '/wheel_controller/cmd_vel_unstamped',
+    '/diff_cont/cmd_vel_unstamped',
+}
+
 
 def sanitize_topic_overrides(raw: Any) -> Dict[str, str]:
     if not isinstance(raw, dict):
@@ -117,7 +122,13 @@ def sanitize_topic_overrides(raw: Any) -> Dict[str, str]:
         topic_key = str(key or '').strip()
         if not topic_key:
             continue
-        cleaned[topic_key] = str(value or '').strip()
+        topic_value = str(value or '').strip()
+        if (
+            topic_key == 'ui_manual_cmd_vel_publish'
+            and topic_value in _UNSAFE_MANUAL_CMD_VEL_TARGETS
+        ):
+            topic_value = DEFAULT_TOPICS['ui_manual_cmd_vel_publish']
+        cleaned[topic_key] = topic_value
     return cleaned
 
 

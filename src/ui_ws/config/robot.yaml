@@ -75,9 +75,8 @@ safety_controller:
     # This is the single on/off authority for obstacle distance/TTC stop and slowdown.
     distance_safety_enabled: true
 
-    # Safety-only path: prefer the merged dual-lidar union cloud.
-    # If that goes stale, fall back directly to raw /scan + /scan2.
-    obstacle_cloud_topic: /scan_combined_cloud
+    # Debug mode: bypass the merged cloud and let safety use raw /scan + /scan2 directly.
+    obstacle_cloud_topic: /scan_combined_cloud_disabled
     obstacle_prefer_cloud_timeout_sec: 0.35
     obstacle_scan_topic: ''
     obstacle_prefer_combined_timeout_sec: 0.35
@@ -127,6 +126,10 @@ safety_controller:
     robot_body_width_m: 0.72
     obstacle_body_padding_m: 0.06
     obstacle_body_exclusion_radius_m: 0.22
+    # Raw lidars sit in recessed body pockets. Ignore only near off-axis
+    # pocket echoes, while still allowing close straight-ahead obstacles.
+    raw_scan_self_echo_range_m: 0.18
+    raw_scan_opening_half_angle_deg: 42.0
 
 
 # ---------------------------------------------------------------
@@ -135,7 +138,7 @@ safety_controller:
 keepout_zone_publisher:
   ros__parameters:
     enable_speed_filter: false
-    max_speed_mps: 0.30
+    max_speed_mps: 1.5
     publish_rate_hz: 10.0
     dynamic_safety_filters_enabled: true
     robot_base_frame: base_footprint
@@ -153,18 +156,18 @@ joy_node:
   ros__parameters:
     device_id       : 0      # /dev/input/js<N>
     deadzone        : 0.05   # ignore stick noise below this fraction
-    autorepeat_rate : 0.0    # 0 = publish only on change
+    autorepeat_rate : 20.0   # keep publishing while held so brief safety gating does not require button re-presses
 
 teleop_node:
   ros__parameters:
     # Linear (forward / back)
     axis_linear.x        : 1       # stick axis index
-    scale_linear.x       : 0.5     # normal mode max speed (m/s)
-    scale_linear_turbo.x : 1.0     # turbo mode max speed (m/s)
+    scale_linear.x: 1.5     # normal mode max speed (m/s)
+    scale_linear_turbo.x: 1.5     # turbo mode max speed (m/s)
     # Angular (yaw / turn)
     axis_angular.yaw        : 0    # stick axis index
-    scale_angular.yaw       : 0.5  # normal mode max turn rate (rad/s)
-    scale_angular_turbo.yaw : 1.0  # turbo mode max turn rate (rad/s)
+    scale_angular.yaw: 1.5  # normal mode max turn rate (rad/s)
+    scale_angular_turbo.yaw: 1.5  # turbo mode max turn rate (rad/s)
     # Buttons (0-indexed per controller layout)
     enable_button        : 6       # deadman — must hold to drive
     enable_turbo_button  : 7       # hold for turbo speed
@@ -178,7 +181,7 @@ zone_manager:
     # ---- Nav2 runtime speed cap ----
     # This is pushed to controller_server/desired_linear_vel at runtime by the UI's
     # /set_max_speed service. Must match (or be <= ) desired_linear_vel in nav2_params.yaml.
-    default_max_speed                  : 0.55   # m/s
+    default_max_speed: 1.5   # m/s
 
     # ---- Zone arrival tolerances ----
     # How close the robot must be to call a GoToZone 'arrived'.

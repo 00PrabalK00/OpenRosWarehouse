@@ -112,9 +112,9 @@ controller_server:
       plugin: next_nav2_controller::NextNav2Controller
       control_mode: rpp
       max_v: 1.5
-      max_w: 0.55
-      acc_lim_v: 2.5
-      decel_lim_v: 1.5
+      max_w: 1.5
+      acc_lim_v: 1.0
+      decel_lim_v: 1.0
       acc_lim_w: 1.5
       allow_reverse: false
       enforce_diff_drive_kinematics: true
@@ -130,7 +130,7 @@ controller_server:
       segment_finish_epsilon: 0.04
       transform_tolerance: 0.25
       final_approach_distance: 0.8
-      rpp_desired_linear_vel: 0.5
+      rpp_desired_linear_vel: 1.5
       rpp_use_collision_detection: false
       rpp_max_allowed_time_to_collision: 1.0
       rpp_regulated_linear_scaling_min_radius: 0.5
@@ -167,14 +167,14 @@ controller_server:
       blocked_timeout: 3.0
       abort_on_blocked_timeout: true
       max_vel_x: 1.5
-      desired_linear_vel: 0.5
+      desired_linear_vel: 1.5
       min_vel_x: 0.0
       max_vel_theta: 1.5
       min_speed_xy: 0.05
       max_speed_xy: 1.5
-      acc_lim_x: 2.5
+      acc_lim_x: 1.0
       acc_lim_theta: 1.5
-      decel_lim_x: -2.5
+      decel_lim_x: -1.0
       decel_lim_theta: -1.5
 controller_server_rclcpp_node:
   ros__parameters:

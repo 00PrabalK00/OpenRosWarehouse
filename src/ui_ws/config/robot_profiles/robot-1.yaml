@@ -1,7 +1,7 @@
 schema_version: 1
 migration_warnings: []
-profile_version: 3
-robot_id: Robot1
+profile_version: 1
+robot_id: Robot-1
 namespace: /
 base_frame: base_footprint
 sensor_frames:
@@ -562,34 +562,6 @@ bringup:
   last_log_file: ''
   last_run_message: ''
 nav2_config:
-  curated:
-    footprint:
-      mode: circle
-      robot_radius: 0.3
-      footprint_padding: 0
-      footprint: []
-    inflation:
-      local_radius: 0.7
-      global_radius: 1
-    controller_limits:
-      max_vel_x: 1.5
-      min_vel_x: 0
-      max_vel_theta: 1.5
-      min_speed_xy: 0.05
-      max_speed_xy: 1
-    acceleration_limits:
-      acc_lim_x: 1
-      acc_lim_theta: 1.5
-      decel_lim_x: -1
-      decel_lim_theta: -1.5
-    sensor_topics:
-      scan_topic: /scan
-      amcl_scan_topic: /scan
-      local_scan_topic: /scan
-      global_scan_topic: /scan
-    frames:
-      map_frame: map
-      odom_frame: odom
-      base_frame: base_footprint
+  curated: {}
   advanced_overrides: {}
-  updated_at: 1777951481
+  updated_at: 0

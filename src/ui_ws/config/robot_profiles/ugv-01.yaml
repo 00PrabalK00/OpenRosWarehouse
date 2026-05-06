@@ -1,9 +1,9 @@
 schema_version: 1
 migration_warnings: []
-profile_version: 3
-robot_id: Robot1
+profile_version: 6
+robot_id: UGV-01
 namespace: /
-base_frame: base_footprint
+base_frame: base_link
 sensor_frames:
   map: map
   odom: odom
@@ -40,7 +40,7 @@ mappings:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
   robot_pose:
     topic: /tf
-    field: map->base_footprint
+    field: map->base_link
     type: tf2_msgs/msg/TFMessage
   map:
     topic: /map
@@ -66,7 +66,9 @@ mappings:
     topic: /lift/cmd_rpm
     field: '{"data": -1500}'
     type: std_msgs/msg/Int32
-topics: {}
+topics:
+  subscription_slam_pose: /slam_toolbox/pose
+  subscription_odom: /odom
 urdf_artifact:
   source_filename: ''
   source_type: ''
@@ -99,10 +101,10 @@ urdf_artifact:
 robot_builder:
   schema_version: 1
   source: robot_editor
-  base_link: base_footprint
+  base_link: base_link
   links:
   - name: base_link
-    parent: base_footprint
+    parent: ''
     joint_type: fixed
     joint_xyz:
     - 0.0
@@ -113,7 +115,7 @@ robot_builder:
     - 0.0
     - 0.0
   - name: base_footprint
-    parent: ''
+    parent: base_link
     joint_type: fixed
     joint_xyz:
     - 0.0
@@ -544,7 +546,7 @@ robot_builder:
     diagnostic_source: ''
     parameters: {}
     validation_records: []
-  updated_at: 1776826364
+  updated_at: 1778030916
 release:
   production: false
   production_marked_at: 0
@@ -552,44 +554,16 @@ release:
   published_profile_version: 0
   published_snapshot_id: ''
 bringup:
-  last_run_at: 0
+  last_run_at: 1772604574
   last_pass: false
-  last_total_steps: 0
-  last_passed_steps: 0
-  last_failed_steps: 0
-  last_summary: ''
-  last_report_file: ''
-  last_log_file: ''
-  last_run_message: ''
+  last_total_steps: 5
+  last_passed_steps: 1
+  last_failed_steps: 4
+  last_summary: Bringup wizard FAIL (1/5)
+  last_report_file: bringup_reports/ugv-01/20260304_130934.yaml
+  last_log_file: bringup_reports/ugv-01/20260304_130934.log
+  last_run_message: Bringup wizard FAIL (1/5)
 nav2_config:
-  curated:
-    footprint:
-      mode: circle
-      robot_radius: 0.3
-      footprint_padding: 0
-      footprint: []
-    inflation:
-      local_radius: 0.7
-      global_radius: 1
-    controller_limits:
-      max_vel_x: 1.5
-      min_vel_x: 0
-      max_vel_theta: 1.5
-      min_speed_xy: 0.05
-      max_speed_xy: 1
-    acceleration_limits:
-      acc_lim_x: 1
-      acc_lim_theta: 1.5
-      decel_lim_x: -1
-      decel_lim_theta: -1.5
-    sensor_topics:
-      scan_topic: /scan
-      amcl_scan_topic: /scan
-      local_scan_topic: /scan
-      global_scan_topic: /scan
-    frames:
-      map_frame: map
-      odom_frame: odom
-      base_frame: base_footprint
+  curated: {}
   advanced_overrides: {}
-  updated_at: 1777951481
+  updated_at: 0
