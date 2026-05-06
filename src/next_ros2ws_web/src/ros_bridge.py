@@ -7130,6 +7130,7 @@ class RosBridge(Node):
             'dimensions': {
                 'width': 1.20,
                 'depth': 0.92,
+                'height': 0.35,
                 'opening_width': 0.96,
                 'capture_depth': 0.72,
                 'clearance': 0.08,
@@ -14392,6 +14393,391 @@ class RosBridge(Node):
             last_update_age_sec=float(last_age_sec),
             **status_payload,
         )
+
+    # ---------- network ----------
+
+    def _run_network_command(self, args: List[str], timeout: float = 12.0) -> Dict[str, Any]:
+        clean_args = [str(part) for part in (args or []) if str(part or '').strip()]
+        if not clean_args:
+            return self._ok(False, 'No command provided', stdout='', stderr='', returncode=-1)
+
+        try:
+            completed = subprocess.run(
+                clean_args,
+                capture_output=True,
+                text=True,
+                timeout=max(1.0, float(timeout)),
+                check=False,
+            )
+        except FileNotFoundError:
+            return self._ok(
+                False,
+                f'Command not found: {clean_args[0]}',
+                stdout='',
+                stderr='',
+                returncode=-1,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return self._ok(
+                False,
+                f'Command timed out: {" ".join(clean_args)}',
+                stdout=str(exc.stdout or ''),
+                stderr=str(exc.stderr or ''),
+                returncode=-1,
+            )
+        except Exception as exc:
+            return self._ok(
+                False,
+                f'Command failed: {exc}',
+                stdout='',
+                stderr='',
+                returncode=-1,
+            )
+
+        stdout = str(completed.stdout or '')
+        stderr = str(completed.stderr or '')
+        ok = int(completed.returncode) == 0
+        message = 'ok' if ok else (stderr.strip() or stdout.strip() or f'Exit code {completed.returncode}')
+        return self._ok(
+            ok,
+            message,
+            stdout=stdout,
+            stderr=stderr,
+            returncode=int(completed.returncode),
+        )
+
+    @staticmethod
+    def _mask_to_prefix(subnet_mask: str) -> int:
+        raw = str(subnet_mask or '').strip()
+        if not raw:
+            return 24
+        if raw.isdigit():
+            return max(0, min(32, int(raw)))
+        parts = raw.split('.')
+        if len(parts) != 4:
+            return 24
+        try:
+            bits = ''.join(f'{max(0, min(255, int(part))):08b}' for part in parts)
+        except Exception:
+            return 24
+        return bits.count('1')
+
+    def _network_device_rows(self) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        result = self._run_network_command(
+            ['nmcli', '--terse', '--escape', 'no', '--separator', '|', '--fields', 'DEVICE,TYPE,STATE,CONNECTION', 'device', 'status'],
+            timeout=8.0,
+        )
+        if not bool(result.get('ok')):
+            return [], result
+
+        rows: List[Dict[str, Any]] = []
+        for raw_line in str(result.get('stdout', '') or '').splitlines():
+            line = str(raw_line or '').strip()
+            if not line:
+                continue
+            device, dev_type, state, connection = (line.split('|') + ['', '', '', ''])[:4]
+            rows.append(
+                {
+                    'device': str(device or '').strip(),
+                    'type': str(dev_type or '').strip(),
+                    'state': str(state or '').strip(),
+                    'connection': '' if str(connection or '').strip() in {'', '--'} else str(connection or '').strip(),
+                }
+            )
+        return rows, result
+
+    def _ip_addr_snapshot(self) -> Dict[str, Dict[str, Any]]:
+        result = self._run_network_command(['ip', '-j', 'addr', 'show'], timeout=6.0)
+        if not bool(result.get('ok')):
+            return {}
+
+        try:
+            payload = json.loads(str(result.get('stdout', '') or '[]'))
+        except Exception:
+            return {}
+
+        snapshot: Dict[str, Dict[str, Any]] = {}
+        for entry in payload if isinstance(payload, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            ifname = str(entry.get('ifname', '') or '').strip()
+            if not ifname:
+                continue
+            ipv4: List[str] = []
+            for addr in entry.get('addr_info', []) if isinstance(entry.get('addr_info', []), list) else []:
+                if not isinstance(addr, dict) or str(addr.get('family', '') or '') != 'inet':
+                    continue
+                local = str(addr.get('local', '') or '').strip()
+                prefix = addr.get('prefixlen')
+                if local:
+                    ipv4.append(f'{local}/{prefix}' if prefix is not None else local)
+            snapshot[ifname] = {
+                'operstate': str(entry.get('operstate', '') or '').strip().lower(),
+                'mac': str(entry.get('address', '') or '').strip(),
+                'ipv4': ipv4,
+            }
+        return snapshot
+
+    def _select_network_interface(
+        self,
+        rows: List[Dict[str, Any]],
+        requested: str = '',
+        preferred_type: str = '',
+    ) -> Optional[Dict[str, Any]]:
+        clean_requested = str(requested or '').strip()
+        clean_type = str(preferred_type or '').strip().lower()
+        if clean_requested:
+            for row in rows:
+                if str(row.get('device', '') or '').strip() == clean_requested:
+                    return row
+
+        candidates = rows
+        if clean_type:
+            candidates = [row for row in rows if str(row.get('type', '') or '').strip().lower() == clean_type]
+        if not candidates:
+            return None
+
+        connected = [
+            row for row in candidates
+            if str(row.get('state', '') or '').strip().lower() in {'connected', 'connecting'}
+        ]
+        if connected:
+            return connected[0]
+        return candidates[0]
+
+    def get_network_manager_status(self):
+        rows, nmcli_result = self._network_device_rows()
+        ip_snapshot = self._ip_addr_snapshot()
+
+        active_result = self._run_network_command(
+            ['nmcli', '--terse', '--escape', 'no', '--separator', '|', '--fields', 'NAME,DEVICE,TYPE', 'connection', 'show', '--active'],
+            timeout=6.0,
+        )
+        active_by_device: Dict[str, Dict[str, str]] = {}
+        if bool(active_result.get('ok')):
+            for raw_line in str(active_result.get('stdout', '') or '').splitlines():
+                line = str(raw_line or '').strip()
+                if not line:
+                    continue
+                name, device, conn_type = (line.split('|') + ['', '', ''])[:3]
+                clean_device = str(device or '').strip()
+                if clean_device:
+                    active_by_device[clean_device] = {
+                        'name': str(name or '').strip(),
+                        'type': str(conn_type or '').strip(),
+                    }
+
+        devices: List[Dict[str, Any]] = []
+        for row in rows:
+            iface = str(row.get('device', '') or '').strip()
+            ip_info = ip_snapshot.get(iface, {})
+            active = active_by_device.get(iface, {})
+            devices.append(
+                {
+                    'device': iface,
+                    'type': str(row.get('type', '') or '').strip(),
+                    'state': str(row.get('state', '') or '').strip(),
+                    'connection': str(row.get('connection', '') or '').strip(),
+                    'active_connection': str(active.get('name', '') or '').strip(),
+                    'active_connection_type': str(active.get('type', '') or '').strip(),
+                    'ipv4': list(ip_info.get('ipv4', []) or []),
+                    'operstate': str(ip_info.get('operstate', '') or '').strip(),
+                    'mac': str(ip_info.get('mac', '') or '').strip(),
+                }
+            )
+
+        wifi_device = self._select_network_interface(devices, preferred_type='wifi')
+        ethernet_device = self._select_network_interface(devices, preferred_type='ethernet')
+
+        return self._ok(
+            True,
+            'Network status collected',
+            supports_nmcli=bool(nmcli_result.get('ok')),
+            wireless_interface=str((wifi_device or {}).get('device', '') or ''),
+            ethernet_interface=str((ethernet_device or {}).get('device', '') or ''),
+            devices=devices,
+        )
+
+    def scan_wifi_networks(self, interface: str = '', rescan: bool = True):
+        status = self.get_network_manager_status()
+        devices = status.get('devices', []) if isinstance(status.get('devices', []), list) else []
+        wifi_device = self._select_network_interface(devices, requested=interface, preferred_type='wifi')
+        if wifi_device is None:
+            return self._ok(False, 'No wireless interface found', networks=[], interface='')
+
+        iface = str(wifi_device.get('device', '') or '').strip()
+        args = ['nmcli', '--terse', '--escape', 'no', '--separator', '|', '--fields', 'IN-USE,SSID,SIGNAL,SECURITY,BARS,CHAN,BSSID', 'device', 'wifi', 'list', 'ifname', iface]
+        if bool(rescan):
+            args.extend(['--rescan', 'yes'])
+        result = self._run_network_command(args, timeout=12.0)
+        if not bool(result.get('ok')):
+            return self._ok(False, str(result.get('message', 'Wi-Fi scan failed')), networks=[], interface=iface)
+
+        networks: List[Dict[str, Any]] = []
+        seen_keys: Set[Tuple[str, str]] = set()
+        for raw_line in str(result.get('stdout', '') or '').splitlines():
+            line = str(raw_line or '').strip()
+            if not line:
+                continue
+            in_use, ssid, signal, security, bars, channel, bssid = (line.split('|') + ['', '', '', '', '', '', ''])[:7]
+            clean_ssid = str(ssid or '').strip()
+            clean_bssid = str(bssid or '').strip()
+            key = (clean_ssid, clean_bssid)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            try:
+                signal_value = int(str(signal or '0').strip() or '0')
+            except Exception:
+                signal_value = 0
+            networks.append(
+                {
+                    'ssid': clean_ssid,
+                    'signal': signal_value,
+                    'security': str(security or '').strip(),
+                    'quality_bars': str(bars or '').strip(),
+                    'channel': str(channel or '').strip(),
+                    'bssid': clean_bssid,
+                    'in_use': str(in_use or '').strip() == '*',
+                }
+            )
+
+        networks.sort(key=lambda item: (not bool(item.get('in_use')), -int(item.get('signal', 0)), str(item.get('ssid', '') or '')))
+        return self._ok(True, 'Wi-Fi scan complete', interface=iface, networks=networks)
+
+    def connect_wifi_network(self, ssid: str, password: str = '', interface: str = ''):
+        clean_ssid = str(ssid or '').strip()
+        if not clean_ssid:
+            return self._ok(False, 'SSID is required')
+
+        status = self.get_network_manager_status()
+        devices = status.get('devices', []) if isinstance(status.get('devices', []), list) else []
+        wifi_device = self._select_network_interface(devices, requested=interface, preferred_type='wifi')
+        if wifi_device is None:
+            return self._ok(False, 'No wireless interface found')
+
+        iface = str(wifi_device.get('device', '') or '').strip()
+        args = ['nmcli', '--wait', '20', 'device', 'wifi', 'connect', clean_ssid, 'ifname', iface]
+        if str(password or ''):
+            args.extend(['password', str(password)])
+        result = self._run_network_command(args, timeout=24.0)
+        if not bool(result.get('ok')):
+            return self._ok(False, str(result.get('message', 'Wi-Fi connect failed')), interface=iface, ssid=clean_ssid)
+
+        refreshed = self.get_network_manager_status()
+        return self._ok(
+            True,
+            f'Connected to {clean_ssid}',
+            interface=iface,
+            ssid=clean_ssid,
+            status=refreshed,
+        )
+
+    def configure_interface_ipv4(
+        self,
+        interface: str,
+        use_dhcp: bool = True,
+        address: str = '',
+        subnet_mask: str = '',
+        gateway: str = '',
+        dns_servers: Optional[List[str]] = None,
+    ):
+        clean_interface = str(interface or '').strip()
+        if not clean_interface:
+            return self._ok(False, 'Interface is required')
+
+        status = self.get_network_manager_status()
+        devices = status.get('devices', []) if isinstance(status.get('devices', []), list) else []
+        row = self._select_network_interface(devices, requested=clean_interface)
+        if row is None:
+            return self._ok(False, f'Interface "{clean_interface}" not found')
+
+        iface_type = str(row.get('type', '') or '').strip().lower()
+        connection_name = str(row.get('connection', '') or '').strip() or str(row.get('active_connection', '') or '').strip()
+        if not connection_name and iface_type == 'ethernet':
+            connection_name = f'{clean_interface}-managed'
+            create_result = self._run_network_command(
+                ['nmcli', 'connection', 'add', 'type', 'ethernet', 'ifname', clean_interface, 'con-name', connection_name],
+                timeout=12.0,
+            )
+            if not bool(create_result.get('ok')):
+                return self._ok(False, str(create_result.get('message', 'Failed to create ethernet profile')))
+        if not connection_name:
+            return self._ok(False, f'No active connection profile found for {clean_interface}')
+
+        base_args = ['nmcli', 'connection', 'modify', connection_name]
+        if bool(use_dhcp):
+            updates = [
+                'ipv4.method', 'auto',
+                'ipv4.addresses', '',
+                'ipv4.gateway', '',
+                'ipv4.dns', '',
+                'connection.autoconnect', 'yes',
+                'ipv6.method', 'ignore',
+            ]
+        else:
+            clean_address = str(address or '').strip()
+            if not clean_address:
+                return self._ok(False, 'Static IP address is required')
+            prefix = self._mask_to_prefix(subnet_mask)
+            dns_list = [str(item or '').strip() for item in (dns_servers or []) if str(item or '').strip()]
+            updates = [
+                'ipv4.method', 'manual',
+                'ipv4.addresses', f'{clean_address}/{prefix}',
+                'ipv4.gateway', str(gateway or '').strip(),
+                'ipv4.dns', ','.join(dns_list),
+                'connection.autoconnect', 'yes',
+                'ipv6.method', 'ignore',
+            ]
+
+        modify_result = self._run_network_command(base_args + updates, timeout=14.0)
+        if not bool(modify_result.get('ok')):
+            return self._ok(False, str(modify_result.get('message', 'Failed to update interface settings')))
+
+        up_result = self._run_network_command(
+            ['nmcli', '--wait', '20', 'connection', 'up', connection_name, 'ifname', clean_interface],
+            timeout=24.0,
+        )
+        if not bool(up_result.get('ok')):
+            return self._ok(False, str(up_result.get('message', 'Failed to bring interface online')))
+
+        refreshed = self.get_network_manager_status()
+        return self._ok(
+            True,
+            'Interface configuration applied',
+            interface=clean_interface,
+            connection=connection_name,
+            use_dhcp=bool(use_dhcp),
+            status=refreshed,
+        )
+
+    def set_wireless_interface_enabled(self, enabled: bool, interface: str = ''):
+        status = self.get_network_manager_status()
+        devices = status.get('devices', []) if isinstance(status.get('devices', []), list) else []
+        wifi_device = self._select_network_interface(devices, requested=interface, preferred_type='wifi')
+        if wifi_device is None:
+            return self._ok(False, 'No wireless interface found')
+
+        iface = str(wifi_device.get('device', '') or '').strip()
+        if bool(enabled):
+            ip_result = self._run_network_command(['ip', 'link', 'set', 'dev', iface, 'up'], timeout=8.0)
+            if not bool(ip_result.get('ok')):
+                return self._ok(False, str(ip_result.get('message', 'Failed to enable wireless interface')))
+            radio_result = self._run_network_command(['nmcli', 'radio', 'wifi', 'on'], timeout=8.0)
+            if not bool(radio_result.get('ok')):
+                return self._ok(False, str(radio_result.get('message', 'Failed to enable wireless radio')))
+            message = 'Wireless interface enabled'
+        else:
+            disconnect_result = self._run_network_command(['nmcli', 'device', 'disconnect', iface], timeout=10.0)
+            if not bool(disconnect_result.get('ok')):
+                return self._ok(False, str(disconnect_result.get('message', 'Failed to disconnect wireless interface')))
+            link_result = self._run_network_command(['ip', 'link', 'set', 'dev', iface, 'down'], timeout=8.0)
+            if not bool(link_result.get('ok')):
+                return self._ok(False, str(link_result.get('message', 'Failed to disable wireless interface')))
+            message = 'Wireless interface disabled'
+
+        refreshed = self.get_network_manager_status()
+        return self._ok(True, message, interface=iface, enabled=bool(enabled), status=refreshed)
 
     # ---------- diagnostics ----------
 

@@ -12831,7 +12831,7 @@
     <link rel="stylesheet" href="/static/dev_recognition.css">
 </head>
 
-<body id="app-shell" data-mode="operate" data-user-page="{{ '1' if user_page else '0' }}">
+<body id="app-shell" data-mode="operate" data-user-page="{{ '1' if user_page else '0' }}" data-current-role="{{ current_role or ('viewer' if user_page else 'admin') }}" data-current-user="{{ current_user or '' }}">
     <!-- ============================================
          GLOBAL FIXED HEADER - ALWAYS VISIBLE
          ============================================ -->
@@ -12886,6 +12886,18 @@
         <!-- Right: Emergency Stop -->
         <div class="global-header-right">
             <div class="global-header-right-controls">
+                <span class="global-header-robot-id" style="margin-right:6px;">{{ (current_user or 'viewer') }} · {{ (current_role or ('viewer' if user_page else 'admin'))|upper }}</span>
+                {% if not user_page %}
+                <form method="post" action="/dev/lock" style="display:inline-flex;">
+                    <button class="manual-mode-btn header-desktop-refresh-btn" type="submit" title="Sign out">
+                        <i class="fas fa-sign-out-alt"></i> SIGN OUT
+                    </button>
+                </form>
+                {% else %}
+                <a class="manual-mode-btn header-desktop-refresh-btn" href="/" title="Open access portal" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+                    <i class="fas fa-user-shield"></i> ACCESS
+                </a>
+                {% endif %}
                 <button class="manual-mode-btn header-desktop-refresh-btn" id="desktop-refresh-btn" onclick="triggerDesktopRefresh()"
                     title="Refresh Desktop UI">
                     <i class="fas fa-sync-alt"></i> REFRESH
@@ -20303,6 +20315,7 @@
                                 <div class="rcg-form-grid">
                                     ${rcgField('width','Leg Width (m)', t.width, 'Outer width of the two shelf legs in entry direction')}
                                     ${rcgField('length','Leg Length (m)', t.length, 'Outer width of legs perpendicular to entry')}
+                                    ${rcgField('height','Shelf Height (m)', t.height, 'Physical height of the shelf')}
                                     ${rcgField('leg_width','Reflective Strip Width (m)', t.leg_width, 'Standard 3M sticker: 0.05 m')}
                                     ${rcgField('outer_width','Outer Width (m)', t.outer_width, 'Total shelf width including overhangs (must be ≥ width + 5 cm)')}
                                     ${rcgField('outer_length','Outer Length (m)', t.outer_length, 'Total shelf length. Must be ≥ length + 5 cm to avoid laser noise')}
@@ -31879,11 +31892,51 @@
                                 <div class="settings-card">
                                     <div class="settings-card-header">
                                         <h4 class="settings-card-title">User Management</h4>
-                                        <button class="btn btn-primary" onclick="handleCreateUser()"><i class="fas fa-plus"></i> Add User</button>
+                                        <div class="profile-inline-actions" style="gap:8px;">
+                                            <button class="btn btn-primary" type="button" onclick="handleCreateUser()"><i class="fas fa-plus"></i> New User</button>
+                                            <button class="btn" type="button" onclick="resetUserForm()"><i class="fas fa-eraser"></i> Clear</button>
+                                        </div>
+                                    </div>
+                                    <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; margin-top:10px;">
+                                        <label class="property-row" style="display:flex; flex-direction:column; gap:6px;">
+                                            <span class="property-label">Username</span>
+                                            <input id="settings-user-username" class="property-input" type="text" placeholder="operator_a">
+                                        </label>
+                                        <label class="property-row" style="display:flex; flex-direction:column; gap:6px;">
+                                            <span class="property-label">Role</span>
+                                            <select id="settings-user-role" class="property-select">
+                                                <option value="viewer">viewer</option>
+                                                <option value="editor">editor</option>
+                                                <option value="admin">admin</option>
+                                            </select>
+                                        </label>
+                                        <label class="property-row" style="display:flex; flex-direction:column; gap:6px;">
+                                            <span class="property-label">Password</span>
+                                            <input id="settings-user-password" class="property-input" type="password" placeholder="Leave blank to keep current">
+                                        </label>
+                                    </div>
+                                    <div class="profile-inline-actions" style="flex-wrap:wrap; gap:8px; padding-top:10px;">
+                                        <button class="btn btn-primary" type="button" onclick="submitUserForm()"><i class="fas fa-save"></i> Save User</button>
+                                        <button class="btn" type="button" onclick="loadSettingsUsers()"><i class="fas fa-rotate"></i> Refresh Users</button>
+                                    </div>
+                                    <div id="settings-user-form-status" style="margin-top:8px; font-size:12px; color:var(--text-secondary);">
+                                        Create a new user or select an existing one from the list below to edit role and password.
                                     </div>
                                     <div id="settings-users-list" class="settings-list" style="margin-top:10px;">
                                         <!-- Populated by JS -->
                                         <div class="settings-list-item">Loading users...</div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card" style="margin-top:16px;">
+                                    <div class="settings-card-header">
+                                        <h4 class="settings-card-title">Database Access</h4>
+                                    </div>
+                                    <div style="font-size:12px; color:var(--text-secondary); line-height:1.6; padding-top:8px;">
+                                        Download the live robot database for backup, diagnostics, or offline review.
+                                    </div>
+                                    <div class="profile-inline-actions" style="flex-wrap:wrap; gap:8px; padding-top:10px;">
+                                        <a class="btn btn-primary" href="/api/next/database/download"><i class="fas fa-download"></i> Download Database</a>
                                     </div>
                                 </div>
 
@@ -40089,12 +40142,37 @@
             }
         }
 
-        async function handleCreateUser() {
-            const username = prompt('Enter Username:');
-            if (!username) return;
-            const password = prompt('Enter Password (optional, default is username):');
-            const role = prompt('Enter Role (admin, editor, viewer):', 'viewer');
-            if (!role) return;
+        function resetUserForm() {
+            const usernameEl = document.getElementById('settings-user-username');
+            const roleEl = document.getElementById('settings-user-role');
+            const passwordEl = document.getElementById('settings-user-password');
+            const statusEl = document.getElementById('settings-user-form-status');
+            if (usernameEl) usernameEl.value = '';
+            if (roleEl) roleEl.value = 'viewer';
+            if (passwordEl) passwordEl.value = '';
+            if (statusEl) {
+                statusEl.style.color = 'var(--text-secondary)';
+                statusEl.textContent = 'Create a new user or select an existing one from the list below to edit role and password.';
+            }
+        }
+
+        function handleCreateUser() {
+            resetUserForm();
+            document.getElementById('settings-user-username')?.focus();
+        }
+
+        async function submitUserForm() {
+            const username = String(document.getElementById('settings-user-username')?.value || '').trim();
+            const role = String(document.getElementById('settings-user-role')?.value || 'viewer').trim();
+            const password = String(document.getElementById('settings-user-password')?.value || '');
+            const statusEl = document.getElementById('settings-user-form-status');
+            if (!username) {
+                if (statusEl) {
+                    statusEl.style.color = 'var(--accent-critical)';
+                    statusEl.textContent = 'Username is required.';
+                }
+                return;
+            }
 
             try {
                 const res = await fetch('/api/next/users', {
@@ -40104,37 +40182,42 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
+                    if (statusEl) {
+                        statusEl.style.color = 'var(--accent-success)';
+                        statusEl.textContent = `Saved user ${username}.`;
+                    }
                     showStatus(`User ${username} created/updated`, 'success');
+                    document.getElementById('settings-user-password').value = '';
                     loadSettingsUsers();
                 } else {
+                    if (statusEl) {
+                        statusEl.style.color = 'var(--accent-critical)';
+                        statusEl.textContent = data.message || 'Failed to save user.';
+                    }
                     showStatus(data.message, 'error');
                 }
             } catch (err) {
+                if (statusEl) {
+                    statusEl.style.color = 'var(--accent-critical)';
+                    statusEl.textContent = 'Failed to save user.';
+                }
                 showStatus('Failed to create user', 'error');
             }
         }
 
         async function handleEditUser(username, currentRole) {
-            const role = prompt(`Update role for ${username}:`, currentRole);
-            if (!role) return;
-            const password = prompt(`Update password for ${username} (leave empty to keep current):`);
-
-            try {
-                const res = await fetch('/api/next/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, role, password: password || undefined }),
-                });
-                const data = await res.json();
-                if (data.ok) {
-                    showStatus(`User ${username} updated`, 'success');
-                    loadSettingsUsers();
-                } else {
-                    showStatus(data.message, 'error');
-                }
-            } catch (err) {
-                showStatus('Failed to update user', 'error');
+            const usernameEl = document.getElementById('settings-user-username');
+            const roleEl = document.getElementById('settings-user-role');
+            const passwordEl = document.getElementById('settings-user-password');
+            const statusEl = document.getElementById('settings-user-form-status');
+            if (usernameEl) usernameEl.value = username;
+            if (roleEl) roleEl.value = currentRole || 'viewer';
+            if (passwordEl) passwordEl.value = '';
+            if (statusEl) {
+                statusEl.style.color = 'var(--text-secondary)';
+                statusEl.textContent = `Editing ${username}. Leave password empty to keep the current password.`;
             }
+            passwordEl?.focus();
         }
 
         async function handleDeleteUser(username) {

@@ -153,6 +153,7 @@
             dimensions: {
                 width: normalizedCategory === 'shelves' ? 1.20 : (normalizedCategory === 'pallets' ? 0.80 : 1.10),
                 depth: normalizedCategory === 'shelves' ? 0.92 : (normalizedCategory === 'pallets' ? 1.20 : 0.70),
+                height: normalizedCategory === 'shelves' ? 0.35 : 0.0,
                 opening_width: normalizedCategory === 'shelves' ? 0.96 : 0.74,
                 capture_depth: normalizedCategory === 'shelves' ? 0.72 : 0.64,
                 clearance: 0.08,
@@ -231,6 +232,7 @@
         template.dimensions = {
             width: Number(template.dimensions && template.dimensions.width) || 0,
             depth: Number(template.dimensions && template.dimensions.depth) || 0,
+            height: Number(template.dimensions && template.dimensions.height) || 0,
             opening_width: Number(template.dimensions && template.dimensions.opening_width) || 0,
             capture_depth: Number(template.dimensions && template.dimensions.capture_depth) || 0,
             clearance: Number(template.dimensions && template.dimensions.clearance) || 0,
@@ -1206,6 +1208,10 @@
                                 <input class="rcg-form-input" type="number" step="0.01" value="${Number(template.dimensions.depth || 0).toFixed(2)}" oninput="recognitionUpdateTemplateField('dimensions.depth', this.value)">
                             </div>
                             <div class="rcg-form-field">
+                                <label>Shelf Height (m)</label>
+                                <input class="rcg-form-input" type="number" step="0.01" value="${Number(template.dimensions.height || 0).toFixed(2)}" oninput="recognitionUpdateTemplateField('dimensions.height', this.value)" title="Physical height of the shelf. Used for dynamic lift target calculation.">
+                            </div>
+                            <div class="rcg-form-field">
                                 <label>Opening Width (m)</label>
                                 <input class="rcg-form-input" type="number" step="0.01" value="${Number(template.dimensions.opening_width || 0).toFixed(2)}" oninput="recognitionUpdateTemplateField('dimensions.opening_width', this.value)">
                             </div>
@@ -1897,7 +1903,7 @@
         return `
             <div class="rcg-action-summary">
                 <div><strong>${safeHtml(template.name)}</strong> · ${safeHtml(template.geometry_type || 'profile')} · v${Number(template.version || 1)}</div>
-                <div style="margin-top:6px;">Width ${Number(dims.width || 0).toFixed(2)}m · Depth ${Number(dims.depth || 0).toFixed(2)}m · Opening ${Number(dims.opening_width || 0).toFixed(2)}m</div>
+                <div style="margin-top:6px;">Width ${Number(dims.width || 0).toFixed(2)}m · Depth ${Number(dims.depth || 0).toFixed(2)}m · Height ${Number(dims.height || 0).toFixed(2)}m</div>
                 <div style="margin-top:6px;">${recognize ? 'Shelf Detection On' : 'Shelf Detection Off'}${warnings.length ? ` · ${safeHtml(warnings.join(', '))}` : ''}</div>
             </div>
         `;
