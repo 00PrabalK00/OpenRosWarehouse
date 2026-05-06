@@ -1220,6 +1220,20 @@
                                 <input class="rcg-form-input" type="number" step="0.01" value="${Number(template.dimensions.capture_depth || 0).toFixed(2)}" oninput="recognitionUpdateTemplateField('dimensions.capture_depth', this.value)">
                             </div>
                         </div>
+                        ${(() => {
+                            const shelfHeightCm = Number(template.dimensions.height || 0) * 100;
+                            const liftRpm = (typeof window.liftRpm === 'number') ? window.liftRpm : 300;
+                            const baselineCm = 24.5;
+                            const deltaD = Math.max(0, shelfHeightCm - baselineCm);
+                            const estTime = (53 * (deltaD / 4.5) * (300 / liftRpm)).toFixed(1);
+                            return deltaD > 0 
+                                ? `<div style="margin-top:12px; padding:8px; background:rgba(66,153,225,0.1); border-radius:4px; font-size:11px; border:1px solid rgba(66,153,225,0.2);">
+                                     <i class="fas fa-clock" style="margin-right:4px; color:var(--accent-blue);"></i>
+                                     Estimated Lift Time: <strong>${estTime}s</strong> 
+                                     <span style="color:var(--text-tertiary); font-size:9px;">(Dist: ${deltaD.toFixed(1)}cm @ ${liftRpm} RPM)</span>
+                                   </div>`
+                                : '';
+                        })()}
                     </div>
                     <div class="rcg-inspector-card">
                         <div class="rcg-card-kicker">Notes</div>
@@ -1900,10 +1914,18 @@
         const warnings = [];
         if (template.status === 'draft') warnings.push('Draft template');
         if (template.status === 'deprecated') warnings.push('Deprecated template');
+
+        const shelfHeightCm = Number(dims.height || 0) * 100;
+        const liftRpm = (typeof window.liftRpm === 'number') ? window.liftRpm : 300;
+        const baselineCm = 24.5;
+        const deltaD = Math.max(0, shelfHeightCm - baselineCm);
+        const estTime = (53 * (deltaD / 4.5) * (300 / liftRpm)).toFixed(1);
+        const liftInfo = deltaD > 0 ? ` · <i class="fas fa-clock"></i> ${estTime}s lift` : '';
+
         return `
             <div class="rcg-action-summary">
                 <div><strong>${safeHtml(template.name)}</strong> · ${safeHtml(template.geometry_type || 'profile')} · v${Number(template.version || 1)}</div>
-                <div style="margin-top:6px;">Width ${Number(dims.width || 0).toFixed(2)}m · Depth ${Number(dims.depth || 0).toFixed(2)}m · Height ${Number(dims.height || 0).toFixed(2)}m</div>
+                <div style="margin-top:6px;">Width ${Number(dims.width || 0).toFixed(2)}m · Depth ${Number(dims.depth || 0).toFixed(2)}m · Height ${Number(dims.height || 0).toFixed(2)}m${liftInfo}</div>
                 <div style="margin-top:6px;">${recognize ? 'Shelf Detection On' : 'Shelf Detection Off'}${warnings.length ? ` · ${safeHtml(warnings.join(', '))}` : ''}</div>
             </div>
         `;
