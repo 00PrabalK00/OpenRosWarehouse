@@ -14944,6 +14944,259 @@
                     const PATH_ATTR_BOOL_IDS = ['ultrasonic','laser','infrared','virtualLaser','3DCameraHole','3DCameraObstacle'];
                     const PATH_ATTR_STR_IDS = ['collisionGroupId','forbidLaserGroupId','forbidDNodeGroupId'];
                     const PATH_ATTR_ALL_IDS = [...PATH_ATTR_NUM_IDS, ...PATH_ATTR_BOOL_IDS, ...PATH_ATTR_STR_IDS];
+                    const PATH_ATTR_GROUP_FIELDS = {
+                        motion: ['maxspeed', 'maxacc', 'maxdec', 'maxrot', 'maxrotacc', 'maxrotdec'],
+                        tolerance: ['reachdist', 'reachangle', 'width'],
+                        sensing: ['ultrasonic', 'laser', 'infrared'],
+                        obstacle: ['virtualLaser', '3DCameraHole', '3DCameraObstacle'],
+                        safety: ['collisionGroupId', 'forbidLaserGroupId', 'forbidDNodeGroupId'],
+                    };
+
+                    function togglePathAttrEditorInput(prefix, attrId) {
+                        const chkEl = document.getElementById(`${prefix}-en-${attrId}`);
+                        const valEl = document.getElementById(`${prefix}-${attrId}`);
+                        if (valEl) {
+                            valEl.disabled = !(chkEl && chkEl.checked);
+                        }
+                        updatePathAttrEditorBadge(prefix);
+                    }
+
+                    function togglePathAttrEditorGroup(prefix, groupId) {
+                        const body = document.getElementById(`${prefix}-body-${groupId}`);
+                        const chev = document.getElementById(`${prefix}-chev-${groupId}`);
+                        if (!body) return;
+                        body.classList.toggle('collapsed');
+                        if (chev) {
+                            chev.style.transform = body.classList.contains('collapsed') ? '' : 'rotate(180deg)';
+                        }
+                    }
+
+                    function getPathAttrParamsFromEditor(prefix) {
+                        const params = {};
+                        PATH_ATTR_ALL_IDS.forEach((attrId) => {
+                            const enEl = document.getElementById(`${prefix}-en-${attrId}`);
+                            if (!enEl || !enEl.checked) return;
+                            const valEl = document.getElementById(`${prefix}-${attrId}`);
+                            if (!valEl) return;
+                            if (PATH_ATTR_BOOL_IDS.includes(attrId)) {
+                                params[attrId] = !!valEl.checked;
+                            } else if (PATH_ATTR_NUM_IDS.includes(attrId)) {
+                                const v = parseFloat(valEl.value);
+                                if (Number.isFinite(v)) params[attrId] = v;
+                            } else {
+                                const v = String(valEl.value || '').trim();
+                                if (v) params[attrId] = v;
+                            }
+                        });
+                        return params;
+                    }
+
+                    function applyPathAttrParamsToEditor(prefix, params) {
+                        const source = (params && typeof params === 'object') ? params : {};
+                        PATH_ATTR_ALL_IDS.forEach((attrId) => {
+                            const enEl = document.getElementById(`${prefix}-en-${attrId}`);
+                            const valEl = document.getElementById(`${prefix}-${attrId}`);
+                            if (!enEl || !valEl) return;
+                            if (attrId in source) {
+                                enEl.checked = true;
+                                valEl.disabled = false;
+                                if (PATH_ATTR_BOOL_IDS.includes(attrId)) {
+                                    valEl.checked = !!source[attrId];
+                                } else {
+                                    valEl.value = source[attrId];
+                                }
+                            } else {
+                                enEl.checked = false;
+                                valEl.disabled = true;
+                                if (PATH_ATTR_BOOL_IDS.includes(attrId)) {
+                                    valEl.checked = false;
+                                } else {
+                                    valEl.value = '';
+                                }
+                            }
+                        });
+                        updatePathAttrEditorBadge(prefix);
+                    }
+
+                    function resetPathAttrEditor(prefix) {
+                        applyPathAttrParamsToEditor(prefix, {});
+                    }
+
+                    function updatePathAttrEditorBadge(prefix) {
+                        const count = PATH_ATTR_ALL_IDS.filter((attrId) => {
+                            const el = document.getElementById(`${prefix}-en-${attrId}`);
+                            return el && el.checked;
+                        }).length;
+                        const badge = document.getElementById(`${prefix}-badge`);
+                        if (badge) {
+                            badge.textContent = count;
+                            badge.classList.toggle('visible', count > 0);
+                        }
+                    }
+
+                    function buildPathAttrEditorSection(prefix, title, helperText = '', saveLabel = 'Save Segment Properties') {
+                        const helperHtml = helperText
+                            ? `<div style="font-size:10px;color:var(--text-tertiary);margin:4px 0 8px;">${helperText}</div>`
+                            : '';
+                        return `
+                            <div style="margin-top: 8px; border-top: 1px solid var(--border-chrome); padding-top: 8px;">
+                                <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
+                                    <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;">
+                                        ${title}
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:6px;">
+                                        <span class="pattr-count-badge" id="${prefix}-badge">0</span>
+                                        <button type="button" class="path-btn path-btn-neutral pattr-reset-btn" onclick="resetPathAttrEditor('${prefix}')" title="Reset this segment's overrides">
+                                            <i class="fas fa-rotate-left"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                ${helperHtml}
+                                <div class="pattr-direction-row" style="padding-left:0;padding-right:0;">
+                                    <span class="pattr-direction-lbl"><i class="fas fa-arrows-left-right" style="margin-right:3px;"></i>Direction</span>
+                                    <select id="${prefix}-direction" class="pattr-direction-sel">
+                                        <option value="">Inherit Path Default</option>
+                                        <option value="uni">&#x2192; Unidirectional</option>
+                                        <option value="bi">&#x21C4; Bidirectional</option>
+                                        <option value="reverse">&#x2190; Reverse</option>
+                                    </select>
+                                </div>
+                                <div class="pattr-group">
+                                    <button type="button" class="pattr-group-hdr" onclick="togglePathAttrEditorGroup('${prefix}', 'motion')">
+                                        <i class="fas fa-gauge-high"></i><span>Motion Constraints</span>
+                                        <i class="fas fa-chevron-down pattr-chev" id="${prefix}-chev-motion"></i>
+                                    </button>
+                                    <div class="pattr-group-body collapsed" id="${prefix}-body-motion">
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-maxspeed" onchange="togglePathAttrEditorInput('${prefix}', 'maxspeed')">Max Speed</label>
+                                            <input type="number" id="${prefix}-maxspeed" class="pattr-num" min="0" step="0.1" placeholder="m/s" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-maxacc" onchange="togglePathAttrEditorInput('${prefix}', 'maxacc')">Max Accel</label>
+                                            <input type="number" id="${prefix}-maxacc" class="pattr-num" min="0" step="0.1" placeholder="m/s²" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-maxdec" onchange="togglePathAttrEditorInput('${prefix}', 'maxdec')">Max Decel</label>
+                                            <input type="number" id="${prefix}-maxdec" class="pattr-num" min="0" step="0.1" placeholder="m/s²" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-maxrot" onchange="togglePathAttrEditorInput('${prefix}', 'maxrot')">Max Rot Speed</label>
+                                            <input type="number" id="${prefix}-maxrot" class="pattr-num" min="0" step="0.01" placeholder="rad/s" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-maxrotacc" onchange="togglePathAttrEditorInput('${prefix}', 'maxrotacc')">Max Rot Accel</label>
+                                            <input type="number" id="${prefix}-maxrotacc" class="pattr-num" min="0" step="0.01" placeholder="rad/s²" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-maxrotdec" onchange="togglePathAttrEditorInput('${prefix}', 'maxrotdec')">Max Rot Decel</label>
+                                            <input type="number" id="${prefix}-maxrotdec" class="pattr-num" min="0" step="0.01" placeholder="rad/s²" disabled>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pattr-group">
+                                    <button type="button" class="pattr-group-hdr" onclick="togglePathAttrEditorGroup('${prefix}', 'tolerance')">
+                                        <i class="fas fa-bullseye"></i><span>Nav Tolerance</span>
+                                        <i class="fas fa-chevron-down pattr-chev" id="${prefix}-chev-tolerance"></i>
+                                    </button>
+                                    <div class="pattr-group-body collapsed" id="${prefix}-body-tolerance">
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-reachdist" onchange="togglePathAttrEditorInput('${prefix}', 'reachdist')">Reach Dist</label>
+                                            <input type="number" id="${prefix}-reachdist" class="pattr-num" min="0" step="0.01" placeholder="m" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-reachangle" onchange="togglePathAttrEditorInput('${prefix}', 'reachangle')">Reach Angle</label>
+                                            <input type="number" id="${prefix}-reachangle" class="pattr-num" min="0" step="0.01" placeholder="rad" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-width" onchange="togglePathAttrEditorInput('${prefix}', 'width')">Path Width</label>
+                                            <input type="number" id="${prefix}-width" class="pattr-num" min="0" step="0.01" placeholder="m" disabled>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pattr-group">
+                                    <button type="button" class="pattr-group-hdr" onclick="togglePathAttrEditorGroup('${prefix}', 'sensing')">
+                                        <i class="fas fa-broadcast-tower"></i><span>Env Sensing</span>
+                                        <i class="fas fa-chevron-down pattr-chev" id="${prefix}-chev-sensing"></i>
+                                    </button>
+                                    <div class="pattr-group-body collapsed" id="${prefix}-body-sensing">
+                                        <div class="pattr-bool-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-ultrasonic" onchange="togglePathAttrEditorInput('${prefix}', 'ultrasonic')">Ultrasonic</label>
+                                            <label class="path-toggle-switch" for="${prefix}-ultrasonic" aria-label="Ultrasonic">
+                                                <input type="checkbox" id="${prefix}-ultrasonic" class="path-toggle-input pattr-bool" disabled>
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div class="pattr-bool-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-laser" onchange="togglePathAttrEditorInput('${prefix}', 'laser')">Laser</label>
+                                            <label class="path-toggle-switch" for="${prefix}-laser" aria-label="Laser">
+                                                <input type="checkbox" id="${prefix}-laser" class="path-toggle-input pattr-bool" disabled>
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div class="pattr-bool-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-infrared" onchange="togglePathAttrEditorInput('${prefix}', 'infrared')">Infrared</label>
+                                            <label class="path-toggle-switch" for="${prefix}-infrared" aria-label="Infrared">
+                                                <input type="checkbox" id="${prefix}-infrared" class="path-toggle-input pattr-bool" disabled>
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pattr-group">
+                                    <button type="button" class="pattr-group-hdr" onclick="togglePathAttrEditorGroup('${prefix}', 'obstacle')">
+                                        <i class="fas fa-shield-halved"></i><span>Obstacle Control</span>
+                                        <i class="fas fa-chevron-down pattr-chev" id="${prefix}-chev-obstacle"></i>
+                                    </button>
+                                    <div class="pattr-group-body collapsed" id="${prefix}-body-obstacle">
+                                        <div class="pattr-bool-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-virtualLaser" onchange="togglePathAttrEditorInput('${prefix}', 'virtualLaser')">Virtual Laser</label>
+                                            <label class="path-toggle-switch" for="${prefix}-virtualLaser" aria-label="Virtual Laser">
+                                                <input type="checkbox" id="${prefix}-virtualLaser" class="path-toggle-input pattr-bool" disabled>
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div class="pattr-bool-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-3DCameraHole" onchange="togglePathAttrEditorInput('${prefix}', '3DCameraHole')">3D Cam (Hole)</label>
+                                            <label class="path-toggle-switch" for="${prefix}-3DCameraHole" aria-label="3D Camera Hole">
+                                                <input type="checkbox" id="${prefix}-3DCameraHole" class="path-toggle-input pattr-bool" disabled>
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div class="pattr-bool-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-3DCameraObstacle" onchange="togglePathAttrEditorInput('${prefix}', '3DCameraObstacle')">3D Cam (Wall)</label>
+                                            <label class="path-toggle-switch" for="${prefix}-3DCameraObstacle" aria-label="3D Camera Obstacle">
+                                                <input type="checkbox" id="${prefix}-3DCameraObstacle" class="path-toggle-input pattr-bool" disabled>
+                                                <span class="path-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pattr-group">
+                                    <button type="button" class="pattr-group-hdr" onclick="togglePathAttrEditorGroup('${prefix}', 'safety')">
+                                        <i class="fas fa-user-shield"></i><span>Safety Groups</span>
+                                        <i class="fas fa-chevron-down pattr-chev" id="${prefix}-chev-safety"></i>
+                                    </button>
+                                    <div class="pattr-group-body collapsed" id="${prefix}-body-safety">
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-collisionGroupId" onchange="togglePathAttrEditorInput('${prefix}', 'collisionGroupId')">Collision Grp</label>
+                                            <input type="text" id="${prefix}-collisionGroupId" class="pattr-num" placeholder="ID" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-forbidLaserGroupId" onchange="togglePathAttrEditorInput('${prefix}', 'forbidLaserGroupId')">Forbid Laser Grp</label>
+                                            <input type="text" id="${prefix}-forbidLaserGroupId" class="pattr-num" placeholder="ID" disabled>
+                                        </div>
+                                        <div class="pattr-row">
+                                            <label class="pattr-lbl"><input type="checkbox" id="${prefix}-en-forbidDNodeGroupId" onchange="togglePathAttrEditorInput('${prefix}', 'forbidDNodeGroupId')">Forbid Node Grp</label>
+                                            <input type="text" id="${prefix}-forbidDNodeGroupId" class="pattr-num" placeholder="ID" disabled>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="${prefix}-save" class="property-action-btn primary" style="margin-top:8px;width:100%;font-size:10px;">
+                                    <i class="fas fa-save"></i> ${saveLabel}
+                                </button>
+                            </div>
+                        `;
+                    }
 
                     function pattrToggle(chkEl) {
                         const attrId = chkEl.id.replace(/^en-/, '');
