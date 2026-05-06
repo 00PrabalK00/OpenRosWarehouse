@@ -653,33 +653,70 @@
 
         /* ── Property row layout for inspector ───────────────────── */
         .prop-row {
-            display: flex; align-items: center; padding: 4px 10px;
-            gap: 8px; min-height: 28px; border-bottom: 1px solid rgba(255,255,255,0.03);
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            gap: 10px;
+            min-height: 30px;
+            border-bottom: 1px solid var(--border-chrome);
+            background: rgba(255, 255, 255, 0.01);
         }
-        .prop-row:last-child { border-bottom: none; }
+        .prop-row:last-child {
+            border-bottom: none;
+        }
         .prop-lbl {
-            flex: 0 0 90px; font-size: 10px; color: var(--text-field-label);
-            text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            flex: 0 0 100px;
+            font-size: 10px;
+            color: var(--text-field-label);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .prop-val {
-            flex: 1; font-size: 11px; color: var(--text-field-value);
-            font-family: 'Roboto Mono', monospace; overflow: hidden; text-overflow: ellipsis;
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-field-value);
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-all;
         }
         .prop-val-input {
-            flex: 1; font-size: 11px; color: var(--text-primary); background: var(--bg-tertiary);
-            border: 1px solid var(--border-chrome); border-radius: 3px; padding: 2px 6px;
-            font-family: 'Roboto Mono', monospace; width: 100%;
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-family: 'Roboto Mono', monospace;
+            width: 100%;
+            transition: border-color 0.15s;
         }
-        .prop-val-input:focus { border-color: var(--selected-blue); outline: none; }
+        .prop-val-input:focus {
+            outline: none;
+            border-color: var(--selected-blue);
+        }
         .prop-section {
-            padding: 5px 10px 3px; background: var(--bg-elevated);
+            padding: 6px 12px 5px;
+            background: var(--bg-chrome);
             border-bottom: 1px solid var(--border-chrome);
-            font-size: 9px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: 0.06em; color: var(--text-secondary);
-            position: sticky; top: 0; z-index: 2;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+            position: sticky;
+            top: 0;
+            z-index: 2;
         }
-        .prop-section-body { padding: 4px 0 6px; }
+        .prop-section-body {
+            padding: 2px 0 8px;
+            background: var(--bg-inspector);
+        }
 
         /* ── Selected objects on canvas ──────────────────────────── */
         /* Zone rendering refinements via CSS (canvas is drawn in JS) */
@@ -876,6 +913,29 @@
             background: rgba(196, 43, 43, 0.24) !important;
             border-color: #f87171 !important;
         }
+
+        /* ── Tag Styles ───────────────────────────────────────── */
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            line-height: 1.2;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .tag-blue   { background: rgba(66, 153, 225, 0.15); border-color: rgba(66, 153, 225, 0.3); color: #60a5fa; }
+        .tag-green  { background: rgba(72, 187, 120, 0.15); border-color: rgba(72, 187, 120, 0.3); color: #68d391; }
+        .tag-amber  { background: rgba(237, 137, 54, 0.15); border-color: rgba(237, 137, 54, 0.3); color: #ed8936; }
+        .tag-red    { background: rgba(229, 62, 62, 0.15);  border-color: rgba(229, 62, 62, 0.3);  color: #f87171; }
+        .tag-purple { background: rgba(159, 122, 234, 0.15); border-color: rgba(159, 122, 234, 0.3); color: #a78bfa; }
+        .tag-teal   { background: rgba(20, 184, 166, 0.15);  border-color: rgba(20, 184, 166, 0.3);  color: #2dd4bf; }
+        .tag-gray   { background: rgba(148, 163, 184, 0.15); border-color: rgba(148, 163, 184, 0.3); color: #94a3b8; }
 
         /* ── Settings + Editor Tab v2 ──────────────────────────────── */
         #settings-tab.active { background: var(--bg-canvas) !important; display: flex !important; flex-direction: column !important; overflow: hidden !important; }
@@ -10023,17 +10083,17 @@
         #properties-panel {
             position: fixed;
             right: 0;
-            top: 60px;
-            bottom: 0;
-            width: 300px;
-            background: var(--bg-panel);
-            border-left: 1px solid var(--border-heavy);
+            top: calc(var(--global-header-height) + 40px);
+            bottom: var(--shell-status-bar-height);
+            width: var(--sidebar-width);
+            background: var(--bg-inspector);
+            border-left: 1px solid var(--border-chrome);
             padding: 0;
-            overflow-y: auto;
+            overflow-y: hidden;
             transform: translateX(100%);
-            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
+            transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 1000;
-            box-shadow: -3px 0 16px rgba(0,0,0,0.35);
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
             display: flex;
             flex-direction: column;
         }
@@ -10045,9 +10105,10 @@
         .properties-header {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 8px 10px 7px;
-            background: var(--bg-elevated);
+            gap: 8px;
+            padding: 0 12px;
+            height: 36px;
+            background: var(--bg-chrome);
             border-bottom: 1px solid var(--border-chrome);
             flex-shrink: 0;
             position: sticky;
@@ -10057,37 +10118,50 @@
 
         .properties-title {
             flex: 1;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.08em;
         }
 
         .properties-close-btn {
-            background: none;
+            background: transparent;
             border: none;
             color: var(--text-tertiary);
-            font-size: 14px;
+            font-size: 18px;
             cursor: pointer;
-            padding: 2px 5px;
-            border-radius: 3px;
+            padding: 4px;
+            border-radius: 4px;
             line-height: 1;
-            transition: color 0.15s, background 0.15s;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .properties-close-btn:hover {
-            color: var(--accent-danger);
-            background: rgba(239,68,68,0.12);
+            color: var(--accent-critical);
+            background: rgba(229, 62, 62, 0.12);
         }
 
         #properties-content {
             flex: 1;
             overflow-y: auto;
+            background: var(--bg-inspector);
+        }
+
+        #properties-content::-webkit-scrollbar {
+            width: 4px;
+        }
+        #properties-content::-webkit-scrollbar-thumb {
+            background: var(--border-chrome);
+            border-radius: 2px;
         }
 
         .property-group {
-            border-bottom: 1px solid rgba(255,255,255,0.04);
+            border-bottom: 1px solid var(--border-chrome);
+            background: rgba(255, 255, 255, 0.01);
         }
 
         .property-group:last-of-type {
@@ -10098,162 +10172,208 @@
             font-size: 9px;
             color: var(--text-field-label);
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 600;
-            padding: 5px 10px 1px;
-            opacity: 0.75;
+            letter-spacing: 0.06em;
+            font-weight: 700;
+            padding: 8px 12px 2px;
         }
 
         .property-value {
             font-size: 11px;
             color: var(--text-primary);
-            padding: 2px 10px 5px;
-            font-family: 'Roboto Mono', 'Courier New', monospace;
-            line-height: 1.45;
-            word-break: break-word;
+            padding: 2px 12px 10px;
+            font-family: 'Roboto Mono', monospace;
+            line-height: 1.5;
+            word-break: break-all;
         }
 
         .property-value code {
-            color: var(--accent-blue, #60a5fa);
+            color: var(--accent-blue);
             font-weight: 600;
             font-size: 11px;
         }
 
-        .property-value select {
+        .property-value select,
+        .property-value input[type="text"],
+        .property-value input[type="number"] {
             width: 100%;
             background: var(--bg-tertiary);
             border: 1px solid var(--border-primary);
-            border-radius: 3px;
+            border-radius: 4px;
             color: var(--text-primary);
             font-size: 11px;
-            padding: 3px 6px;
-            margin-top: 2px;
+            padding: 5px 8px;
+            margin-top: 4px;
+            font-family: 'Roboto Mono', monospace;
+            transition: border-color 0.15s;
+        }
+
+        .property-value select:focus,
+        .property-value input:focus {
+            outline: none;
+            border-color: var(--selected-blue);
         }
 
         .property-actions {
             display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            padding: 8px 10px 10px;
+            flex-direction: column;
+            gap: 6px;
+            padding: 12px;
+            background: var(--bg-chrome);
             border-top: 1px solid var(--border-chrome);
-            margin-top: 4px;
+            margin-top: auto;
         }
 
         .property-action-btn {
-            flex: 1 1 auto;
-            min-width: 0;
-            padding: 5px 8px;
-            border: none;
+            width: 100%;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 12px;
             border-radius: 4px;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
             cursor: pointer;
-            transition: opacity 0.15s, transform 0.1s;
+            transition: all 0.15s;
             text-transform: uppercase;
             letter-spacing: 0.04em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-align: center;
+            border: 1px solid var(--border-primary);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
         }
 
-        .property-action-btn:active { transform: scale(0.97); }
+        .property-action-btn:hover {
+            background: var(--bg-panel);
+            border-color: var(--border-secondary);
+        }
 
         .property-action-btn.primary {
-            background: var(--accent-normal, #2563eb);
-            color: #fff;
+            background: var(--selected-blue-dim) !important;
+            border-color: var(--selected-blue) !important;
+            color: var(--accent-blue) !important;
+            border-width: 1px !important;
         }
-
         .property-action-btn.primary:hover {
-            background: #3b8dd9;
+            background: rgba(38, 105, 200, 0.24) !important;
+            border-color: #60a5fa !important;
         }
 
         .property-action-btn.danger {
-            background: var(--accent-danger);
-            color: white;
+            background: rgba(196, 43, 43, 0.14) !important;
+            border-color: rgba(196, 43, 43, 0.45) !important;
+            color: #fc8181 !important;
         }
-
         .property-action-btn.danger:hover {
-            background: #dc2626;
+            background: rgba(196, 43, 43, 0.24) !important;
+            border-color: #f87171 !important;
         }
 
         /* Zone List Overlay - for zones edit mode */
         #zone-list-overlay {
             position: fixed;
-            right: 20px;
-            top: 80px;
-            width: 300px;
-            max-height: calc(100vh - 120px);
-            background: var(--bg-panel);
-            border: 2px solid var(--border-heavy);
-            border-radius: 8px;
-            padding: 16px;
-            overflow-y: auto;
+            right: calc(var(--sidebar-width) + 20px);
+            top: calc(var(--global-header-height) + 40px);
+            width: 280px;
+            max-height: calc(100vh - 200px);
+            background: var(--bg-inspector);
+            border: 1px solid var(--border-chrome);
+            border-radius: 6px;
+            padding: 0;
+            overflow-y: hidden;
             display: none;
+            flex-direction: column;
             z-index: 999;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }
 
         #zone-list-overlay.show {
-            display: block;
+            display: flex;
         }
 
         .zone-list-overlay-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--border-primary);
+            padding: 0 12px;
+            height: 36px;
+            background: var(--bg-chrome);
+            border-bottom: 1px solid var(--border-chrome);
+            flex-shrink: 0;
         }
 
         .zone-list-overlay-title {
-            font-size: 14px;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            color: var(--text-primary);
-            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            letter-spacing: 0.08em;
         }
 
         .zone-list-overlay-close {
-            background: none;
+            background: transparent;
             border: none;
-            color: var(--text-secondary);
+            color: var(--text-tertiary);
             font-size: 18px;
             cursor: pointer;
             padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
         }
 
         .zone-list-overlay-close:hover {
-            color: var(--accent-danger);
+            color: var(--accent-critical);
+            background: rgba(229, 62, 62, 0.12);
+        }
+
+        #zone-list-overlay-content {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        #zone-list-overlay-content::-webkit-scrollbar {
+            width: 4px;
+        }
+        #zone-list-overlay-content::-webkit-scrollbar-thumb {
+            background: var(--border-chrome);
+            border-radius: 2px;
         }
 
         .zone-list-overlay-item {
             padding: 10px 12px;
-            background: var(--bg-tertiary);
+            background: var(--bg-secondary);
             border: 1px solid var(--border-primary);
-            border-radius: 6px;
+            border-radius: 4px;
             margin-bottom: 8px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
 
         .zone-list-overlay-item:hover {
-            border-color: var(--accent-normal);
-            background: var(--bg-secondary);
+            border-color: var(--selected-blue);
+            background: var(--bg-elevated);
+            transform: translateX(2px);
         }
 
         .zone-list-overlay-item-name {
-            font-size: 13px;
-            font-weight: 600;
+            font-size: 12px;
+            font-weight: 700;
             color: var(--text-primary);
             margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .zone-list-overlay-item-coords {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-tertiary);
             font-family: 'Roboto Mono', monospace;
+            opacity: 0.8;
         }
 
         /* Hide default Google Translate chrome; keep translation engine only. */
@@ -29801,7 +29921,7 @@
                             setMapSelection('', '');
                         }
 
-                        title.textContent = elementType === 'zone' ? 'Zone' : elementType === 'path' ? 'Path' : elementType === 'filter' ? 'Filter Rule' : 'Properties';
+                        title.textContent = elementType === 'zone' ? 'Zone Details' : elementType === 'path' ? 'Path Details' : elementType === 'filter' ? 'Filter Rules' : 'Properties';
 
                         let html = '';
 
@@ -29817,9 +29937,6 @@
                                 settings?.loop_mode ? 'ping_pong' : 'none'
                             );
                             const segmentCount = getPathSegmentCount(pathPoints.length, loopType);
-                            const curvedSegments = Array.isArray(settings?.curved_segments)
-                                ? settings.curved_segments.length
-                                : 0;
                             const pathLengthMeters = source === 'current'
                                 ? calculateCurrentPathLengthMeters()
                                 : (Number.isFinite(providedMetricLength)
@@ -29838,75 +29955,70 @@
                                 : null;
 
                             const safePathName = escapeHtml(String(elementName || 'Path'));
-                            const safeStart = escapeHtml(startSummary);
-                            const safeEnd = escapeHtml(endSummary);
 
                             html = `
                                 <div class="property-group">
-                                    <div class="property-label">Path Name</div>
+                                    <div class="property-label"><i class="fas fa-file-signature"></i>Path Name</div>
                                     <div class="property-value"><code>${safePathName}</code></div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Source</div>
-                                    <div class="property-value">${source === 'current' ? 'Current editor path' : 'Saved path'}</div>
+                                    <div class="property-label"><i class="fas fa-database"></i>Source</div>
+                                    <div class="property-value">
+                                        <span class="tag ${source === 'current' ? 'tag-purple' : 'tag-blue'}">${source === 'current' ? 'Active Editor' : 'Saved Database'}</span>
+                                    </div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Waypoints</div>
-                                    <div class="property-value">${pathPoints.length}</div>
+                                    <div class="property-label"><i class="fas fa-route"></i>Metrics</div>
+                                    <div class="property-value">
+                                        <div style="display:flex;gap:12px;">
+                                            <div><span style="color:var(--text-tertiary);font-size:9px;">LEN:</span> ${formatPathLengthMeters(pathLengthMeters)}</div>
+                                            <div><span style="color:var(--text-tertiary);font-size:9px;">SEG:</span> ${segmentCount}</div>
+                                            <div><span style="color:var(--text-tertiary);font-size:9px;">WPT:</span> ${pathPoints.length}</div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Segments</div>
-                                    <div class="property-value">${segmentCount}</div>
+                                    <div class="property-label"><i class="fas fa-repeat"></i>Loop & Curve</div>
+                                    <div class="property-value">
+                                        ${getPathLoopLabel(loopType)} · ${(Array.isArray(settings?.curved_segments) ? settings.curved_segments.length : 0)} Curved
+                                    </div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Length</div>
-                                    <div class="property-value">${formatPathLengthMeters(pathLengthMeters)}</div>
-                                </div>
-                                <div class="property-group">
-                                    <div class="property-label">Loop Type</div>
-                                    <div class="property-value">${getPathLoopLabel(loopType)}</div>
-                                </div>
-                                <div class="property-group">
-                                    <div class="property-label">Curved Segments</div>
-                                    <div class="property-value">${curvedSegments}</div>
-                                </div>
-                                <div class="property-group">
-                                    <div class="property-label">Direction</div>
+                                    <div class="property-label"><i class="fas fa-arrows-left-right"></i>Directionality</div>
                                     <div class="property-value">${getPathDirectionLabel(settings?.direction || 'uni')}</div>
                                 </div>
                                 ${source !== 'current' ? `
                                 <div class="property-group">
-                                    <div class="property-label">Edit Direction</div>
+                                    <div class="property-label"><i class="fas fa-edit"></i>Override Direction</div>
                                     <div class="property-value">
-                                        <select class="prop-direction-sel" id="path-prop-direction-sel">
+                                        <select id="path-prop-direction-sel">
                                             <option value="uni"${(settings?.direction||'uni')==='uni'?' selected':''}>&#8594; Unidirectional</option>
                                             <option value="bi"${settings?.direction==='bi'?' selected':''}>&#8644; Bidirectional</option>
                                             <option value="reverse"${settings?.direction==='reverse'?' selected':''}>&#8592; Reverse</option>
                                         </select>
-                                        <button id="path-prop-save-direction" class="property-action-btn primary" style="margin-top:6px;width:100%;font-size:10px;"><i class="fas fa-save"></i> Save Direction</button>
+                                        <button id="path-prop-save-direction" class="property-action-btn primary" style="margin-top:8px;"><i class="fas fa-save"></i> Save Direction</button>
                                     </div>
                                 </div>
                                 ` : ''}
                                 <div class="property-group">
-                                    <div class="property-label">Start</div>
-                                    <div class="property-value">${safeStart}</div>
-                                </div>
-                                <div class="property-group">
-                                    <div class="property-label">End</div>
-                                    <div class="property-value">${safeEnd}</div>
+                                    <div class="property-label"><i class="fas fa-flag-checkered"></i>Endpoints</div>
+                                    <div class="property-value">
+                                        <div style="margin-bottom:2px;"><span style="color:var(--text-tertiary);font-size:9px;">START:</span> ${escapeHtml(startSummary)}</div>
+                                        <div><span style="color:var(--text-tertiary);font-size:9px;">END:</span> ${escapeHtml(endSummary)}</div>
+                                    </div>
                                 </div>
                                 ${selectedSegmentLabel ? `
                                 <div class="property-group">
-                                    <div class="property-label">Selected Segment</div>
+                                    <div class="property-label"><i class="fas fa-vector-square"></i>Selected Segment</div>
                                     <div class="property-value">
-                                        <strong>${escapeHtml(selectedSegmentLabel)}</strong>
+                                        <span class="tag tag-purple" style="margin-bottom:6px;">${escapeHtml(selectedSegmentLabel)}</span>
                                         ${buildPathAttrEditorSection(
                                             'path-seg-prop',
-                                            'Segment Properties',
+                                            'Segment Overrides',
                                             source === 'current'
-                                                ? 'These segment-wise overrides are applied to the current drawn path and will be included on the next path run.'
-                                                : 'These segment-wise overrides are saved with this path and used whenever this path is run.',
-                                            source === 'current' ? 'Apply Segment Properties' : 'Save Segment Properties'
+                                                ? 'Applied to current path run only.'
+                                                : 'Saved permanently with this path.',
+                                            source === 'current' ? 'Apply to current' : 'Save overrides'
                                         )}
                                     </div>
                                 </div>
@@ -29922,7 +30034,7 @@
                                         <button id="path-prop-load-saved" class="property-action-btn primary"><i class="fas fa-upload"></i> Load</button>
                                         <button id="path-prop-edit-saved" class="property-action-btn primary"><i class="fas fa-pen"></i> Edit</button>
                                         <button id="path-prop-follow-saved" class="property-action-btn primary"><i class="fas fa-play"></i> Follow</button>
-                                        <button id="path-prop-delete-saved" class="property-action-btn danger"><i class="fas fa-trash"></i> Del</button>
+                                        <button id="path-prop-delete-saved" class="property-action-btn danger"><i class="fas fa-trash"></i> Delete</button>
                                     `}
                                 </div>
                             `;
@@ -29931,31 +30043,38 @@
                             const zoneType = resolveZoneType(zone);
                             const visual = getZoneTypeVisual(zoneType);
                             const metadata = (zone.metadata && typeof zone.metadata === 'object') ? zone.metadata : {};
+                            
+                            let tagClass = 'tag-gray';
+                            if (zoneType === 'action') tagClass = 'tag-purple';
+                            if (zoneType === 'charge') tagClass = 'tag-amber';
+                            if (zoneType === 'normal') tagClass = 'tag-blue';
 
                             html = `
                                 <div class="property-group">
-                                    <div class="property-label">Zone Name</div>
+                                    <div class="property-label"><i class="fas fa-map-location-dot"></i>Zone Name</div>
                                     <div class="property-value"><code>${elementName}</code></div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Zone Type</div>
-                                    <div class="property-value" style="background: ${visual.fill}; color: ${visual.textColor || '#fff'}; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.25); padding: 2px 8px; border-radius: 4px;">
-                                        ${zoneType.toUpperCase()}
-                                    </div>
-                                </div>
-                                <div class="property-group">
-                                    <div class="property-label">Position</div>
+                                    <div class="property-label"><i class="fas fa-layer-group"></i>Classification</div>
                                     <div class="property-value">
-                                        x: ${zone.position.x.toFixed(2)}m<br>
-                                        y: ${zone.position.y.toFixed(2)}m
+                                        <span class="tag ${tagClass}">${zoneType}</span>
                                     </div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Heading</div>
-                                    <div class="property-value">${getZoneHeadingDegrees(zone).toFixed(1)}°</div>
+                                    <div class="property-label"><i class="fas fa-crosshairs"></i>Position</div>
+                                    <div class="property-value">
+                                        <div style="display:flex;gap:12px;">
+                                            <div><span style="color:var(--text-tertiary);font-size:9px;">X:</span> ${zone.position.x.toFixed(3)}m</div>
+                                            <div><span style="color:var(--text-tertiary);font-size:9px;">Y:</span> ${zone.position.y.toFixed(3)}m</div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Speed</div>
+                                    <div class="property-label"><i class="fas fa-compass"></i>Heading</div>
+                                    <div class="property-value">${getZoneHeadingDegrees(zone).toFixed(1)}° <span style="color:var(--text-tertiary);font-size:9px;">(Global)</span></div>
+                                </div>
+                                <div class="property-group">
+                                    <div class="property-label"><i class="fas fa-gauge-high"></i>Target Speed</div>
                                     <div class="property-value">${(metadata.speed || zone.speed || 0.5).toFixed(2)} m/s</div>
                                 </div>
                             `;
@@ -29963,7 +30082,7 @@
                             if (zoneType === 'action' && (metadata.action || zone.action)) {
                                 html += `
                                     <div class="property-group">
-                                        <div class="property-label">Action</div>
+                                        <div class="property-label"><i class="fas fa-bolt"></i>Action Script</div>
                                         <div class="property-value"><code>${metadata.action || zone.action}</code></div>
                                     </div>
                                 `;
@@ -29972,34 +30091,37 @@
                             const actionPointConfig = (zone.action_point_config && typeof zone.action_point_config === 'object')
                                 ? zone.action_point_config
                                 : ((metadata.action_point && typeof metadata.action_point === 'object') ? metadata.action_point : null);
+                            
                             if (zoneType === 'action' && actionPointConfig) {
                                 const pointType = String(actionPointConfig.point_type || 'generic').trim().toLowerCase();
                                 const templateSummary = actionPointConfig.template_summary && typeof actionPointConfig.template_summary === 'object'
                                     ? actionPointConfig.template_summary
                                     : null;
                                 const warningText = Array.isArray(actionPointConfig.warnings) && actionPointConfig.warnings.length
-                                    ? `<div style="margin-top:6px;color:#fbbf24;">${escapeHtml(actionPointConfig.warnings.join(' '))}</div>`
+                                    ? `<div style="margin-top:6px;color:var(--accent-critical);font-weight:600;font-size:10px;"><i class="fas fa-warning"></i> ${escapeHtml(actionPointConfig.warnings.join(' '))}</div>`
                                     : '';
                                 html += `
                                     <div class="property-group">
-                                        <div class="property-label">Point Type</div>
-                                        <div class="property-value">${escapeHtml(pointType || 'generic')}</div>
+                                        <div class="property-label"><i class="fas fa-plug-circle-bolt"></i>Point Sub-type</div>
+                                        <div class="property-value"><span class="tag tag-teal">${pointType}</span></div>
                                     </div>
                                 `;
                                 if (pointType === 'shelf') {
                                     html += `
                                         <div class="property-group">
-                                            <div class="property-label">Linked Shelf Template</div>
+                                            <div class="property-label"><i class="fas fa-box-archive"></i>Shelf Template</div>
                                             <div class="property-value">
                                                 ${templateSummary
-                                                    ? `<code>${escapeHtml(templateSummary.name || templateSummary.template_id || 'Template')}</code><br><span style="color:var(--text-tertiary);">${escapeHtml(templateSummary.geometry_type || 'profile')} · v${Number(templateSummary.version || 1)} · ${escapeHtml(templateSummary.status || 'draft')}</span>`
-                                                    : '<span style="color:#fca5a5;">Missing template</span>'}
+                                                    ? `<code>${escapeHtml(templateSummary.name || templateSummary.template_id || 'Template')}</code><br><span style="color:var(--text-tertiary);font-size:10px;">v${Number(templateSummary.version || 1)} · ${escapeHtml(templateSummary.status || 'draft')}</span>`
+                                                    : '<span class="tag tag-red">Missing Template</span>'}
                                                 ${warningText}
                                             </div>
                                         </div>
                                         <div class="property-group">
-                                            <div class="property-label">Shelf Detection</div>
-                                            <div class="property-value">${actionPointConfig.recognize ? 'On' : 'Off'}</div>
+                                            <div class="property-label"><i class="fas fa-eye"></i>Auto Recognition</div>
+                                            <div class="property-value">
+                                                <span class="tag ${actionPointConfig.recognize ? 'tag-green' : 'tag-gray'}">${actionPointConfig.recognize ? 'ENABLED' : 'DISABLED'}</span>
+                                            </div>
                                         </div>
                                     `;
                                     const prePoint = actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object' ? actionPointConfig.pre_point : null;
@@ -30007,11 +30129,13 @@
                                         const ppThetaDeg = Number.isFinite(Number(prePoint.theta)) ? (Number(prePoint.theta) * 180 / Math.PI).toFixed(1) : '0.0';
                                         html += `
                                         <div class="property-group">
-                                            <div class="property-label"><i class="fas fa-map-pin" style="color:#3b82f6;margin-right:3px;"></i>Pre Point</div>
+                                            <div class="property-label"><i class="fas fa-map-pin"></i>Docking Pre-point</div>
                                             <div class="property-value">
-                                                x: ${Number(prePoint.x || 0).toFixed(3)}m<br>
-                                                y: ${Number(prePoint.y || 0).toFixed(3)}m<br>
-                                                <span style="color:var(--text-tertiary);font-size:10px;">${ppThetaDeg}° · Path → <strong>Pre Point</strong> → Shelf</span>
+                                                <div style="display:flex;gap:12px;margin-bottom:2px;">
+                                                    <div><span style="color:var(--text-tertiary);font-size:9px;">X:</span> ${Number(prePoint.x || 0).toFixed(3)}m</div>
+                                                    <div><span style="color:var(--text-tertiary);font-size:9px;">Y:</span> ${Number(prePoint.y || 0).toFixed(3)}m</div>
+                                                </div>
+                                                <div style="color:var(--text-tertiary);font-size:10px;">${ppThetaDeg}° Heading · <span style="color:var(--accent-success);">Verified</span></div>
                                             </div>
                                         </div>
                                     `;}
@@ -30021,7 +30145,7 @@
                             if ((metadata.charge_duration || zone.charge_duration)) {
                                 html += `
                                     <div class="property-group">
-                                        <div class="property-label">Stop Timer</div>
+                                        <div class="property-label"><i class="fas fa-hourglass-half"></i>Dwell Timer</div>
                                         <div class="property-value">${metadata.charge_duration || zone.charge_duration} seconds</div>
                                     </div>
                                 `;
@@ -30030,41 +30154,50 @@
                             html += `
                                 <div class="property-actions">
                                     <button class="property-action-btn primary" onclick="editZoneParameters('${elementName}', zones['${elementName}'])">
-                                        <i class="fas fa-edit"></i> Edit
+                                        <i class="fas fa-edit"></i> Parameters
                                     </button>
-                                    <button class="property-action-btn primary" onclick="goToZone('${elementName}'); closePropertiesPanel();">
-                                        <i class="fas fa-crosshairs"></i> Go
-                                    </button>
-                                    <button class="property-action-btn primary" onclick="addZoneToCurrentPath('${elementName}'); closePropertiesPanel();">
-                                        <i class="fas fa-route"></i> To Path
-                                    </button>
+                                    <div style="display:flex;gap:6px;">
+                                        <button class="property-action-btn primary" onclick="goToZone('${elementName}'); closePropertiesPanel();">
+                                            <i class="fas fa-crosshairs"></i> Navigate
+                                        </button>
+                                        <button class="property-action-btn primary" onclick="addZoneToCurrentPath('${elementName}'); closePropertiesPanel();">
+                                            <i class="fas fa-plus"></i> Add to Path
+                                        </button>
+                                    </div>
                                     <button class="property-action-btn danger" onclick="if(confirm('Delete zone ${elementName}?')) { deleteZone('${elementName}'); closePropertiesPanel(); }">
-                                        <i class="fas fa-trash"></i> Del
+                                        <i class="fas fa-trash"></i> Remove Zone
                                     </button>
                                 </div>
                             `;
                         }   else if (elementType === 'filter') {
                             const filter = elementData;
                             const layerMeta = FILTER_LAYER_META[filter.layer] || { label: 'Unknown', color: '#888' };
+                            
+                            let tagClass = 'tag-gray';
+                            if (filter.layer === 'no_go_zones') tagClass = 'tag-red';
+                            if (filter.layer === 'restricted') tagClass = 'tag-amber';
+                            if (filter.layer === 'slow_zones') tagClass = 'tag-blue';
 
                             html = `
                                 <div class="property-group">
-                                    <div class="property-label">Filter Type</div>
-                                    <div class="property-value" style="background: ${layerMeta.fill}; color: ${layerMeta.color}; font-weight: 600;">
-                                        ${layerMeta.label.toUpperCase()}
+                                    <div class="property-label"><i class="fas fa-filter"></i>Constraint Type</div>
+                                    <div class="property-value">
+                                        <span class="tag ${tagClass}">${layerMeta.label}</span>
                                     </div>
                                 </div>
                                 <div class="property-group">
-                                    <div class="property-label">Shape</div>
-                                    <div class="property-value">${filter.shape || 'Unknown'}</div>
+                                    <div class="property-label"><i class="fas fa-shapes"></i>Geometry</div>
+                                    <div class="property-value">
+                                        <span class="tag tag-gray">${filter.shape || 'polygon'}</span>
+                                    </div>
                                 </div>
                             `;
 
                             if (filter.layer === 'slow_zones' && filter.speed !== undefined) {
                                 html += `
                                     <div class="property-group">
-                                        <div class="property-label">Speed Limit</div>
-                                        <div class="property-value">${filter.speed}%</div>
+                                        <div class="property-label"><i class="fas fa-gauge-high"></i>Velocity Limit</div>
+                                        <div class="property-value">${filter.speed}% of max</div>
                                     </div>
                                 `;
                             }
