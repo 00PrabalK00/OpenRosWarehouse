@@ -67,6 +67,7 @@ from next_ros2ws_interfaces.srv import (
     SaveZone,
     SetActiveMap,
     SetControlMode,
+    SetMaxSpeed,
     SetStackMode,
     StartSequence,
     StopSequence,
@@ -11202,6 +11203,7 @@ class RosBridge(Node):
             'controller_server/ros__parameters/FollowPath/min_tracking_speed': ('controller_server', 'FollowPath.min_tracking_speed'),
             'controller_server/ros__parameters/FollowPath/acc_lim_v': ('controller_server', 'FollowPath.acc_lim_v'),
             'controller_server/ros__parameters/FollowPath/acc_lim_w': ('controller_server', 'FollowPath.acc_lim_w'),
+            'controller_server/ros__parameters/FollowPath/decel_lim_v': ('controller_server', 'FollowPath.decel_lim_v'),
             'controller_server/ros__parameters/FollowPath/rpp_desired_linear_vel': ('controller_server', 'FollowPath.rpp_desired_linear_vel'),
             'amcl/ros__parameters/scan_topic': ('amcl', 'scan_topic'),
             'local_costmap/local_costmap/ros__parameters/voxel_layer/scan/topic': ('local_costmap', 'voxel_layer.scan.topic'),
@@ -11229,9 +11231,340 @@ class RosBridge(Node):
         )
         return nodes
 
+    @staticmethod
+    def _coerce_effective_positive(values: List[Any], fallback: float) -> float:
+        candidates: List[float] = []
+        for raw_value in values:
+            try:
+                value = float(raw_value)
+            except Exception:
+                continue
+            if not math.isfinite(value) or value <= 0.0:
+                continue
+            candidates.append(value)
+        if not candidates:
+            return float(fallback)
+        return float(min(candidates))
+
+    @staticmethod
+    def _coerce_effective_min_floor(values: List[Any], fallback: float) -> float:
+        candidates: List[float] = []
+        for raw_value in values:
+            try:
+                value = float(raw_value)
+            except Exception:
+                continue
+            if not math.isfinite(value):
+                continue
+            candidates.append(value)
+        if not candidates:
+            return float(fallback)
+        return float(max(candidates))
+
+    def _load_robot_yaml_selected_node_params(self, node_names: List[str]) -> Dict[str, Any]:
+        unique_names = [str(name or '').strip() for name in node_names if str(name or '').strip()]
+        path = self._resolve_robot_yaml_path()
+        if not path or not os.path.exists(path):
+            return self._ok(False, f'robot.yaml not found at "{path}"', source_path=path, nodes={})
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                payload = yaml.safe_load(f) or {}
+        except Exception as exc:
+            return self._ok(False, f'Failed reading robot.yaml: {exc}', source_path=path, nodes={})
+
+        if not isinstance(payload, dict):
+            return self._ok(False, 'robot.yaml did not parse into a mapping', source_path=path, nodes={})
+
+        nodes: Dict[str, Dict[str, Any]] = {}
+        for node_name in unique_names:
+            node_block = payload.get(node_name, {})
+            params = node_block.get('ros__parameters', {}) if isinstance(node_block, dict) else {}
+            nodes[node_name] = copy.deepcopy(params) if isinstance(params, dict) else {}
+
+        return self._ok(True, f'Loaded {len(nodes)} node parameter blocks from robot.yaml', source_path=path, nodes=nodes)
+
+    def _save_robot_yaml_node_parameters(self, node_name: str, overrides: Any) -> Dict[str, Any]:
+        clean_node_name = str(node_name or '').strip()
+        payload = overrides if isinstance(overrides, dict) else {}
+        normalized: Dict[str, Any] = {}
+        for raw_key, raw_value in payload.items():
+            key = str(raw_key or '').strip()
+            if not key:
+                continue
+            normalized[key] = raw_value
+
+        path = self._resolve_robot_yaml_path()
+        if not clean_node_name:
+            return self._ok(False, 'node_name is required', source_path=path, params={})
+        if not path or not os.path.exists(path):
+            return self._ok(False, f'robot.yaml not found at "{path}"', source_path=path, params={})
+        if not normalized:
+            selected = self._load_robot_yaml_selected_node_params([clean_node_name])
+            params = selected.get('nodes', {}).get(clean_node_name, {}) if bool(selected.get('ok')) else {}
+            return self._ok(bool(selected.get('ok')), selected.get('message', ''), source_path=path, params=params)
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                original_text = f.read()
+        except Exception as exc:
+            return self._ok(False, f'Failed reading robot.yaml: {exc}', source_path=path, params={})
+
+        lines = original_text.splitlines(True)
+        if not lines:
+            return self._ok(False, 'robot.yaml is empty', source_path=path, params={})
+
+        def _indent(line: str) -> int:
+            return len(line) - len(line.lstrip(' '))
+
+        node_pattern = re.compile(rf'^\s*{re.escape(clean_node_name)}:\s*$')
+        node_idx = -1
+        for idx, line in enumerate(lines):
+            if node_pattern.match(line):
+                node_idx = idx
+                break
+        if node_idx < 0:
+            return self._ok(False, f'Could not find "{clean_node_name}:" in robot.yaml', source_path=path, params={})
+
+        node_indent = _indent(lines[node_idx])
+        block_end = len(lines)
+        for idx in range(node_idx + 1, len(lines)):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if _indent(lines[idx]) <= node_indent:
+                block_end = idx
+                break
+
+        ros_idx = -1
+        for idx in range(node_idx + 1, block_end):
+            if re.match(r'^\s+ros__parameters:\s*$', lines[idx]):
+                ros_idx = idx
+                break
+        if ros_idx < 0:
+            return self._ok(False, f'Could not find "ros__parameters:" under {clean_node_name} in robot.yaml', source_path=path, params={})
+
+        ros_indent = _indent(lines[ros_idx])
+        param_indent = ros_indent + 2
+        params_end = block_end
+        for idx in range(ros_idx + 1, block_end):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if _indent(lines[idx]) <= ros_indent:
+                params_end = idx
+                break
+
+        existing_lines: Dict[str, int] = {}
+        key_pattern = re.compile(rf'^\s{{{param_indent}}}([A-Za-z0-9_.-]+)\s*:\s*(.*?)(\s+#.*)?$')
+        for idx in range(ros_idx + 1, params_end):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            match = key_pattern.match(lines[idx].rstrip('\n'))
+            if match:
+                existing_lines[str(match.group(1) or '').strip()] = idx
+
+        new_lines: List[str] = []
+        for key, value in normalized.items():
+            rendered = self._format_yaml_inline_scalar(value)
+            if key in existing_lines:
+                line_idx = existing_lines[key]
+                existing = lines[line_idx].rstrip('\n')
+                comment_match = key_pattern.match(existing)
+                comment = (comment_match.group(3) or '') if comment_match else ''
+                lines[line_idx] = f'{" " * param_indent}{key}: {rendered}{comment}\n'
+            else:
+                new_lines.append(f'{" " * param_indent}{key}: {rendered}\n')
+
+        if new_lines:
+            insert_at = params_end
+            if insert_at > ros_idx + 1 and lines[insert_at - 1].strip():
+                new_lines.insert(0, '\n')
+            lines[insert_at:insert_at] = new_lines
+
+        updated_text = ''.join(lines)
+        try:
+            parsed = yaml.safe_load(updated_text) or {}
+        except Exception as exc:
+            return self._ok(False, f'Updated robot.yaml is invalid: {exc}', source_path=path, params={})
+
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(updated_text)
+        except Exception as exc:
+            return self._ok(False, f'Failed writing robot.yaml: {exc}', source_path=path, params={})
+
+        node_block = parsed.get(clean_node_name, {}) if isinstance(parsed, dict) else {}
+        params = node_block.get('ros__parameters', {}) if isinstance(node_block, dict) else {}
+        if not isinstance(params, dict):
+            params = {}
+
+        return self._ok(
+            True,
+            f'Updated {len(normalized)} parameter(s) under {clean_node_name} in robot.yaml',
+            source_path=path,
+            params=copy.deepcopy(params),
+        )
+
+    def _apply_runtime_zone_max_speed(self, profile: Dict[str, Any], speed_mps: float) -> Dict[str, Any]:
+        namespace = self._normalize_namespace(profile.get('namespace', '/'))
+        service_name = self._join_namespace(namespace, '/set_max_speed')
+        client = self.create_client(SetMaxSpeed, service_name, callback_group=self.cb_group)
+        try:
+            req = SetMaxSpeed.Request()
+            req.speed = float(speed_mps)
+            response, err = self._call_service(client, req, wait_timeout=0.8, response_timeout=4.0)
+        finally:
+            try:
+                self.destroy_client(client)
+            except Exception:
+                pass
+
+        if err == 'service_not_available':
+            return self._ok(False, f'{service_name} unavailable')
+        if err == 'timeout':
+            return self._ok(False, f'{service_name} timed out')
+        if response is None:
+            return self._ok(False, f'{service_name} failed')
+
+        if not bool(getattr(response, 'ok', False)):
+            return self._ok(False, str(getattr(response, 'message', '') or f'{service_name} rejected speed update'))
+
+        return self._ok(True, str(getattr(response, 'message', '') or f'Applied {speed_mps:.2f} m/s to {service_name}'))
+
     def _extract_nav2_curated_subset(self, nav2_payload: Dict[str, Any], footprint_config: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
         def _get(path: str, default: Any = None) -> Any:
             return self._tree_path_get(nav2_payload, path, default)
+
+        robot_yaml_nodes_payload = self._load_robot_yaml_selected_node_params(
+            ['zone_manager', 'keepout_zone_publisher', 'teleop_node']
+        )
+        robot_yaml_nodes = (
+            robot_yaml_nodes_payload.get('nodes', {})
+            if bool(robot_yaml_nodes_payload.get('ok'))
+            and isinstance(robot_yaml_nodes_payload.get('nodes', {}), dict)
+            else {}
+        )
+        zone_manager_params = (
+            robot_yaml_nodes.get('zone_manager', {})
+            if isinstance(robot_yaml_nodes.get('zone_manager', {}), dict)
+            else {}
+        )
+        keepout_params = (
+            robot_yaml_nodes.get('keepout_zone_publisher', {})
+            if isinstance(robot_yaml_nodes.get('keepout_zone_publisher', {}), dict)
+            else {}
+        )
+        teleop_params = (
+            robot_yaml_nodes.get('teleop_node', {})
+            if isinstance(robot_yaml_nodes.get('teleop_node', {}), dict)
+            else {}
+        )
+        speed_filter_enabled = bool(keepout_params.get('enable_speed_filter', False))
+
+        desired_linear_vel = self._coerce_float(
+            _get(
+                'controller_server/ros__parameters/FollowPath/desired_linear_vel',
+                _get('controller_server/ros__parameters/FollowPath/rpp_desired_linear_vel', 0.55),
+            ),
+            0.55,
+        )
+        rpp_desired_linear_vel = self._coerce_float(
+            _get('controller_server/ros__parameters/FollowPath/rpp_desired_linear_vel', desired_linear_vel),
+            desired_linear_vel,
+        )
+        max_v = self._coerce_float(
+            _get(
+                'controller_server/ros__parameters/FollowPath/max_v',
+                _get('controller_server/ros__parameters/FollowPath/max_vel_x', desired_linear_vel),
+            ),
+            desired_linear_vel,
+        )
+        max_vel_x = self._coerce_float(
+            _get('controller_server/ros__parameters/FollowPath/max_vel_x', max_v),
+            max_v,
+        )
+        max_speed_xy = self._coerce_float(
+            _get('controller_server/ros__parameters/FollowPath/max_speed_xy', max_v),
+            max_v,
+        )
+        zone_default_max_speed = self._coerce_float(
+            zone_manager_params.get('default_max_speed', desired_linear_vel),
+            desired_linear_vel,
+        )
+        keepout_max_speed = self._coerce_float(
+            keepout_params.get('max_speed_mps', max(max_v, max_speed_xy, desired_linear_vel)),
+            max(max_v, max_speed_xy, desired_linear_vel),
+        )
+        teleop_linear_speed = self._coerce_float(
+            teleop_params.get('scale_linear.x', desired_linear_vel),
+            desired_linear_vel,
+        )
+        teleop_linear_turbo_speed = self._coerce_float(
+            teleop_params.get('scale_linear_turbo.x', max(max_v, max_speed_xy, desired_linear_vel)),
+            max(max_v, max_speed_xy, desired_linear_vel),
+        )
+        teleop_turn_speed = self._coerce_float(
+            teleop_params.get('scale_angular.yaw', 1.0),
+            1.0,
+        )
+        teleop_turn_turbo_speed = self._coerce_float(
+            teleop_params.get('scale_angular_turbo.yaw', teleop_turn_speed),
+            teleop_turn_speed,
+        )
+        max_linear_ceiling = self._coerce_effective_positive(
+            [max_vel_x, max_speed_xy, max_v, teleop_linear_turbo_speed] + ([keepout_max_speed] if speed_filter_enabled else []),
+            max(max_vel_x, max_speed_xy, max_v, desired_linear_vel, teleop_linear_turbo_speed),
+        )
+        cruise_speed = self._coerce_effective_positive(
+            [desired_linear_vel, rpp_desired_linear_vel, zone_default_max_speed, teleop_linear_speed, max_linear_ceiling],
+            desired_linear_vel,
+        )
+        max_turn_speed = self._coerce_effective_positive(
+            [
+                _get('controller_server/ros__parameters/FollowPath/max_vel_theta', 1.0),
+                _get('controller_server/ros__parameters/FollowPath/max_w', 1.0),
+                teleop_turn_speed,
+                teleop_turn_turbo_speed,
+            ],
+            1.0,
+        )
+        min_speed_floor = self._coerce_effective_min_floor(
+            [
+                _get('controller_server/ros__parameters/FollowPath/min_speed_xy', 0.0),
+                _get('controller_server/ros__parameters/FollowPath/min_tracking_speed', 0.0),
+            ],
+            0.0,
+        )
+        acc_lim_x = self._coerce_effective_positive(
+            [
+                _get('controller_server/ros__parameters/FollowPath/acc_lim_x', 2.0),
+                _get('controller_server/ros__parameters/FollowPath/acc_lim_v', 2.0),
+            ],
+            2.0,
+        )
+        acc_lim_theta = self._coerce_effective_positive(
+            [
+                _get('controller_server/ros__parameters/FollowPath/acc_lim_theta', 3.0),
+                _get('controller_server/ros__parameters/FollowPath/acc_lim_w', 3.0),
+            ],
+            3.0,
+        )
+        decel_lim_v = self._coerce_effective_positive(
+            [
+                _get('controller_server/ros__parameters/FollowPath/decel_lim_v', None),
+                abs(self._coerce_float(_get('controller_server/ros__parameters/FollowPath/decel_lim_x', -2.0), -2.0)),
+            ],
+            2.0,
+        )
+        decel_lim_theta = self._coerce_float(
+            _get(
+                'controller_server/ros__parameters/FollowPath/decel_lim_theta',
+                -abs(self._coerce_float(_get('controller_server/ros__parameters/FollowPath/acc_lim_w', 3.0), 3.0)),
+            ),
+            -3.0,
+        )
 
         map_frame = str(
             _get('amcl/ros__parameters/global_frame_id', '')
@@ -11272,71 +11605,17 @@ class RosBridge(Node):
                 ),
             },
             'controller_limits': {
-                'max_vel_x': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/max_vel_x',
-                        _get(
-                            'controller_server/ros__parameters/FollowPath/max_v',
-                            _get('controller_server/ros__parameters/FollowPath/desired_linear_vel', 0.55),
-                        ),
-                    ),
-                    0.55,
-                ),
+                'max_vel_x': self._coerce_float(cruise_speed, 0.55),
                 'min_vel_x': self._coerce_float(_get('controller_server/ros__parameters/FollowPath/min_vel_x', 0.0), 0.0),
-                'max_vel_theta': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/max_vel_theta',
-                        _get('controller_server/ros__parameters/FollowPath/max_w', 1.0),
-                    ),
-                    1.0,
-                ),
-                'min_speed_xy': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/min_speed_xy',
-                        _get('controller_server/ros__parameters/FollowPath/min_tracking_speed', 0.0),
-                    ),
-                    0.0,
-                ),
-                'max_speed_xy': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/max_speed_xy',
-                        _get(
-                            'controller_server/ros__parameters/FollowPath/max_v',
-                            _get('controller_server/ros__parameters/FollowPath/desired_linear_vel', 0.55),
-                        ),
-                    ),
-                    0.55,
-                ),
+                'max_vel_theta': self._coerce_float(max_turn_speed, 1.0),
+                'min_speed_xy': self._coerce_float(min_speed_floor, 0.0),
+                'max_speed_xy': self._coerce_float(max(max_linear_ceiling, cruise_speed), 0.55),
             },
             'acceleration_limits': {
-                'acc_lim_x': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/acc_lim_x',
-                        _get('controller_server/ros__parameters/FollowPath/acc_lim_v', 2.0),
-                    ),
-                    2.0,
-                ),
-                'acc_lim_theta': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/acc_lim_theta',
-                        _get('controller_server/ros__parameters/FollowPath/acc_lim_w', 3.0),
-                    ),
-                    3.0,
-                ),
-                'decel_lim_x': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/decel_lim_x',
-                        -abs(self._coerce_float(_get('controller_server/ros__parameters/FollowPath/acc_lim_v', 2.0), 2.0)),
-                    ),
-                    -2.0,
-                ),
-                'decel_lim_theta': self._coerce_float(
-                    _get(
-                        'controller_server/ros__parameters/FollowPath/decel_lim_theta',
-                        -abs(self._coerce_float(_get('controller_server/ros__parameters/FollowPath/acc_lim_w', 3.0), 3.0)),
-                    ),
-                    -3.0,
-                ),
+                'acc_lim_x': self._coerce_float(acc_lim_x, 2.0),
+                'acc_lim_theta': self._coerce_float(acc_lim_theta, 3.0),
+                'decel_lim_x': -abs(self._coerce_float(decel_lim_v, 2.0)),
+                'decel_lim_theta': self._coerce_float(decel_lim_theta, -3.0),
             },
             'sensor_topics': {
                 'scan_topic': scan_topic,
@@ -11349,12 +11628,25 @@ class RosBridge(Node):
                 'odom_frame': odom_frame,
                 'base_frame': base_frame,
             },
+            'runtime_sync': {
+                'zone_default_max_speed': self._coerce_float(zone_default_max_speed, cruise_speed),
+                'speed_filter_enabled': speed_filter_enabled,
+                'keepout_max_speed_mps': self._coerce_float(keepout_max_speed, max_linear_ceiling),
+                'teleop_linear_speed': self._coerce_float(teleop_linear_speed, cruise_speed),
+                'teleop_linear_turbo_speed': self._coerce_float(
+                    teleop_linear_turbo_speed,
+                    max(max_linear_ceiling, cruise_speed),
+                ),
+                'teleop_turn_speed': self._coerce_float(teleop_turn_speed, max_turn_speed),
+                'teleop_turn_turbo_speed': self._coerce_float(teleop_turn_turbo_speed, max_turn_speed),
+            },
         }
         return curated
 
-    def _curated_subset_to_path_updates(self, curated: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def _curated_subset_to_path_updates(self, curated: Any) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Dict[str, Any]]]:
         updates: Dict[str, Any] = {}
         footprint_payload: Dict[str, Any] = {}
+        robot_yaml_updates: Dict[str, Dict[str, Any]] = {}
         source = curated if isinstance(curated, dict) else {}
 
         footprint = source.get('footprint', {}) if isinstance(source.get('footprint', {}), dict) else {}
@@ -11373,18 +11665,40 @@ class RosBridge(Node):
             updates['global_costmap/global_costmap/ros__parameters/inflation_layer/inflation_radius'] = self._coerce_float(inflation.get('global_radius', 1.0), 1.0)
 
         controller = source.get('controller_limits', {}) if isinstance(source.get('controller_limits', {}), dict) else {}
-        for key in ('max_vel_x', 'min_vel_x', 'max_vel_theta', 'min_speed_xy', 'max_speed_xy'):
-            if key in controller:
-                value = self._coerce_float(controller.get(key, 0.0), 0.0)
-                updates[f'controller_server/ros__parameters/FollowPath/{key}'] = value
-                if key in ('max_vel_x', 'max_speed_xy'):
-                    updates['controller_server/ros__parameters/FollowPath/max_v'] = value
-                    updates['controller_server/ros__parameters/FollowPath/rpp_desired_linear_vel'] = value
-                    updates['controller_server/ros__parameters/FollowPath/desired_linear_vel'] = value
-                elif key == 'max_vel_theta':
-                    updates['controller_server/ros__parameters/FollowPath/max_w'] = value
-                elif key == 'min_speed_xy':
-                    updates['controller_server/ros__parameters/FollowPath/min_tracking_speed'] = value
+        runtime_sync = source.get('runtime_sync', {}) if isinstance(source.get('runtime_sync', {}), dict) else {}
+        cruise_speed = self._coerce_float(
+            controller.get('max_vel_x', runtime_sync.get('zone_default_max_speed', 0.55)),
+            0.55,
+        )
+        max_speed_xy = self._coerce_float(
+            controller.get('max_speed_xy', max(cruise_speed, runtime_sync.get('keepout_max_speed_mps', cruise_speed))),
+            max(cruise_speed, runtime_sync.get('keepout_max_speed_mps', cruise_speed)),
+        )
+        max_linear_ceiling = max(cruise_speed, max_speed_xy)
+        if 'max_vel_x' in controller or 'max_speed_xy' in controller:
+            updates['controller_server/ros__parameters/FollowPath/max_vel_x'] = max_linear_ceiling
+            updates['controller_server/ros__parameters/FollowPath/max_speed_xy'] = max_linear_ceiling
+            updates['controller_server/ros__parameters/FollowPath/max_v'] = max_linear_ceiling
+            updates['controller_server/ros__parameters/FollowPath/rpp_desired_linear_vel'] = cruise_speed
+            updates['controller_server/ros__parameters/FollowPath/desired_linear_vel'] = cruise_speed
+
+            robot_yaml_updates.setdefault('zone_manager', {})['default_max_speed'] = cruise_speed
+            robot_yaml_updates.setdefault('keepout_zone_publisher', {})['max_speed_mps'] = max_linear_ceiling
+            robot_yaml_updates.setdefault('teleop_node', {})['scale_linear.x'] = cruise_speed
+            robot_yaml_updates.setdefault('teleop_node', {})['scale_linear_turbo.x'] = max_linear_ceiling
+
+        if 'min_vel_x' in controller:
+            updates['controller_server/ros__parameters/FollowPath/min_vel_x'] = self._coerce_float(controller.get('min_vel_x', 0.0), 0.0)
+        if 'max_vel_theta' in controller:
+            turn_speed = self._coerce_float(controller.get('max_vel_theta', 1.0), 1.0)
+            updates['controller_server/ros__parameters/FollowPath/max_vel_theta'] = turn_speed
+            updates['controller_server/ros__parameters/FollowPath/max_w'] = turn_speed
+            robot_yaml_updates.setdefault('teleop_node', {})['scale_angular.yaw'] = turn_speed
+            robot_yaml_updates.setdefault('teleop_node', {})['scale_angular_turbo.yaw'] = turn_speed
+        if 'min_speed_xy' in controller:
+            min_speed = self._coerce_float(controller.get('min_speed_xy', 0.0), 0.0)
+            updates['controller_server/ros__parameters/FollowPath/min_speed_xy'] = min_speed
+            updates['controller_server/ros__parameters/FollowPath/min_tracking_speed'] = min_speed
 
         accel = source.get('acceleration_limits', {}) if isinstance(source.get('acceleration_limits', {}), dict) else {}
         for key in ('acc_lim_x', 'acc_lim_theta', 'decel_lim_x', 'decel_lim_theta'):
@@ -11395,6 +11709,8 @@ class RosBridge(Node):
                     updates['controller_server/ros__parameters/FollowPath/acc_lim_v'] = value
                 elif key == 'acc_lim_theta':
                     updates['controller_server/ros__parameters/FollowPath/acc_lim_w'] = value
+                elif key == 'decel_lim_x':
+                    updates['controller_server/ros__parameters/FollowPath/decel_lim_v'] = abs(value)
 
         topics = source.get('sensor_topics', {}) if isinstance(source.get('sensor_topics', {}), dict) else {}
         scan_topic = str(topics.get('scan_topic', '') or '').strip()
@@ -11427,7 +11743,7 @@ class RosBridge(Node):
             updates['local_costmap/local_costmap/ros__parameters/robot_base_frame'] = base_frame
             updates['global_costmap/global_costmap/ros__parameters/robot_base_frame'] = base_frame
 
-        return updates, footprint_payload
+        return updates, footprint_payload, robot_yaml_updates
 
     @staticmethod
     def _normalize_nav2_advanced_updates(raw: Any) -> Any:
@@ -11537,13 +11853,6 @@ class RosBridge(Node):
 
         curated = self._extract_nav2_curated_subset(nav2_payload, footprint_config, profile)
         profile_nav2_config = self._sanitize_nav2_profile_config(profile.get('nav2_config', {}))
-        curated_draft = (
-            profile_nav2_config.get('curated', {})
-            if isinstance(profile_nav2_config.get('curated', {}), dict)
-            else {}
-        )
-        if curated_draft:
-            curated = copy.deepcopy(curated_draft)
         diff = self._build_tree_diff(nav2_payload, template_payload)
         full_tree = self._flatten_tree_entries(nav2_payload)
         template_tree = self._flatten_tree_entries(template_payload)
@@ -11566,7 +11875,7 @@ class RosBridge(Node):
             nav2_params_file=nav2_params_path,
             template_params_file=template_path,
             curated=curated,
-            curated_source='profile_draft' if curated_draft else 'nav2_yaml',
+            curated_source='nav2_yaml',
             draft_nav2_config=profile_nav2_config,
             full_tree=full_tree,
             template_tree=template_tree,
@@ -11606,7 +11915,7 @@ class RosBridge(Node):
             return self._ok(False, f'Nav2 params file does not exist: {nav2_params_path}')
 
         path_updates: Dict[str, Any] = {}
-        curated_path_updates, curated_footprint = self._curated_subset_to_path_updates(curated_updates)
+        curated_path_updates, curated_footprint, robot_yaml_updates = self._curated_subset_to_path_updates(curated_updates)
         path_updates.update(curated_path_updates)
 
         advanced_raw = advanced_updates
@@ -11633,6 +11942,7 @@ class RosBridge(Node):
         applied_yaml_paths: List[str] = []
         skipped_yaml_paths: List[str] = []
         saved_profile: Optional[Dict[str, Any]] = None
+        robot_yaml_saved_nodes: Dict[str, Any] = {}
 
         if mode in {'offline', 'both'}:
             try:
@@ -11654,6 +11964,12 @@ class RosBridge(Node):
                     yaml.safe_dump(nav2_payload, f, sort_keys=False)
             except Exception as exc:
                 return self._ok(False, f'Failed writing Nav2 params file: {exc}')
+
+            for node_name, overrides in robot_yaml_updates.items():
+                save_result = self._save_robot_yaml_node_parameters(node_name, overrides)
+                robot_yaml_saved_nodes[node_name] = save_result
+                if not bool(save_result.get('ok')):
+                    return self._ok(False, f'Failed saving robot.yaml Nav2 sync for {node_name}: {save_result.get("message", "")}')
 
             profile['nav2_config'] = self._sanitize_nav2_profile_config(
                 {
@@ -11727,6 +12043,32 @@ class RosBridge(Node):
             if needs_costmap_refresh:
                 clear_ok, clear_msg = self._clear_nav2_costmaps()
                 runtime_results['costmap_clear'] = {'ok': bool(clear_ok), 'message': clear_msg}
+
+            zone_manager_speed = (
+                robot_yaml_updates.get('zone_manager', {}).get('default_max_speed')
+                if isinstance(robot_yaml_updates.get('zone_manager', {}), dict)
+                else None
+            )
+            if zone_manager_speed is not None:
+                zone_speed_result = self._apply_runtime_zone_max_speed(profile, float(zone_manager_speed))
+                runtime_results['zone_manager_speed'] = zone_speed_result
+                if not bool(zone_speed_result.get('ok')):
+                    runtime_results['skipped'].append(
+                        {
+                            'path': 'robot.yaml/zone_manager/ros__parameters/default_max_speed',
+                            'reason': 'runtime_apply_failed:zone_manager_speed',
+                        }
+                    )
+
+            for node_name in sorted(robot_yaml_updates.keys()):
+                if node_name == 'zone_manager':
+                    continue
+                runtime_results['skipped'].append(
+                    {
+                        'path': f'robot.yaml/{node_name}/ros__parameters',
+                        'reason': 'restart_required',
+                    }
+                )
 
         runtime_failed_paths: List[str] = []
         if online_enabled:

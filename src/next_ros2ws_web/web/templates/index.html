@@ -744,7 +744,6 @@
         #app-shell[data-mode="map"]      [data-wf-only]:not([data-wf-only~="map"])      { display: none !important; }
         #app-shell[data-mode="diagnose"] [data-wf-only]:not([data-wf-only~="diagnose"]) { display: none !important; }
         /* Active mode rail button styling */
-        #mode-rail .mode-rail-btn[data-wf-mode] { /* base */ }
         #app-shell[data-mode="operate"]  #mode-rail [data-wf-mode="operate"]  { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
         #app-shell[data-mode="navigate"] #mode-rail [data-wf-mode="navigate"] { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
         #app-shell[data-mode="path"]     #mode-rail [data-wf-mode="path"]     { background: var(--selected-blue-dim) !important; color: var(--selected-blue) !important; }
@@ -9449,6 +9448,48 @@
             margin-bottom: 0 !important;
         }
 
+        #params-tab-nav2 .nav2-quick-help {
+            font-size: 10px;
+            color: var(--text-field-label);
+            margin: 0 0 8px 0;
+            line-height: 1.45;
+        }
+
+        #params-tab-nav2 .nav2-quick-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+
+        #params-tab-nav2 .nav2-quick-card {
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 6px;
+            padding: 9px;
+        }
+
+        #params-tab-nav2 .nav2-quick-card.is-primary {
+            border-color: rgba(66, 153, 225, 0.22);
+            background: rgba(66, 153, 225, 0.06);
+        }
+
+        #params-tab-nav2 .nav2-quick-card-title {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        #params-tab-nav2 .nav2-quick-card-note {
+            font-size: 10px;
+            color: var(--text-field-label);
+            margin: 4px 0 0 0;
+            line-height: 1.35;
+        }
+
         #params-tab-nav2 .form-group label {
             display: block;
             margin-bottom: 4px;
@@ -9494,11 +9535,11 @@
         #params-tab-nav2 #nav2-sync-footprint-btn,
         #params-tab-nav2 #nav2-apply-curated-btn,
         #params-tab-nav2 .nav2-editor-actions .btn {
-            min-height: 28px !important;
-            height: 28px !important;
-            padding: 0 10px !important;
+            min-height: 24px !important;
+            height: 24px !important;
+            padding: 0 8px !important;
             border-radius: 4px !important;
-            font-size: 11px !important;
+            font-size: 10px !important;
             font-weight: 700 !important;
             letter-spacing: 0.03em !important;
             box-shadow: none !important;
@@ -23298,7 +23339,8 @@
                             if (!currentMappings || typeof currentMappings !== 'object') {
                                 currentMappings = {};
                             }
-                            const mappingKey = `${ACTION_MAPPING_PREFIX}${normalizedId}`;
+                            const configuredPrefix = getUiTopicValue('ui_action_mapping_prefix', UI_RUNTIME_TOPIC_DEFAULTS.ui_action_mapping_prefix);
+                            const mappingKey = `${configuredPrefix}${normalizedId}`;
                             const current = (currentMappings[mappingKey] && typeof currentMappings[mappingKey] === 'object')
                                 ? currentMappings[mappingKey]
                                 : {};
@@ -23320,7 +23362,8 @@
                         }
                         delete actionNodeExtensions[normalizedId];
                         if (Boolean(options && options.removeMapping) && currentMappings && typeof currentMappings === 'object') {
-                            delete currentMappings[`${ACTION_MAPPING_PREFIX}${normalizedId}`];
+                            const configuredPrefix = getUiTopicValue('ui_action_mapping_prefix', UI_RUNTIME_TOPIC_DEFAULTS.ui_action_mapping_prefix);
+                            delete currentMappings[`${configuredPrefix}${normalizedId}`];
                         }
                         refreshZoneActionOptionsUI();
                         return { ok: true, id: normalizedId };
@@ -23328,10 +23371,11 @@
 
                     function initializeCoreActionsModule() {
                         const existing = (window.CoreActions && typeof window.CoreActions === 'object') ? window.CoreActions : {};
+                        const configuredPrefix = getUiTopicValue('ui_action_mapping_prefix', UI_RUNTIME_TOPIC_DEFAULTS.ui_action_mapping_prefix);
                         window.CoreActions = {
                             ...existing,
                             __nextCoreModule: true,
-                            prefix: ACTION_MAPPING_PREFIX,
+                            prefix: configuredPrefix,
                             normalizeActionId: normalizeActionNodeId,
                             listActions: getActionNodeDefinitions,
                             registerAction: registerCoreAction,
@@ -31765,57 +31809,58 @@
                             </div>
 
                             <div class="nav2-params-section-group" style="margin-top: 12px;">
-                                <span class="nav2-param-group-label">Operator Quick Controls</span>
-                                <p style="font-size:11px; color:var(--text-field-label); margin:0 0 10px 0;">
-                                    Use these first when you need to tune robot speed live. They map to the common Nav2
-                                    controller limits without hiding the full parameter tree below.
+                                <span class="nav2-param-group-label">Motion Tuning</span>
+                                <p class="nav2-quick-help">
+                                    Start with the three highlighted controls. Most operator adjustments only need cruise speed,
+                                    turn speed, and forward acceleration.
                                 </p>
-                                <div class="form-row" style="margin-bottom: 0;">
-                                    <div class="form-group">
-                                        <label title="Main forward speed cap for autonomous driving.">Max Forward Speed (m/s)</label>
+                                <div class="nav2-quick-grid">
+                                    <div class="nav2-quick-card is-primary">
+                                        <label class="nav2-quick-card-title" title="Main forward speed cap for autonomous driving.">Cruise Speed</label>
                                         <input type="number" id="nav2-curated-max-vel-x" step="0.01">
+                                        <p class="nav2-quick-card-note">Primary forward speed limit in m/s.</p>
                                     </div>
-                                    <div class="form-group">
-                                        <label title="Upper XY speed limit used by the controller. Usually keep near Max Forward Speed.">Max XY Speed (m/s)</label>
-                                        <input type="number" id="nav2-curated-max-speed-xy" step="0.01">
-                                    </div>
-                                    <div class="form-group">
-                                        <label title="Maximum turning speed for Nav2 path following.">Max Turn Speed (rad/s)</label>
+                                    <div class="nav2-quick-card is-primary">
+                                        <label class="nav2-quick-card-title" title="Maximum turning speed for Nav2 path following.">Turn Speed</label>
                                         <input type="number" id="nav2-curated-max-vel-theta" step="0.01">
+                                        <p class="nav2-quick-card-note">Reduces aggressive cornering when lowered.</p>
                                     </div>
-                                </div>
-                                <div class="form-row" style="margin-bottom: 0;">
-                                    <div class="form-group">
-                                        <label title="Minimum forward speed the controller will command.">Min Forward Speed (m/s)</label>
-                                        <input type="number" id="nav2-curated-min-vel-x" step="0.01">
-                                    </div>
-                                    <div class="form-group">
-                                        <label title="Minimum XY speed / tracking floor.">Min XY Speed (m/s)</label>
-                                        <input type="number" id="nav2-curated-min-speed-xy" step="0.01">
-                                    </div>
-                                    <div class="form-group">
-                                        <label title="How quickly the robot accelerates forward.">Forward Accel Limit (m/s²)</label>
+                                    <div class="nav2-quick-card is-primary">
+                                        <label class="nav2-quick-card-title" title="How quickly the robot accelerates forward.">Forward Acceleration</label>
                                         <input type="number" id="nav2-curated-acc-lim-x" step="0.01">
+                                        <p class="nav2-quick-card-note">Softens starts and slows ramp-up when lowered.</p>
                                     </div>
-                                </div>
-                                <div class="form-row" style="margin-bottom: 0;">
-                                    <div class="form-group">
-                                        <label title="How quickly the robot decelerates forward. Usually negative.">Forward Decel Limit (m/s²)</label>
+                                    <div class="nav2-quick-card">
+                                        <label class="nav2-quick-card-title" title="Upper XY speed limit used by the controller. Usually keep near Cruise Speed.">Max XY Speed</label>
+                                        <input type="number" id="nav2-curated-max-speed-xy" step="0.01">
+                                        <p class="nav2-quick-card-note">Keep close to cruise speed unless you know why it differs.</p>
+                                    </div>
+                                    <div class="nav2-quick-card">
+                                        <label class="nav2-quick-card-title" title="How quickly the robot decelerates forward. Usually negative.">Forward Deceleration</label>
                                         <input type="number" id="nav2-curated-decel-lim-x" step="0.01">
+                                        <p class="nav2-quick-card-note">Controls braking feel and stop sharpness.</p>
                                     </div>
-                                    <div class="form-group">
-                                        <label title="Angular acceleration limit for turning.">Turn Accel Limit (rad/s²)</label>
+                                    <div class="nav2-quick-card">
+                                        <label class="nav2-quick-card-title" title="Angular acceleration limit for turning.">Turn Acceleration</label>
                                         <input type="number" id="nav2-curated-acc-lim-theta" step="0.01">
+                                        <p class="nav2-quick-card-note">Higher values let the robot snap into turns faster.</p>
                                     </div>
-                                    <div class="form-group">
-                                        <label title="Angular deceleration limit for turning. Usually negative.">Turn Decel Limit (rad/s²)</label>
+                                    <div class="nav2-quick-card">
+                                        <label class="nav2-quick-card-title" title="Angular deceleration limit for turning. Usually negative.">Turn Deceleration</label>
                                         <input type="number" id="nav2-curated-decel-lim-theta" step="0.01">
+                                        <p class="nav2-quick-card-note">Higher magnitude makes turn stop-off quicker.</p>
+                                    </div>
+                                    <div class="nav2-quick-card">
+                                        <label class="nav2-quick-card-title" title="Minimum forward speed the controller will command.">Min Forward Speed</label>
+                                        <input type="number" id="nav2-curated-min-vel-x" step="0.01">
+                                        <p class="nav2-quick-card-note">Usually leave low unless motion stalls at low speed.</p>
+                                    </div>
+                                    <div class="nav2-quick-card">
+                                        <label class="nav2-quick-card-title" title="Minimum XY speed / tracking floor.">Min XY Speed</label>
+                                        <input type="number" id="nav2-curated-min-speed-xy" step="0.01">
+                                        <p class="nav2-quick-card-note">Tracking floor for slow movement.</p>
                                     </div>
                                 </div>
-                                <p style="font-size:11px; color:var(--text-field-label); margin:10px 0 0 0;">
-                                    If you only need to slow the robot down, start with <strong>Max Forward Speed</strong>
-                                    and <strong>Max XY Speed</strong>. Use <strong>Max Turn Speed</strong> if cornering is too aggressive.
-                                </p>
                             </div>
 
                             <div class="nav2-params-section-group" style="margin-top: 12px;">
@@ -33210,14 +33255,16 @@
                 navHeader.innerHTML = '<h4 class="settings-card-title">Nav2 Parameters</h4>';
                 navCard.appendChild(navHeader);
 
-                const footprintRow = document.getElementById('nav2-curated-footprint-mode')?.closest('.form-row');
+                const footprintBlock = document.getElementById('nav2-curated-footprint-mode')?.closest('.nav2-params-section-group');
+                const inflationBlock = document.getElementById('nav2-curated-inflation-local')?.closest('.nav2-params-section-group');
+                const quickControlsBlock = document.getElementById('nav2-curated-max-vel-x')?.closest('.nav2-params-section-group');
                 const footprintPoints = document.getElementById('nav2-curated-footprint-points')?.parentElement;
                 const syncBtn = document.querySelector('button[onclick="syncNav2FootprintFromEditor()"]');
                 const applyCuratedBtn = document.querySelector('button[onclick="applyNav2ParameterEditor(\'curated\')"]');
                 const topicBindings = document.getElementById('nav2-curated-scan-topic')?.closest('details');
                 const advancedTreesBlock = document.getElementById('nav2-advanced-dropdown')?.closest('.settings-subgroup');
 
-                [footprintRow, footprintPoints, syncBtn, applyCuratedBtn, topicBindings, advancedTreesBlock]
+                [footprintBlock, inflationBlock, quickControlsBlock, footprintPoints, syncBtn, applyCuratedBtn, topicBindings, advancedTreesBlock]
                     .filter(Boolean)
                     .forEach((node) => navCard.appendChild(node));
 

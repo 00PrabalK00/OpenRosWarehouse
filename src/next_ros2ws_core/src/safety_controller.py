@@ -3,13 +3,14 @@ import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
 from rclpy.time import Time
-from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from geometry_msgs.msg import Twist, PoseWithCovarianceStamped, Point
 from sensor_msgs.msg import LaserScan, PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import String, Bool, UInt8
 from std_srvs.srv import Trigger, SetBool
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+from visualization_msgs.msg import Marker, MarkerArray
 import math
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -162,6 +163,14 @@ class SafetyController(Node):
         self.robot_body_width_m = max(0.10, float(self.declare_parameter('robot_body_width_m', 0.30).value))
         self.obstacle_body_padding_m = max(0.0, float(self.declare_parameter('obstacle_body_padding_m', 0.06).value))
         self.obstacle_body_exclusion_radius_m = max(0.0, float(self.declare_parameter('obstacle_body_exclusion_radius_m', 0.22).value))
+        self.raw_scan_self_echo_range_m = max(
+            0.0,
+            float(self.declare_parameter('raw_scan_self_echo_range_m', 0.18).value),
+        )
+        self.raw_scan_opening_half_angle_deg = min(
+            89.0,
+            max(5.0, float(self.declare_parameter('raw_scan_opening_half_angle_deg', 42.0).value)),
+        )
         self.carried_profile_active = bool(
             self.declare_parameter('carried_profile_active', False).value
         )
@@ -239,6 +248,13 @@ class SafetyController(Node):
         self.obstacle_gate_strict_stop_only = bool(
             self.declare_parameter('obstacle_gate_strict_stop_only', True).value
         )
+        self.obstacle_emergency_stop_distance_m = max(
+            0.0,
+            float(self.declare_parameter('obstacle_emergency_stop_distance_m', 0.08).value),
+        )
+        self.safety_debug_enabled = bool(
+            self.declare_parameter('safety_debug_enabled', True).value
+        )
 
         self._distance_ema_alpha = min(1.0, max(0.05, float(self.declare_parameter('obstacle_distance_ema_alpha', 0.35).value)))
         self.last_cmd_linear_x = 0.0
@@ -251,10 +267,24 @@ class SafetyController(Node):
         self._obstacle_reason = 'none'
         self._obstacle_blocked_direction = 'none'
         self._manual_blocked_direction = 'none'
+        self._blocked_zones = set()
+        self._front_blocked_zones = set()
+        self._rear_blocked_zones = set()
+        self._blocked_motion_components = set()
+        self._allowed_motion_components = set(['forward', 'reverse', 'left_turn', 'right_turn'])
+        self._obstacle_emergency_full_stop = False
+        self._gate_debug = 'clear'
+        self._last_cmd_direction = 'stopped'
+        self._front_obstacle_present = False
+        self._rear_obstacle_present = False
+        self._reverse_allowed = True
+        self._reverse_block_reason = 'clear'
         self._invalid_front_scan_frames = 0
         self._invalid_rear_scan_frames = 0
         self._last_combined_cloud_ns = None
         self._last_combined_scan_ns = None
+        self._front_obstacle_debug = self._make_obstacle_debug_state('front')
+        self._rear_obstacle_debug = self._make_obstacle_debug_state('rear')
         self.add_on_set_parameters_callback(self._on_runtime_parameters_changed)
         
         # Subscribe to AMCL pose with correct QoS
@@ -374,6 +404,9 @@ class SafetyController(Node):
         self.nav2_speed_limit_pub = self.create_publisher(
             UInt8, '/safety/nav2_speed_limit_percent', _STATE_QOS
         )
+        self.debug_markers_pub = self.create_publisher(
+            MarkerArray, '/safety/debug_markers', 10
+        )
         
         # Timer to continuously publish stops when safety conditions are active
         self.safety_timer = self.create_timer(0.1, self.safety_check_callback)
@@ -436,61 +469,382 @@ class SafetyController(Node):
         yaw = math.atan2(siny_cosp, cosy_cosp)
         return (float(translation.x), float(translation.y), yaw)
 
+    def _make_obstacle_debug_state(self, side: str) -> dict:
+        return {
+            'side': str(side),
+            'source': 'none',
+            'frame_id': '',
+            'closest': None,
+            'ignored': None,
+            'blocked_zones': set(),
+        }
+
+    def _point_debug(self, *, source: str, frame_id: str, x_m: float, y_m: float, distance_m: float,
+                     clearance_m: float, reason: str = '') -> dict:
+        return {
+            'source': str(source),
+            'frame_id': str(frame_id or ''),
+            'x_m': float(x_m),
+            'y_m': float(y_m),
+            'distance_m': float(distance_m),
+            'clearance_m': float(clearance_m),
+            'reason': str(reason or ''),
+        }
+
+    def _footprint_contains_point(self, x_m: float, y_m: float, padding_m: float = 0.0) -> bool:
+        distance = math.hypot(float(x_m), float(y_m))
+        return bool(distance <= self._body_support_radius_m(x_m, y_m, padding_m=float(padding_m)))
+
+    def _format_point_debug(self, debug_point) -> str:
+        if not debug_point:
+            return 'none'
+        reason = f", reason={debug_point['reason']}" if debug_point.get('reason') else ''
+        return (
+            f"{debug_point['source']} frame={debug_point['frame_id']} "
+            f"x={debug_point['x_m']:.2f} y={debug_point['y_m']:.2f} "
+            f"dist={debug_point['distance_m']:.2f}m clearance={debug_point['clearance_m']:.2f}m"
+            f"{reason}"
+        )
+
+    def _set_scan_debug(self, side: str, source: str, frame_id: str, closest_point, ignored_point, blocked_zones=None) -> None:
+        state = self._front_obstacle_debug if str(side).strip().lower() == 'front' else self._rear_obstacle_debug
+        state['source'] = str(source)
+        state['frame_id'] = str(frame_id or '')
+        state['closest'] = closest_point
+        state['ignored'] = ignored_point
+        state['blocked_zones'] = set(blocked_zones or [])
+
+    @staticmethod
+    def _zone_sort_key(zone: str):
+        order = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+        try:
+            return order.index(str(zone))
+        except ValueError:
+            return len(order)
+
+    def _classify_zone(self, x_m: float, y_m: float) -> str:
+        angle_deg = math.degrees(math.atan2(float(y_m), float(x_m)))
+        if -22.5 <= angle_deg < 22.5:
+            return 'N'
+        if 22.5 <= angle_deg < 67.5:
+            return 'NW'
+        if 67.5 <= angle_deg < 112.5:
+            return 'W'
+        if 112.5 <= angle_deg < 157.5:
+            return 'SW'
+        if angle_deg >= 157.5 or angle_deg < -157.5:
+            return 'S'
+        if -157.5 <= angle_deg < -112.5:
+            return 'SE'
+        if -112.5 <= angle_deg < -67.5:
+            return 'E'
+        return 'NE'
+
+    def _blocked_motion_from_zones(self, zones) -> set:
+        zones = set(zones or [])
+        blocked = set()
+        if zones & {'N', 'NE', 'NW'}:
+            blocked.add('forward')
+        if zones & {'S', 'SE', 'SW'}:
+            blocked.add('reverse')
+        if zones & {'W', 'NW', 'SW'}:
+            blocked.add('left_turn')
+        if zones & {'E', 'NE', 'SE'}:
+            blocked.add('right_turn')
+        return blocked
+
+    def _blocked_motion_from_direction(self, direction: str) -> set:
+        direction = str(direction or 'none').strip().lower()
+        if direction == 'forward':
+            return {'forward'}
+        if direction == 'backward':
+            return {'reverse'}
+        if direction == 'both':
+            return {'forward', 'reverse'}
+        return set()
+
+    def _directional_obstacle_gate_active(self) -> bool:
+        return bool(
+            self.distance_safety_enabled
+            and self.obstacle_stop
+            and not self.manual_override
+        )
+
+    @staticmethod
+    def _zone_angle_bounds(zone: str):
+        bounds_deg = {
+            'N': (-22.5, 22.5),
+            'NW': (22.5, 67.5),
+            'W': (67.5, 112.5),
+            'SW': (112.5, 157.5),
+            'S': (157.5, 202.5),
+            'SE': (202.5, 247.5),
+            'E': (247.5, 292.5),
+            'NE': (292.5, 337.5),
+        }.get(str(zone), None)
+        if bounds_deg is None:
+            return None
+        return tuple(math.radians(v) for v in bounds_deg)
+
+    def _zone_fill_points(self, zone: str, stop_distance: float):
+        bounds = self._zone_angle_bounds(zone)
+        if bounds is None:
+            return []
+        start, end = bounds
+        samples = 8
+        points = []
+        for i in range(samples):
+            a0 = start + ((end - start) * float(i) / float(samples))
+            a1 = start + ((end - start) * float(i + 1) / float(samples))
+            u0x = math.cos(a0)
+            u0y = math.sin(a0)
+            u1x = math.cos(a1)
+            u1y = math.sin(a1)
+            inner0 = self._body_support_radius_m(u0x, u0y, padding_m=0.0)
+            inner1 = self._body_support_radius_m(u1x, u1y, padding_m=0.0)
+            outer0 = inner0 + float(stop_distance)
+            outer1 = inner1 + float(stop_distance)
+            p_inner0 = self._marker_point(inner0 * u0x, inner0 * u0y, 0.01)
+            p_outer0 = self._marker_point(outer0 * u0x, outer0 * u0y, 0.01)
+            p_inner1 = self._marker_point(inner1 * u1x, inner1 * u1y, 0.01)
+            p_outer1 = self._marker_point(outer1 * u1x, outer1 * u1y, 0.01)
+            points.extend([p_inner0, p_outer0, p_outer1, p_inner0, p_outer1, p_inner1])
+        return points
+
+    @staticmethod
+    def _marker_point(x_m: float, y_m: float, z_m: float = 0.0) -> Point:
+        point = Point()
+        point.x = float(x_m)
+        point.y = float(y_m)
+        point.z = float(z_m)
+        return point
+
+    def _sector_boundary_points(self, sector_center: float, half_angle: float, stop_distance: float):
+        points = [self._marker_point(0.0, 0.0, 0.02)]
+        samples = 18
+        start = sector_center - half_angle
+        end = sector_center + half_angle
+        for i in range(samples + 1):
+            angle = start + ((end - start) * float(i) / float(samples))
+            ux = math.cos(angle)
+            uy = math.sin(angle)
+            radius = self._body_support_radius_m(ux, uy, padding_m=0.0) + float(stop_distance)
+            points.append(self._marker_point(radius * ux, radius * uy, 0.02))
+        points.append(self._marker_point(0.0, 0.0, 0.02))
+        return points
+
+    def _publish_debug_markers(self):
+        if not self.safety_debug_enabled:
+            return
+
+        markers = MarkerArray()
+        stamp = self.get_clock().now().to_msg()
+        stop_distance = self._current_hard_stop_distance_m()
+
+        footprint = Marker()
+        footprint.header.frame_id = self.robot_base_frame
+        footprint.header.stamp = stamp
+        footprint.ns = 'safety_debug'
+        footprint.id = 1
+        footprint.type = Marker.LINE_STRIP
+        footprint.action = Marker.ADD
+        footprint.scale.x = 0.02
+        footprint.color.r = 1.0
+        footprint.color.g = 1.0
+        footprint.color.b = 0.0
+        footprint.color.a = 0.9
+        half_len = 0.5 * self._effective_body_length_m()
+        half_wid = 0.5 * self._effective_body_width_m()
+        footprint.points = [
+            self._marker_point(half_len, half_wid),
+            self._marker_point(half_len, -half_wid),
+            self._marker_point(-half_len, -half_wid),
+            self._marker_point(-half_len, half_wid),
+            self._marker_point(half_len, half_wid),
+        ]
+        markers.markers.append(footprint)
+
+        for marker_id, (center, half_angle, color_rgb) in enumerate(
+            (
+                (0.0, self.obstacle_forward_half_angle_rad, (1.0, 0.1, 0.1)),
+                (math.pi, self.obstacle_rear_half_angle_rad, (1.0, 0.5, 0.1)),
+            ),
+            start=2,
+        ):
+            marker = Marker()
+            marker.header.frame_id = self.robot_base_frame
+            marker.header.stamp = stamp
+            marker.ns = 'safety_debug'
+            marker.id = marker_id
+            marker.type = Marker.LINE_STRIP
+            marker.action = Marker.ADD
+            marker.scale.x = 0.02
+            marker.color.r = float(color_rgb[0])
+            marker.color.g = float(color_rgb[1])
+            marker.color.b = float(color_rgb[2])
+            marker.color.a = 0.85
+            marker.points = self._sector_boundary_points(center, half_angle, stop_distance)
+            markers.markers.append(marker)
+
+        closest_candidates = [
+            state.get('closest')
+            for state in (self._front_obstacle_debug, self._rear_obstacle_debug)
+            if state.get('closest')
+        ]
+        ignored_candidates = [
+            state.get('ignored')
+            for state in (self._front_obstacle_debug, self._rear_obstacle_debug)
+            if state.get('ignored')
+        ]
+
+        for marker_id, point_debug, color_rgb in (
+            (4, min(closest_candidates, key=lambda p: p['clearance_m']) if closest_candidates else None, (0.0, 1.0, 0.0)),
+            (5, min(ignored_candidates, key=lambda p: p['distance_m']) if ignored_candidates else None, (1.0, 1.0, 0.0)),
+        ):
+            marker = Marker()
+            marker.header.frame_id = self.robot_base_frame
+            marker.header.stamp = stamp
+            marker.ns = 'safety_debug'
+            marker.id = marker_id
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD if point_debug else Marker.DELETE
+            marker.scale.x = 0.08
+            marker.scale.y = 0.08
+            marker.scale.z = 0.08
+            marker.color.r = float(color_rgb[0])
+            marker.color.g = float(color_rgb[1])
+            marker.color.b = float(color_rgb[2])
+            marker.color.a = 0.95
+            if point_debug:
+                marker.pose.position = self._marker_point(point_debug['x_m'], point_debug['y_m'], 0.08)
+                marker.pose.orientation.w = 1.0
+            markers.markers.append(marker)
+
+        blocked_region = Marker()
+        blocked_region.header.frame_id = self.robot_base_frame
+        blocked_region.header.stamp = stamp
+        blocked_region.ns = 'safety_debug'
+        blocked_region.id = 6
+        blocked_region.type = Marker.TRIANGLE_LIST
+        blocked_region.action = Marker.ADD if self._blocked_zones else Marker.DELETE
+        blocked_region.pose.orientation.w = 1.0
+        blocked_region.color.r = 1.0
+        blocked_region.color.g = 0.0
+        blocked_region.color.b = 0.0
+        blocked_region.color.a = 0.22
+        blocked_region.points = []
+        for zone in sorted(self._blocked_zones, key=self._zone_sort_key):
+            blocked_region.points.extend(self._zone_fill_points(zone, stop_distance))
+        markers.markers.append(blocked_region)
+
+        self.debug_markers_pub.publish(markers)
+
     def _vfh_classify_scan(self, msg, sector: str):
-        """VFH-style histogram classification for a front/rear sector in base_link."""
+        """Classify raw scan points in base_footprint for a front/rear sector."""
         if msg is None or not msg.ranges:
+            self._set_scan_debug(sector, 'raw_scan', '', None, None)
             return float('inf'), 0, 0, False
 
         transform_meta = self._transform_msg_metadata_to_base(msg)
         if transform_meta is None:
+            self._set_scan_debug(
+                sector,
+                'raw_scan',
+                str(getattr(getattr(msg, 'header', None), 'frame_id', '') or ''),
+                None,
+                None,
+            )
             return float('inf'), 0, 0, False
         tx, ty, yaw = transform_meta
 
-        bins = 24
-        bin_counts_crit = [0] * bins
-        bin_counts_warn = [0] * bins
-
         min_dist = float('inf')
+        critical_count = 0
+        warning_count = 0
+        closest_point = None
+        closest_ignored = None
+        blocked_zones = set()
         angle = msg.angle_min
         angle_inc = msg.angle_increment or 0.0
-        valid_min = max(float(msg.range_min), float(self.obstacle_valid_min_range))
+        valid_min = max(0.0, float(msg.range_min), float(self.obstacle_valid_min_range))
+        valid_max = float(msg.range_max)
         sector_name = 'rear' if str(sector).strip().lower() == 'rear' else 'front'
         half_angle = self.obstacle_rear_half_angle_rad if sector_name == 'rear' else self.obstacle_forward_half_angle_rad
         sector_center = math.pi if sector_name == 'rear' else 0.0
+        hard_stop_distance = self._current_hard_stop_distance_m()
+        source = '/scan2' if sector_name == 'rear' else '/scan'
+        frame_id = str(getattr(getattr(msg, 'header', None), 'frame_id', '') or '')
 
         for distance in msg.ranges:
-            if valid_min < distance < msg.range_max:
-                lx = float(distance * math.cos(angle))
-                ly = float(distance * math.sin(angle))
-                bx = tx + (math.cos(yaw) * lx) - (math.sin(yaw) * ly)
-                by = ty + (math.sin(yaw) * lx) + (math.cos(yaw) * ly)
-                if self._is_body_echo_point(bx, by):
-                    angle += angle_inc
-                    continue
+            try:
+                distance = float(distance)
+            except Exception:
+                angle += angle_inc
+                continue
 
-                base_angle = math.atan2(by, bx)
-                sector_delta = abs(self._wrap_angle(base_angle - sector_center))
-                if sector_delta > half_angle:
-                    angle += angle_inc
-                    continue
+            if (not math.isfinite(distance)) or distance <= valid_min or distance >= valid_max:
+                angle += angle_inc
+                continue
 
-                clearance = self._obstacle_clearance_m(bx, by)
-                min_dist = min(min_dist, clearance)
-                if half_angle > 1e-6:
-                    ratio = sector_delta / half_angle
-                    bin_idx = min(bins - 1, max(0, int(ratio * bins)))
-                else:
-                    bin_idx = 0
+            lx = float(distance * math.cos(angle))
+            ly = float(distance * math.sin(angle))
+            bx = tx + (math.cos(yaw) * lx) - (math.sin(yaw) * ly)
+            by = ty + (math.sin(yaw) * lx) + (math.cos(yaw) * ly)
+            base_angle = math.atan2(by, bx)
+            sector_delta = abs(self._wrap_angle(base_angle - sector_center))
+            point_distance = math.hypot(bx, by)
+            clearance = self._obstacle_clearance_m(bx, by)
 
-                if clearance < self.critical_zone:
-                    bin_counts_crit[bin_idx] += 1
-                elif clearance < self.warning_zone:
-                    bin_counts_warn[bin_idx] += 1
+            if self._footprint_contains_point(bx, by, padding_m=0.0):
+                ignored = self._point_debug(
+                    source=source,
+                    frame_id=frame_id,
+                    x_m=bx,
+                    y_m=by,
+                    distance_m=point_distance,
+                    clearance_m=clearance,
+                    reason='inside_footprint',
+                )
+                if closest_ignored is None or ignored['distance_m'] < closest_ignored['distance_m']:
+                    closest_ignored = ignored
+                angle += angle_inc
+                continue
 
+            if sector_delta > half_angle:
+                ignored = self._point_debug(
+                    source=source,
+                    frame_id=frame_id,
+                    x_m=bx,
+                    y_m=by,
+                    distance_m=point_distance,
+                    clearance_m=clearance,
+                    reason='outside_sector',
+                )
+                if closest_ignored is None or ignored['distance_m'] < closest_ignored['distance_m']:
+                    closest_ignored = ignored
+                angle += angle_inc
+                continue
+
+            accepted = self._point_debug(
+                source=source,
+                frame_id=frame_id,
+                x_m=bx,
+                y_m=by,
+                distance_m=point_distance,
+                clearance_m=clearance,
+                reason='accepted',
+            )
+            if closest_point is None or accepted['clearance_m'] < closest_point['clearance_m']:
+                closest_point = accepted
+
+            min_dist = min(min_dist, clearance)
+            if clearance <= hard_stop_distance:
+                critical_count += 1
+                blocked_zones.add(self._classify_zone(bx, by))
+            elif clearance <= self.warning_zone:
+                warning_count += 1
             angle += angle_inc
 
-        critical_count = max(bin_counts_crit) if bin_counts_crit else 0
-        warning_count = max(bin_counts_warn) if bin_counts_warn else 0
+        self._set_scan_debug(sector_name, source, frame_id, closest_point, closest_ignored, blocked_zones)
         return min_dist, critical_count, warning_count, math.isfinite(min_dist)
 
     def _smooth_distance(self, previous: float, current: float) -> float:
@@ -538,14 +892,8 @@ class SafetyController(Node):
         return distance - body_extent
 
     def _is_body_echo_point(self, x_m: float, y_m: float) -> bool:
-        # Ignore returns clearly inside robot footprint in base_link.
-        distance = math.hypot(float(x_m), float(y_m))
-        body_extent = self._body_support_radius_m(
-            x_m,
-            y_m,
-            padding_m=float(self._effective_body_padding_m()),
-        )
-        return distance <= body_extent
+        # Ignore points that land inside the physical robot footprint in base_footprint.
+        return self._footprint_contains_point(x_m, y_m, padding_m=0.0)
 
     def _on_runtime_parameters_changed(self, params):
         try:
@@ -577,6 +925,24 @@ class SafetyController(Node):
     @staticmethod
     def _wrap_angle(angle: float) -> float:
         return math.atan2(math.sin(angle), math.cos(angle))
+
+    def _sector_bin_strength(self, bin_counts) -> int:
+        counts = [int(v) for v in list(bin_counts or [])]
+        if not counts:
+            return 0
+        if len(counts) == 1:
+            return max(0, counts[0])
+
+        weighted_total = 0.0
+        denom = max(1, len(counts) - 1)
+        for idx, count in enumerate(counts):
+            if count <= 0:
+                continue
+            center_ratio = 1.0 - (float(idx) / float(denom))
+            weight = 0.5 + center_ratio
+            weighted_total += float(count) * weight
+
+        return max(max(counts), int(round(weighted_total)))
 
     def _median_valid_range(self, ranges, idx: int, valid_min: float, valid_max: float) -> float:
         window = max(1, int(self.obstacle_median_window))
@@ -660,10 +1026,10 @@ class SafetyController(Node):
 
             angle += angle_inc
 
-        front_critical = max(front_crit_bins) if front_crit_bins else 0
-        front_warning = max(front_warn_bins) if front_warn_bins else 0
-        rear_critical = max(rear_crit_bins) if rear_crit_bins else 0
-        rear_warning = max(rear_warn_bins) if rear_warn_bins else 0
+        front_critical = self._sector_bin_strength(front_crit_bins)
+        front_warning = self._sector_bin_strength(front_warn_bins)
+        rear_critical = self._sector_bin_strength(rear_crit_bins)
+        rear_warning = self._sector_bin_strength(rear_warn_bins)
         return front_min, front_critical, front_warning, rear_min, rear_critical, rear_warning
 
     def _classify_union_cloud(self, msg):
@@ -728,10 +1094,10 @@ class SafetyController(Node):
                 elif clearance < self.warning_zone:
                     rear_warn_bins[rear_idx] += 1
 
-        front_critical = max(front_crit_bins) if front_crit_bins else 0
-        front_warning = max(front_warn_bins) if front_warn_bins else 0
-        rear_critical = max(rear_crit_bins) if rear_crit_bins else 0
-        rear_warning = max(rear_warn_bins) if rear_warn_bins else 0
+        front_critical = self._sector_bin_strength(front_crit_bins)
+        front_warning = self._sector_bin_strength(front_warn_bins)
+        rear_critical = self._sector_bin_strength(rear_crit_bins)
+        rear_warning = self._sector_bin_strength(rear_warn_bins)
         return (
             front_min,
             front_critical,
@@ -842,25 +1208,42 @@ class SafetyController(Node):
 
         self._update_obstacle_state()
 
-    def _evaluate_obstacle_trigger(self):
-        front_trigger = self.critical_obstacles_front >= self.obstacle_min_points
-        rear_trigger = self.critical_obstacles_rear >= self.obstacle_min_points
+    def _obstacle_side_state(self, side: str) -> dict:
+        side_name = 'rear' if str(side).strip().lower() == 'rear' else 'front'
+        if side_name == 'rear':
+            raw_distance = float(self.raw_obstacle_distance_rear)
+            smooth_distance = float(self.min_obstacle_distance_rear)
+            critical_count = int(self.critical_obstacles_rear)
+        else:
+            raw_distance = float(self.raw_obstacle_distance_front)
+            smooth_distance = float(self.min_obstacle_distance_front)
+            critical_count = int(self.critical_obstacles_front)
+
         hard_stop_distance = self._current_hard_stop_distance_m()
-        front_hard_stop = math.isfinite(self.raw_obstacle_distance_front) and (
-            self.raw_obstacle_distance_front <= hard_stop_distance
-        )
-        rear_hard_stop = math.isfinite(self.raw_obstacle_distance_rear) and (
-            self.raw_obstacle_distance_rear <= hard_stop_distance
+        trigger = critical_count > 0
+        hard_stop = math.isfinite(raw_distance) and raw_distance <= hard_stop_distance
+        active = bool(trigger or hard_stop)
+        clear = (not math.isfinite(smooth_distance)) or (
+            smooth_distance > (self.critical_zone + self.obstacle_clear_margin_m)
         )
 
+        return {
+            'side': side_name,
+            'raw_distance': raw_distance,
+            'smooth_distance': smooth_distance,
+            'critical_count': critical_count,
+            'trigger': bool(trigger),
+            'hard_stop': bool(hard_stop),
+            'active': bool(active),
+            'clear': bool(clear),
+        }
+
+    def _evaluate_ttc_state(self) -> tuple:
         moving_forward = self.last_cmd_linear_x > self.ttc_min_speed_mps
         moving_backward = self.last_cmd_linear_x < -self.ttc_min_speed_mps
 
-        ttc_trigger = False
-        ttc_warning = False
-        ttc_value = float('inf')
         ttc_side = ''
-
+        ttc_value = float('inf')
         if moving_forward and math.isfinite(self.min_obstacle_distance_front):
             if self.min_obstacle_distance_front >= self.obstacle_ttc_min_distance_m:
                 ttc_side = 'front'
@@ -870,95 +1253,62 @@ class SafetyController(Node):
                 ttc_side = 'rear'
                 ttc_value = self.min_obstacle_distance_rear / max(abs(self.last_cmd_linear_x), self.ttc_min_speed_mps)
 
-        if math.isfinite(ttc_value):
-            ttc_warning = ttc_value <= self.ttc_warn_sec
-            ttc_trigger = ttc_value <= self.ttc_stop_sec
-
+        ttc_warning = math.isfinite(ttc_value) and ttc_value <= self.ttc_warn_sec
+        ttc_trigger = math.isfinite(ttc_value) and ttc_value <= self.ttc_stop_sec
         self.last_ttc_sec = ttc_value
+        return ttc_side, ttc_value, ttc_warning, ttc_trigger
 
-        front_active = bool(front_hard_stop or front_trigger)
-        rear_active = bool(rear_hard_stop or rear_trigger)
+    def _evaluate_obstacle_trigger(self):
+        front = self._obstacle_side_state('front')
+        rear = self._obstacle_side_state('rear')
+        ttc_side, ttc_value, ttc_warning, ttc_trigger = self._evaluate_ttc_state()
 
-        if self.obstacle_use_directional_blocking:
-            active_side = 'none'
-            if moving_forward:
-                active_side = 'front'
-            elif moving_backward:
-                active_side = 'rear'
-            elif self.obstacle_stop:
-                if front_active and not rear_active:
-                    active_side = 'front'
-                elif rear_active and not front_active:
-                    active_side = 'rear'
-                elif front_active and rear_active:
-                    active_side = 'both'
-            static_trigger = (
-                front_trigger if active_side == 'front'
-                else rear_trigger if active_side == 'rear'
-                else (front_trigger or rear_trigger) if active_side == 'both'
-                else False
-            )
-            immediate_trigger = (
-                front_hard_stop if active_side == 'front'
-                else rear_hard_stop if active_side == 'rear'
-                else (front_hard_stop or rear_hard_stop) if active_side == 'both'
-                else False
-            )
-        else:
-            static_trigger = front_trigger or rear_trigger
-            immediate_trigger = front_hard_stop or rear_hard_stop
-        should_trigger = immediate_trigger or static_trigger or ttc_trigger
+        front_active = bool(front['active'] or ttc_side == 'front')
+        rear_active = bool(rear['active'] or ttc_side == 'rear')
+        blocked_direction = self._derive_blocked_direction(
+            {
+                'front_active': front_active,
+                'rear_active': rear_active,
+                'ttc_side': ttc_side,
+            }
+        )
+
+        should_trigger = bool(front['active'] or rear['active'] or ttc_trigger)
+        immediate_trigger = bool(front['hard_stop'] or rear['hard_stop'])
+        clear_ready = (not should_trigger) and front['clear'] and rear['clear']
 
         reasons = []
-        if front_hard_stop:
-            reasons.append(f'front_hard_stop={self.raw_obstacle_distance_front:.2f}m')
-        if rear_hard_stop:
-            reasons.append(f'rear_hard_stop={self.raw_obstacle_distance_rear:.2f}m')
-        if moving_forward and front_trigger:
-            reasons.append(f'front_critical={self.critical_obstacles_front}')
-        elif moving_backward and rear_trigger:
-            reasons.append(f'rear_critical={self.critical_obstacles_rear}')
-        elif (not self.obstacle_use_directional_blocking) and front_trigger:
-            reasons.append(f'front_critical={self.critical_obstacles_front}')
-            if rear_trigger:
-                reasons.append(f'rear_critical={self.critical_obstacles_rear}')
-
+        if front['hard_stop']:
+            reasons.append(f'front_hard_stop={front["raw_distance"]:.2f}m')
+        if rear['hard_stop']:
+            reasons.append(f'rear_hard_stop={rear["raw_distance"]:.2f}m')
+        if front['trigger']:
+            reasons.append(f'front_critical={front["critical_count"]}')
+        if rear['trigger']:
+            reasons.append(f'rear_critical={rear["critical_count"]}')
         if ttc_trigger and ttc_side:
             reasons.append(f'ttc_{ttc_side}={ttc_value:.2f}s')
 
-        front_clear = (not math.isfinite(self.min_obstacle_distance_front)) or (
-            self.min_obstacle_distance_front > (self.critical_zone + self.obstacle_clear_margin_m)
-        )
-        rear_clear = (not math.isfinite(self.min_obstacle_distance_rear)) or (
-            self.min_obstacle_distance_rear > (self.critical_zone + self.obstacle_clear_margin_m)
-        )
-        clear_ready = (not should_trigger) and front_clear and rear_clear
-
         reason = ', '.join(reasons) if reasons else 'none'
         details = {
-            'front_trigger': bool(front_trigger),
-            'rear_trigger': bool(rear_trigger),
-            'front_hard_stop': bool(front_hard_stop),
-            'rear_hard_stop': bool(rear_hard_stop),
-            # Direction derivation should follow the currently-triggering side,
-            # not the hysteresis clear state. Otherwise a one-sided stop can
-            # degrade into "both blocked" while the opposite side is merely
-            # waiting to satisfy clear-confirm frames.
+            'front_trigger': bool(front['trigger']),
+            'rear_trigger': bool(rear['trigger']),
+            'front_hard_stop': bool(front['hard_stop']),
+            'rear_hard_stop': bool(rear['hard_stop']),
             'front_active': bool(front_active),
             'rear_active': bool(rear_active),
-            'front_clear': bool(front_clear),
-            'rear_clear': bool(rear_clear),
+            'front_clear': bool(front['clear']),
+            'rear_clear': bool(rear['clear']),
             'ttc_side': str(ttc_side or ''),
+            'blocked_direction': str(blocked_direction or 'none'),
         }
         return should_trigger, clear_ready, reason, ttc_warning, immediate_trigger, details
 
     def _manual_directional_gate_active(self) -> bool:
-        mode = self._control_mode_normalized()
         return bool(
-            mode == 'manual'
-            and self.manual_directional_escape_enabled
-            and self._distance_hold_active()
-            and self._manual_blocked_direction in ('forward', 'backward')
+            self._directional_obstacle_gate_active()
+            and self._blocked_motion_components
+            and not self._obstacle_emergency_full_stop
         )
 
     def _control_mode_normalized(self) -> str:
@@ -983,37 +1333,24 @@ class SafetyController(Node):
         if self._distance_hold_active():
             if self._manual_directional_gate_active():
                 return False, []
-            if not self._nav2_filter_handoff_enabled():
-                return True, [f'OBSTACLE({self._obstacle_reason})']
+            return True, [f'OBSTACLE({self._obstacle_reason})']
 
         return False, []
 
     def _derive_blocked_direction(self, details) -> str:
         front_active = bool(details.get('front_active') or details.get('ttc_side') == 'front')
         rear_active = bool(details.get('rear_active') or details.get('ttc_side') == 'rear')
+        if (not self.obstacle_use_directional_blocking) and (front_active or rear_active):
+            return 'both'
         if front_active and rear_active:
             return 'both'
         if front_active:
             return 'forward'
         if rear_active:
             return 'backward'
-
-        threshold = float(self.ttc_min_speed_mps)
-        if self.last_cmd_linear_x > threshold:
-            return 'forward'
-        if self.last_cmd_linear_x < -threshold:
-            return 'backward'
-        if self.last_nonzero_cmd_linear_x > threshold:
-            return 'forward'
-        if self.last_nonzero_cmd_linear_x < -threshold:
-            return 'backward'
         return 'none'
 
     def _apply_manual_directional_gate(self, msg: Twist) -> Twist:
-        blocked = str(self._manual_blocked_direction or 'none').strip().lower()
-        if blocked not in ('forward', 'backward', 'both'):
-            return msg
-
         gated = Twist()
         gated.linear.x = float(msg.linear.x)
         gated.linear.y = float(msg.linear.y)
@@ -1022,14 +1359,63 @@ class SafetyController(Node):
         gated.angular.y = float(msg.angular.y)
         gated.angular.z = float(msg.angular.z)
 
-        if blocked == 'both':
-            return Twist()
-        if blocked == 'forward' and gated.linear.x > self.ttc_min_speed_mps:
+        blocked = set(self._blocked_motion_components or [])
+        reasons = []
+        command_parts = []
+        if gated.linear.x > self.ttc_min_speed_mps:
+            command_parts.append('forward')
+        elif gated.linear.x < -self.ttc_min_speed_mps:
+            command_parts.append('reverse')
+        if gated.angular.z > self.ttc_min_speed_mps:
+            command_parts.append('left_turn')
+        elif gated.angular.z < -self.ttc_min_speed_mps:
+            command_parts.append('right_turn')
+        self._last_cmd_direction = '+'.join(command_parts) if command_parts else 'stationary'
+        self._reverse_allowed = True
+        self._reverse_block_reason = 'not_reversing'
+        if 'forward' in blocked and gated.linear.x > self.ttc_min_speed_mps:
             gated.linear.x = 0.0
-        elif blocked == 'backward' and gated.linear.x < -self.ttc_min_speed_mps:
+            reasons.append('forward')
+        elif 'reverse' in blocked and gated.linear.x < -self.ttc_min_speed_mps:
             gated.linear.x = 0.0
+            reasons.append('reverse')
+            self._reverse_allowed = False
+            rear_zones = sorted(self._rear_blocked_zones, key=self._zone_sort_key)
+            if rear_zones:
+                self._reverse_block_reason = f"rear_danger_zone:{','.join(rear_zones)}"
+            elif self._obstacle_emergency_full_stop:
+                self._reverse_block_reason = 'boxed_in_full_stop'
+            else:
+                self._reverse_block_reason = f"latched_block:{self._obstacle_blocked_direction}"
+        elif gated.linear.x < -self.ttc_min_speed_mps:
+            self._reverse_allowed = True
+            self._reverse_block_reason = (
+                f"rear_clear(front_zones={','.join(sorted(self._front_blocked_zones, key=self._zone_sort_key)) or 'none'})"
+            )
+
+        if 'left_turn' in blocked and gated.angular.z > self.ttc_min_speed_mps:
+            gated.angular.z = 0.0
+            reasons.append('left_turn')
+        elif 'right_turn' in blocked and gated.angular.z < -self.ttc_min_speed_mps:
+            gated.angular.z = 0.0
+            reasons.append('right_turn')
+
+        self._gate_debug = (
+            f"cmd={self._last_cmd_direction} "
+            f"blocked={','.join(sorted(reasons)) or 'none'} "
+            f"allowed={','.join(sorted(self._allowed_motion_components, key=str)) or 'none'} "
+            f"zones={','.join(sorted(self._blocked_zones, key=self._zone_sort_key)) or 'none'} "
+            f"reverse={'allowed' if self._reverse_allowed else 'blocked'} "
+            f"reason={self._reverse_block_reason}"
+        )
 
         return gated
+
+    def _manual_blocked_direction_for_reason(self, derived_direction: str, reason: str) -> str:
+        blocked = str(derived_direction or 'none').strip().lower()
+        if blocked not in ('forward', 'backward', 'both'):
+            return 'none'
+        return blocked
 
     def _update_obstacle_state(self):
         if not self.distance_safety_enabled:
@@ -1039,21 +1425,46 @@ class SafetyController(Node):
             self._obstacle_reason = 'distance_safety_disabled'
             self._obstacle_blocked_direction = 'none'
             self._manual_blocked_direction = 'none'
+            self._blocked_zones = set()
+            self._front_blocked_zones = set()
+            self._rear_blocked_zones = set()
+            self._blocked_motion_components = set()
+            self._allowed_motion_components = set(['forward', 'reverse', 'left_turn', 'right_turn'])
+            self._obstacle_emergency_full_stop = False
+            self._gate_debug = 'distance_safety_disabled'
             self.last_ttc_sec = float('inf')
             return
 
         should_trigger, clear_ready, reason, ttc_warning, immediate_trigger, details = self._evaluate_obstacle_trigger()
+        self._front_blocked_zones = set(self._front_obstacle_debug.get('blocked_zones') or [])
+        self._rear_blocked_zones = set(self._rear_obstacle_debug.get('blocked_zones') or [])
+        self._blocked_zones = set(self._front_blocked_zones) | set(self._rear_blocked_zones)
+        self._front_obstacle_present = bool(details.get('front_active') or self._front_blocked_zones)
+        self._rear_obstacle_present = bool(details.get('rear_active') or self._rear_blocked_zones)
+        self._blocked_motion_components = self._blocked_motion_from_zones(self._blocked_zones)
+        all_motion_components = {'forward', 'reverse', 'left_turn', 'right_turn'}
+        self._allowed_motion_components = all_motion_components - set(self._blocked_motion_components)
+        self._obstacle_emergency_full_stop = bool(self._blocked_motion_components == all_motion_components)
+        if self._obstacle_emergency_full_stop:
+            self._blocked_motion_components = set(all_motion_components)
+            self._allowed_motion_components = set()
+            self._gate_debug = (
+                f"emergency_full_stop zones={','.join(sorted(self._blocked_zones, key=self._zone_sort_key)) or 'none'}"
+            )
+
+        requested_direction = self._derive_blocked_direction(details)
 
         if should_trigger:
-            derived_direction = self._derive_blocked_direction(details)
-            self._obstacle_blocked_direction = (
-                derived_direction if derived_direction in ('forward', 'backward', 'both') else 'both'
-            )
+            if requested_direction in ('forward', 'backward', 'both'):
+                self._obstacle_blocked_direction = requested_direction
             if (
                 self._control_mode_normalized() == 'manual'
                 and self.manual_directional_escape_enabled
             ):
-                self._manual_blocked_direction = self._obstacle_blocked_direction
+                self._manual_blocked_direction = self._manual_blocked_direction_for_reason(
+                    self._obstacle_blocked_direction,
+                    reason,
+                )
             self._obstacle_stop_frames = (
                 self.obstacle_stop_confirm_frames if immediate_trigger else (self._obstacle_stop_frames + 1)
             )
@@ -1067,7 +1478,6 @@ class SafetyController(Node):
                 )
         else:
             self._obstacle_stop_frames = 0
-            current_direction = self._derive_blocked_direction(details)
             if self.obstacle_stop and clear_ready:
                 self._obstacle_clear_frames += 1
                 if self._obstacle_clear_frames >= self.obstacle_clear_confirm_frames:
@@ -1081,16 +1491,29 @@ class SafetyController(Node):
                     )
             else:
                 self._obstacle_clear_frames = 0
-                if self.obstacle_stop and current_direction in ('forward', 'backward', 'both'):
-                    self._obstacle_blocked_direction = current_direction
+                if self.obstacle_stop and requested_direction in ('forward', 'backward', 'both'):
+                    self._obstacle_blocked_direction = requested_direction
                     if (
                         self._control_mode_normalized() == 'manual'
                         and self.manual_directional_escape_enabled
                     ):
-                        self._manual_blocked_direction = current_direction
+                        self._manual_blocked_direction = self._manual_blocked_direction_for_reason(
+                            requested_direction,
+                            self._obstacle_reason,
+                        )
                 if not self.obstacle_stop:
                     self._obstacle_blocked_direction = 'none'
                     self._manual_blocked_direction = 'none'
+
+        if (not self._blocked_motion_components) and self.obstacle_stop:
+            self._blocked_motion_components = self._blocked_motion_from_direction(self._obstacle_blocked_direction)
+            self._allowed_motion_components = all_motion_components - set(self._blocked_motion_components)
+        if not self._obstacle_emergency_full_stop:
+            self._gate_debug = (
+                f"zones={','.join(sorted(self._blocked_zones, key=self._zone_sort_key)) or 'none'} "
+                f"blocked={','.join(sorted(self._blocked_motion_components)) or 'none'} "
+                f"allowed={','.join(sorted(self._allowed_motion_components)) or 'none'}"
+            )
 
         if ttc_warning and (not self.obstacle_stop):
             if int(self.get_clock().now().nanoseconds / 1e9) % 2 == 0:
@@ -1416,6 +1839,7 @@ class SafetyController(Node):
         nav2_speed_msg = UInt8()
         nav2_speed_msg.data = int(self._nav2_speed_limit_percent(self.last_cmd_linear_x))
         self.nav2_speed_limit_pub.publish(nav2_speed_msg)
+        self._publish_debug_markers()
     
     def estop_callback(self, request, response):
         """Service to activate/deactivate emergency stop."""
@@ -1535,8 +1959,23 @@ class SafetyController(Node):
             f"  Nav2 speed limit: {self._nav2_speed_limit_percent(self.last_cmd_linear_x)}%",
             f"  TTC stop/warn: <{self.ttc_stop_sec:.2f}s / <{self.ttc_warn_sec:.2f}s (last={self.last_ttc_sec:.2f}s)",
             f"  Hard-stop distance: {self._current_hard_stop_distance_m():.2f}m",
+            f"  Emergency full-stop distance: {self.obstacle_emergency_stop_distance_m:.2f}m",
+            f"  Command direction: {self._last_cmd_direction}",
+            f"  Front obstacle present: {'YES' if self._front_obstacle_present else 'no'}",
+            f"  Rear obstacle present: {'YES' if self._rear_obstacle_present else 'no'}",
+            f"  Reverse gate: {'ALLOWED' if self._reverse_allowed else 'BLOCKED'} ({self._reverse_block_reason})",
             f"  Front sector (source {obstacle_source_label}): raw={self.raw_obstacle_distance_front:.2f}m, nearest={self.min_obstacle_distance_front:.2f}m, critical={self.critical_obstacles_front}, warning={self.warning_obstacles_front}",
             f"  Rear sector (source {obstacle_source_label}): raw={self.raw_obstacle_distance_rear:.2f}m, nearest={self.min_obstacle_distance_rear:.2f}m, critical={self.critical_obstacles_rear}, warning={self.warning_obstacles_rear}",
+            f"  Blocked zones: {','.join(sorted(self._blocked_zones, key=self._zone_sort_key)) or 'none'}",
+            f"  Front blocked zones: {','.join(sorted(self._front_blocked_zones, key=self._zone_sort_key)) or 'none'}",
+            f"  Rear blocked zones: {','.join(sorted(self._rear_blocked_zones, key=self._zone_sort_key)) or 'none'}",
+            f"  Blocked motion: {','.join(sorted(self._blocked_motion_components)) or 'none'}",
+            f"  Allowed motion: {','.join(sorted(self._allowed_motion_components)) or 'none'}",
+            f"  Directional gate: {self._gate_debug}",
+            f"  Front closest point: {self._format_point_debug(self._front_obstacle_debug.get('closest'))}",
+            f"  Front closest ignored: {self._format_point_debug(self._front_obstacle_debug.get('ignored'))}",
+            f"  Rear closest point: {self._format_point_debug(self._rear_obstacle_debug.get('closest'))}",
+            f"  Rear closest ignored: {self._format_point_debug(self._rear_obstacle_debug.get('ignored'))}",
             f"  Stop reason: {self._obstacle_reason}"
         ]
         
