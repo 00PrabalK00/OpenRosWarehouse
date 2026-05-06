@@ -1,224 +1,375 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 
-const DEFAULT_CONFIG = Object.freeze({
-  protocol: 'http',
-  host: 'localhost',
-  port: 5000,
-  page: '/dev',
-  autoConnect: false,
-  maximizeOnStartup: false,
-  proxyEnabled: false,
-  proxyRules: '',
+const ROBOTS_FILE = path.join(app.getPath('userData'), 'robots.json');
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+const APP_PARTITION = 'persist:testbuild-robot-ui';
+
+const DEFAULT_SETTINGS = Object.freeze({
+  maximizeOnStartup: true,
+  autoRefresh: false,
+  defaultPort: 5000,
+  defaultPage: '/dev',
 });
 
-const CONNECT_WINDOW_SIZE = Object.freeze({
-  width: 560,
-  height: 720,
-});
+let managerWindow = null;
+const robotWindows = new Map();
 
-const MAIN_WINDOW_SIZE = Object.freeze({
-  width: 1600,
-  height: 980,
-});
-
-const APP_PARTITION = 'persist:next-robot-ui';
-
-let connectWindow = null;
-let mainWindow = null;
-let connectBootstrap = null;
-let ipcRegistered = false;
-
-function configFilePath() {
-  return path.join(app.getPath('userData'), 'connection.json');
-}
-
-function sanitizeProtocol(value) {
+function normalizeProtocol(value) {
   return String(value || '').trim().toLowerCase() === 'https' ? 'https' : 'http';
 }
 
-function sanitizeHost(value) {
+function normalizeHost(value) {
   let host = String(value || '').trim();
   if (!host) {
-    return DEFAULT_CONFIG.host;
+    return '';
   }
   host = host.replace(/^https?:\/\//i, '');
   host = host.split('/')[0];
-  if (!host) {
-    return DEFAULT_CONFIG.host;
-  }
-  if (host.startsWith('[')) {
-    return host;
-  }
-  const maybeHostPort = host.split(':');
-  if (maybeHostPort.length === 2 && /^\d+$/.test(maybeHostPort[1])) {
-    return maybeHostPort[0] || DEFAULT_CONFIG.host;
-  }
   return host;
 }
 
-function sanitizePort(value) {
+function normalizePort(value) {
   const parsed = Number.parseInt(String(value ?? '').trim(), 10);
   if (Number.isInteger(parsed) && parsed > 0 && parsed < 65536) {
     return parsed;
   }
-  return DEFAULT_CONFIG.port;
+  return DEFAULT_SETTINGS.defaultPort;
 }
 
-function sanitizePage(value) {
+function normalizePage(value) {
   const page = String(value || '').trim();
-  if (page === '/user' || page === '/editor') {
-    return page;
-  }
-  return '/dev';
+  return ['/dev', '/user', '/editor'].includes(page) ? page : DEFAULT_SETTINGS.defaultPage;
 }
 
-function sanitizeConfig(raw = {}) {
+function normalizeRobot(robot = {}) {
+  const host = normalizeHost(robot.host);
   return {
-    protocol: sanitizeProtocol(raw.protocol),
-    host: sanitizeHost(raw.host),
-    port: sanitizePort(raw.port),
-    page: sanitizePage(raw.page),
-    autoConnect: Boolean(raw.autoConnect),
-    maximizeOnStartup: Boolean(raw.maximizeOnStartup),
-    proxyEnabled: Boolean(raw.proxyEnabled),
-    proxyRules: String(raw.proxyRules || '').trim(),
+    id: String(robot.id || '').trim() || Date.now().toString(),
+    name: String(robot.name || host || 'Unnamed robot').trim(),
+    protocol: normalizeProtocol(robot.protocol),
+    host,
+    port: normalizePort(robot.port),
+    page: normalizePage(robot.page),
+    note: String(robot.note || '').trim(),
+    group: String(robot.group || 'Ungrouped').trim() || 'Ungrouped',
   };
 }
 
-async function readConfig() {
+async function readRobots() {
   try {
-    const raw = await fs.readFile(configFilePath(), 'utf-8');
-    return sanitizeConfig(JSON.parse(raw));
+    const data = await fs.readFile(ROBOTS_FILE, 'utf-8');
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed.map(normalizeRobot).filter((robot) => robot.host) : [];
   } catch (_error) {
-    return { ...DEFAULT_CONFIG };
+    return [];
   }
 }
 
-async function writeConfig(raw, { mergeExisting = true } = {}) {
-  const baseConfig = mergeExisting ? await readConfig() : { ...DEFAULT_CONFIG };
-  const nextConfig = sanitizeConfig({ ...baseConfig, ...(raw || {}) });
-  await fs.mkdir(path.dirname(configFilePath()), { recursive: true });
-  await fs.writeFile(configFilePath(), JSON.stringify(nextConfig, null, 2), 'utf-8');
-  return nextConfig;
+async function writeRobots(robots) {
+  const normalized = Array.isArray(robots) ? robots.map(normalizeRobot).filter((robot) => robot.host) : [];
+  await fs.mkdir(path.dirname(ROBOTS_FILE), { recursive: true });
+  await fs.writeFile(ROBOTS_FILE, JSON.stringify(normalized, null, 2), 'utf-8');
+  return normalized;
 }
 
-async function applyProxy(config, targetSession = null) {
-  const safe = sanitizeConfig(config);
-  const managedSession = targetSession || session.fromPartition(APP_PARTITION);
-  if (!managedSession || typeof managedSession.setProxy !== 'function') {
-    return safe;
+async function readSettings() {
+  try {
+    const data = await fs.readFile(SETTINGS_FILE, 'utf-8');
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+  } catch (_error) {
+    return { ...DEFAULT_SETTINGS };
   }
-
-  if (safe.proxyEnabled) {
-    const proxyRules = String(safe.proxyRules || '').trim();
-    await managedSession.setProxy(
-      proxyRules
-        ? { mode: 'fixed_servers', proxyRules }
-        : { mode: 'system' }
-    );
-  } else {
-    await managedSession.setProxy({ mode: 'direct' });
-  }
-  return safe;
 }
 
-function buildBaseUrl(config) {
-  const safe = sanitizeConfig(config);
+async function writeSettings(settings) {
+  const merged = { ...(await readSettings()), ...(settings || {}) };
+  await fs.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
+  await fs.writeFile(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+  return merged;
+}
+
+function robotBaseUrl(robot) {
+  const safe = normalizeRobot(robot);
   return `${safe.protocol}://${safe.host}:${safe.port}`;
 }
 
-function buildTargetUrl(config) {
-  const safe = sanitizeConfig(config);
-  return `${buildBaseUrl(safe)}${safe.page}`;
+function robotUiUrl(robot) {
+  const safe = normalizeRobot(robot);
+  return `${robotBaseUrl(safe)}${safe.page}`;
 }
 
-async function probeRobot(config) {
-  const safe = sanitizeConfig(config);
-  const baseUrl = buildBaseUrl(safe);
-  const probeTargets = [
-    `${baseUrl}/api/stack/health`,
-    `${baseUrl}/api/map/get_active`,
-    buildTargetUrl(safe),
-  ];
+async function fetchRobotJson(robot, endpoint, init = {}, timeoutMs = 6000) {
+  const target = `${robotBaseUrl(robot)}${endpoint}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  let lastError = null;
-  let lastStatus = null;
-
-  for (const target of probeTargets) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch(target, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init.headers || {}),
+      },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let payload = {};
     try {
-      const response = await fetch(target, {
-        method: 'GET',
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-      clearTimeout(timeout);
-      if (response.ok || response.status === 401 || response.status === 403) {
-        return {
-          ok: true,
-          checkedUrl: target,
-          targetUrl: buildTargetUrl(safe),
-          status: response.status,
-        };
-      }
-      lastStatus = response.status;
-    } catch (error) {
-      clearTimeout(timeout);
-      lastError = error;
+      payload = text ? JSON.parse(text) : {};
+    } catch (_error) {
+      payload = { ok: response.ok, raw: text };
     }
+    return {
+      ok: response.ok,
+      status: response.status,
+      payload,
+      url: target,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      payload: {
+        ok: false,
+        message: error?.name === 'AbortError' ? 'Request timed out' : String(error?.message || error),
+      },
+      url: target,
+    };
+  } finally {
+    clearTimeout(timeout);
   }
+}
 
-  let failureReason = 'Could not reach the robot UI. Make sure zone_web_ui is running and the IP/port are correct.';
-  if (lastError && lastError.name === 'AbortError') {
-    failureReason = 'Network timeout. The robot did not respond within the time limit. Check if the robot is online and reachable.';
-  } else if (lastError && lastError.message && lastError.message.includes('ECONNREFUSED')) {
-    failureReason = 'Connection refused. The daemon or web server might be unavailable or not running on this port.';
-  } else if (lastStatus === 404) {
-    failureReason = 'API endpoint not found (404). This might indicate a wrong robot software version or stale backend state.';
-  } else if (lastStatus >= 500) {
-    failureReason = `Robot API rejected the request with a server error (${lastStatus}).`;
-  }
-
+async function probeRobot(robot) {
+  const started = Date.now();
+  const response = await fetchRobotJson(robot, '/api/stack/health', { method: 'GET' }, 3500);
+  const latencyMs = Date.now() - started;
   return {
-    ok: false,
-    targetUrl: buildTargetUrl(safe),
-    message: failureReason,
+    ok: Boolean(response.ok || response.status === 401 || response.status === 403),
+    latencyMs,
+    status: response.status,
+    message: response.payload?.message || '',
+    diagnostics: response.payload?.diagnostics || {},
   };
 }
 
-function buildMenu() {
+function summarizeMapName(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return '';
+  }
+  const mapName = String(payload.map_name || payload.name || '').trim();
+  if (mapName) {
+    return mapName;
+  }
+  const mapYamlPath = String(payload.map_yaml_path || '').trim();
+  if (!mapYamlPath) {
+    return '';
+  }
+  const base = path.basename(mapYamlPath);
+  return base.replace(/\.ya?ml$/i, '');
+}
+
+async function fetchRobotSnapshot(robot) {
+  const safeRobot = normalizeRobot(robot);
+  const probe = await probeRobot(safeRobot);
+  if (!probe.ok) {
+    return {
+      ...probe,
+      online: false,
+      robot: safeRobot,
+      confidence: '',
+      map: '',
+      pose: null,
+      networkStatus: null,
+      note: safeRobot.note,
+    };
+  }
+
+  const [previewResponse, mapResponse, poseResponse, networkResponse] = await Promise.all([
+    fetchRobotJson(safeRobot, '/api/settings/preview', { method: 'GET' }, 4500),
+    fetchRobotJson(safeRobot, '/api/map/get_active', { method: 'GET' }, 4500),
+    fetchRobotJson(safeRobot, '/api/robot/pose', { method: 'GET' }, 4500),
+    fetchRobotJson(safeRobot, '/api/next/network/status', { method: 'GET' }, 5000),
+  ]);
+
+  const preview = previewResponse.payload || {};
+  const mapPayload = mapResponse.payload || {};
+  const posePayload = poseResponse.payload || {};
+  const networkPayload = networkResponse.payload || {};
+  const diagnostics = probe.diagnostics || {};
+  const currentState = diagnostics.current_state || {};
+
+  return {
+    ok: true,
+    online: true,
+    latencyMs: probe.latencyMs,
+    status: probe.status,
+    robot: safeRobot,
+    confidence: String(preview.preview?.localization || currentState.localization_confidence || '').trim(),
+    map: summarizeMapName(mapPayload),
+    pose: posePayload.pose || null,
+    stack: diagnostics.stack || {},
+    networkStatus: networkPayload.ok ? networkPayload : null,
+    networkDelay: `${probe.latencyMs} ms`,
+    note: safeRobot.note,
+  };
+}
+
+async function openRobotUi(robot) {
+  const safeRobot = normalizeRobot(robot);
+  if (robotWindows.has(safeRobot.id)) {
+    robotWindows.get(safeRobot.id).focus();
+    return;
+  }
+
+  const settings = await readSettings();
+  const win = new BrowserWindow({
+    width: 1600,
+    height: 980,
+    title: `Robot: ${safeRobot.name} (${safeRobot.host})`,
+    backgroundColor: '#000',
+    webPreferences: {
+      partition: APP_PARTITION,
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  await win.loadURL(robotUiUrl(safeRobot));
+  if (settings.maximizeOnStartup) {
+    win.maximize();
+  }
+
+  robotWindows.set(safeRobot.id, win);
+  win.on('closed', () => robotWindows.delete(safeRobot.id));
+}
+
+function createManagerWindow() {
+  if (managerWindow) {
+    managerWindow.focus();
+    return;
+  }
+
+  managerWindow = new BrowserWindow({
+    width: 1480,
+    height: 920,
+    minWidth: 1200,
+    minHeight: 760,
+    title: 'NEXT Device Manager',
+    backgroundColor: '#17181d',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  managerWindow.loadFile(path.join(__dirname, 'renderer', 'connect.html'));
+  managerWindow.on('closed', () => {
+    managerWindow = null;
+  });
+}
+
+function registerIpc() {
+  ipcMain.handle('robots:get-all', async () => readRobots());
+
+  ipcMain.handle('robots:save', async (_event, robot) => {
+    const robots = await readRobots();
+    const normalized = normalizeRobot(robot);
+    const index = robots.findIndex((entry) => entry.id === normalized.id);
+    if (index >= 0) {
+      robots[index] = { ...robots[index], ...normalized };
+    } else {
+      robots.push(normalized);
+    }
+    return writeRobots(robots);
+  });
+
+  ipcMain.handle('robots:delete', async (_event, id) => {
+    const robots = await readRobots();
+    return writeRobots(robots.filter((robot) => robot.id !== String(id || '')));
+  });
+
+  ipcMain.handle('robots:connect', async (_event, robot) => {
+    await openRobotUi(robot);
+    return { ok: true };
+  });
+
+  ipcMain.handle('robots:probe', async (_event, robot) => probeRobot(robot));
+  ipcMain.handle('robots:refresh-one', async (_event, robot) => fetchRobotSnapshot(robot));
+
+  ipcMain.handle('robots:fetch-network-status', async (_event, robot) => {
+    const response = await fetchRobotJson(robot, '/api/next/network/status', { method: 'GET' }, 6000);
+    return response.payload;
+  });
+
+  ipcMain.handle('robots:scan-wifi', async (_event, robot, interfaceName = '') => {
+    const query = interfaceName ? `?interface=${encodeURIComponent(interfaceName)}&rescan=1` : '?rescan=1';
+    const response = await fetchRobotJson(robot, `/api/next/network/wifi/scan${query}`, { method: 'GET' }, 12000);
+    return response.payload;
+  });
+
+  ipcMain.handle('robots:connect-wifi', async (_event, robot, payload) => {
+    const response = await fetchRobotJson(
+      robot,
+      '/api/next/network/wifi/connect',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      },
+      25000,
+    );
+    return response.payload;
+  });
+
+  ipcMain.handle('robots:configure-interface', async (_event, robot, payload) => {
+    const response = await fetchRobotJson(
+      robot,
+      '/api/next/network/interface/configure',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      },
+      25000,
+    );
+    return response.payload;
+  });
+
+  ipcMain.handle('robots:set-wireless-enabled', async (_event, robot, payload) => {
+    const response = await fetchRobotJson(
+      robot,
+      '/api/next/network/wifi/enabled',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      },
+      15000,
+    );
+    return response.payload;
+  });
+
+  ipcMain.handle('settings:get', async () => readSettings());
+  ipcMain.handle('settings:save', async (_event, settings) => writeSettings(settings));
+  ipcMain.handle('desktop:get-bootstrap', async () => ({ version: app.getVersion() }));
+}
+
+app.whenReady().then(() => {
+  registerIpc();
+  createManagerWindow();
+
   const template = [
     {
       label: 'Connection',
       submenu: [
-        {
-          label: 'Change Robot',
-          accelerator: 'CmdOrCtrl+L',
-          click: async () => {
-            const config = await readConfig();
-            await showConnectWindow({ config });
-          },
-        },
-        {
-          label: 'Reload Robot UI',
-          accelerator: 'CmdOrCtrl+R',
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.reloadIgnoringCache();
-            }
-          },
-        },
-        {
-          label: 'Open Current UI In Browser',
-          click: async () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              await shell.openExternal(mainWindow.webContents.getURL());
-            }
-          },
-        },
+        { label: 'Device Manager', click: createManagerWindow },
         { type: 'separator' },
         { role: 'quit' },
       ],
@@ -227,182 +378,16 @@ function buildMenu() {
       label: 'View',
       submenu: [
         { role: 'reload' },
-        { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
       ],
     },
   ];
-
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-}
-
-async function showConnectWindow(bootstrap = null) {
-  connectBootstrap = bootstrap;
-  if (connectWindow && !connectWindow.isDestroyed()) {
-    connectWindow.focus();
-    return connectWindow;
-  }
-
-  connectWindow = new BrowserWindow({
-    width: CONNECT_WINDOW_SIZE.width,
-    height: CONNECT_WINDOW_SIZE.height,
-    minWidth: 520,
-    minHeight: 680,
-    title: 'Connect To Robot',
-    backgroundColor: '#0d1118',
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  connectWindow.on('closed', () => {
-    connectWindow = null;
-  });
-
-  await connectWindow.loadFile(path.join(__dirname, 'renderer', 'connect.html'));
-  return connectWindow;
-}
-
-async function showMainWindow(config) {
-  const safe = sanitizeConfig(config);
-  const targetUrl = buildTargetUrl(safe);
-
-  if (connectWindow && !connectWindow.isDestroyed()) {
-    connectWindow.close();
-  }
-
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    mainWindow = new BrowserWindow({
-      width: MAIN_WINDOW_SIZE.width,
-      height: MAIN_WINDOW_SIZE.height,
-      minWidth: 1280,
-      minHeight: 760,
-      title: 'NEXT Robot UI',
-      backgroundColor: '#0d1118',
-      autoHideMenuBar: true,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false,
-        partition: APP_PARTITION,
-      },
-    });
-
-    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    });
-
-    mainWindow.on('closed', () => {
-      mainWindow = null;
-    });
-  }
-
-  await applyProxy(safe, mainWindow.webContents.session);
-  await mainWindow.loadURL(targetUrl);
-  if (safe.maximizeOnStartup) {
-    mainWindow.maximize();
-  }
-  mainWindow.focus();
-  return mainWindow;
-}
-
-function registerIpc() {
-  if (ipcRegistered) {
-    return;
-  }
-  ipcRegistered = true;
-
-  ipcMain.handle('desktop:get-bootstrap', async () => {
-    const config = await readConfig();
-    return {
-      config,
-      bootstrap: connectBootstrap,
-      version: app.getVersion(),
-    };
-  });
-
-  ipcMain.handle('desktop:probe-target', async (_event, rawConfig) => {
-    return probeRobot(rawConfig);
-  });
-
-  ipcMain.handle('desktop:save-config', async (_event, rawConfig) => {
-    return writeConfig(rawConfig);
-  });
-
-  ipcMain.handle('desktop:get-settings', async () => {
-    return readConfig();
-  });
-
-  ipcMain.handle('desktop:update-settings', async (_event, partialConfig) => {
-    const nextConfig = await writeConfig(partialConfig || {});
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      await applyProxy(nextConfig, mainWindow.webContents.session);
-      if (nextConfig.maximizeOnStartup) {
-        mainWindow.maximize();
-      } else if (mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
-      }
-    }
-    return nextConfig;
-  });
-
-  ipcMain.handle('desktop:connect-target', async (_event, rawConfig) => {
-    const safe = sanitizeConfig(rawConfig);
-    const probe = await probeRobot(safe);
-    if (!probe.ok) {
-      return probe;
-    }
-    await writeConfig(safe);
-    await showMainWindow(safe);
-    return {
-      ok: true,
-      targetUrl: buildTargetUrl(safe),
-    };
-  });
-
-  ipcMain.handle('desktop:reload-ui', async () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      return { ok: false, message: 'Main window is not available' };
-    }
-    mainWindow.webContents.reloadIgnoringCache();
-    return { ok: true };
-  });
-}
-
-async function bootstrapApp() {
-  buildMenu();
-  registerIpc();
-
-  const config = await readConfig();
-  if (config.autoConnect) {
-    const probe = await probeRobot(config);
-    if (probe.ok) {
-      await showMainWindow(config);
-      return;
-    }
-    await showConnectWindow({
-      config,
-      error: probe.message || 'Auto-connect failed.',
-    });
-    return;
-  }
-
-  await showConnectWindow({ config });
-}
-
-app.whenReady().then(bootstrapApp);
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -410,8 +395,8 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('activate', async () => {
+app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    await bootstrapApp();
+    createManagerWindow();
   }
 });

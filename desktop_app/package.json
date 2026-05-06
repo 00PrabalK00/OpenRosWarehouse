@@ -1,15 +1,39 @@
 {
-  "name": "next-robot-ui-desktop",
-  "version": "0.1.0",
-  "description": "Desktop shell for the NEXT robot web UI",
+  "name": "next-robot-manager",
+  "productName": "NEXT",
+  "version": "1.0.0",
+  "description": "Professional Robot Management Software",
+  "author": "NEXT Robotics",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check renderer/connect.js"
+    "check": "node --check main.js && node --check preload.js && node --check renderer/connect.js",
+    "dist": "electron-builder",
+    "pack": "electron-builder --dir"
   },
   "devDependencies": {
-    "electron": "^31.7.7"
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.next.manager",
+    "productName": "NEXT",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "signingHashAlgorithms": [
+        "sha256"
+      ]
+    },
+    "forceCodeSigning": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ]
   }
 }
-
