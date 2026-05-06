@@ -832,6 +832,51 @@
         .pattr-direction-sel { flex: 1; font-size: 10px; background: var(--bg-input, #1a2234); color: var(--text-primary); border: 1px solid var(--border-primary); border-radius: 3px; padding: 2px 4px; height: 22px; cursor: pointer; }
         .prop-direction-sel { font-size: 11px; background: var(--bg-input, #1a2234); color: var(--text-primary); border: 1px solid var(--border-primary); border-radius: 3px; padding: 2px 6px; height: 26px; cursor: pointer; width: 100%; }
 
+        /* ── Base Button Styles ───────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid var(--border-primary);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            text-transform: none;
+            letter-spacing: 0.02em;
+        }
+        .btn:hover {
+            background: var(--bg-panel);
+            border-color: var(--border-secondary);
+        }
+        .btn:active {
+            transform: translateY(1px);
+        }
+        .btn-primary {
+            background: var(--selected-blue-dim) !important;
+            border-color: var(--selected-blue) !important;
+            color: var(--accent-blue, #4299E1) !important;
+        }
+        .btn-primary:hover {
+            background: rgba(38, 105, 200, 0.24) !important;
+            border-color: #60a5fa !important;
+        }
+        .btn-danger {
+            background: rgba(196, 43, 43, 0.14) !important;
+            border-color: rgba(196, 43, 43, 0.45) !important;
+            color: #fc8181 !important;
+        }
+        .btn-danger:hover {
+            background: rgba(196, 43, 43, 0.24) !important;
+            border-color: #f87171 !important;
+        }
+
         /* ── Settings + Editor Tab v2 ──────────────────────────────── */
         #settings-tab.active { background: var(--bg-canvas) !important; display: flex !important; flex-direction: column !important; overflow: hidden !important; }
         #editor-tab.active { background: var(--bg-canvas) !important; display: flex !important; flex-direction: column !important; }
@@ -13503,178 +13548,6 @@
                             </div>
                         </div>
 
-                        <!-- PATH ATTRIBUTES CARD -->
-                        <div class="card sidebar-section path-workflow-card" data-sidebar-mode="paths" id="path-attrs-card">
-                            <div class="path-section-title">
-                                Path Attributes
-                                <span class="pattr-count-badge" id="pattr-badge">0</span>
-                                <button class="path-btn path-btn-neutral pattr-reset-btn" onclick="resetPathAttrParams()" title="Reset all attributes">
-                                    <i class="fas fa-rotate-left"></i>
-                                </button>
-                            </div>
-                            <div class="path-card-content" style="padding: 0;">
-
-                                <!-- Scope indicator + per-segment apply/load -->
-                                <div class="pattr-scope-bar">
-                                    <span id="pattr-scope-pill" class="pattr-scope-pill">SELECT SEGMENT</span>
-                                    <button id="pattr-seg-load-btn" class="pattr-seg-btn" onclick="loadPattrFromSegment()" title="Load this segment's attribute overrides into the form">&#x2193; Load Seg</button>
-                                    <button id="pattr-seg-save-btn" class="pattr-seg-btn" onclick="savePattrToSegment()" title="Apply current form state to this segment only">&#x2191; Apply to Seg</button>
-                                </div>
-
-                                <!-- Segment direction -->
-                                <div class="pattr-direction-row">
-                                    <span class="pattr-direction-lbl"><i class="fas fa-arrows-left-right" style="margin-right:3px;"></i>Direction</span>
-                                    <select id="pattr-direction" class="pattr-direction-sel" onchange="onPathDirectionChange()">
-                                        <option value="uni">&#x2192; Unidirectional</option>
-                                        <option value="bi">&#x21C4; Bidirectional</option>
-                                        <option value="reverse">&#x2190; Reverse</option>
-                                    </select>
-                                </div>
-
-                                <!-- Motion Constraints -->
-                                <div class="pattr-group">
-                                    <button class="pattr-group-hdr" onclick="togglePattrGroup('motion')">
-                                        <i class="fas fa-gauge-high"></i><span>Motion Constraints</span>
-                                        <i class="fas fa-chevron-down pattr-chev" id="pattr-chev-motion"></i>
-                                    </button>
-                                    <div class="pattr-group-body collapsed" id="pattr-body-motion">
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-maxspeed" onchange="pattrToggle(this)">Max Speed</label>
-                                            <input type="number" id="pattr-maxspeed" class="pattr-num" min="0" step="0.1" placeholder="m/s" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-maxacc" onchange="pattrToggle(this)">Max Accel</label>
-                                            <input type="number" id="pattr-maxacc" class="pattr-num" min="0" step="0.1" placeholder="m/s²" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-maxdec" onchange="pattrToggle(this)">Max Decel</label>
-                                            <input type="number" id="pattr-maxdec" class="pattr-num" min="0" step="0.1" placeholder="m/s²" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-maxrot" onchange="pattrToggle(this)">Max Rot Speed</label>
-                                            <input type="number" id="pattr-maxrot" class="pattr-num" min="0" step="0.01" placeholder="rad/s" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-maxrotacc" onchange="pattrToggle(this)">Max Rot Accel</label>
-                                            <input type="number" id="pattr-maxrotacc" class="pattr-num" min="0" step="0.01" placeholder="rad/s²" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-maxrotdec" onchange="pattrToggle(this)">Max Rot Decel</label>
-                                            <input type="number" id="pattr-maxrotdec" class="pattr-num" min="0" step="0.01" placeholder="rad/s²" disabled>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Nav Tolerance -->
-                                <div class="pattr-group">
-                                    <button class="pattr-group-hdr" onclick="togglePattrGroup('tolerance')">
-                                        <i class="fas fa-bullseye"></i><span>Nav Tolerance</span>
-                                        <i class="fas fa-chevron-down pattr-chev" id="pattr-chev-tolerance"></i>
-                                    </button>
-                                    <div class="pattr-group-body collapsed" id="pattr-body-tolerance">
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-reachdist" onchange="pattrToggle(this)">Reach Dist</label>
-                                            <input type="number" id="pattr-reachdist" class="pattr-num" min="0" step="0.01" placeholder="m" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-reachangle" onchange="pattrToggle(this)">Reach Angle</label>
-                                            <input type="number" id="pattr-reachangle" class="pattr-num" min="0" step="0.01" placeholder="rad" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-width" onchange="pattrToggle(this)">Path Width</label>
-                                            <input type="number" id="pattr-width" class="pattr-num" min="0" step="0.01" placeholder="m" disabled>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Environment Sensing -->
-                                <div class="pattr-group">
-                                    <button class="pattr-group-hdr" onclick="togglePattrGroup('sensing')">
-                                        <i class="fas fa-broadcast-tower"></i><span>Env Sensing</span>
-                                        <i class="fas fa-chevron-down pattr-chev" id="pattr-chev-sensing"></i>
-                                    </button>
-                                    <div class="pattr-group-body collapsed" id="pattr-body-sensing">
-                                        <div class="pattr-bool-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-ultrasonic" onchange="pattrToggle(this)">Ultrasonic</label>
-                                            <label class="path-toggle-switch" for="pattr-ultrasonic" aria-label="Ultrasonic">
-                                                <input type="checkbox" id="pattr-ultrasonic" class="path-toggle-input pattr-bool" disabled>
-                                                <span class="path-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                        <div class="pattr-bool-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-laser" onchange="pattrToggle(this)">Laser</label>
-                                            <label class="path-toggle-switch" for="pattr-laser" aria-label="Laser">
-                                                <input type="checkbox" id="pattr-laser" class="path-toggle-input pattr-bool" disabled>
-                                                <span class="path-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                        <div class="pattr-bool-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-infrared" onchange="pattrToggle(this)">Infrared</label>
-                                            <label class="path-toggle-switch" for="pattr-infrared" aria-label="Infrared">
-                                                <input type="checkbox" id="pattr-infrared" class="path-toggle-input pattr-bool" disabled>
-                                                <span class="path-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Obstacle Control -->
-                                <div class="pattr-group">
-                                    <button class="pattr-group-hdr" onclick="togglePattrGroup('obstacle')">
-                                        <i class="fas fa-shield-halved"></i><span>Obstacle Control</span>
-                                        <i class="fas fa-chevron-down pattr-chev" id="pattr-chev-obstacle"></i>
-                                    </button>
-                                    <div class="pattr-group-body collapsed" id="pattr-body-obstacle">
-                                        <div class="pattr-bool-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-virtualLaser" onchange="pattrToggle(this)">Virtual Laser</label>
-                                            <label class="path-toggle-switch" for="pattr-virtualLaser" aria-label="Virtual Laser">
-                                                <input type="checkbox" id="pattr-virtualLaser" class="path-toggle-input pattr-bool" disabled>
-                                                <span class="path-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                        <div class="pattr-bool-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-3DCameraHole" onchange="pattrToggle(this)">3D Cam (Hole)</label>
-                                            <label class="path-toggle-switch" for="pattr-3DCameraHole" aria-label="3D Camera Hole">
-                                                <input type="checkbox" id="pattr-3DCameraHole" class="path-toggle-input pattr-bool" disabled>
-                                                <span class="path-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                        <div class="pattr-bool-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-3DCameraObstacle" onchange="pattrToggle(this)">3D Cam (Wall)</label>
-                                            <label class="path-toggle-switch" for="pattr-3DCameraObstacle" aria-label="3D Camera Obstacle">
-                                                <input type="checkbox" id="pattr-3DCameraObstacle" class="path-toggle-input pattr-bool" disabled>
-                                                <span class="path-toggle-slider"></span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Safety Groups -->
-                                <div class="pattr-group">
-                                    <button class="pattr-group-hdr" onclick="togglePattrGroup('safety')">
-                                        <i class="fas fa-user-shield"></i><span>Safety Groups</span>
-                                        <i class="fas fa-chevron-down pattr-chev" id="pattr-chev-safety"></i>
-                                    </button>
-                                    <div class="pattr-group-body collapsed" id="pattr-body-safety">
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-collisionGroupId" onchange="pattrToggle(this)">Collision Grp</label>
-                                            <input type="text" id="pattr-collisionGroupId" class="pattr-num" placeholder="ID" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-forbidLaserGroupId" onchange="pattrToggle(this)">Forbid Laser Grp</label>
-                                            <input type="text" id="pattr-forbidLaserGroupId" class="pattr-num" placeholder="ID" disabled>
-                                        </div>
-                                        <div class="pattr-row">
-                                            <label class="pattr-lbl"><input type="checkbox" class="pattr-en-chk" id="en-forbidDNodeGroupId" onchange="pattrToggle(this)">Forbid Node Grp</label>
-                                            <input type="text" id="pattr-forbidDNodeGroupId" class="pattr-num" placeholder="ID" disabled>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                        <!-- END PATH ATTRIBUTES CARD -->
-
                         <div class="card sidebar-section path-workflow-card" data-sidebar-mode="paths">
                             <div class="path-section-title">Saved Paths</div>
                             <div class="path-card-content">
@@ -19096,11 +18969,13 @@
                     }
 
                     async function applyLanguage() {
-                        ensureGoogleTranslateChromeSuppressed();
                         const sel = document.getElementById('language-select');
                         if (!sel) return;
                         const selected = storeUiLanguage(sel.value);
                         sel.value = selected;
+                        
+                        console.log('Applying language:', selected);
+                        ensureGoogleTranslateChromeSuppressed();
 
                         if (selected === 'en') {
                             clearGoogTransCookie();
@@ -19116,18 +18991,25 @@
 
                         setGoogTransTarget(selected);
                         try {
+                            showStatus('Loading translation module...', 'info');
                             await ensureGoogleTranslateModule();
-                            applyGoogleTranslateCombo(selected);
-                            stripGoogleTranslateChrome();
-                            document.documentElement.lang = selected === 'zh-CN' ? 'zh' : selected;
-                            const label = sel.options[sel.selectedIndex]?.text || selected;
-                            if (isAutoTranslateEnabled()) {
-                                showStatus(`Language applied: ${label} (source: English)`, 'success');
-                            } else {
-                                showStatus(`Language applied: ${label}. Enable "Automatic translation" to auto-apply on startup.`, 'info');
-                            }
+                            
+                            // Give Google Translate a moment to settle
+                            setTimeout(() => {
+                                applyGoogleTranslateCombo(selected);
+                                stripGoogleTranslateChrome();
+                                document.documentElement.lang = selected === 'zh-CN' ? 'zh' : selected;
+                                
+                                const label = sel.options[sel.selectedIndex]?.text || selected;
+                                if (isAutoTranslateEnabled()) {
+                                    showStatus(`Language applied: ${label} (source: English)`, 'success');
+                                } else {
+                                    showStatus(`Language applied: ${label}. Enable "Automatic translation" to apply on startup.`, 'info');
+                                }
+                            }, 500);
                         } catch (error) {
-                            showStatus(`Automatic translation module failed: ${error}`, 'error');
+                            console.error('Translation failed:', error);
+                            showStatus(`Translation module failed: ${error.message || error}`, 'error');
                         }
                     }
 
@@ -30018,28 +29900,14 @@
                                     <div class="property-label">Selected Segment</div>
                                     <div class="property-value">
                                         <strong>${escapeHtml(selectedSegmentLabel)}</strong>
-                                        ${source !== 'current' ? `
-                                        <div style="margin-top: 8px; border-top: 1px solid var(--border-chrome); padding-top: 8px;">
-                                            <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 4px;">Segment Direction</div>
-                                            <select class="prop-direction-sel" id="path-seg-prop-direction-sel" style="width: 100%; font-size: 10px;">
-                                                <option value="">(Inherit Path Default)</option>
-                                                <option value="uni">→ Unidirectional</option>
-                                                <option value="bi">⇄ Bidirectional</option>
-                                                <option value="reverse">← Reverse</option>
-                                            </select>
-                                            
-                                            <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 8px; margin-bottom: 4px;">Segment Max Speed (m/s)</div>
-                                            <input type="number" id="path-seg-prop-maxspeed" class="pattr-num" style="width: 100%; font-size: 10px; height: 24px;" min="0" step="0.1" placeholder="Default">
-                                            
-                                            <button id="path-seg-prop-save" class="property-action-btn primary" style="margin-top:8px; width:100%; font-size:10px;">
-                                                <i class="fas fa-save"></i> Save Segment Attrs
-                                            </button>
-                                        </div>
-                                        ` : `
-                                        <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
-                                            Use the <strong>Path Attributes</strong> sidebar card to edit this segment's overrides before saving the path.
-                                        </div>
-                                        `}
+                                        ${buildPathAttrEditorSection(
+                                            'path-seg-prop',
+                                            'Segment Properties',
+                                            source === 'current'
+                                                ? 'These segment-wise overrides are applied to the current drawn path and will be included on the next path run.'
+                                                : 'These segment-wise overrides are saved with this path and used whenever this path is run.',
+                                            source === 'current' ? 'Apply Segment Properties' : 'Save Segment Properties'
+                                        )}
                                     </div>
                                 </div>
                                 ` : ''}
@@ -30245,63 +30113,61 @@
                                     };
                                 }
 
-                                // Segment-wise property editor logic
-                                const segDirSel = document.getElementById('path-seg-prop-direction-sel');
-                                const segSpeedInp = document.getElementById('path-seg-prop-maxspeed');
-                                const segSaveBtn = document.getElementById('path-seg-prop-save');
-                                const selectedSegmentIndex = Number(elementData?.selected_segment_index);
+                            }
 
-                                if (segSaveBtn && Number.isInteger(selectedSegmentIndex) && selectedSegmentIndex >= 0) {
-                                    const settings = (elementData?.settings && typeof elementData.settings === 'object') ? elementData.settings : {};
-                                    const segAttrs = (settings?.segment_attrs && typeof settings.segment_attrs === 'object') ? settings.segment_attrs : {};
-                                    const currentSegAttrs = segAttrs[String(selectedSegmentIndex)] || {};
+                            // Segment-wise property editor logic
+                            const segDirSel = document.getElementById('path-seg-prop-direction');
+                            const segSaveBtn = document.getElementById('path-seg-prop-save');
+                            const selectedSegmentIndex = Number(elementData?.selected_segment_index);
 
-                                    if (segDirSel) segDirSel.value = currentSegAttrs.direction || '';
-                                    if (segSpeedInp) segSpeedInp.value = currentSegAttrs.maxspeed !== undefined ? currentSegAttrs.maxspeed : '';
+                            if (segSaveBtn && Number.isInteger(selectedSegmentIndex) && selectedSegmentIndex >= 0) {
+                                const settings = (elementData?.settings && typeof elementData.settings === 'object') ? elementData.settings : {};
+                                const segAttrs = (settings?.segment_attrs && typeof settings.segment_attrs === 'object') ? settings.segment_attrs : {};
+                                const currentSegAttrs = segAttrs[String(selectedSegmentIndex)] || {};
 
-                                    segSaveBtn.onclick = async () => {
-                                        const pathName = String(elementName || '').trim();
-                                        const pts = savedPathsCache[pathName];
-                                        const fullSettings = JSON.parse(JSON.stringify(savedPathSettingsCache[pathName] || {}));
-                                        if (!fullSettings.segment_attrs) fullSettings.segment_attrs = {};
+                                if (segDirSel) segDirSel.value = currentSegAttrs.direction || '';
+                                applyPathAttrParamsToEditor('path-seg-prop', currentSegAttrs);
 
-                                        const newAttrs = Object.assign({}, fullSettings.segment_attrs[String(selectedSegmentIndex)] || {});
-                                        if (segDirSel && segDirSel.value) {
-                                            newAttrs.direction = segDirSel.value;
-                                        } else if (segDirSel) {
-                                            delete newAttrs.direction;
-                                        }
+                                segSaveBtn.onclick = async () => {
+                                    const newAttrs = getPathAttrParamsFromEditor('path-seg-prop');
+                                    if (segDirSel && segDirSel.value) {
+                                        newAttrs.direction = segDirSel.value;
+                                    }
 
-                                        if (segSpeedInp) {
-                                            const speed = parseFloat(segSpeedInp.value);
-                                            if (Number.isFinite(speed)) {
-                                                newAttrs.maxspeed = speed;
-                                            } else {
-                                                delete newAttrs.maxspeed;
-                                            }
-                                        }
-
+                                    if (source === 'current') {
                                         if (Object.keys(newAttrs).length > 0) {
-                                            fullSettings.segment_attrs[String(selectedSegmentIndex)] = newAttrs;
+                                            segmentAttrsOverrides[String(selectedSegmentIndex)] = newAttrs;
                                         } else {
-                                            delete fullSettings.segment_attrs[String(selectedSegmentIndex)];
+                                            delete segmentAttrsOverrides[String(selectedSegmentIndex)];
                                         }
+                                        showStatus(`Segment ${selectedSegmentIndex + 1} properties applied to current path`, 'success');
+                                        drawMap();
+                                        return;
+                                    }
 
-                                        const res = await fetch('/api/path/save', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ name: pathName, path: pts, settings: fullSettings, overwrite: true })
-                                        });
-                                        const data = await res.json();
-                                        if (data.ok) {
-                                            savedPathSettingsCache[pathName] = fullSettings;
-                                            showStatus(`Segment ${selectedSegmentIndex + 1} properties saved for "${pathName}"`, 'success');
-                                            drawMap();
-                                        } else {
-                                            showStatus(`Failed to save segment properties: ${data.message}`, 'error');
-                                        }
-                                    };
-                                }
+                                    const pathName = String(elementName || '').trim();
+                                    const pts = savedPathsCache[pathName];
+                                    const fullSettings = JSON.parse(JSON.stringify(savedPathSettingsCache[pathName] || {}));
+                                    if (!fullSettings.segment_attrs) fullSettings.segment_attrs = {};
+                                    if (Object.keys(newAttrs).length > 0) {
+                                        fullSettings.segment_attrs[String(selectedSegmentIndex)] = newAttrs;
+                                    } else {
+                                        delete fullSettings.segment_attrs[String(selectedSegmentIndex)];
+                                    }
+                                    const res = await fetch('/api/path/save', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ name: pathName, path: pts, settings: fullSettings, overwrite: true })
+                                    });
+                                    const data = await res.json();
+                                    if (data.ok) {
+                                        savedPathSettingsCache[pathName] = fullSettings;
+                                        showStatus(`Segment ${selectedSegmentIndex + 1} properties saved for "${pathName}"`, 'success');
+                                        drawMap();
+                                    } else {
+                                        showStatus(`Failed to save segment properties: ${data.message}`, 'error');
+                                    }
+                                };
                             }
                         }
 
@@ -31723,17 +31589,9 @@
 
                                 <div class="settings-card" style="margin-top:12px;">
                                     <div class="settings-card-header"><h4 class="settings-card-title">Shelf Detection</h4></div>
-                                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                                        <button class="btn" type="button" onclick="openShelfPopup()">Open Shelf Controls</button>
+                                    <div style="font-size:12px; color:var(--text-secondary);">
+                                        Shelf detection parameters and calibration are managed via the <strong>RECOGNITION</strong> mode in the sidebar.
                                     </div>
-                                    <div style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
-                                        Use disable then enable to relaunch shelf detection when needed.<br>
-                                        Sensor restarts now follow the same disable/enable flow instead of separate relaunch buttons.
-                                    </div>
-                                </div>
-
-                                <div id="settings-relaunch-status" class="nav2-editor-status" style="margin-top:10px;">
-                                    Disable then enable a sensor or motor here to relaunch that component.
                                 </div>
                             </div>
                         </div>
@@ -31817,24 +31675,6 @@
                                         </div>
                                     </div>
                                 </div>
-
-                                <div class="settings-card" style="margin-top:12px;">
-                                    <div class="settings-card-header"><h4 class="settings-card-title">Topics</h4></div>
-                                    <div class="battery-kv-grid">
-                                        <div class="battery-kv">
-                                            <span class="battery-kv-label">Battery State</span>
-                                            <span class="battery-kv-value" id="battery-settings-state-topic">/battery_state</span>
-                                        </div>
-                                        <div class="battery-kv">
-                                            <span class="battery-kv-label">Temperature</span>
-                                            <span class="battery-kv-value" id="battery-settings-temp-topic">/battery_temperature</span>
-                                        </div>
-                                        <div class="battery-kv">
-                                            <span class="battery-kv-label">Charge Cycles</span>
-                                            <span class="battery-kv-value" id="battery-settings-cycles-topic">/battery_charge_cycles</span>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
@@ -31906,7 +31746,7 @@
                                 <div class="settings-card">
                                     <div class="settings-card-header">
                                         <h4 class="settings-card-title">User Management</h4>
-                                        <button class="btn btn-primary" style="height:20px; font-size:9px;" onclick="handleCreateUser()"><i class="fas fa-plus"></i> Add User</button>
+                                        <button class="btn btn-primary" onclick="handleCreateUser()"><i class="fas fa-plus"></i> Add User</button>
                                     </div>
                                     <div id="settings-users-list" class="settings-list" style="margin-top:10px;">
                                         <!-- Populated by JS -->
@@ -31935,10 +31775,10 @@
                                     </div>
                                     <div style="padding-top:10px; display:flex; flex-direction:column; gap:8px;">
                                         <div style="display:flex; gap:6px;">
-                                            <button class="btn btn-primary" style="flex:1; font-size:10px;" onclick="handleTestHardware('indicators', {pattern:'blink', color:'#00ff00'})"><i class="fas fa-lightbulb"></i> Blink Green</button>
-                                            <button class="btn btn-primary" style="flex:1; font-size:10px;" onclick="handleTestHardware('indicators', {pattern:'solid', color:'#ff0000'})"><i class="fas fa-lightbulb"></i> Solid Red</button>
+                                            <button class="btn btn-primary" style="flex:1;" onclick="handleTestHardware('indicators', {pattern:'blink', color:'#00ff00'})"><i class="fas fa-lightbulb"></i> Blink Green</button>
+                                            <button class="btn btn-primary" style="flex:1;" onclick="handleTestHardware('indicators', {pattern:'solid', color:'#ff0000'})"><i class="fas fa-lightbulb"></i> Solid Red</button>
                                         </div>
-                                        <button class="btn btn-danger" style="width:100%; font-size:10px;" onclick="handleTestHardware('motors', {action:'nudge'})"><i class="fas fa-cog"></i> Nudge Motors (Safe Pulse)</button>
+                                        <button class="btn btn-danger" style="width:100%;" onclick="handleTestHardware('motors', {action:'nudge'})"><i class="fas fa-cog"></i> Nudge Motors (Safe Pulse)</button>
                                     </div>
                                 </div>
                             </div>
@@ -41121,30 +40961,63 @@
             const { silent = false } = options;
             const savedTheme = String(theme || 'dark').trim().toLowerCase() || 'dark';
             const resolvedTheme = savedTheme === 'system' ? resolveSystemTheme() : savedTheme;
+            const root = document.documentElement;
             console.log('Changing theme to:', savedTheme, 'resolved:', resolvedTheme);
+
             if (resolvedTheme === 'light') {
-                document.documentElement.style.setProperty('--bg-primary', '#f5f5f5');
-                document.documentElement.style.setProperty('--bg-secondary', '#ffffff');
-                document.documentElement.style.setProperty('--bg-tertiary', '#fafafa');
-                document.documentElement.style.setProperty('--bg-elevated', '#ffffff');
-                document.documentElement.style.setProperty('--bg-panel', '#f8f8f8');
-                document.documentElement.style.setProperty('--border-primary', '#e0e0e0');
-                document.documentElement.style.setProperty('--border-secondary', '#d0d0d0');
-                document.documentElement.style.setProperty('--text-primary', '#212121');
-                document.documentElement.style.setProperty('--text-secondary', '#666666');
-                document.documentElement.style.setProperty('--text-tertiary', '#999999');
+                // Core Backgrounds
+                root.style.setProperty('--bg-primary', '#f5f7fa');
+                root.style.setProperty('--bg-secondary', '#ffffff');
+                root.style.setProperty('--bg-tertiary', '#edf2f7');
+                root.style.setProperty('--bg-elevated', '#ffffff');
+                root.style.setProperty('--bg-panel', '#f8fafc');
+                
+                // Chrome & Infrastructure
+                root.style.setProperty('--bg-chrome', '#e2e8f0');
+                root.style.setProperty('--bg-canvas', '#f8fafc');
+                root.style.setProperty('--bg-inspector', '#ffffff');
+                
+                // Borders
+                root.style.setProperty('--border-primary', '#cbd5e0');
+                root.style.setProperty('--border-secondary', '#a0aec0');
+                root.style.setProperty('--border-heavy', '#718096');
+                root.style.setProperty('--border-chrome', '#cbd5e0');
+                
+                // Text
+                root.style.setProperty('--text-primary', '#1a202c');
+                root.style.setProperty('--text-secondary', '#4a5568');
+                root.style.setProperty('--text-tertiary', '#718096');
+                root.style.setProperty('--text-field-label', '#4a5568');
+                root.style.setProperty('--text-field-value', '#1a202c');
+                
+                // Accents & Selection
+                root.style.setProperty('--selected-blue-dim', 'rgba(38, 105, 200, 0.08)');
+                root.style.setProperty('--accent-normal', '#3182ce');
             } else {
-                // Reset to dark theme (Industrial Dark)
-                document.documentElement.style.setProperty('--bg-primary', '#0a0e14');
-                document.documentElement.style.setProperty('--bg-secondary', '#121720');
-                document.documentElement.style.setProperty('--bg-tertiary', '#1a202c');
-                document.documentElement.style.setProperty('--bg-elevated', '#232933');
-                document.documentElement.style.setProperty('--bg-panel', '#1c2432');
-                document.documentElement.style.setProperty('--border-primary', '#2d3748');
-                document.documentElement.style.setProperty('--border-secondary', '#3d4a5c');
-                document.documentElement.style.setProperty('--text-primary', '#e2e8f0');
-                document.documentElement.style.setProperty('--text-secondary', '#a0aec0');
-                document.documentElement.style.setProperty('--text-tertiary', '#718096');
+                // Reset to Industrial Dark
+                root.style.setProperty('--bg-primary', '#0a0e14');
+                root.style.setProperty('--bg-secondary', '#121720');
+                root.style.setProperty('--bg-tertiary', '#1a202c');
+                root.style.setProperty('--bg-elevated', '#232933');
+                root.style.setProperty('--bg-panel', '#1c2432');
+                
+                root.style.setProperty('--bg-chrome', '#1B1F27');
+                root.style.setProperty('--bg-canvas', '#13161D');
+                root.style.setProperty('--bg-inspector', '#191D26');
+                
+                root.style.setProperty('--border-primary', '#2d3748');
+                root.style.setProperty('--border-secondary', '#3d4a5c');
+                root.style.setProperty('--border-heavy', '#4a5568');
+                root.style.setProperty('--border-chrome', '#252B38');
+                
+                root.style.setProperty('--text-primary', '#e2e8f0');
+                root.style.setProperty('--text-secondary', '#a0aec0');
+                root.style.setProperty('--text-tertiary', '#718096');
+                root.style.setProperty('--text-field-label', '#6B7794');
+                root.style.setProperty('--text-field-value', '#C5CDD9');
+                
+                root.style.setProperty('--selected-blue-dim', 'rgba(38, 105, 200, 0.14)');
+                root.style.setProperty('--accent-normal', '#4299e1');
             }
             localStorage.setItem('theme', savedTheme);
             setSkinThemeSelection(savedTheme);
