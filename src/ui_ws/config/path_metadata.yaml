@@ -201,5 +201,7 @@ FullRun:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
-    segment_attrs: {}
+    segment_attrs:
+      '1':
+        direction: bi
     has_curves: false

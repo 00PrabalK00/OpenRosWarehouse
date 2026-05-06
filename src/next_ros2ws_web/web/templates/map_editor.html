@@ -491,6 +491,11 @@
             scrollbar-color: var(--border-chrome) transparent;
         }
 
+        #map-editor-shell .mctrl-spacer {
+            flex: 1 0 24px;
+            min-width: 24px;
+        }
+
         #map-editor-shell .navigator-top-controls.map-editor-top-controls::-webkit-scrollbar {
             height: 3px;
         }
@@ -533,6 +538,24 @@
             background: rgba(255,255,255,0.07);
             color: var(--text-primary);
             border-color: var(--border-secondary);
+        }
+
+        #map-editor-shell .session-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 32px;
+            padding: 0 10px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 3px;
+            background: rgba(9, 13, 20, 0.86);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
 
         #map-editor-shell .mctrl-btn.active,
@@ -1484,6 +1507,23 @@
                 <button class="mctrl-btn mctrl-btn-icon" id="editor-settings-toggle" title="Global editor settings">
                     <i class="fas fa-gear"></i>
                 </button>
+
+                <div class="mctrl-spacer"></div>
+                <span class="session-chip">{{ (current_user or 'viewer') }} · {{ (current_role or 'viewer')|upper }}</span>
+                <a class="mctrl-btn" href="/user" title="Open operator workspace" style="text-decoration:none;">
+                    <i class="fas fa-gamepad"></i>
+                    <span>Viewer</span>
+                </a>
+                <a class="mctrl-btn" href="/" title="Open access portal" style="text-decoration:none;">
+                    <i class="fas fa-house"></i>
+                    <span>Access</span>
+                </a>
+                <form method="post" action="/dev/lock" style="display:inline-flex; flex-shrink:0;">
+                    <button class="mctrl-btn" type="submit" title="Sign out">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Sign Out</span>
+                    </button>
+                </form>
             </div>
             <div id="editor-settings-popover" class="editor-popover" hidden>
                 <div class="popover-stack">

@@ -27545,17 +27545,19 @@
                             const y = e.clientY - rect.top;
                             const [wx, wy] = pixelToWorld(x, y);
                             // Hit-test against zones (generous 0.5m radius in edit mode)
-                            for (const [name, zone] of Object.entries(zones)) {
-                                if (!zone.position) continue;
-                                const [zx, zy] = worldToPixel(zone.position.x, zone.position.y);
-                                if (Math.hypot(x - zx, y - zy) <= 28) {
-                                    editingZone = name;
-                                    draggingZoneOffsetX = wx - zone.position.x;
-                                    draggingZoneOffsetY = wy - zone.position.y;
-                                    isDragging = true;
-                                    canvas.style.cursor = 'grabbing';
-                                    e.preventDefault();
-                                    return;
+                            if (currentMapMode === 'zones') {
+                                for (const [name, zone] of Object.entries(zones)) {
+                                    if (!zone.position) continue;
+                                    const [zx, zy] = worldToPixel(zone.position.x, zone.position.y);
+                                    if (Math.hypot(x - zx, y - zy) <= 28) {
+                                        editingZone = name;
+                                        draggingZoneOffsetX = wx - zone.position.x;
+                                        draggingZoneOffsetY = wy - zone.position.y;
+                                        isDragging = true;
+                                        canvas.style.cursor = 'grabbing';
+                                        e.preventDefault();
+                                        return;
+                                    }
                                 }
                             }
                             // Hit-test drawn-path waypoints in edit mode (paths map mode)
@@ -30887,6 +30889,13 @@
                         const zone = zones[zoneName];
                         if (!zone) return;
 
+                        const metadata = (zone.metadata && typeof zone.metadata === 'object') ? zone.metadata : {};
+                        const actionPointConfig = (zone.action_point_config && typeof zone.action_point_config === 'object') ? zone.action_point_config : (metadata.action_point || {});
+
+                        let zoneType = 'normal';
+                        if (metadata.action || zone.action || metadata.action_point || zone.action_point_config) zoneType = 'action';
+                        if (metadata.charge_duration || zone.charge_duration) zoneType = 'charge';
+
                         fetch('/api/zones/update', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -30895,7 +30904,16 @@
                                 x: zone.position.x,
                                 y: zone.position.y,
                                 theta: 2 * Math.atan2(zone.orientation.z, zone.orientation.w),
-                                overwrite: true
+                                overwrite: true,
+                                type: zoneType,
+                                speed: metadata.speed !== undefined ? metadata.speed : (zone.speed !== undefined ? zone.speed : 0.5),
+                                action: metadata.action || zone.action || '',
+                                charge_duration: metadata.charge_duration !== undefined ? metadata.charge_duration : (zone.charge_duration || 0.0),
+                                point_type: actionPointConfig.point_type || 'generic',
+                                template_id: actionPointConfig.template_id || '',
+                                recognize: Boolean(actionPointConfig.recognize),
+                                action_point_notes: actionPointConfig.notes || '',
+                                pre_point: actionPointConfig.pre_point || null
                             })
                         })
                             .then(response => response.json())
