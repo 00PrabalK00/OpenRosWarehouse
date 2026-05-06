@@ -241,6 +241,7 @@ class MissionManager(Node):
         self.current_zone = ''
         self.interrupted_by = ''
         self.message = str(message)
+        self._fallback_nearest_path = False
 
     def _serialize_locked(self) -> Dict:
         return {
@@ -777,7 +778,7 @@ class MissionManager(Node):
             self._disable_shelf_detector_best_effort()
             return (
                 False,
-                f'Shelf detection timed out after {self._shelf_detection_timeout_s:.0f}s '
+                f'SHELF_NOT_DETECTED: Shelf detection timed out after {self._shelf_detection_timeout_s:.0f}s '
                 f'at zone "{zone_name}"',
             )
 
@@ -1170,23 +1171,33 @@ class MissionManager(Node):
                 ok, rcg_msg = self._run_shelf_recognition_workflow(
                     zone_name, template_id, token)
                 if not ok:
-                    self._mark_interrupted_if_active(
-                        token, 'shelf_recognition_failed', rcg_msg)
-                    return
+                    if 'SHELF_NOT_DETECTED' in rcg_msg:
+                        self.get_logger().warn(
+                            f'Shelf not detected at "{zone_name}": {rcg_msg}. '
+                            'Proceeding to next point in sequence using nearest path.'
+                        )
+                        with self._lock:
+                            self._fallback_nearest_path = True
+                        zone_action = None
+                    else:
+                        self._mark_interrupted_if_active(
+                            token, 'shelf_recognition_failed', rcg_msg)
+                        return
 
-            with self._lock:
-                if token != self._mission_token or not self.running:
-                    return
-                self.message = f'Zone "{zone_name}": executing action "{zone_action}"'
-                try:
-                    self._persist_locked()
-                except Exception:
-                    pass
+            if zone_action:
+                with self._lock:
+                    if token != self._mission_token or not self.running:
+                        return
+                    self.message = f'Zone "{zone_name}": executing action "{zone_action}"'
+                    try:
+                        self._persist_locked()
+                    except Exception:
+                        pass
 
-            ok, action_message = self._execute_zone_action_and_wait(zone_action, token)
-            if not ok:
-                self._mark_interrupted_if_active(token, 'action_failed', action_message)
-                return
+                ok, action_message = self._execute_zone_action_and_wait(zone_action, token)
+                if not ok:
+                    self._mark_interrupted_if_active(token, 'action_failed', action_message)
+                    return
 
         dispatch = False
         with self._lock:
@@ -1263,7 +1274,13 @@ class MissionManager(Node):
             self._persist_locked()
 
         goal = GoToZone.Goal()
-        goal.name = zone_name
+        with self._lock:
+            if self._fallback_nearest_path:
+                goal.name = f'__nearest_path__:{zone_name}'
+                self._fallback_nearest_path = False
+                self.get_logger().info(f'Dispatching next zone "{zone_name}" with nearest-path fallback')
+            else:
+                goal.name = zone_name
         send_future = self.go_to_zone_client.send_goal_async(goal)
         send_future.add_done_callback(lambda fut, _token=token: self._on_goal_response(fut, _token))
         return True, f'Navigating to zone {self.progress + 1}/{len(self.mission_data)}: {zone_name}'
@@ -1398,6 +1415,7 @@ class MissionManager(Node):
             self.current_zone = ''
             self.interrupted_by = ''
             self.message = 'Sequence starting'
+            self._fallback_nearest_path = False
         ok, msg = self._dispatch_next()
         response.ok = bool(ok)
         response.message = str(msg)

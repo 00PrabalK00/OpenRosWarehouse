@@ -7,7 +7,7 @@ import math
 import time
 import threading
 import tempfile
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
@@ -273,6 +273,11 @@ class ZoneManager(Node):
         self.controller_motion_intent_client = self.create_client(
             SetMotionIntent,
             self.controller_motion_intent_service,
+        )
+        self.safety_set_params_service = self._endpoint('/safety_controller/set_parameters')
+        self.safety_set_params_client = self.create_client(
+            SetParameters,
+            self.safety_set_params_service,
         )
         self.controller_params_client = self.create_client(
             SetParameters,
@@ -1615,6 +1620,49 @@ class ZoneManager(Node):
 
         future.add_done_callback(_done)
         return True, f'{service_name} request queued'
+
+    @staticmethod
+    def _make_bool_parameter(name: str, value: bool) -> Parameter:
+        pv = ParameterValue()
+        pv.type = ParameterType.PARAMETER_BOOL
+        pv.bool_value = bool(value)
+        return Parameter(name=str(name), value=pv)
+
+    async def _set_safety_distance_enabled(self, enabled: bool, reason: str) -> Tuple[bool, str]:
+        target_state = 'enabled' if enabled else 'disabled'
+        if not self.safety_set_params_client.wait_for_service(timeout_sec=0.75):
+            return False, f'{self.safety_set_params_service} unavailable'
+
+        req = SetParameters.Request()
+        req.parameters = [
+            self._make_bool_parameter('distance_safety_enabled', bool(enabled)),
+        ]
+        future = self.safety_set_params_client.call_async(req)
+        deadline = time.monotonic() + 3.0
+
+        while time.monotonic() < deadline:
+            if future.done():
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    return False, f'{self.safety_set_params_service} call failed: {exc}'
+
+                results = list(getattr(result, 'results', []) or [])
+                failed = [item for item in results if not bool(getattr(item, 'successful', False))]
+                if failed:
+                    detail = '; '.join(
+                        str(getattr(item, 'reason', '') or 'rejected')
+                        for item in failed
+                    )
+                    return False, f'{self.safety_set_params_service} rejected: {detail}'
+
+                self.get_logger().info(
+                    f'Safety distance gating {target_state} for {reason}'
+                )
+                return True, f'distance safety {target_state}'
+            await self._non_blocking_wait(0.05)
+
+        return False, f'{self.safety_set_params_service} timed out'
 
     async def _call_setbool_service(
         self,
@@ -4095,6 +4143,7 @@ class ZoneManager(Node):
             source='zone_manager:shelf_insert',
         )
         self._docking_motion_gate.set_lease(lease)
+        safety_distance_disabled = False
         loop_hz = max(10.0, float(self.goal_pose_handoff_local_insert_loop_hz))
         loop_dt = 1.0 / loop_hz
         no_progress_timeout_sec = self._optional_timeout_parameter(
@@ -4148,6 +4197,16 @@ class ZoneManager(Node):
             last_feedback_ns = now_ns
 
         try:
+            safety_ok, safety_msg = await self._set_safety_distance_enabled(
+                False,
+                f'shelf insertion "{target_label}"',
+            )
+            if not safety_ok:
+                return False, (
+                    f'Could not disable distance safety for shelf insertion "{target_label}": '
+                    f'{safety_msg}'
+                )
+            safety_distance_disabled = True
             self._set_navigation_lane_locked(True)
             while True:
                 if goal_handle.is_cancel_requested:
@@ -4156,7 +4215,7 @@ class ZoneManager(Node):
                 if self.estop_active:
                     self._publish_docking_twist(0.0, 0.0)
                     return False, f'Shelf insertion "{target_label}" aborted: E-STOP active.'
-                if self.distance_obstacle_hold_active:
+                if self.distance_obstacle_hold_active and (not safety_distance_disabled):
                     self._publish_docking_twist(0.0, 0.0)
                     return False, f'Shelf insertion "{target_label}" aborted: obstacle hold active.'
                 robot_pose = self._robot_pose_in_frame(frame_id, timeout_sec=0.20)
@@ -4292,6 +4351,16 @@ class ZoneManager(Node):
                 )
                 await self._non_blocking_wait(loop_dt)
         finally:
+            if safety_distance_disabled:
+                restore_ok, restore_msg = await self._set_safety_distance_enabled(
+                    True,
+                    f'shelf insertion "{target_label}" cleanup',
+                )
+                if not restore_ok:
+                    self.get_logger().error(
+                        f'Failed restoring safety distance gating after shelf insertion '
+                        f'"{target_label}": {restore_msg}'
+                    )
             self._publish_docking_twist(0.0, 0.0)
             self._set_navigation_lane_locked(False)
             self._docking_motion_gate.clear()
@@ -5150,7 +5219,15 @@ class ZoneManager(Node):
         return result
 
     async def execute_go_to_zone(self, goal_handle):
-        zone_name = goal_handle.request.name
+        zone_name = str(goal_handle.request.name or '').strip()
+
+        # --- Handle nearest path fallback from MissionManager ---
+        nearest_path_prefix = '__nearest_path__:'
+        if zone_name.startswith(nearest_path_prefix):
+            real_zone_name = zone_name[len(nearest_path_prefix):]
+            self.get_logger().info(f'GoToZone received nearest-path fallback for "{real_zone_name}"')
+            return await self._execute_go_to_zone_via_nearest_path(goal_handle, real_zone_name)
+
         target_zone, target_label, resolve_error = self._resolve_go_to_zone_target(zone_name)
         if target_zone is None:
             result = GoToZoneAction.Result()
@@ -5205,6 +5282,164 @@ class ZoneManager(Node):
             )
         finally:
             self._clear_active_goal_marker()
+
+    async def _execute_go_to_zone_via_nearest_path(self, goal_handle, zone_name):
+        path_name, points = self._find_nearest_path_to_zone(zone_name)
+
+        if not points:
+            self.get_logger().warn(
+                f'No saved path found leading to zone "{zone_name}"; '
+                f'falling back to direct free-navigation.'
+            )
+            target_zone, target_label, resolve_error = self._resolve_go_to_zone_target(zone_name)
+            if target_zone is None:
+                result = GoToZoneAction.Result()
+                result.success = False
+                result.message = resolve_error
+                goal_handle.abort()
+                return result
+
+            target_pose = PoseStamped()
+            target_pose.header.frame_id = str(target_zone.get('frame_id', 'map') or 'map')
+            target_pose.header.stamp = self.get_clock().now().to_msg()
+            target_pose.pose.position.x = float(target_zone['position']['x'])
+            target_pose.pose.position.y = float(target_zone['position']['y'])
+            target_pose.pose.position.z = float(target_zone['position']['z'])
+            target_pose.pose.orientation.x = float(target_zone['orientation']['x'])
+            target_pose.pose.orientation.y = float(target_zone['orientation']['y'])
+            target_pose.pose.orientation.z = float(target_zone['orientation']['z'])
+            target_pose.pose.orientation.w = float(target_zone['orientation']['w'])
+            self._ensure_pose_orientation(target_pose.pose)
+
+            self._publish_active_goal_marker(target_label, target_pose)
+            try:
+                return await self._forward_navigate_to_pose_goal(
+                    goal_handle,
+                    target_label=target_label,
+                    target_pose=target_pose,
+                )
+            finally:
+                self._clear_active_goal_marker()
+
+        # Convert points to waypoints for FollowPath
+        stamped_waypoints = []
+        now = self.get_clock().now().to_msg()
+        for p in points:
+            wp = PoseStamped()
+            wp.header.frame_id = 'map'
+            wp.header.stamp = now
+            wp.pose.position.x = float(p['x'])
+            wp.pose.position.y = float(p['y'])
+            wp.pose.position.z = 0.0
+            wp.pose.orientation.w = 1.0
+            stamped_waypoints.append(wp)
+
+        # Create a proxy for FollowPath request
+        class MockFollowPathRequest:
+            def __init__(self, wps):
+                self.waypoints = wps
+                self.zone_names = []
+                self.shelf_checks = []
+                self.segment_bidirectional = []
+
+        # Create a proxy for the goal handle to bridge FollowPath -> GoToZone
+        class FollowPathProxyGH:
+            def __init__(self, gh, req, logger):
+                self._gh = gh
+                self.request = req
+                self._logger = logger
+
+            @property
+            def is_active(self):
+                return self._gh.is_active
+
+            @property
+            def is_cancel_requested(self):
+                return self._gh.is_cancel_requested
+
+            def publish_feedback(self, feedback):
+                proxy_fb = GoToZoneAction.Feedback()
+                proxy_fb.progress = 0.0
+                proxy_fb.status = f'[NearestPath] {feedback.status}'
+                try:
+                    self._gh.publish_feedback(proxy_fb)
+                except Exception:
+                    pass
+
+            def succeed(self): self._gh.succeed()
+            def abort(self): self._gh.abort()
+            def canceled(self): self._gh.canceled()
+
+        proxy_req = MockFollowPathRequest(stamped_waypoints)
+        proxy_gh = FollowPathProxyGH(goal_handle, proxy_req, self.get_logger())
+
+        self.get_logger().info(
+            f'Executing FollowPath to "{zone_name}" using nearest path "{path_name}" '
+            f'({len(stamped_waypoints)} points)'
+        )
+        follow_result = await self._execute_follow_path_segmented(proxy_gh)
+
+        # Map FollowPath result back to GoToZone result
+        result = GoToZoneAction.Result()
+        if follow_result == '__terminal__':
+            result.success = False
+            result.message = 'FollowPath execution failed (terminal)'
+        else:
+            result.success = bool(getattr(follow_result, 'success', False))
+            result.message = str(getattr(follow_result, 'message', ''))
+        return result
+
+    def _find_nearest_path_to_zone(self, zone_name: str) -> Tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
+        self.load_zones()
+        target_zone = self.zones.get('zones', {}).get(zone_name)
+        if not target_zone:
+            return None, None
+
+        tx = float(target_zone['position']['x'])
+        ty = float(target_zone['position']['y'])
+        frame_id = str(target_zone.get('frame_id', 'map') or 'map')
+
+        robot_pose = self._robot_pose_in_frame(frame_id)
+        if not robot_pose:
+            return None, None
+        rx = float(robot_pose.pose.position.x)
+        ry = float(robot_pose.pose.position.y)
+
+        best_path_name = None
+        best_points = None
+        min_robot_dist = float('inf')
+        match_tolerance = 0.5  # metres
+
+        for p_name, p_data in self.paths.items():
+            pts = p_data.get('points', [])
+            if len(pts) < 2:
+                continue
+
+            # Find target waypoint index
+            target_idx = -1
+            for i, p in enumerate(pts):
+                if math.hypot(float(p['x']) - tx, float(p['y']) - ty) < match_tolerance:
+                    target_idx = i
+                    break
+            
+            if target_idx == -1:
+                continue
+
+            # Find nearest waypoint to robot among those before/at target_idx
+            near_idx = -1
+            near_dist = float('inf')
+            for i in range(target_idx + 1):
+                d = math.hypot(float(pts[i]['x']) - rx, float(pts[i]['y']) - ry)
+                if d < near_dist:
+                    near_dist = d
+                    near_idx = i
+            
+            if near_idx != -1 and near_dist < min_robot_dist:
+                min_robot_dist = near_dist
+                best_path_name = p_name
+                best_points = pts[near_idx : target_idx + 1]
+
+        return best_path_name, best_points
 
     def navigate_to_goal_pose_callback(self, _request, response):
         if self.estop_active:
@@ -6880,10 +7115,15 @@ class ZoneManager(Node):
                         goal_handle.abort()
                         return terminal_error, False
                     if recognize_via_config:
-                        return (
+                        self.get_logger().warn(
                             f'SHELF_CHECK shelf not detected from "{scan_location_label}" '
-                            f'for action point "{target_label}"; zone action was not run'
-                        ), False
+                            f'for action point "{target_label}"; skipping zone action'
+                        )
+                        _publish_feedback(
+                            waypoint_index,
+                            f'SHELF_CHECK: no shelf detected from "{scan_location_label}"; skipping',
+                        )
+                        return '', False
                     _publish_feedback(
                         waypoint_index,
                         f'SHELF_CHECK: no shelf detected from "{scan_location_label}"; continuing',
@@ -7577,15 +7817,16 @@ class ZoneManager(Node):
                         return result
                     actioned_indices.add(target_idx)
                 elif shelf_pre_point_flow:
-                    result.success = False
-                    result.completed = int(max(0, completed_count))
-                    result.message = (
+                    self.get_logger().warn(
                         f'Shelf action point "{zone_name_at}" was scanned from pre-point '
                         f'"{pre_point_name}" but shelf insertion did not complete; '
-                        f'skipping zone action'
+                        'skipping zone action and continuing to next waypoint'
                     )
-                    goal_handle.abort()
-                    return result
+                    _publish_feedback(
+                        target_idx,
+                        f'SHELF_CHECK failed at "{zone_name_at}"; skipping to next waypoint',
+                    )
+                    actioned_indices.add(target_idx)
 
                 # Phase 5: optional POI action after move/align/stop timer/shelf check.
                 zone_action_id = normalize_action_id(zone_meta_at.get('action', ''))

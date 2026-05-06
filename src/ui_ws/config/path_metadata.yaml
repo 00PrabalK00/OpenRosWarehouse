@@ -171,23 +171,29 @@ zelfy:
     has_curves: false
 FullRun:
   points:
-  - x: 4.86
-    y: 10.28
+  - x: 4.753357
+    y: 10.356174
     zone_name: A1
   - x: 6.1
     y: 11.44
     zone_name: A2
   - x: 11.09
-    y: 6.66
+    y: 6.673845
     zone_name: A3
   - x: 11.747371
-    y: 5.672344
+    y: 5.680441
     zone_name: PRE-POINT
   - x: 12.57
     y: 4.9
     zone_name: zelf
   - x: 10.08
-    y: 5.53
+    y: 5.521904
+    zone_name: A4
+  - x: 11.747371
+    y: 5.680441
+    zone_name: PRE-POINT
+  - x: 10.08
+    y: 5.521904
     zone_name: A4
   settings:
     loop_type: closed
