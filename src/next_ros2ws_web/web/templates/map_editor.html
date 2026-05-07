@@ -9,6 +9,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Global Custom Scrollbar for Dark UI */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-chrome, #30363d);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-tertiary, #8b949e);
+        }
+
         /* ================================================================
            Map Editor — Industrial HMI Shell (matches home page design)
            ================================================================ */
@@ -708,7 +724,7 @@
             flex: 1;
             min-height: 0;
             display: grid;
-            grid-template-columns: var(--map-editor-sidebar-width, 286px) minmax(0, 1fr) 318px;
+            grid-template-columns: var(--map-editor-sidebar-width, 64px) minmax(0, 1fr) var(--map-editor-inspector-width, 318px);
             overflow: hidden;
         }
 
@@ -716,14 +732,23 @@
             --map-editor-sidebar-width: 0px;
         }
 
+        #map-editor-shell.inspector-collapsed {
+            --map-editor-inspector-width: 22px;
+        }
+
         #map-editor-shell .tool-sidebar {
             min-width: 0;
-            overflow: hidden;
+            overflow: visible;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 6px;
             background: var(--bg-inspector);
             border-right: 1px solid var(--border-chrome);
+            position: relative;
             transition: opacity 0.14s ease, border-color 0.14s ease;
+            z-index: 4;
         }
 
         #map-editor-shell.sidebar-collapsed .tool-sidebar {
@@ -732,18 +757,102 @@
             border-right-color: transparent;
         }
 
-        #map-editor-shell .tool-sidebar-header {
+        #map-editor-shell .tool-rail {
             display: flex;
+            flex-direction: column;
+            gap: 8px;
             align-items: center;
-            gap: 10px;
-            justify-content: space-between;
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--border-chrome);
+            width: 100%;
+        }
+
+        #map-editor-shell .tool-rail-group {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+            align-items: center;
+        }
+
+        #map-editor-shell .tool-rail-group.active-panel {
+            display: flex;
+        }
+
+        #map-editor-shell .tool-rail-btn {
+            width: 46px;
+            height: 46px;
+            padding: 0;
+            border: 1px solid var(--border-chrome);
+            border-radius: 5px;
             background: var(--bg-elevated);
-            flex-shrink: 0;
-            position: sticky;
-            top: 0;
-            z-index: 3;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+            box-shadow: none;
+        }
+
+        #map-editor-shell .tool-rail-btn:hover {
+            background: rgba(255,255,255,0.07);
+            color: var(--text-primary);
+            border-color: var(--border-secondary);
+            transform: translateY(-1px);
+        }
+
+        #map-editor-shell .tool-rail-btn.active {
+            background: var(--selected-blue-dim);
+            color: var(--selected-blue);
+            border-color: var(--selected-blue);
+        }
+
+        #map-editor-shell .tool-rail-btn i {
+            font-size: 13px;
+            line-height: 1;
+        }
+
+        #map-editor-shell .tool-rail-btn span {
+            font-size: 7px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            line-height: 1;
+            text-align: center;
+        }
+
+        #map-editor-shell .tool-flyout {
+            position: absolute;
+            left: calc(100% + 8px);
+            top: 8px;
+            width: 214px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        #map-editor-shell .tool-flyout .tool-sidebar-header,
+        #map-editor-shell .tool-flyout .sidebar-panel {
+            pointer-events: auto;
+        }
+
+        #map-editor-shell .tool-sidebar-header {
+            display: grid;
+            gap: 3px;
+            padding: 8px 10px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 5px;
+            background: rgba(17, 22, 31, 0.96);
+            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #map-editor-shell .tool-sidebar-header.is-dragging {
+            cursor: grabbing;
         }
 
         #map-editor-shell .tool-sidebar-header-copy {
@@ -763,28 +872,21 @@
         #map-editor-shell .tool-sidebar-subtitle {
             font-size: 10px;
             color: var(--text-tertiary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1.35;
         }
 
         #map-editor-shell .tool-sidebar-scroll {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
+            display: none;
         }
 
         #map-editor-shell .sidebar-panel {
             display: none;
-            flex: 1;
-            min-height: 0;
-            padding: 10px;
-            gap: 10px;
+            flex-direction: column;
+            gap: 8px;
         }
 
         #map-editor-shell .sidebar-panel.active-panel {
             display: flex;
-            flex-direction: column;
         }
 
         #map-editor-shell .tool-sidebar-scroll::-webkit-scrollbar,
@@ -800,8 +902,8 @@
 
         #map-editor-shell .sidebar-card {
             display: grid;
-            gap: 12px;
-            padding: 10px;
+            gap: 10px;
+            padding: 8px;
             border-radius: 4px;
             border: 1px solid var(--border-chrome);
             background: rgba(10, 14, 20, 0.4);
@@ -809,7 +911,7 @@
         }
 
         #map-editor-shell .sidebar-card-title {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -818,27 +920,29 @@
 
         #map-editor-shell .sidebar-tool-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
         }
 
         #map-editor-shell .sidebar-tool-grid .tool-btn,
-        #map-editor-shell .sidebar-tool-grid .editor-action-btn {
+        #map-editor-shell .sidebar-tool-grid .editor-action-btn,
+        #map-editor-shell .sidebar-tool-grid .tool-rail-btn {
             width: 100%;
             min-width: 0;
-            height: 50px;
-            border-radius: 3px;
-            gap: 4px;
+            height: 32px;
+            border-radius: 4px;
+            gap: 3px;
             background: var(--bg-elevated);
         }
 
         #map-editor-shell .sidebar-tool-grid .tool-btn i,
-        #map-editor-shell .sidebar-tool-grid .editor-action-btn i {
+        #map-editor-shell .sidebar-tool-grid .editor-action-btn i,
+        #map-editor-shell .sidebar-tool-grid .tool-rail-btn i {
             font-size: 12px;
         }
 
         #map-editor-shell .tool-lbl {
-            font-size: 8px;
+            font-size: 7px;
         }
 
         #map-editor-shell .sidebar-range-label {
@@ -1015,38 +1119,6 @@
             background: #0b1119;
         }
 
-        #map-editor-shell .canvas-stage-header {
-            height: 38px;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 12px;
-            padding: 0 12px;
-            background: var(--bg-elevated);
-            border-bottom: 1px solid var(--border-chrome);
-        }
-
-        #map-editor-shell .canvas-stage-chiprow {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        #map-editor-shell .context-chip {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            height: 24px;
-            padding: 0 10px;
-            border-radius: 3px;
-            border: 1px solid var(--border-chrome);
-            background: var(--bg-elevated);
-            font-size: 10px;
-            color: var(--text-secondary);
-            white-space: nowrap;
-        }
-
         #map-editor-shell .canvas-wrap {
             flex: 1;
             min-height: 0;
@@ -1074,48 +1146,47 @@
             background: var(--bg-inspector);
             border-left: 1px solid var(--border-chrome);
             overflow: hidden;
+            position: relative;
         }
 
-        #map-editor-shell .insp-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--border-chrome);
-            background: var(--bg-elevated);
-        }
-
-        #map-editor-shell .insp-header-title {
-            flex: 1;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+        #map-editor-shell #inspector-toggle {
+            position: absolute;
+            left: 0;
+            top: 14px;
+            width: 22px;
+            height: 54px;
+            border: 1px solid var(--border-chrome);
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+            background: rgba(17, 22, 31, 0.96);
             color: var(--text-secondary);
-        }
-
-        #map-editor-shell .insp-mode-badge {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            height: 22px;
-            padding: 0 6px;
-            border-radius: 2px;
-            border: 1px solid rgba(38, 105, 200, 0.35);
-            background: var(--selected-blue-dim);
-            color: var(--selected-blue);
-            font-size: 8px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
+            z-index: 3;
+            cursor: pointer;
+        }
+
+        #map-editor-shell #inspector-toggle:hover {
+            color: var(--text-primary);
+            border-color: var(--border-secondary);
+        }
+
+        #map-editor-shell #inspector-toggle i {
+            transition: transform 0.14s ease;
+        }
+
+        #map-editor-shell.inspector-collapsed #inspector-toggle i {
+            transform: rotate(180deg);
         }
 
         #map-editor-shell .insp-tabs {
             display: flex;
             align-items: center;
-            padding: 0 14px;
+            padding: 0 14px 0 30px;
             border-bottom: 1px solid var(--border-chrome);
-            gap: 14px;
+            gap: 10px;
+            min-height: 38px;
         }
 
         #map-editor-shell .insp-tab {
@@ -1145,6 +1216,17 @@
 
         #map-editor-shell .insp-pane.active {
             display: block;
+        }
+
+        #map-editor-shell.inspector-collapsed .insp-tabs {
+            padding: 0;
+            min-height: 0;
+            border-bottom: none;
+        }
+
+        #map-editor-shell.inspector-collapsed .insp-tab,
+        #map-editor-shell.inspector-collapsed .insp-pane {
+            display: none !important;
         }
 
         #map-editor-shell .insp-card {
@@ -1445,27 +1527,12 @@
     <div class="editor-root" id="map-editor-shell">
         <div class="tab-navigation map-editor-topnav">
             <div class="navigator-top-controls map-editor-top-controls">
-                <button class="mctrl-btn mctrl-btn-icon" id="sidebar-collapse-toggle" type="button" title="Collapse tools sidebar">
-                    <i class="fas fa-chevron-left" id="sidebar-collapse-icon"></i>
-                </button>
                 <span id="layout-chip" class="layout-chip" title="Active map">active_map</span>
                 <div class="mctrl-sep"></div>
 
                 <button class="mctrl-btn active" data-editor-mode="draw" type="button" title="Draw mode">
                     <i class="fas fa-pen"></i>
                     <span>Draw</span>
-                </button>
-                <button class="mctrl-btn" data-editor-mode="zones" type="button" title="Zones mode">
-                    <i class="fas fa-draw-polygon"></i>
-                    <span>Zones</span>
-                </button>
-                <button class="mctrl-btn" data-editor-mode="paths" type="button" title="Paths mode">
-                    <i class="fas fa-route"></i>
-                    <span>Paths</span>
-                </button>
-                <button class="mctrl-btn" data-editor-mode="waypoints" type="button" title="Waypoints mode">
-                    <i class="fas fa-location-dot"></i>
-                    <span>Waypoints</span>
                 </button>
                 <button class="mctrl-btn" data-editor-mode="dotted" type="button" title="Dotted map mode">
                     <i class="fas fa-th-large"></i>
@@ -1475,6 +1542,7 @@
                     <i class="fas fa-layer-group"></i>
                     <span>View</span>
                 </button>
+
 
                 <div class="mctrl-sep"></div>
                 <button class="mctrl-btn" id="undo-btn" title="Undo last change">
@@ -1504,62 +1572,30 @@
                 </button>
 
                 <div class="mctrl-sep"></div>
-                <button class="mctrl-btn mctrl-btn-icon" id="editor-settings-toggle" title="Global editor settings">
+                <button class="mctrl-btn mctrl-btn-icon" id="editor-settings-toggle" title="Map frame tools">
                     <i class="fas fa-gear"></i>
                 </button>
 
                 <div class="mctrl-spacer"></div>
-                <span class="session-chip">{{ (current_user or 'viewer') }} · {{ (current_role or 'viewer')|upper }}</span>
-                <a class="mctrl-btn" href="/user" title="Open operator workspace" style="text-decoration:none;">
-                    <i class="fas fa-gamepad"></i>
-                    <span>Viewer</span>
-                </a>
-                <a class="mctrl-btn" href="/" title="Open access portal" style="text-decoration:none;">
-                    <i class="fas fa-house"></i>
-                    <span>Access</span>
-                </a>
-                <form method="post" action="/dev/lock" style="display:inline-flex; flex-shrink:0;">
-                    <button class="mctrl-btn" type="submit" title="Sign out">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>Sign Out</span>
-                    </button>
-                </form>
             </div>
             <div id="editor-settings-popover" class="editor-popover" hidden>
                 <div class="popover-stack">
                     <div class="popover-card">
-                        <div class="popover-title">Map Transform</div>
-                        <div class="popover-row">
-                            <button class="step-btn active" data-shift-step="0.05" title="5 cm">5 cm</button>
-                            <button class="step-btn" data-shift-step="0.10" title="10 cm">10 cm</button>
-                            <button class="step-btn" data-shift-step="0.25" title="25 cm">25 cm</button>
-                        </div>
-                        <div class="popover-row popover-row-spread">
-                            <div class="nudge-grid" aria-label="Map shift controls">
-                                <span></span>
-                                <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0.05" title="Shift Up">▲</button>
-                                <span></span>
-                                <button class="nudge-btn" data-shift-dx="-0.05" data-shift-dy="0" title="Shift Left">◀</button>
-                                <button class="nudge-btn" data-shift-dx="0" data-shift-dy="0" title="Center">•</button>
-                                <button class="nudge-btn" data-shift-dx="0.05" data-shift-dy="0" title="Shift Right">▶</button>
-                                <span></span>
-                                <button class="nudge-btn" data-shift-dx="0" data-shift-dy="-0.05" title="Shift Down">▼</button>
-                                <span></span>
-                            </div>
-                            <div class="popover-column">
-                                <button class="top-action-btn compact" data-yaw-delta="-2" title="Rotate map left">
-                                    <i class="fas fa-rotate-left"></i>
-                                    <span>Rotate -2°</span>
-                                </button>
-                                <button class="top-action-btn compact" data-yaw-delta="2" title="Rotate map right">
-                                    <i class="fas fa-rotate-right"></i>
-                                    <span>Rotate +2°</span>
-                                </button>
-                                <button class="top-action-btn compact" id="origin-reset" title="Reset origin transform">
-                                    <i class="fas fa-location-crosshairs"></i>
-                                    <span>Reset Origin</span>
-                                </button>
-                            </div>
+                        <div class="popover-title">Map Frame</div>
+                        <div class="sidebar-note">Use the drag tools for map alignment instead of step nudges.</div>
+                        <div class="popover-column">
+                            <button class="top-action-btn compact" id="popover-move-origin-btn" type="button" title="Activate move-origin tool">
+                                <i class="fas fa-up-down-left-right"></i>
+                                <span>Move Origin</span>
+                            </button>
+                            <button class="top-action-btn compact" id="popover-rotate-origin-btn" type="button" title="Activate rotate-map tool">
+                                <i class="fas fa-rotate"></i>
+                                <span>Rotate Map</span>
+                            </button>
+                            <button class="top-action-btn compact" id="origin-reset" type="button" title="Reset origin transform">
+                                <i class="fas fa-location-crosshairs"></i>
+                                <span>Reset Origin</span>
+                            </button>
                         </div>
                     </div>
 
@@ -1579,251 +1615,171 @@
 
         <div class="workspace-grid">
             <aside class="tool-sidebar">
-                <div class="tool-sidebar-header">
-                    <div class="tool-sidebar-header-copy">
-                        <span class="tool-sidebar-title" id="tool-sidebar-title">Draw</span>
-                        <span class="tool-sidebar-subtitle" id="tool-sidebar-subtitle">Paint the occupancy map, erase noise, and reshape walls.</span>
-                    </div>
-                </div>
-                <div class="tool-sidebar-scroll">
-                <section class="sidebar-panel active-panel" data-mode-panel="draw">
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn active" data-tool="add" title="Paint obstacles">
-                                <i class="fas fa-pen"></i>
-                                <span class="tool-lbl">Add</span>
-                            </button>
-                            <button class="tool-btn" data-tool="erase" title="Erase obstacles">
-                                <i class="fas fa-eraser"></i>
-                                <span class="tool-lbl">Erase</span>
-                            </button>
-                            <button class="tool-btn" data-tool="wall_line" title="Draw wall line">
-                                <i class="fas fa-ruler"></i>
-                                <span class="tool-lbl">Wall</span>
-                            </button>
-                            <button class="tool-btn" data-tool="move_zone" title="Move selected zone">
-                                <i class="fas fa-up-down-left-right"></i>
-                                <span class="tool-lbl">Move</span>
-                            </button>
-                            <button class="tool-btn" data-tool="rotate_zone" title="Rotate selected zone">
-                                <i class="fas fa-rotate"></i>
-                                <span class="tool-lbl">Rotate</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Tool Settings</div>
-                        <label class="sidebar-range-label" for="brush">
-                            <span>Brush Size</span>
-                            <span id="brush-value" class="sidebar-range-value">14</span>
-                        </label>
-                        <input id="brush" class="sidebar-range" type="range" min="2" max="60" value="14">
-
-                        <label class="sidebar-range-label" for="wall-line-width">
-                            <span>Wall Thickness</span>
-                            <span id="wall-line-width-value" class="sidebar-range-value">1</span>
-                        </label>
-                        <input id="wall-line-width" class="sidebar-range" type="range" min="1" max="30" value="1">
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Map Actions</div>
-                        <button class="sidebar-action-btn danger" id="clear-obstacles-btn" title="Clear all painted obstacles" onclick="if(!confirm('Clear all obstacles from map?'))return;">
-                            <i class="fas fa-trash-can"></i>
-                            <span>Clear Painted Obstacles</span>
+                <div class="tool-rail">
+                    <div class="tool-rail-group active-panel" data-mode-panel="draw">
+                        <button class="tool-rail-btn active" data-tool="add" title="Paint obstacles">
+                            <i class="fas fa-pen"></i>
+                            <span>Add</span>
                         </button>
-                        <div class="sidebar-note" id="draw-selection-summary">No object selected.</div>
+                        <button class="tool-rail-btn" data-tool="erase" title="Erase obstacles">
+                            <i class="fas fa-eraser"></i>
+                            <span>Erase</span>
+                        </button>
+                        <button class="tool-rail-btn" data-tool="wall_line" title="Draw wall line">
+                            <i class="fas fa-ruler"></i>
+                            <span>Wall</span>
+                        </button>
+                        <button class="tool-rail-btn" id="move-origin-toggle" data-tool="move_origin" title="Drag the map origin">
+                            <i class="fas fa-up-down-left-right"></i>
+                            <span>Move</span>
+                        </button>
+                        <button class="tool-rail-btn" data-tool="rotate_origin" title="Drag to rotate the map">
+                            <i class="fas fa-rotate"></i>
+                            <span>Rotate</span>
+                        </button>
                     </div>
-                </section>
+                    <div class="tool-rail-group" data-mode-panel="dotted">
+                        <button class="tool-rail-btn active" data-tool="add" title="Draw dotted wall segment">
+                            <i class="fas fa-pen"></i>
+                            <span>Wall</span>
+                        </button>
+                        <button class="tool-rail-btn" data-tool="erase" title="Erase dotted segment">
+                            <i class="fas fa-eraser"></i>
+                            <span>Erase</span>
+                        </button>
+                        <button class="tool-rail-btn" id="dot-place-robot-btn" data-tool="set_robot_pose" title="Place the robot pose on the map with heading">
+                            <i class="fas fa-location-crosshairs"></i>
+                            <span>Robot</span>
+                        </button>
+                    </div>
+                    <div class="tool-rail-group" data-mode-panel="view">
+                        <button class="tool-rail-btn active" data-tool="inspect" title="Inspect map geometry">
+                            <i class="fas fa-arrow-pointer"></i>
+                            <span>Select</span>
+                        </button>
+                        <button class="tool-rail-btn" id="pan-btn" data-tool="pan" title="Pan map view">
+                            <i class="fas fa-hand"></i>
+                            <span>Pan</span>
+                        </button>
+                        <button class="tool-rail-btn" id="measure-btn" data-tool="measure" title="Measure map distance">
+                            <i class="fas fa-ruler-horizontal"></i>
+                            <span>Measure</span>
+                        </button>
+                        <button class="tool-rail-btn" data-tool="move_origin" title="Drag the map origin">
+                            <i class="fas fa-up-down-left-right"></i>
+                            <span>Move</span>
+                        </button>
+                        <button class="tool-rail-btn" data-tool="rotate_origin" title="Drag to rotate the map">
+                            <i class="fas fa-rotate"></i>
+                            <span>Rotate</span>
+                        </button>
+                    </div>
 
-                <section class="sidebar-panel" data-mode-panel="zones">
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Zone Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn zone-nogo" data-tool="nogo" title="Place no-go zone">
-                                <i class="fas fa-ban"></i>
-                                <span class="tool-lbl">No-Go</span>
-                            </button>
-                            <button class="tool-btn zone-slow" data-tool="slow" title="Place slow zone">
-                                <i class="fas fa-person-walking"></i>
-                                <span class="tool-lbl">Slow</span>
-                            </button>
-                            <button class="tool-btn zone-restrict" data-tool="restricted" title="Place restricted zone">
-                                <i class="fas fa-lock"></i>
-                                <span class="tool-lbl">Restrict</span>
-                            </button>
+                </div>
+                <div class="tool-flyout">
+                    <div class="tool-sidebar-header">
+                        <div class="tool-sidebar-header-copy">
+                            <span class="tool-sidebar-title" id="tool-sidebar-title">Draw</span>
+                            <span class="tool-sidebar-subtitle" id="tool-sidebar-subtitle">Paint the occupancy map, erase noise, and reshape walls.</span>
                         </div>
                     </div>
 
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Placed Zones</div>
-                        <div class="sidebar-list" id="zones-list"></div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="paths">
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Path Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn path-tool" data-tool="add_path" title="Create path between two zones">
-                                <i class="fas fa-route"></i>
-                                <span class="tool-lbl">Add Path</span>
-                            </button>
+                    <section class="sidebar-panel active-panel" data-mode-panel="draw">
+                        <div class="sidebar-card">
+                            <div class="sidebar-card-title">Brush Controls</div>
+                            <label class="sidebar-range-label" for="brush">
+                                <span>Pen Size</span>
+                                <span id="brush-value" class="sidebar-range-value">14</span>
+                            </label>
+                            <input id="brush" class="sidebar-range" type="range" min="2" max="60" value="14">
+                            <label class="sidebar-range-label" for="wall-line-width">
+                                <span>Wall Thickness</span>
+                                <span id="wall-line-width-value" class="sidebar-range-value">1</span>
+                            </label>
+                            <input id="wall-line-width" class="sidebar-range" type="range" min="1" max="30" value="1">
+                            <div class="sidebar-note" id="draw-selection-summary">No object selected.</div>
                         </div>
-                        <div class="sidebar-note">Click a start zone, then an end zone to create or overwrite a route.</div>
-                    </div>
-
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Saved Paths</div>
-                        <div class="sidebar-list" id="paths-list"></div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="waypoints">
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Waypoint Tools</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="editor-action-btn" id="add-waypoint-btn" data-tool="add_waypoint" title="Place waypoint">
-                                <i class="fas fa-map-pin"></i>
-                                <span class="tool-lbl">Waypoint</span>
-                            </button>
-                            <button class="editor-action-btn" id="add-dock-btn" data-tool="add_dock" title="Place dock">
-                                <i class="fas fa-plug"></i>
-                                <span class="tool-lbl">Dock</span>
-                            </button>
-                            <button class="editor-action-btn" id="add-queue-btn" data-tool="add_queue" title="Place queue marker">
-                                <i class="fas fa-list-ol"></i>
-                                <span class="tool-lbl">Queue</span>
-                            </button>
+                        <div class="sidebar-card">
+                            <div class="sidebar-card-title">Map Actions</div>
+                            <div class="sidebar-tool-grid">
+                                <button class="editor-action-btn" id="origin-reset-rail" type="button" title="Reset origin transform">
+                                    <i class="fas fa-location-crosshairs"></i>
+                                    <span class="tool-lbl">Reset</span>
+                                </button>
+                                <button class="editor-action-btn danger" id="clear-obstacles-btn" title="Clear all painted obstacles" onclick="if(!confirm('Clear all obstacles from map?'))return;">
+                                    <i class="fas fa-trash-can"></i>
+                                    <span class="tool-lbl">Clear</span>
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Action Points</div>
-                        <div class="sidebar-list" id="waypoints-list"></div>
-                    </div>
-                </section>
-
-                <section class="sidebar-panel" data-mode-panel="dotted">
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Session</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="editor-action-btn tinted-info" id="dotted-view-btn" title="Toggle dotted map view and editor">
-                                <i class="fas fa-th-large"></i>
-                                <span class="tool-lbl">Edit View</span>
-                            </button>
-                            <button class="tool-btn" data-tool="add" title="Draw dotted wall segment">
-                                <i class="fas fa-pen"></i>
-                                <span class="tool-lbl">Wall</span>
-                            </button>
-                            <button class="tool-btn" data-tool="erase" title="Erase nearest dotted segment">
-                                <i class="fas fa-eraser"></i>
-                                <span class="tool-lbl">Erase</span>
-                            </button>
-                            <button class="editor-action-btn" id="dot-place-robot-btn" data-tool="set_robot_pose" title="Place the robot pose on the map with heading" style="display:none">
-                                <i class="fas fa-location-crosshairs"></i>
-                                <span class="tool-lbl">Place Bot</span>
-                            </button>
-                            <button class="editor-action-btn" id="dot-auto-reloc-btn" title="Run Auto Reloc against the current map" style="display:none">
-                                <i class="fas fa-wand-magic-sparkles"></i>
-                                <span class="tool-lbl">Reloc</span>
-                            </button>
-                            <button class="editor-action-btn" id="dot-refresh-btn" title="Refresh the dotted map render" style="display:none">
-                                <i class="fas fa-sync-alt"></i>
-                                <span class="tool-lbl">Refresh</span>
-                            </button>
+                    <section class="sidebar-panel" data-mode-panel="dotted">
+                        <div class="sidebar-card">
+                            <div class="sidebar-card-title">Dotted Tools</div>
+                            <div class="sidebar-tool-grid">
+                                <button class="editor-action-btn tinted-info" id="dotted-view-btn" title="Toggle dotted map view and editor">
+                                    <i class="fas fa-th-large"></i>
+                                    <span class="tool-lbl">Overlay</span>
+                                </button>
+                                <button class="editor-action-btn" id="dot-auto-reloc-btn" title="Run Auto Reloc against the current map">
+                                    <i class="fas fa-wand-magic-sparkles"></i>
+                                    <span class="tool-lbl">Reloc</span>
+                                </button>
+                                <button class="editor-action-btn" id="dot-refresh-btn" title="Refresh the dotted map render">
+                                    <i class="fas fa-sync-alt"></i>
+                                    <span class="tool-lbl">Refresh</span>
+                                </button>
+                            </div>
+                            <div class="sidebar-note" id="dotted-session-meta">Dotted overlay is currently off.</div>
                         </div>
-                        <div class="sidebar-note" id="dotted-session-meta">Dotted overlay is currently off.</div>
-                    </div>
-                </section>
+                    </section>
 
-                <section class="sidebar-panel" data-mode-panel="view">
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Navigation</div>
-                        <div class="sidebar-tool-grid">
-                            <button class="tool-btn active" data-tool="inspect" title="Inspect and select geometry">
-                                <i class="fas fa-arrow-pointer"></i>
-                                <span class="tool-lbl">Inspect</span>
-                            </button>
-                            <button class="editor-action-btn" id="pan-btn" data-tool="pan" title="Drag to pan map view">
-                                <i class="fas fa-hand"></i>
-                                <span class="tool-lbl">Pan</span>
-                            </button>
-                            <button class="editor-action-btn" id="measure-btn" data-tool="measure" title="Measure distance on map">
-                                <i class="fas fa-ruler-horizontal"></i>
-                                <span class="tool-lbl">Measure</span>
-                            </button>
-                            <button class="tool-btn" id="move-origin-toggle" title="Drag to reposition map origin">
-                                <i class="fas fa-crosshairs"></i>
-                                <span class="tool-lbl">Origin</span>
-                            </button>
+                    <section class="sidebar-panel" data-mode-panel="view">
+                        <div class="sidebar-card">
+                            <div class="sidebar-card-title">Viewport</div>
+                            <div class="sidebar-tool-grid">
+                                <button class="layer-toggle" id="grid-toggle-btn" data-grid-toggle="true" title="Toggle metric grid overlay">
+                                    <i class="fas fa-border-all"></i>
+                                    <span>Grid</span>
+                                </button>
+                                <button class="layer-toggle active" data-overlay="robot" title="Toggle robot position">
+                                    <i class="fas fa-robot"></i>
+                                    <span>Robot</span>
+                                </button>
+                                <button class="layer-toggle active" data-overlay="axes" title="Toggle coordinate axes">
+                                    <i class="fas fa-plus"></i>
+                                    <span>Axes</span>
+                                </button>
+                            </div>
+                            <div class="sidebar-note">Use Move or Rotate from the left rail, then drag directly on the map.</div>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="sidebar-card">
-                        <div class="sidebar-card-title">Layers</div>
-                        <div class="sidebar-toggle-grid">
-                            <button class="layer-toggle" id="grid-toggle-btn" data-grid-toggle="true" title="Toggle metric grid overlay">
-                                <i class="fas fa-border-all"></i>
-                                <span>Grid</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="zones" title="Toggle zone outlines">
-                                <i class="fas fa-draw-polygon"></i>
-                                <span>Zones</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="paths" title="Toggle path lines">
-                                <i class="fas fa-route"></i>
-                                <span>Paths</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="robot" title="Toggle robot position">
-                                <i class="fas fa-robot"></i>
-                                <span>Robot</span>
-                            </button>
-                            <button class="layer-toggle active" data-overlay="axes" title="Toggle coordinate axes">
-                                <i class="fas fa-plus"></i>
-                                <span>Axes</span>
-                            </button>
-                        </div>
-                    </div>
-                </section>
                 </div>
             </aside>
 
             <section class="canvas-stage">
-                <div class="canvas-stage-header">
-                    <div class="canvas-stage-chiprow">
-                        <span class="context-chip" id="canvas-selection-chip">No selection</span>
-                        <span class="context-chip" id="canvas-layer-chip">4 overlays visible</span>
-                    </div>
-                </div>
-
                 <main class="canvas-wrap">
                     <canvas id="editor"></canvas>
                 </main>
             </section>
 
             <aside id="inspector">
-                <div class="insp-header">
-                    <span class="insp-header-title" id="insp-header-title">Map Overview</span>
-                    <span class="insp-mode-badge" id="insp-mode-badge">Draw</span>
-                </div>
+                <button id="inspector-toggle" type="button" title="Collapse properties panel">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
 
                 <div class="insp-tabs">
                     <button class="insp-tab active" data-inspector-tab="properties" type="button">Properties</button>
-                    <button class="insp-tab" data-inspector-tab="layers" type="button">Layers</button>
-                    <button class="insp-tab" data-inspector-tab="guide" type="button">Guide</button>
+                    <button class="insp-tab" data-inspector-tab="objects" type="button">Objects</button>
                 </div>
 
                 <div class="insp-pane active" data-inspector-pane="properties">
                     <div id="inspector-properties"></div>
                 </div>
-                <div class="insp-pane" data-inspector-pane="layers">
-                    <div id="inspector-layers"></div>
-                </div>
-                <div class="insp-pane" data-inspector-pane="guide">
-                    <div id="inspector-guide"></div>
+                <div class="insp-pane" data-inspector-pane="objects">
+                    <div id="inspector-objects"></div>
                 </div>
             </aside>
         </div>
@@ -1871,6 +1827,8 @@
         const redoBtn = document.getElementById("redo-btn");
         const layoutChip = document.getElementById("layout-chip");
         const moveOriginToggle = document.getElementById("move-origin-toggle");
+        const popoverMoveOriginBtn = document.getElementById("popover-move-origin-btn");
+        const popoverRotateOriginBtn = document.getElementById("popover-rotate-origin-btn");
         const panBtn = document.getElementById("pan-btn");
         const zoomInBtn = document.getElementById("map-zoom-in-btn");
         const zoomOutBtn = document.getElementById("map-zoom-out-btn");
@@ -1887,26 +1845,29 @@
         const canvasLayerChipEl = document.getElementById("canvas-layer-chip");
         const drawSelectionSummaryEl = document.getElementById("draw-selection-summary");
         const dottedSessionMetaEl = document.getElementById("dotted-session-meta");
+        const toolFlyoutEl = document.querySelector(".tool-flyout");
+        const toolFlyoutHandleEl = document.querySelector(".tool-flyout .tool-sidebar-header");
         const sidebarCollapseToggleBtn = document.getElementById("sidebar-collapse-toggle");
         const sidebarCollapseIconEl = document.getElementById("sidebar-collapse-icon");
         const toolSidebarTitleEl = document.getElementById("tool-sidebar-title");
         const toolSidebarSubtitleEl = document.getElementById("tool-sidebar-subtitle");
         const inspectorHeaderTitleEl = document.getElementById("insp-header-title");
         const inspectorModeBadgeEl = document.getElementById("insp-mode-badge");
+        const inspectorEl = document.getElementById("inspector");
+        const inspectorToggleBtn = document.getElementById("inspector-toggle");
         const inspectorPropertiesEl = document.getElementById("inspector-properties");
-        const inspectorLayersEl = document.getElementById("inspector-layers");
-        const inspectorGuideEl = document.getElementById("inspector-guide");
-        const shiftStepButtons = Array.from(document.querySelectorAll("button[data-shift-step]"));
-        const shiftNudgeButtons = Array.from(document.querySelectorAll("button[data-shift-dx]"));
-        const yawButtons = Array.from(document.querySelectorAll("button[data-yaw-delta]"));
+        const inspectorObjectsEl = document.getElementById("inspector-objects");
         const overlayButtons = Array.from(document.querySelectorAll("button[data-overlay]"));
         const gridToggleButtons = Array.from(document.querySelectorAll("button[data-grid-toggle]"));
         const modePillButtons = Array.from(document.querySelectorAll("button[data-editor-mode]"));
-        const modePanels = Array.from(document.querySelectorAll(".sidebar-panel[data-mode-panel]"));
+        const modePanels = Array.from(document.querySelectorAll("[data-mode-panel]"));
         const inspectorTabButtons = Array.from(document.querySelectorAll("button[data-inspector-tab]"));
         const inspectorPanes = Array.from(document.querySelectorAll("[data-inspector-pane]"));
 
+        const EDITOR_DOTTED_PRESETS = new Set(["balanced", "balanced_plus", "quality", "speed"]);
+
         const API = {
+            mapStatic: "/api/map",
             preview: "/api/editor/map/preview",
             activeMap: "/api/map/get_active",
             editorReload: "/api/editor/map/reload",
@@ -1932,6 +1893,8 @@
         const editCanvas = document.createElement("canvas");
         const editCtx = editCanvas.getContext("2d");
         const sidebarCollapsedStorageKey = "mapEditorSidebarCollapsed";
+        const inspectorCollapsedStorageKey = "mapEditorInspectorCollapsed";
+        const toolFlyoutPositionStorageKey = "mapEditorToolFlyoutPosition";
 
         const savedBrushSize = Number(window.localStorage.getItem("mapEditorBrushSize"));
         if (Number.isFinite(savedBrushSize)) {
@@ -1980,9 +1943,7 @@
             lineStart: null,
             linePreviewEnd: null,
             draggingOrigin: false,
-            rotatingZoneId: null,
-            rotateStartYaw: 0,
-            rotateStartAngle: 0,
+            rotatingMap: false,
             currentLayout: null,
             moveOriginEnabled: false,
             draggingView: false,
@@ -1994,8 +1955,6 @@
                 end: null
             },
             overlayVisibility: {
-                zones: true,
-                paths: true,
                 robot: true,
                 axes: true
             },
@@ -2007,6 +1966,7 @@
             scanPoints: [],
             scanSource: "",
             scanOrigin: null,
+            rotateStartYaw: 0,
             robotPosePlacementStart: null,
             robotPosePlacementPreviewEnd: null,
             dottedRefreshTimer: null,
@@ -2023,6 +1983,9 @@
             },
             snapEnabled: false,
             sidebarCollapsed: window.localStorage.getItem(sidebarCollapsedStorageKey) === "1",
+            inspectorCollapsed: window.localStorage.getItem(inspectorCollapsedStorageKey) === "1",
+            toolFlyoutPosition: null,
+            flyoutDrag: null,
             view: {
                 scale: 1,
                 minScale: 0.35,
@@ -2032,20 +1995,30 @@
             }
         };
 
+        try {
+            const rawFlyoutPosition = window.localStorage.getItem(toolFlyoutPositionStorageKey);
+            if (rawFlyoutPosition) {
+                const parsed = JSON.parse(rawFlyoutPosition);
+                if (parsed && Number.isFinite(parsed.left) && Number.isFinite(parsed.top)) {
+                    state.toolFlyoutPosition = {
+                        left: Number(parsed.left),
+                        top: Number(parsed.top)
+                    };
+                }
+            }
+        } catch (_err) {
+            state.toolFlyoutPosition = null;
+        }
+
         const MODE_META = {
-            draw: { label: "Draw", description: "Paint the occupancy map, erase noise, and reshape walls." },
-            zones: { label: "Zones", description: "Create navigation constraints and operational areas." },
-            paths: { label: "Paths", description: "Link zones together and inspect saved route geometry." },
-            waypoints: { label: "Waypoints", description: "Place destinations, docking stations, and queue markers." },
-            dotted: { label: "Dotted Map", description: "Edit the dotted render, place the robot, and preview scan alignment." },
-            view: { label: "View", description: "Inspect objects, pan the canvas, and control visual layers." }
+            draw: { label: "Draw", description: "Paint, erase, and stamp wall segments." },
+            dotted: { label: "Dotted Map", description: "Ground-truth dotted map with scan and robot overlays." },
+            view: { label: "View", description: "Inspect the map, pan, and control layers." },
+            graph: { label: "Graph", description: "Edit LM/AP/CP/QR sites, paths, areas, and bins over the map." }
         };
 
         const MODE_DEFAULT_TOOL = {
             draw: "add",
-            zones: "nogo",
-            paths: "add_path",
-            waypoints: "add_waypoint",
             dotted: "add",
             view: "inspect"
         };
@@ -2054,21 +2027,12 @@
             add: "draw",
             erase: "draw",
             wall_line: "draw",
-            move_zone: "draw",
-            rotate_zone: "draw",
-            nogo: "zones",
-            slow: "zones",
-            restricted: "zones",
-            add_path: "paths",
             inspect: "view",
             pan: "view",
             measure: "view",
             set_robot_pose: "dotted",
             dot_wall: "dotted",
-            dot_erase: "dotted",
-            add_waypoint: "waypoints",
-            add_dock: "waypoints",
-            add_queue: "waypoints"
+            dot_erase: "dotted"
         };
 
         const TOOL_ZONE_PRESETS = {
@@ -2114,18 +2078,11 @@
             add: "Obstacle brush enabled",
             erase: "Obstacle erase brush enabled",
             wall_line: "Click start point, then end point to draw a wall line — width is adjustable in Settings",
-            inspect: "Click a zone or path to inspect its properties",
+            inspect: "Inspect the map canvas and current overlays",
             pan: "Drag the map viewport",
-            move_zone: "Drag a zone to reposition it",
-            rotate_zone: "Drag around a zone to rotate it",
-            nogo: "Click the map to place a No-Go zone marker",
-            slow: "Click the map to place a Slow zone marker",
-            restricted: "Click the map to place a Restricted zone marker",
-            add_path: "Click a start zone, then an end zone",
             measure: "Click two points to measure distance",
-            add_waypoint: "Click the map to place a waypoint",
-            add_dock: "Click the map to place a dock",
-            add_queue: "Click the map to place a queue marker",
+            move_origin: "Drag the origin marker to shift the map frame",
+            rotate_origin: "Drag around the origin marker to rotate the map frame",
             dot_wall: "Dotted map editor — click start, then end point to draw a wall segment (Esc to cancel)",
             dot_erase: "Dotted map editor — click near a segment to erase it",
             set_robot_pose: "Place Robot: click robot position, then click again to set heading"
@@ -2298,6 +2255,50 @@
             }
         }
 
+        function syncInspectorCollapsedState() {
+            document.getElementById("map-editor-shell")?.classList.toggle("inspector-collapsed", !!state.inspectorCollapsed);
+            if (inspectorToggleBtn) {
+                inspectorToggleBtn.title = state.inspectorCollapsed ? "Expand properties panel" : "Collapse properties panel";
+                inspectorToggleBtn.setAttribute("aria-expanded", String(!state.inspectorCollapsed));
+            }
+        }
+
+        function setInspectorCollapsed(nextCollapsed) {
+            state.inspectorCollapsed = !!nextCollapsed;
+            try {
+                window.localStorage.setItem(inspectorCollapsedStorageKey, state.inspectorCollapsed ? "1" : "0");
+            } catch (_err) {
+                // ignore storage failures
+            }
+            syncInspectorCollapsedState();
+            window.requestAnimationFrame(() => {
+                resizeCanvasToViewport({ preserveView: true });
+            });
+        }
+
+        function clampToolFlyoutPosition(position) {
+            if (!toolFlyoutEl || !toolFlyoutEl.parentElement) {
+                return { left: 72, top: 8 };
+            }
+            const parentRect = toolFlyoutEl.parentElement.getBoundingClientRect();
+            const maxLeft = Math.max(72, window.innerWidth - parentRect.left - toolFlyoutEl.offsetWidth - 12);
+            const maxTop = Math.max(8, window.innerHeight - parentRect.top - toolFlyoutEl.offsetHeight - 12);
+            return {
+                left: Math.max(72, Math.min(maxLeft, Number(position?.left) || 72)),
+                top: Math.max(8, Math.min(maxTop, Number(position?.top) || 8))
+            };
+        }
+
+        function applyToolFlyoutPosition() {
+            if (!toolFlyoutEl) {
+                return;
+            }
+            const nextPosition = clampToolFlyoutPosition(state.toolFlyoutPosition || { left: 72, top: 8 });
+            state.toolFlyoutPosition = nextPosition;
+            toolFlyoutEl.style.left = `${nextPosition.left}px`;
+            toolFlyoutEl.style.top = `${nextPosition.top}px`;
+        }
+
         function setSidebarCollapsed(nextCollapsed) {
             state.sidebarCollapsed = !!nextCollapsed;
             try {
@@ -2323,12 +2324,14 @@
                 canvasLayerChipEl.textContent = `${countVisibleLayers()} layers visible`;
             }
             if (drawSelectionSummaryEl) {
-                if (state.selection.kind === "zone") {
-                    drawSelectionSummaryEl.textContent = `${getSelectionLabel()} selected. Use Move or Rotate to edit placement.`;
-                } else if (state.selection.kind === "path") {
-                    drawSelectionSummaryEl.textContent = `${getSelectionLabel()} selected. Open Paths or Properties to inspect this route.`;
+                if (state.tool === "move_origin") {
+                    drawSelectionSummaryEl.textContent = "Drag the origin marker to reposition the map frame.";
+                } else if (state.tool === "rotate_origin") {
+                    drawSelectionSummaryEl.textContent = "Drag around the origin marker to rotate the map frame.";
+                } else if (state.tool === "wall_line") {
+                    drawSelectionSummaryEl.textContent = "Click two points to stamp a straight wall segment.";
                 } else {
-                    drawSelectionSummaryEl.textContent = "No object selected.";
+                    drawSelectionSummaryEl.textContent = "Paint and clean the occupancy map directly.";
                 }
             }
             if (dottedSessionMetaEl) {
@@ -2350,7 +2353,7 @@
         }
 
         function openInspectorTab(tab) {
-            const normalized = ["properties", "layers", "guide"].includes(String(tab || ""))
+            const normalized = ["properties", "objects"].includes(String(tab || ""))
                 ? String(tab)
                 : "properties";
             state.inspectorTab = normalized;
@@ -2363,7 +2366,7 @@
         }
 
         function activateEditorMode(mode) {
-            const normalized = ["draw", "zones", "paths", "waypoints", "dotted", "view"].includes(String(mode || ""))
+            const normalized = ["draw", "dotted", "view", "graph"].includes(String(mode || ""))
                 ? String(mode)
                 : "draw";
             if (state.sidebarCollapsed) {
@@ -2374,6 +2377,26 @@
                     toggleDottedView();
                 }
                 setEditorMode("dotted");
+                return;
+            }
+            if (normalized === "graph") {
+                if (state.dottedViewMode && state.editorMode === "dotted") {
+                    toggleDottedView();
+                }
+                setEditorMode("graph");
+                openInspectorTab("properties");
+                try {
+                    if (window.MapEditorGraph?.refresh) {
+                        window.MapEditorGraph.refresh();
+                    } else if (window.MapEditorGraph?.renderInspector) {
+                        window.MapEditorGraph.renderInspector();
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+                updateStatus("Graph editor ready — place LM/AP/CP/QR sites, paths, areas, and bins.");
+                syncCanvasCursor();
+                draw();
                 return;
             }
             if (state.dottedViewMode && state.editorMode === "dotted") {
@@ -2402,18 +2425,26 @@
 
         function syncCanvasCursor() {
             let cursor = "crosshair";
-            if (state.draggingView) {
+            if (state.editorMode === "graph") {
+                const graphTool = String(window.MapEditorGraph?.tool || "pointer");
+                const graphDragging = Boolean(window.MapEditorGraph?.dragging);
+                if (graphDragging) {
+                    cursor = "grabbing";
+                } else if (graphTool === "pointer") {
+                    cursor = "default";
+                } else {
+                    cursor = "crosshair";
+                }
+            } else if (state.draggingView) {
                 cursor = "grabbing";
             } else if (state.tool === "inspect") {
                 cursor = "default";
             } else if (state.tool === "pan") {
                 cursor = "grab";
-            } else if (state.tool === "move_zone") {
-                cursor = state.draggingZoneId ? "grabbing" : "grab";
-            } else if (state.tool === "rotate_zone") {
-                cursor = "alias";
-            } else if (state.moveOriginEnabled && state.draggingOrigin) {
-                cursor = "grabbing";
+            } else if (state.tool === "move_origin") {
+                cursor = state.draggingOrigin ? "grabbing" : "grab";
+            } else if (state.tool === "rotate_origin") {
+                cursor = state.rotatingMap ? "grabbing" : "alias";
             }
             canvas.style.cursor = cursor;
         }
@@ -2602,6 +2633,16 @@
             }
         }
 
+        function getEditorDottedPreset() {
+            let preset = "balanced";
+            try {
+                preset = String(window.localStorage.getItem("dottedMapPreset") || "balanced").trim().toLowerCase();
+            } catch (_err) {
+                preset = "balanced";
+            }
+            return EDITOR_DOTTED_PRESETS.has(preset) ? preset : "balanced";
+        }
+
         function resolveToolSelection(tool) {
             if (!state.dottedViewMode) {
                 return tool;
@@ -2632,7 +2673,7 @@
         }
 
         function setEditorMode(mode) {
-            const normalized = ["draw", "zones", "paths", "view", "waypoints", "dotted"].includes(String(mode || ""))
+            const normalized = ["draw", "view", "dotted", "graph"].includes(String(mode || ""))
                 ? String(mode)
                 : "draw";
             state.editorMode = normalized;
@@ -2652,16 +2693,11 @@
             if (nextMode) {
                 setEditorMode(nextMode);
             }
-            if ((tool === "move_zone" || tool === "rotate_zone") && state.zones.size === 0) {
-                updateStatus("No zones available to edit");
-                return;
-            }
-            if (tool === "add_path" && state.zones.size < 2) {
-                updateStatus("Need at least 2 zones to create a path");
-                return;
-            }
 
             state.tool = tool;
+            state.moveOriginEnabled = tool === "move_origin";
+            state.draggingOrigin = false;
+            state.rotatingMap = false;
             state.pendingFromZone = null;
             state.lineStart = null;
             state.linePreviewEnd = null;
@@ -2669,6 +2705,7 @@
             state.dottedPreviewEnd = null;
             state.robotPosePlacementStart = null;
             state.robotPosePlacementPreviewEnd = null;
+            state.rotateStartAngle = 0;
             if (tool !== "measure") {
                 resetMeasurement({ silent: true });
             }
@@ -2678,11 +2715,7 @@
             });
 
             const baseMessage = TOOL_HINTS[tool] || `Tool: ${tool}`;
-            if ((tool === "move_zone" || tool === "rotate_zone" || tool === "add_path") && !state.currentLayout) {
-                updateStatus(`${baseMessage} (editing live zones/paths)`);
-            } else {
-                updateStatus(baseMessage);
-            }
+            updateStatus(baseMessage);
             syncCanvasCursor();
             syncCanvasContext();
             renderInspector();
@@ -2706,16 +2739,56 @@
 
         inspectorTabButtons.forEach((button) => {
             button.addEventListener("click", () => {
+                if (state.inspectorCollapsed) {
+                    setInspectorCollapsed(false);
+                }
                 openInspectorTab(String(button.dataset.inspectorTab || "properties"));
             });
         });
 
-        moveOriginToggle.addEventListener("click", () => {
-            state.moveOriginEnabled = !state.moveOriginEnabled;
-            moveOriginToggle.classList.toggle("active", state.moveOriginEnabled);
-            syncCanvasCursor();
-            renderInspector();
-            updateStatus(state.moveOriginEnabled ? "Move Origin enabled" : "Move Origin disabled");
+        inspectorToggleBtn?.addEventListener("click", () => {
+            setInspectorCollapsed(!state.inspectorCollapsed);
+        });
+
+        toolFlyoutHandleEl?.addEventListener("pointerdown", (event) => {
+            if (!toolFlyoutEl || !toolFlyoutEl.parentElement) {
+                return;
+            }
+            event.preventDefault();
+            const currentPosition = state.toolFlyoutPosition || clampToolFlyoutPosition({ left: 72, top: 8 });
+            state.flyoutDrag = {
+                pointerId: event.pointerId,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                startLeft: currentPosition.left,
+                startTop: currentPosition.top
+            };
+            toolFlyoutHandleEl.classList.add("is-dragging");
+        });
+
+        window.addEventListener("pointermove", (event) => {
+            if (!state.flyoutDrag || event.pointerId !== state.flyoutDrag.pointerId) {
+                return;
+            }
+            const nextPosition = clampToolFlyoutPosition({
+                left: state.flyoutDrag.startLeft + (event.clientX - state.flyoutDrag.startClientX),
+                top: state.flyoutDrag.startTop + (event.clientY - state.flyoutDrag.startClientY)
+            });
+            state.toolFlyoutPosition = nextPosition;
+            applyToolFlyoutPosition();
+        });
+
+        window.addEventListener("pointerup", (event) => {
+            if (!state.flyoutDrag || event.pointerId !== state.flyoutDrag.pointerId) {
+                return;
+            }
+            state.flyoutDrag = null;
+            toolFlyoutHandleEl?.classList.remove("is-dragging");
+            try {
+                window.localStorage.setItem(toolFlyoutPositionStorageKey, JSON.stringify(state.toolFlyoutPosition));
+            } catch (_err) {
+                // ignore storage failures
+            }
         });
 
         settingsToggleBtn.addEventListener("click", (event) => {
@@ -2747,6 +2820,7 @@
 
         window.addEventListener("resize", () => {
             positionSettingsPopover();
+            applyToolFlyoutPosition();
             resizeCanvasToViewport({ preserveView: true });
         });
 
@@ -2765,41 +2839,18 @@
             }
         });
 
-        shiftStepButtons.forEach((btn) => {
-            btn.addEventListener("click", () => {
-                const step = Number(btn.dataset.shiftStep);
-                if (!Number.isFinite(step) || step <= 0) {
-                    return;
-                }
-                state.shiftStep = step;
-                shiftStepButtons.forEach((candidate) => {
-                    candidate.classList.toggle("active", candidate === btn);
-                });
-            });
+        popoverMoveOriginBtn?.addEventListener("click", () => {
+            setEditorMode("view");
+            setTool("move_origin");
+            settingsPopover.setAttribute("hidden", "");
+            settingsToggleBtn.classList.remove("active");
         });
 
-        shiftNudgeButtons.forEach((btn) => {
-            btn.addEventListener("click", () => {
-                const dxBase = Number(btn.dataset.shiftDx);
-                const dyBase = Number(btn.dataset.shiftDy);
-                if (!Number.isFinite(dxBase) || !Number.isFinite(dyBase)) {
-                    return;
-                }
-                if (dxBase === 0 && dyBase === 0) {
-                    return;
-                }
-                applyMapTransform(dxBase * (state.shiftStep / 0.05), dyBase * (state.shiftStep / 0.05), 0, "shift");
-            });
-        });
-
-        yawButtons.forEach((btn) => {
-            btn.addEventListener("click", () => {
-                const yawDeltaDeg = Number(btn.dataset.yawDelta);
-                if (!Number.isFinite(yawDeltaDeg) || yawDeltaDeg === 0) {
-                    return;
-                }
-                applyMapTransform(0, 0, yawDeltaDeg, "yaw");
-            });
+        popoverRotateOriginBtn?.addEventListener("click", () => {
+            setEditorMode("view");
+            setTool("rotate_origin");
+            settingsPopover.setAttribute("hidden", "");
+            settingsToggleBtn.classList.remove("active");
         });
 
         overlayButtons.forEach((btn) => {
@@ -2939,6 +2990,9 @@
             syncOriginInputs();
             draw();
             saveEdits("recenter");
+        });
+        document.getElementById("origin-reset-rail")?.addEventListener("click", () => {
+            originResetBtn?.click();
         });
 
         function rotatePoint(x, y, angle, ox, oy) {
@@ -3311,164 +3365,57 @@
             if (!inspectorPropertiesEl) {
                 return;
             }
+            const widthMeters = state.mapInfo ? Number(state.mapInfo.width || 0) * Number(state.mapInfo.resolution || 0) : 0;
+            const heightMeters = state.mapInfo ? Number(state.mapInfo.height || 0) * Number(state.mapInfo.resolution || 0) : 0;
+            inspectorPropertiesEl.innerHTML = `
+                <div class="insp-card">
+                    <div class="insp-section">Map Overview</div>
+                    <div class="metrics-grid">
+                        ${metricCell("Width", formatMeters(widthMeters, 2))}
+                        ${metricCell("Height", formatMeters(heightMeters, 2))}
+                        ${metricCell("Resolution", formatMeters(state.mapInfo?.resolution || 0, 3))}
+                        ${metricCell("Zoom", `${Math.round(state.view.scale * 100)}%`)}
+                    </div>
+                </div>
 
-            const zone = getSelectedZone();
-            const path = getSelectedPath();
-            let html = "";
+                <div class="insp-card">
+                    <div class="insp-section">Frame</div>
+                    ${propRow("Origin X", formatCoord(state.origin.x))}
+                    ${propRow("Origin Y", formatCoord(state.origin.y))}
+                    ${propRow("Origin Yaw", formatDegrees(state.origin.yaw * 180 / Math.PI, 2))}
+                    ${propRow("Active Map", basename(state.loadedMapPath || state.activeMapPath) || "active_map")}
+                </div>
 
-            if (zone) {
-                const yawDeg = Number(zone.yaw || 0) * 180 / Math.PI;
-                html = `
-                    <div class="insp-card">
-                        <div class="insp-section">Selected Zone</div>
-                        ${propRow("Name", zone.name || zone.id)}
-                        ${propRow("Type", String(zone.type || "zone").replace(/_/g, " "))}
-                        ${propRow("Coordinates", `${formatCoord(zone.x)}, ${formatCoord(zone.y)}`)}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Placement</div>
-                        <div class="prop-grid">
-                            <label class="prop-field">
-                                <span class="prop-field-label">X (m)</span>
-                                <input class="prop-input" id="selected-zone-x" type="number" step="0.01" value="${escapeHtml(zone.x)}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Y (m)</span>
-                                <input class="prop-input" id="selected-zone-y" type="number" step="0.01" value="${escapeHtml(zone.y)}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Yaw (deg)</span>
-                                <input class="prop-input" id="selected-zone-yaw" type="number" step="0.1" value="${escapeHtml(yawDeg.toFixed(2))}">
-                            </label>
-                        </div>
-                        ${propRow("Radius", formatMeters(zone.radius_m || 0, 2))}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Behavior</div>
-                        <div class="prop-grid">
-                            <label class="prop-field">
-                                <span class="prop-field-label">Zone Type</span>
-                                <select class="prop-select" id="selected-zone-type">
-                                    <option value="no_go"${zone.type === "no_go" ? " selected" : ""}>No-Go</option>
-                                    <option value="slow"${zone.type === "slow" ? " selected" : ""}>Slow</option>
-                                    <option value="restricted"${zone.type === "restricted" ? " selected" : ""}>Restricted</option>
-                                    <option value="waypoint"${zone.type === "waypoint" ? " selected" : ""}>Waypoint</option>
-                                    <option value="dock"${zone.type === "dock" ? " selected" : ""}>Dock</option>
-                                    <option value="queue"${zone.type === "queue" ? " selected" : ""}>Queue</option>
-                                    <option value="normal"${zone.type === "normal" ? " selected" : ""}>Normal</option>
-                                </select>
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Speed Limit</span>
-                                <input class="prop-input" id="selected-zone-speed" type="number" step="0.05" value="${escapeHtml(Number(zone.speed || 0.5).toFixed(2))}">
-                            </label>
-                            <label class="prop-field">
-                                <span class="prop-field-label">Charge Duration</span>
-                                <input class="prop-input" id="selected-zone-charge" type="number" step="1" value="${escapeHtml(Number(zone.charge_duration || 0).toFixed(0))}">
-                            </label>
-                        </div>
-                        <div class="prop-actions">
-                            <button class="insp-action-btn primary" type="button" id="selected-zone-save-btn"><i class="fas fa-save"></i><span>Save Zone</span></button>
-                            <button class="insp-action-btn danger" type="button" id="selected-zone-delete-btn"><i class="fas fa-trash"></i><span>Delete Zone</span></button>
-                            <button class="insp-action-btn" type="button" id="clear-selection-btn"><i class="fas fa-xmark"></i><span>Clear Selection</span></button>
-                        </div>
-                    </div>
-                `;
-                if (inspectorHeaderTitleEl) {
-                    inspectorHeaderTitleEl.textContent = zone.name || zone.id || "Selected Zone";
-                }
-            } else if (path) {
-                const points = Array.isArray(path.points) ? path.points : [];
-                const metrics = state.pathMetrics.get(path.id) || {};
-                const [fromId, toId] = String(path.id || "").split("__");
-                const pathLength = Number(metrics.length_m ?? metrics.distance_m);
-                html = `
-                    <div class="insp-card">
-                        <div class="insp-section">Selected Path</div>
-                        ${propRow("Path ID", path.id || "path", { mono: true })}
-                        ${propRow("From", fromId || "—")}
-                        ${propRow("To", toId || "—")}
-                        ${propRow("Control Points", String(points.length))}
-                        ${propRow("Length", Number.isFinite(pathLength) ? formatMeters(pathLength, 2) : "Unavailable")}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Path Actions</div>
-                        <div class="prop-actions">
-                            <button class="insp-action-btn danger" type="button" id="selected-path-delete-btn"><i class="fas fa-trash"></i><span>Delete Path</span></button>
-                            <button class="insp-action-btn" type="button" id="clear-selection-btn"><i class="fas fa-xmark"></i><span>Clear Selection</span></button>
-                        </div>
-                    </div>
-                `;
-                if (inspectorHeaderTitleEl) {
-                    inspectorHeaderTitleEl.textContent = path.id || "Selected Path";
-                }
-            } else {
-                const widthMeters = state.mapInfo ? Number(state.mapInfo.width || 0) * Number(state.mapInfo.resolution || 0) : 0;
-                const heightMeters = state.mapInfo ? Number(state.mapInfo.height || 0) * Number(state.mapInfo.resolution || 0) : 0;
-                const zoneCount = Array.from(state.zones.values()).filter((zoneEntry) => !isWaypointType(zoneEntry.type)).length;
-                const waypointCount = Array.from(state.zones.values()).filter((zoneEntry) => isWaypointType(zoneEntry.type)).length;
-                html = `
-                    <div class="insp-card">
-                        <div class="insp-section">Map Overview</div>
-                        <div class="metrics-grid">
-                            ${metricCell("Width", formatMeters(widthMeters, 2))}
-                            ${metricCell("Height", formatMeters(heightMeters, 2))}
-                            ${metricCell("Resolution", formatMeters(state.mapInfo?.resolution || 0, 3))}
-                            ${metricCell("Zoom", `${Math.round(state.view.scale * 100)}%`)}
-                            ${metricCell("Zones", String(zoneCount))}
-                            ${metricCell("Waypoints", String(waypointCount))}
-                        </div>
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-section">Origin</div>
-                        ${propRow("X", formatCoord(state.origin.x))}
-                        ${propRow("Y", formatCoord(state.origin.y))}
-                        ${propRow("Yaw", formatDegrees(state.origin.yaw * 180 / Math.PI, 2))}
-                        ${propRow("Active Map", basename(state.loadedMapPath || state.activeMapPath) || "active_map")}
-                    </div>
-
-                    <div class="insp-card">
-                        <div class="insp-empty">
-                            <i class="fas fa-arrow-pointer"></i>
-                            <div>Select a zone or path to edit its properties here.</div>
-                        </div>
-                    </div>
-                `;
-                if (inspectorHeaderTitleEl) {
-                    inspectorHeaderTitleEl.textContent = "Map Overview";
-                }
+                <div class="insp-card">
+                    <div class="insp-section">Editing</div>
+                    ${propRow("Mode", getModeLabel())}
+                    ${propRow("Tool", TOOL_HINTS[state.tool] || "Ready")}
+                    ${propRow("Grid", state.showGrid ? "Enabled" : "Disabled")}
+                    ${propRow("Dotted Overlay", state.dottedViewMode ? "Enabled" : "Disabled")}
+                </div>
+            `;
+            if (inspectorHeaderTitleEl) {
+                inspectorHeaderTitleEl.textContent = "Map Overview";
             }
-
-            inspectorPropertiesEl.innerHTML = html;
-            document.getElementById("selected-zone-save-btn")?.addEventListener("click", saveSelectedZoneProperties);
-            document.getElementById("selected-zone-delete-btn")?.addEventListener("click", deleteSelectedZone);
-            document.getElementById("selected-path-delete-btn")?.addEventListener("click", deleteSelectedPath);
-            document.getElementById("clear-selection-btn")?.addEventListener("click", () => clearSelection());
         }
 
-        function renderInspectorLayers() {
-            if (!inspectorLayersEl) {
+        function renderInspectorObjects() {
+            if (!inspectorObjectsEl) {
                 return;
             }
-            inspectorLayersEl.innerHTML = `
+
+            const robotPoseText = state.robotPose
+                ? `${formatCoord(state.robotPose.x)}, ${formatCoord(state.robotPose.y)} @ ${formatDegrees(state.robotPose.theta * 180 / Math.PI, 1)}`
+                : "Unavailable";
+            const scanText = state.scanPoints.length > 0 ? `${state.scanPoints.length} points` : "No live scan";
+
+            inspectorObjectsEl.innerHTML = `
                 <div class="insp-card">
                     <div class="insp-section">Visibility</div>
                     <div class="sidebar-toggle-grid">
                         <button class="layer-toggle${state.showGrid ? " active" : ""}" type="button" data-grid-toggle="true">
                             <i class="fas fa-border-all"></i>
                             <span>Grid</span>
-                        </button>
-                        <button class="layer-toggle${state.overlayVisibility.zones ? " active" : ""}" type="button" data-overlay="zones">
-                            <i class="fas fa-draw-polygon"></i>
-                            <span>Zones</span>
-                        </button>
-                        <button class="layer-toggle${state.overlayVisibility.paths ? " active" : ""}" type="button" data-overlay="paths">
-                            <i class="fas fa-route"></i>
-                            <span>Paths</span>
                         </button>
                         <button class="layer-toggle${state.overlayVisibility.robot ? " active" : ""}" type="button" data-overlay="robot">
                             <i class="fas fa-robot"></i>
@@ -3481,14 +3428,16 @@
                     </div>
                 </div>
                 <div class="insp-card">
-                    <div class="insp-section">Viewport</div>
-                    ${propRow("Zoom", `${Math.round(state.view.scale * 100)}%`)}
-                    ${propRow("Grid", state.showGrid ? "Enabled" : "Disabled")}
+                    <div class="insp-section">Scene Objects</div>
+                    ${propRow("Origin Marker", "Always available")}
+                    ${propRow("Robot Pose", robotPoseText)}
+                    ${propRow("Dotted Segments", String(state.dottedSegments.length))}
+                    ${propRow("Live Scan", scanText)}
                     ${propRow("Visible Layers", String(countVisibleLayers()))}
                 </div>
             `;
 
-            inspectorLayersEl.querySelectorAll("[data-overlay]").forEach((button) => {
+            inspectorObjectsEl.querySelectorAll("[data-overlay]").forEach((button) => {
                 button.addEventListener("click", () => {
                     const key = String(button.getAttribute("data-overlay") || "");
                     if (!key || !(key in state.overlayVisibility)) return;
@@ -3500,7 +3449,7 @@
                 });
             });
 
-            inspectorLayersEl.querySelectorAll("[data-grid-toggle]").forEach((button) => {
+            inspectorObjectsEl.querySelectorAll("[data-grid-toggle]").forEach((button) => {
                 button.addEventListener("click", () => {
                     state.showGrid = !state.showGrid;
                     syncGridButton();
@@ -3511,32 +3460,16 @@
             });
         }
 
-        function renderInspectorGuide() {
-            if (!inspectorGuideEl) {
-                return;
-            }
-            inspectorGuideEl.innerHTML = `
-                <div class="insp-card">
-                    <div class="insp-section">Current Mode</div>
-                    ${propRow("Mode", getModeLabel())}
-                    ${propRow("Tool", TOOL_HINTS[state.tool] || "Ready")}
-                    ${propRow("Pending Path", state.pendingFromZone || "None")}
-                    ${propRow("Dotted Overlay", state.dottedViewMode ? "Enabled" : "Disabled")}
-                </div>
-                <div class="insp-card">
-                    <div class="insp-section">Quick Help</div>
-                    ${propRow("Pan", "Middle click or Pan tool")}
-                    ${propRow("Zoom", "Mouse wheel or top bar controls")}
-                    ${propRow("Measure", "Two clicks in View mode")}
-                    ${propRow("Cancel", "Press Esc to cancel line placement")}
-                </div>
-            `;
-        }
-
         function renderInspector() {
             renderInspectorProperties();
-            renderInspectorLayers();
-            renderInspectorGuide();
+            renderInspectorObjects();
+            if (state.editorMode === "graph" && window.MapEditorGraph?.renderInspector) {
+                try {
+                    window.MapEditorGraph.renderInspector();
+                } catch (err) {
+                    console.error(err);
+                }
+            }
             openInspectorTab(state.inspectorTab || "properties");
         }
 
@@ -3696,6 +3629,10 @@
                 if (state.overlayVisibility.axes) {
                     drawAxes(robotCanvas.x, robotCanvas.y, -state.robotPose.theta, 18, "robot");
                 }
+            }
+
+            if (window.MapEditorGraph) {
+                try { MapEditorGraph.draw(ctx); } catch (e) { console.error(e); }
             }
         }
 
@@ -3958,6 +3895,8 @@
             state.dragStart = null;
             state.draggingView = false;
             state.viewDragStart = null;
+            state.draggingOrigin = false;
+            state.rotatingMap = false;
             syncCanvasCursor();
             releasePointerCaptureSafe(event?.pointerId);
         }
@@ -3978,7 +3917,7 @@
             }
             const margin = 8;
             const rect = settingsToggleBtn.getBoundingClientRect();
-            const width = Math.min(640, Math.max(280, window.innerWidth - 28));
+            const width = Math.min(320, Math.max(236, window.innerWidth - 28));
             settingsPopover.style.width = `${width}px`;
             settingsPopover.style.right = "auto";
             settingsPopover.style.left = `${Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin))}px`;
@@ -4109,7 +4048,7 @@
                 return;
             }
 
-            if (state.moveOriginEnabled) {
+            if (state.tool === "move_origin") {
                 const originCanvas = mapPixelToCanvas(state.originPx, state.originPy);
                 const dx = p.x - originCanvas.x;
                 const dy = p.y - originCanvas.y;
@@ -4122,53 +4061,14 @@
                 }
             }
 
-            if (state.tool === "move_zone") {
-                const hit = hitTestZone(p.x, p.y);
-                if (!hit) return;
-                setSelection("zone", hit.id, { silent: true });
-                state.draggingZoneId = hit.id;
-                state.dragOffsetMap = {
-                    x: hit.x - worldPos.x,
-                    y: hit.y - worldPos.y
-                };
+            if (state.tool === "rotate_origin") {
+                const originCanvas = mapPixelToCanvas(state.originPx, state.originPy);
+                state.strokeSnapshot = captureEditorSnapshot();
+                state.rotatingMap = true;
+                state.rotateStartYaw = state.origin.yaw;
+                state.rotateStartAngle = Math.atan2(p.y - originCanvas.y, p.x - originCanvas.x);
                 syncCanvasCursor();
-                updateStatus(`Moving ${hit.name || hit.id}`);
-                return;
-            }
-
-            if (state.tool === "rotate_zone") {
-                const hit = hitTestZone(p.x, p.y);
-                if (!hit) return;
-                setSelection("zone", hit.id, { silent: true });
-                const mapPixel = worldToMapPixel(hit.x, hit.y);
-                const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
-                state.rotatingZoneId = hit.id;
-                state.rotateStartYaw = hit.yaw || 0;
-                state.rotateStartAngle = Math.atan2(p.y - canvasPos.y, p.x - canvasPos.x);
-                syncCanvasCursor();
-                updateStatus(`Rotating ${hit.name || hit.id}`);
-                return;
-            }
-
-            if (state.tool === "add_path") {
-                const hit = hitTestZone(p.x, p.y);
-                if (!hit) {
-                    const pathHit = hitTestPath(p.x, p.y);
-                    if (pathHit) {
-                        setSelection("path", pathHit.id);
-                        openInspectorTab("properties");
-                    }
-                    return;
-                }
-                setSelection("zone", hit.id, { silent: true });
-                if (!state.pendingFromZone) {
-                    state.pendingFromZone = hit.id;
-                    updateStatus(`Path from ${hit.name || hit.id}...`);
-                } else if (state.pendingFromZone !== hit.id) {
-                    createPathBetween(state.pendingFromZone, hit.id);
-                    state.pendingFromZone = null;
-                }
-                draw();
+                updateStatus("Rotating map frame");
                 return;
             }
 
@@ -4296,7 +4196,7 @@
                 return;
             }
 
-            if (state.moveOriginEnabled && state.draggingOrigin) {
+            if (state.tool === "move_origin" && state.draggingOrigin) {
                 state.originPx = mapPos.x;
                 state.originPy = mapPos.y;
                 updateOriginFromPixel(state.originPx, state.originPy);
@@ -4305,26 +4205,12 @@
                 return;
             }
 
-            if (state.tool === "move_zone" && state.draggingZoneId) {
-                const worldPos = mapPixelToWorld(mapPos.x, mapPos.y);
-                const zone = state.zones.get(state.draggingZoneId);
-                if (zone) {
-                    zone.x = worldPos.x + state.dragOffsetMap.x;
-                    zone.y = worldPos.y + state.dragOffsetMap.y;
-                    draw();
-                }
-                return;
-            }
-
-            if (state.tool === "rotate_zone" && state.rotatingZoneId) {
-                const zone = state.zones.get(state.rotatingZoneId);
-                if (zone) {
-                    const mapPixel = worldToMapPixel(zone.x, zone.y);
-                    const canvasPos = mapPixelToCanvas(mapPixel.x, mapPixel.y);
-                    const angle = Math.atan2(p.y - canvasPos.y, p.x - canvasPos.x);
-                    zone.yaw = state.rotateStartYaw + (angle - state.rotateStartAngle);
-                    draw();
-                }
+            if (state.tool === "rotate_origin" && state.rotatingMap) {
+                const originCanvas = mapPixelToCanvas(state.originPx, state.originPy);
+                const angle = Math.atan2(p.y - originCanvas.y, p.x - originCanvas.x);
+                state.origin.yaw = state.rotateStartYaw + (angle - state.rotateStartAngle);
+                syncOriginInputs();
+                draw();
                 return;
             }
 
@@ -4360,7 +4246,7 @@
                 }
             }
 
-            if (state.moveOriginEnabled && state.draggingOrigin) {
+            if (state.tool === "move_origin" && state.draggingOrigin) {
                 state.draggingOrigin = false;
                 syncCanvasCursor();
                 if (state.strokeSnapshot) {
@@ -4371,39 +4257,22 @@
                 return;
             }
 
+            if (state.tool === "rotate_origin" && state.rotatingMap) {
+                state.rotatingMap = false;
+                syncCanvasCursor();
+                if (state.strokeSnapshot) {
+                    pushUndoSnapshot(state.strokeSnapshot);
+                    state.strokeSnapshot = null;
+                }
+                saveEdits("origin-rotate");
+                return;
+            }
+
             if (state.draggingView) {
                 state.draggingView = false;
                 state.viewDragStart = null;
                 syncCanvasCursor();
                 updateStatus(TOOL_HINTS[state.tool] || "Ready");
-                return;
-            }
-
-            if (state.tool === "move_zone" && state.draggingZoneId) {
-                const zone = state.zones.get(state.draggingZoneId);
-                const movedId = state.draggingZoneId;
-                state.draggingZoneId = null;
-                state.dragOffsetMap = null;
-                syncCanvasCursor();
-                if (zone) {
-                    setSelection("zone", movedId, { silent: true });
-                    updateZonePose(zone);
-                    updateAttachedPaths(movedId);
-                }
-                state.pointerDown = false;
-                return;
-            }
-
-            if (state.tool === "rotate_zone" && state.rotatingZoneId) {
-                const zone = state.zones.get(state.rotatingZoneId);
-                const zoneId = state.rotatingZoneId;
-                state.rotatingZoneId = null;
-                syncCanvasCursor();
-                if (zone) {
-                    setSelection("zone", zoneId, { silent: true });
-                    updateZonePose(zone);
-                }
-                state.pointerDown = false;
                 return;
             }
 
@@ -4895,12 +4764,14 @@
 
         async function refreshDottedBackground(options = {}) {
             const silent = !!options.silent;
+            const preset = getEditorDottedPreset();
             if (!silent) {
-                updateStatus("Refreshing dotted map…");
+                updateStatus("Refreshing ground-truth dotted map…");
             }
             try {
-                const dottedUrl = new URL(API.editorPreview, window.location.origin);
+                const dottedUrl = new URL(API.mapStatic, window.location.origin);
                 dottedUrl.searchParams.set("dotted", "true");
+                dottedUrl.searchParams.set("preset", preset);
                 dottedUrl.searchParams.set("_ts", String(Date.now()));
                 const r = await fetch(dottedUrl.toString(), { cache: "no-store" });
                 const d = await r.json();
@@ -4911,7 +4782,7 @@
                         syncCanvasContext();
                         draw();
                         if (!silent) {
-                            updateStatus("Dotted map ready — use Add, Erase, Place Bot, or Reloc");
+                            updateStatus("Ground-truth dotted map ready");
                         }
                     };
                     img.src = "data:image/png;base64," + d.image;
@@ -4982,13 +4853,13 @@
         async function init() {
             await loadMap({ forceReload: true });
             await loadLayoutInfo();
-            await loadZones();
-            await loadPaths();
             syncOriginInputs();
             syncGridButton();
             Object.keys(state.overlayVisibility).forEach((key) => syncOverlayButtons(key));
             syncHistoryButtons();
             syncSidebarCollapsedState();
+            syncInspectorCollapsedState();
+            applyToolFlyoutPosition();
             renderSidebarCollections();
             renderInspector();
             syncCanvasContext();
@@ -5012,13 +4883,12 @@
             setInterval(async () => {
                 await syncActiveMapPreviewIfNeeded();
                 await loadLayoutInfo();
-                await loadZones();
-                await loadPaths();
             }, 5000);
         }
 
         init();
     </script>
+
 </body>
 
 </html>

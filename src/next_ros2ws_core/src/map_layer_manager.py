@@ -19,7 +19,11 @@ from .db_manager import DatabaseManager
 
 
 class MapLayerManager(Node):
-    VALID_LAYERS = ('no_go_zones', 'restricted', 'slow_zones')
+    VALID_LAYERS = (
+        'no_go_zones', 'restricted', 'slow_zones',
+        'locate_config', 'reflector', 'tag_area', 'do_area',
+        'di_area', 'clean_area', 'description_area'
+    )
 
     def __init__(self):
         super().__init__('map_layer_manager')
@@ -49,6 +53,13 @@ class MapLayerManager(Node):
             'no_go_zones': [],
             'restricted': [],
             'slow_zones': [],
+            'locate_config': [],
+            'reflector': [],
+            'tag_area': [],
+            'do_area': [],
+            'di_area': [],
+            'clean_area': [],
+            'description_area': [],
         }
 
     def _sanitize_layers(self, data: Any) -> Dict[str, List[Dict[str, Any]]]:

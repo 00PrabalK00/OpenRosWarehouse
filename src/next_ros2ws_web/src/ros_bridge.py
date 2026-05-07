@@ -7091,6 +7091,19 @@ class RosBridge(Node):
             'docks': 'docks',
             'fixture': 'fixtures',
             'fixtures': 'fixtures',
+            'charger': 'chargers',
+            'chargers': 'chargers',
+            'battery': 'batteries',
+            'batteries': 'batteries',
+            'chargespot': 'chargespots',
+            'chargespots': 'chargespots',
+            'leg': 'legs',
+            'legs': 'legs',
+            'tag': 'tags',
+            'tags': 'tags',
+            'polygon': 'polygons',
+            'polygons': 'polygons',
+            'polygon_template': 'polygons',
         }
         return mapping.get(value, 'shelves')
 
@@ -7108,12 +7121,24 @@ class RosBridge(Node):
             'pallets': 'Pallet Face',
             'docks': 'Dock Face',
             'fixtures': 'Fixture Marker',
+            'chargers': 'Charger Pile',
+            'batteries': 'Battery Profile',
+            'chargespots': 'Charge Spot',
+            'legs': 'Human Leg',
+            'tags': 'QR Tag',
+            'polygons': 'Polygon Template',
         }.get(normalized_category, 'Recognition Asset')
         geometry_type = {
             'shelves': 'shelf_profile',
             'pallets': 'pallet_profile',
             'docks': 'dock_profile',
             'fixtures': 'fixture_profile',
+            'chargers': 'charger_profile',
+            'batteries': 'battery_profile',
+            'chargespots': 'chargespot_profile',
+            'legs': 'leg_profile',
+            'tags': 'tag_profile',
+            'polygons': 'polygon_profile',
         }.get(normalized_category, 'recognition_profile')
 
         family_key = f'{self._recognition_slug(normalized_category)}_{self._recognition_slug(base_name, "asset")}'
@@ -7165,7 +7190,84 @@ class RosBridge(Node):
             },
             'notes': '',
             'validation': {},
+            'metadata': self._build_default_recognition_metadata(normalized_category),
         }
+
+    @staticmethod
+    def _build_default_recognition_metadata(category: str) -> Dict[str, Any]:
+        """Per-category PDF-spec metadata defaults."""
+        defaults = {
+            'chargers': {
+                'device_name': 'charger_default',
+                'minwidth': 0.04,
+                'maxwidth': 0.10,
+                'dx': 0.0,
+                'dy': 0.0,
+            },
+            'batteries': {
+                'device_name': 'battery_default',
+                'backLength': 0.0,
+                'aheadLength': 0.0,
+                'upHeight': 0.0,
+                'recHeightTor': 0.0,
+                'goLateralDist': 0.0,
+                'maxAdjustTime': 0.0,
+            },
+            'chargespots': {
+                'device_name': 'chargespot_default',
+                'ip': '',
+                'port': 0,
+            },
+            'legs': {
+                'minwidth': 0.05,
+                'maxwidth': 0.20,
+                'maxdistance': 0.50,
+                'method_type': 'by_legshape',
+            },
+            'tags': {
+                'X_Dis': 0.0,
+                'Y_Dis': 0.0,
+                'Z_Dis': 0.0,
+                'goodsWidth': 1.0,
+                'goodsLength': 1.0,
+                'tagDistance': 0.5,
+                'tagSize': 0.05,
+                'Tagtype': 'aruco',
+            },
+            'shelves': {
+                'leg_width': 0.05,
+                'align_depth': 0.0,
+                'anti_align_depth': 0.0,
+                'y_align_depth': 0.0,
+                'y_anti_align_depth': 0.0,
+                'rec_off_x': 0.0,
+                'rec_off_y': 0.0,
+                'rec_off_angle': 0.0,
+                'outer_width': 0.0,
+                'outer_length': 0.0,
+                'extra_dist': 0.0,
+                'continue_detect': True,
+                'side_block': False,
+                'detect_direction': 'x',
+                'leg_type': 'cube',
+                'method_type': 'by_reflector',
+            },
+            'pallets': {
+                'pallet_width': 1.20,
+                'pallet_height': 0.15,
+                'pallet_length': 1.00,
+                'block_laser': True,
+                'pocket_width': 0.30,
+                'pocket_height': 0.10,
+                'pocket_spacing': 0.30,
+                'in_global_framework': False,
+            },
+            'polygons': {
+                'points': [],
+                'image_path': '',
+            },
+        }
+        return defaults.get(category, {})
 
     def _normalize_recognition_template_payload(
         self,
@@ -7954,6 +8056,13 @@ class RosBridge(Node):
             'no_go_zones': [],
             'restricted': [],
             'slow_zones': [],
+            'locate_config': [],
+            'reflector': [],
+            'tag_area': [],
+            'do_area': [],
+            'di_area': [],
+            'clean_area': [],
+            'description_area': [],
         }
         try:
             parsed = json.loads(str(raw or '{}'))
@@ -8080,6 +8189,13 @@ class RosBridge(Node):
         recognize: bool = False,
         action_point_notes: str = '',
         pre_point: Any = None,
+        angle_enabled: bool = True,
+        follow: bool = False,
+        use_pgv: bool = False,
+        pgv_dx: float = 0.0,
+        pgv_dy: float = 0.0,
+        pgv_dtheta: float = 0.0,
+        description: str = '',
     ):
         zone_name = (name or '').strip()
         if not zone_name:
@@ -8110,55 +8226,30 @@ class RosBridge(Node):
         if not bool(response.ok):
             return self._ok(False, str(response.message))
 
-        zone_type = str(zone_type or 'normal')
-        needs_metadata_update = (
-            zone_type != 'normal'
-            or abs(float(speed) - 0.5) > 1e-6
-            or bool(action)
-            or float(charge_duration) > 0.0
+        meta = self.update_zone_params(
+            zone_name,
+            str(zone_type or 'normal'),
+            float(speed),
+            str(action or ''),
+            float(charge_duration),
+            point_type=point_type,
+            template_id=template_id,
+            recognize=recognize,
+            action_point_notes=action_point_notes,
+            pre_point=pre_point,
+            angle_enabled=angle_enabled,
+            follow=follow,
+            use_pgv=use_pgv,
+            pgv_dx=pgv_dx,
+            pgv_dy=pgv_dy,
+            pgv_dtheta=pgv_dtheta,
+            description=description,
         )
-        if not needs_metadata_update:
-            meta = self._ok(True, str(response.message))
-        else:
-            meta = self.update_zone_params(
-                zone_name,
-                zone_type,
-                float(speed),
-                str(action or ''),
-                float(charge_duration),
-                point_type=point_type,
-                template_id=template_id,
-                recognize=recognize,
-                action_point_notes=action_point_notes,
-                pre_point=pre_point,
+        if not meta.get('ok'):
+            return self._ok(
+                True,
+                f'{response.message}. Metadata update warning: {meta.get("message", "unknown")}',
             )
-            if not meta.get('ok'):
-                return self._ok(
-                    True,
-                    f'{response.message}. Metadata update warning: {meta.get("message", "unknown")}',
-                )
-
-        should_persist_action_point = (
-            str(zone_type or 'normal').strip().lower() == 'action'
-            or bool(template_id)
-            or self._normalize_action_point_type(point_type) != 'generic'
-            or bool(recognize)
-        )
-        if should_persist_action_point:
-            action_point_payload = {
-                'zone_name': zone_name,
-                'point_type': self._normalize_action_point_type(point_type),
-                'template_id': str(template_id or '').strip(),
-                'action_id': str(action or '').strip(),
-                'action': str(action or '').strip(),
-                'recognize': bool(recognize),
-                'notes': str(action_point_notes or '').strip(),
-            }
-            if isinstance(pre_point, (dict, str)) and pre_point:
-                action_point_payload['pre_point'] = pre_point
-            self._save_action_point_config_to_db(zone_name, action_point_payload)
-        else:
-            self._delete_action_point_config_from_db(zone_name)
 
         return self._ok(True, str(response.message))
 
@@ -8176,6 +8267,114 @@ class RosBridge(Node):
         if ok:
             self._delete_action_point_config_from_db(str(name or ''))
         return self._ok(ok, str(response.message))
+
+    def align_zones(self, names: List[str], alignment: str):
+        """Align multiple zones to a common axis."""
+        res = self.get_zones()
+        if not res.get('ok'):
+            return res
+        all_zones = res.get('zones', {})
+        targets = {n: all_zones[n] for n in names if n in all_zones}
+        if len(targets) < 2:
+            return self._ok(False, 'Need at least 2 valid zones to align')
+
+        if alignment == 'left':
+            val = min(z['position']['x'] for z in targets.values())
+            axis = 'x'
+        elif alignment == 'right':
+            val = max(z['position']['x'] for z in targets.values())
+            axis = 'x'
+        elif alignment == 'top':
+            val = max(z['position']['y'] for z in targets.values())
+            axis = 'y'
+        elif alignment == 'bottom':
+            val = min(z['position']['y'] for z in targets.values())
+            axis = 'y'
+        elif alignment == 'h_center':
+            val = sum(z['position']['x'] for z in targets.values()) / len(targets)
+            axis = 'x'
+        elif alignment == 'v_center':
+            val = sum(z['position']['y'] for z in targets.values()) / len(targets)
+            axis = 'y'
+        else:
+            return self._ok(False, f'Unknown alignment: {alignment}')
+
+        success_count = 0
+        for name, z in targets.items():
+            nx = val if axis == 'x' else z['position']['x']
+            ny = val if axis == 'y' else z['position']['y']
+            # Orientation is quaternion
+            q = z.get('orientation', {})
+            theta = 2.0 * math.atan2(q.get('z', 0.0), q.get('w', 1.0))
+            
+            # Use save_zone to update position and notify Nav2
+            # We must pass existing metadata to preserve it
+            meta = self._load_action_point_configs_from_db().get(name, {})
+            sr = self.save_zone(
+                name=name, x=nx, y=ny, theta=theta,
+                zone_type=z.get('metadata', {}).get('type', 'normal'),
+                speed=float(z.get('metadata', {}).get('speed', 0.5)),
+                action=str(z.get('metadata', {}).get('action', '')),
+                charge_duration=float(z.get('metadata', {}).get('charge_duration', 0.0)),
+                point_type=meta.get('point_type', 'generic'),
+                template_id=meta.get('template_id', ''),
+                recognize=bool(meta.get('recognize', False)),
+                description=meta.get('description', ''),
+                angle_enabled=bool(meta.get('angle_enabled', True)),
+                follow=bool(meta.get('follow', False)),
+            )
+            if sr.get('ok'):
+                success_count += 1
+
+        return self._ok(True, f'Aligned {success_count} zones')
+
+    def batch_create_zones(self, base_name: str, count: int, spacing: float, direction_deg: float, angle_deg: float = None):
+        """Create a series of zones starting from a base zone."""
+        res = self.get_zones()
+        if not res.get('ok'):
+            return res
+        all_zones = res.get('zones', {})
+        base = all_zones.get(base_name)
+        if not base:
+            return self._ok(False, f'Base zone "{base_name}" not found')
+
+        rad = math.radians(float(direction_deg or 0.0))
+        dx = math.cos(rad) * float(spacing)
+        dy = math.sin(rad) * float(spacing)
+        
+        q_base = base.get('orientation', {})
+        base_theta = 2.0 * math.atan2(q_base.get('z', 0.0), q_base.get('w', 1.0))
+        target_theta = math.radians(float(angle_deg)) if angle_deg is not None else base_theta
+        
+        meta = self._load_action_point_configs_from_db().get(base_name, {})
+        
+        created = []
+        for i in range(1, int(count) + 1):
+            nx = float(base['position']['x']) + dx * i
+            ny = float(base['position']['y']) + dy * i
+            new_name = f'{base_name}_{i}'
+            # Avoid overwriting existing
+            if new_name in all_zones:
+                import uuid
+                new_name = f'{base_name}_{uuid.uuid4().hex[:4]}'
+            
+            sr = self.save_zone(
+                name=new_name, x=nx, y=ny, theta=target_theta,
+                zone_type=base.get('metadata', {}).get('type', 'normal'),
+                speed=float(base.get('metadata', {}).get('speed', 0.5)),
+                action=str(base.get('metadata', {}).get('action', '')),
+                charge_duration=float(base.get('metadata', {}).get('charge_duration', 0.0)),
+                point_type=meta.get('point_type', 'generic'),
+                template_id=meta.get('template_id', ''),
+                recognize=bool(meta.get('recognize', False)),
+                description=meta.get('description', ''),
+                angle_enabled=bool(meta.get('angle_enabled', True)),
+                follow=bool(meta.get('follow', False)),
+            )
+            if sr.get('ok'):
+                created.append(new_name)
+        
+        return self._ok(True, f'Created {len(created)} zones: {", ".join(created)}')
 
     def reorder_zones(self, zone_names: List[str]):
         req = ReorderZones.Request()
@@ -8202,6 +8401,13 @@ class RosBridge(Node):
         recognize: bool = False,
         action_point_notes: str = '',
         pre_point: Any = None,
+        angle_enabled: bool = True,
+        follow: bool = False,
+        use_pgv: bool = False,
+        pgv_dx: float = 0.0,
+        pgv_dy: float = 0.0,
+        pgv_dtheta: float = 0.0,
+        description: str = '',
     ):
         req = UpdateZoneParams.Request()
         req.name = str(name or '')
@@ -8230,50 +8436,29 @@ class RosBridge(Node):
             effective_notes = str(action_point_notes or '').strip()
             effective_pre_point = pre_point
 
-            # When no action point fields were explicitly sent (all at their defaults),
-            # preserve whatever is already in the DB rather than overwriting with generic.
-            caller_sent_no_action_point_fields = (
-                effective_point_type == 'generic'
-                and not effective_template_id
-                and not effective_recognize
-                and not effective_notes
-                and pre_point is None
+            db_payload = {
+                'zone_name': str(name or '').strip(),
+                'point_type': effective_point_type,
+                'template_id': effective_template_id,
+                'action_id': str(action or '').strip(),
+                'action': str(action or '').strip(),
+                'recognize': effective_recognize,
+                'notes': effective_notes,
+                'angle_enabled': bool(angle_enabled),
+                'follow': bool(follow),
+                'use_pgv': bool(use_pgv),
+                'pgv_dx': float(pgv_dx),
+                'pgv_dy': float(pgv_dy),
+                'pgv_dtheta': float(pgv_dtheta),
+                'description': str(description or ''),
+            }
+            if isinstance(effective_pre_point, (dict, str)) and effective_pre_point:
+                db_payload['pre_point'] = effective_pre_point
+            
+            self._save_action_point_config_to_db(
+                str(name or ''),
+                db_payload,
             )
-            if caller_sent_no_action_point_fields:
-                existing = self._load_action_point_configs_from_db().get(str(name or '').strip(), {})
-                if isinstance(existing, dict) and existing:
-                    existing_point_type = self._normalize_action_point_type(existing.get('point_type', 'generic'))
-                    if existing_point_type != 'generic':
-                        effective_point_type = existing_point_type
-                        effective_template_id = str(existing.get('template_id', '') or '').strip()
-                        effective_recognize = bool(existing.get('recognize', False))
-                        effective_notes = str(existing.get('notes', '') or '').strip()
-                        effective_pre_point = existing.get('pre_point')
-
-            should_persist_action_point = (
-                str(zone_type or 'normal').strip().lower() == 'action'
-                or bool(effective_template_id)
-                or effective_point_type != 'generic'
-                or effective_recognize
-            )
-            if should_persist_action_point:
-                db_payload = {
-                    'zone_name': str(name or '').strip(),
-                    'point_type': effective_point_type,
-                    'template_id': effective_template_id,
-                    'action_id': str(action or '').strip(),
-                    'action': str(action or '').strip(),
-                    'recognize': effective_recognize,
-                    'notes': effective_notes,
-                }
-                if isinstance(effective_pre_point, (dict, str)) and effective_pre_point:
-                    db_payload['pre_point'] = effective_pre_point
-                self._save_action_point_config_to_db(
-                    str(name or ''),
-                    db_payload,
-                )
-            else:
-                self._delete_action_point_config_from_db(str(name or ''))
         return self._ok(ok, str(response.message))
 
     # ---------- go-to-zone action ----------
@@ -8656,6 +8841,9 @@ class RosBridge(Node):
         if direction not in ('uni', 'bi', 'reverse'):
             direction = 'uni'
 
+        road_width = float(incoming.get('road_width', existing.get('road_width', 0.0)))
+        description = str(incoming.get('description', existing.get('description', '')))
+
         segment_attrs_raw = incoming.get('segment_attrs')
         if segment_attrs_raw is None:
             segment_attrs_raw = existing.get('segment_attrs', {})
@@ -8686,6 +8874,8 @@ class RosBridge(Node):
             'curved_segments': curved_segments,
             'curved_segment_controls': curved_segment_controls,
             'direction': direction,
+            'road_width': road_width,
+            'description': description,
             'segment_attrs': segment_attrs,
             'has_curves': bool(curved_segments),
         }

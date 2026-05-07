@@ -20,6 +20,7 @@ import rclpy
 from ament_index_python.packages import get_package_share_directory
 from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, send_from_directory, session
 from flask_cors import CORS
+from PIL import Image
 from rclpy.executors import MultiThreadedExecutor
 import yaml
 
@@ -267,10 +268,57 @@ def _dotted_cache_put(cache_key: Tuple[str, str, str], payload: Dict[str, Any]) 
 
 
 def _base64_png_to_pil(encoded_png: str):
-    from PIL import Image
-
     raw = base64.b64decode(str(encoded_png or '').encode('ascii'))
     return Image.open(io.BytesIO(raw)).convert('RGB')
+
+
+def _load_stitch_map_bundle(map_path: str) -> Dict[str, Any]:
+    resolved_path = os.path.abspath(os.path.expanduser(str(map_path or '').strip()))
+    if not resolved_path:
+        raise ValueError('map_path is required')
+    if not os.path.exists(resolved_path):
+        raise FileNotFoundError(f'Map path does not exist: {resolved_path}')
+
+    lower_path = resolved_path.lower()
+    image_path = resolved_path
+    resolution = 0.05
+    origin = [0.0, 0.0, 0.0]
+
+    if lower_path.endswith(('.yaml', '.yml')):
+        with open(resolved_path, 'r', encoding='utf-8') as f:
+            payload = yaml.safe_load(f) or {}
+        image_path = str(payload.get('image', '') or '').strip()
+        if not image_path:
+            raise ValueError(f'Map YAML does not define an image: {resolved_path}')
+        if not os.path.isabs(image_path):
+            image_path = os.path.join(os.path.dirname(resolved_path), image_path)
+        resolution = float(payload.get('resolution', 0.05) or 0.05)
+        raw_origin = payload.get('origin', [0.0, 0.0, 0.0]) or [0.0, 0.0, 0.0]
+        if len(raw_origin) < 3:
+            raw_origin = list(raw_origin) + [0.0] * (3 - len(raw_origin))
+        origin = [float(raw_origin[0]), float(raw_origin[1]), float(raw_origin[2])]
+    elif not lower_path.endswith(('.pgm', '.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff')):
+        raise ValueError('Unsupported map format. Use a map YAML or an image file.')
+
+    image_path = os.path.abspath(os.path.expanduser(image_path))
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f'Map image does not exist: {image_path}')
+
+    image = Image.open(image_path).convert('L')
+    image_io = io.BytesIO()
+    image.save(image_io, 'PNG')
+    encoded = base64.b64encode(image_io.getvalue()).decode('ascii')
+
+    return {
+        'ok': True,
+        'map_yaml_path': resolved_path,
+        'map_image_path': image_path,
+        'image': encoded,
+        'width': int(image.width),
+        'height': int(image.height),
+        'resolution': float(resolution),
+        'origin': origin,
+    }
 
 
 def _live_map_to_pil(map_payload: Dict[str, Any]):
@@ -876,6 +924,13 @@ def save_zone():
         recognize=_as_bool(data.get('recognize', data.get('shelf_detection_on', False)), default=False),
         action_point_notes=str(data.get('action_point_notes', '')),
         pre_point=data.get('pre_point') or None,
+        angle_enabled=_as_bool(data.get('angle_enabled', True), default=True),
+        follow=_as_bool(data.get('follow', False), default=False),
+        use_pgv=_as_bool(data.get('use_pgv', False), default=False),
+        pgv_dx=float(data.get('pgv_dx', 0.0)),
+        pgv_dy=float(data.get('pgv_dy', 0.0)),
+        pgv_dtheta=float(data.get('pgv_dtheta', 0.0)),
+        description=str(data.get('description', '')),
     )
     return _status(result, fail_code=503)
 
@@ -907,6 +962,48 @@ def delete_zone():
         return jsonify({'ok': False, 'message': 'Missing zone name'}), 400
 
     result = node.delete_zone(str(name))
+    return _status(result, fail_code=503)
+
+
+@app.route('/api/zones/align', methods=['POST'])
+def align_zones():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    names = data.get('names', [])
+    alignment = data.get('alignment', '')
+    if not names or not alignment:
+        return jsonify({'ok': False, 'message': 'Missing names or alignment'}), 400
+
+    result = node.align_zones(names, alignment)
+    return _status(result, fail_code=503)
+
+
+@app.route('/api/zones/batch-create', methods=['POST'])
+def batch_create_zones():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    base_name = data.get('base_name')
+    count = data.get('count')
+    spacing = data.get('spacing')
+    direction_deg = data.get('direction_deg')
+    angle_deg = data.get('angle_deg')
+
+    if not base_name or count is None or spacing is None or direction_deg is None:
+        return jsonify({'ok': False, 'message': 'Missing required fields'}), 400
+
+    result = node.batch_create_zones(
+        base_name=str(base_name),
+        count=int(count),
+        spacing=float(spacing),
+        direction_deg=float(direction_deg),
+        angle_deg=float(angle_deg) if angle_deg is not None else None,
+    )
     return _status(result, fail_code=503)
 
 
@@ -953,6 +1050,13 @@ def update_zone_params():
         recognize=_as_bool(data.get('recognize', data.get('shelf_detection_on', False)), default=False),
         action_point_notes=str(data.get('action_point_notes', '')),
         pre_point=data.get('pre_point') or None,
+        angle_enabled=_as_bool(data.get('angle_enabled', True), default=True),
+        follow=_as_bool(data.get('follow', False), default=False),
+        use_pgv=_as_bool(data.get('use_pgv', False), default=False),
+        pgv_dx=float(data.get('pgv_dx', 0.0)),
+        pgv_dy=float(data.get('pgv_dy', 0.0)),
+        pgv_dtheta=float(data.get('pgv_dtheta', 0.0)),
+        description=str(data.get('description', '')),
     )
     return _status(result, fail_code=503)
 
@@ -1795,6 +1899,21 @@ def reload_current_map():
 
     result = node.reload_editor_map()
     return _status(result, fail_code=503)
+
+
+@app.route('/api/map/stitch/load', methods=['POST'])
+@app.route('/api/editor/stitch/load', methods=['POST'])
+def load_editor_stitch_map():
+    data = _json_body()
+    map_path = str(data.get('map_path') or data.get('path') or '').strip()
+    if not map_path:
+        return jsonify({'ok': False, 'message': 'map_path is required'}), 400
+    try:
+        return jsonify(_load_stitch_map_bundle(map_path)), 200
+    except Exception as exc:
+        return jsonify({'ok': False, 'message': str(exc)}), 400
+
+
 @app.route('/api/map/upload', methods=['POST'])
 def upload_map():
     node, err = _node()
@@ -3068,5 +3187,6 @@ def main(args=None):
             pass
 
 
+# =================================================================
 if __name__ == '__main__':
     main()

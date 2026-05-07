@@ -14,6 +14,22 @@
     <script src="/static/easeljs.min.js"></script>
     <script src="/static/ros2d.min.js"></script>
     <style>
+        /* Global Custom Scrollbar for Dark UI */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-chrome, #30363d);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-tertiary, #8b949e);
+        }
+
         :root {
             /* Industrial Dark Theme - HMI Style */
             --bg-primary: #0a0e14;
@@ -13030,6 +13046,8 @@
                     <button class="mctrl-btn" id="manual-mode-btn" onclick="toggleManualMode()" title="Manual Joystick Control"><i class="fas fa-gamepad"></i><span>MOVE</span></button>
                     <button class="mctrl-btn" onclick="openLiftPopup()" title="Lift &amp; I/O Control"><i class="fas fa-arrows-alt-v"></i><span>LIFT</span></button>
                     <button class="mctrl-btn" id="shelf-popup-btn-top" onclick="toggleShelfPopup()" title="Open shelf controls"><i class="fas fa-box"></i><span>SHELF</span></button>
+                    <button class="mctrl-btn" id="motion-control-btn-top" onclick="document.getElementById('motion-control-modal').classList.toggle('open')" title="Translation/Rotation test"><i class="fas fa-arrows-up-down-left-right"></i><span>MOTION</span></button>
+                    <button class="mctrl-btn" id="camera-btn-top" onclick="window.open('/dev/camera', 'camera_popup', 'width=640,height=480,menubar=no,toolbar=no,location=no,status=no')" title="Open Camera Feed"><i class="fas fa-camera"></i><span>CAMERA</span></button>
                     <div class="mctrl-sep"></div>
                     <button class="mctrl-btn" id="nav-mode-btn-top" onclick="toggleNavMode()" title="Toggle Navigation Stack"><i class="fas fa-wifi"></i><span>START NAV</span></button>
                     <button class="mctrl-btn" onclick="cancelNav2Goal()" title="Cancel Navigation"><i class="fas fa-ban"></i><span>CANCEL NAV</span></button>
@@ -13042,7 +13060,7 @@
                     <button class="mctrl-btn" onclick="openMapMgmtPopup(event)" title="Load / Manage Map"><i class="fas fa-folder-open"></i><span>LOAD MAP</span></button>
                     <button class="mctrl-btn" id="slam-mode-btn-top" onclick="toggleSlamMode()" title="Toggle 2D Mapping (SLAM)"><i class="fas fa-map-marked-alt"></i><span>2D MAP</span></button>
                     <button class="mctrl-btn" id="dotted-map-btn" data-dotted-map-toggle onclick="toggleDottedMap()" title="Toggle dotted map display layer"><i class="fas fa-braille"></i><span>DOTTED</span></button>
-                    <button class="mctrl-btn" onclick="openStitchPopup()" title="Map Stitching — extend an existing map using slam_toolbox pose graph"><i class="fas fa-object-group"></i><span>STITCH</span></button>
+                    <button class="mctrl-btn" onclick="openStitchPopup()" title="Map Stitching — load a second map, align it, and merge it into the active map"><i class="fas fa-object-group"></i><span>STITCH</span></button>
                     <button class="mctrl-btn" onclick="openLayoutsPanel()" title="Map Layout Snapshots"><i class="fas fa-th-large"></i><span>LAYOUTS</span></button>
                     <div class="mctrl-sep"></div>
                 </div>
@@ -13441,6 +13459,12 @@
                                             <option value="pallet">Pallet</option>
                                             <option value="dock">Dock</option>
                                             <option value="fixture">Fixture</option>
+                                            <option value="charger">Charger (charging pile)</option>
+                                            <option value="battery">Battery</option>
+                                            <option value="chargespot">Chargespot (forklift)</option>
+                                            <option value="leg">Leg (human leg)</option>
+                                            <option value="tag">Tag (QR code)</option>
+                                            <option value="polygon">Polygon Template</option>
                                         </select>
                                     </div>
                                     <div id="zone-shelf-config-group" style="display:none;">
@@ -13745,21 +13769,56 @@
                             <div class="filter-tools">
                                 <div class="filter-step">
                                     <div class="filter-step-title">Step 1: Type</div>
-                                    <div class="filter-row type-row">
+                                    <div class="filter-row type-row" style="flex-wrap: wrap;">
                                         <button class="filter-btn filter-btn-type active" id="filter-layer-no-go"
-                                            onclick="setFilterLayer('no_go_zones')">
+                                            onclick="setFilterLayer('no_go_zones')" style="flex: 1 1 30%;">
                                             <span class="filter-btn-title">No Entry</span>
                                             <span class="filter-btn-count" id="filter-count-no-go">(0)</span>
                                         </button>
                                         <button class="filter-btn filter-btn-type" id="filter-layer-restricted"
-                                            onclick="setFilterLayer('restricted')">
+                                            onclick="setFilterLayer('restricted')" style="flex: 1 1 30%;">
                                             <span class="filter-btn-title">Caution</span>
                                             <span class="filter-btn-count" id="filter-count-restricted">(0)</span>
                                         </button>
                                         <button class="filter-btn filter-btn-type" id="filter-layer-slow"
-                                            onclick="setFilterLayer('slow_zones')">
+                                            onclick="setFilterLayer('slow_zones')" style="flex: 1 1 30%;">
                                             <span class="filter-btn-title">Speed</span>
                                             <span class="filter-btn-count" id="filter-count-slow">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-locate_config"
+                                            onclick="setFilterLayer('locate_config')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Locate Config</span>
+                                            <span class="filter-btn-count" id="filter-count-locate_config">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-reflector"
+                                            onclick="setFilterLayer('reflector')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Reflector</span>
+                                            <span class="filter-btn-count" id="filter-count-reflector">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-tag_area"
+                                            onclick="setFilterLayer('tag_area')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Tag / QR</span>
+                                            <span class="filter-btn-count" id="filter-count-tag_area">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-do_area"
+                                            onclick="setFilterLayer('do_area')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">DO Area</span>
+                                            <span class="filter-btn-count" id="filter-count-do_area">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-di_area"
+                                            onclick="setFilterLayer('di_area')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">DI Area</span>
+                                            <span class="filter-btn-count" id="filter-count-di_area">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-clean_area"
+                                            onclick="setFilterLayer('clean_area')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Clean Area</span>
+                                            <span class="filter-btn-count" id="filter-count-clean_area">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-description_area"
+                                            onclick="setFilterLayer('description_area')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Description</span>
+                                            <span class="filter-btn-count" id="filter-count-description_area">(0)</span>
                                         </button>
                                     </div>
                                 </div>
@@ -14212,6 +14271,16 @@
                         return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:9090`;
                     }
                     let mapData = null;
+                    let baseMap = null;
+                    let stitchedMap = null;
+                    let stitchTransform = { x: 0, y: 0, rotation: 0, scale: 1 };
+                    let regionMatching = { selection: null, selectionStart: null, lastScore: null };
+                    let referencePointMatching = { pairs: [], pendingBasePoint: null, lastError: null };
+                    let alignmentMode = null;
+                    let stitchState = 'idle';
+                    let stitchInteractionMode = 'move';
+                    let stitchDrag = { active: false, startWorld: null, startTransform: null };
+                    let stitchMapCatalog = [];
                     let dottedMapEnabled = false;
                     let dottedMapPreset = 'balanced';
                     let zones = {};
@@ -14425,6 +14494,9 @@
                     let isDrawingPath = false;
                     let drawnPath = [];  // Array of {zoneName: string} for zone-to-zone paths
                     let pathLoopType = 'none';
+                    let activePathDirection = 'uni';
+                    let activePathRoadWidth = 0.0;
+                    let activePathDescription = '';
                     let pathCurveEditMode = false;
                     let pathCurveAutoSmooth = false;  // true = all segments auto-smooth cubic Bézier
                     let curvedPathSegmentStarts = new Set();  // Segment i means anchor i -> i+1 is curved.
@@ -14473,10 +14545,28 @@
                     const FILTER_LAYER_META = {
                         no_go_zones: { label: 'No Entry', color: 'rgba(239, 68, 68, 0.62)', fill: 'rgba(239, 68, 68, 0.07)' },
                         restricted: { label: 'Caution', color: 'rgba(245, 158, 11, 0.56)', fill: 'rgba(245, 158, 11, 0.07)' },
-                        slow_zones: { label: 'Speed', color: 'rgba(59, 130, 246, 0.56)', fill: 'rgba(59, 130, 246, 0.08)' }
+                        slow_zones: { label: 'Speed', color: 'rgba(59, 130, 246, 0.56)', fill: 'rgba(59, 130, 246, 0.08)' },
+                        locate_config: { label: 'Locate Config', color: 'rgba(168, 85, 247, 0.56)', fill: 'rgba(168, 85, 247, 0.08)' },
+                        reflector: { label: 'Reflector', color: 'rgba(236, 72, 153, 0.56)', fill: 'rgba(236, 72, 153, 0.08)' },
+                        tag_area: { label: 'Tag / QR', color: 'rgba(34, 197, 94, 0.56)', fill: 'rgba(34, 197, 94, 0.08)' },
+                        do_area: { label: 'DO Area', color: 'rgba(20, 184, 166, 0.56)', fill: 'rgba(20, 184, 166, 0.08)' },
+                        di_area: { label: 'DI Area', color: 'rgba(249, 115, 22, 0.56)', fill: 'rgba(249, 115, 22, 0.08)' },
+                        clean_area: { label: 'Clean Area', color: 'rgba(6, 182, 212, 0.56)', fill: 'rgba(6, 182, 212, 0.08)' },
+                        description_area: { label: 'Description', color: 'rgba(100, 116, 139, 0.56)', fill: 'rgba(100, 116, 139, 0.08)' },
                     };
                     const FILTER_SPEED_PRESETS = { slow: 50 };
-                    let filterLayers = { no_go_zones: [], restricted: [], slow_zones: [] };
+                    let filterLayers = { 
+                        no_go_zones: [], 
+                        restricted: [], 
+                        slow_zones: [],
+                        locate_config: [],
+                        reflector: [],
+                        tag_area: [],
+                        do_area: [],
+                        di_area: [],
+                        clean_area: [],
+                        description_area: []
+                    };
                     let activeFilterLayer = 'no_go_zones';
                     let activeFilterShape = 'rectangle';
                     let activeFilterSpeedPreset = 'slow';
@@ -15553,6 +15643,9 @@
                             curved_segment_controls: JSON.parse(JSON.stringify(curvedPathSegmentControls || {})),
                             params: getPathAttrParams(),
                             segment_attrs: JSON.parse(JSON.stringify(segmentAttrsOverrides || {})),
+                            direction: activePathDirection || 'uni',
+                            road_width: activePathRoadWidth || 0.0,
+                            description: activePathDescription || '',
                         };
                     }
 
@@ -15561,6 +15654,9 @@
                         const payload = (settings && typeof settings === 'object') ? settings : {};
                         const inferredLoopType = payload.loop_mode ? 'ping_pong' : 'none';
                         pathLoopType = normalizePathLoopType(payload.loop_type, inferredLoopType);
+                        activePathDirection = payload.direction || 'uni';
+                        activePathRoadWidth = Number(payload.road_width || 0.0);
+                        activePathDescription = String(payload.description || '');
 
                         const maxSegmentIndex = getPathSegmentMaxIndex(normalizedCount, pathLoopType);
                         const nextCurves = new Set();
@@ -17067,12 +17163,22 @@
                     }
 
                     function updateFilterTypeCounts() {
-                        const noGoCount = document.getElementById('filter-count-no-go');
-                        const restrictedCount = document.getElementById('filter-count-restricted');
-                        const slowCount = document.getElementById('filter-count-slow');
-                        if (noGoCount) noGoCount.textContent = `(${getFilterTypeCount('no_go_zones')})`;
-                        if (restrictedCount) restrictedCount.textContent = `(${getFilterTypeCount('restricted')})`;
-                        if (slowCount) slowCount.textContent = `(${getFilterTypeCount('slow_zones')})`;
+                        const counts = {
+                            'no_go_zones': 'filter-count-no-go',
+                            'restricted': 'filter-count-restricted',
+                            'slow_zones': 'filter-count-slow',
+                            'locate_config': 'filter-count-locate_config',
+                            'reflector': 'filter-count-reflector',
+                            'tag_area': 'filter-count-tag_area',
+                            'do_area': 'filter-count-do_area',
+                            'di_area': 'filter-count-di_area',
+                            'clean_area': 'filter-count-clean_area',
+                            'description_area': 'filter-count-description_area'
+                        };
+                        for (const [layer, elemId] of Object.entries(counts)) {
+                            const el = document.getElementById(elemId);
+                            if (el) el.textContent = `(${getFilterTypeCount(layer)})`;
+                        }
                     }
 
                     function buildFilterObjectKey(obj, index) {
@@ -17311,7 +17417,14 @@
                         const layerButtons = {
                             no_go_zones: document.getElementById('filter-layer-no-go'),
                             restricted: document.getElementById('filter-layer-restricted'),
-                            slow_zones: document.getElementById('filter-layer-slow')
+                            slow_zones: document.getElementById('filter-layer-slow'),
+                            locate_config: document.getElementById('filter-layer-locate_config'),
+                            reflector: document.getElementById('filter-layer-reflector'),
+                            tag_area: document.getElementById('filter-layer-tag_area'),
+                            do_area: document.getElementById('filter-layer-do_area'),
+                            di_area: document.getElementById('filter-layer-di_area'),
+                            clean_area: document.getElementById('filter-layer-clean_area'),
+                            description_area: document.getElementById('filter-layer-description_area')
                         };
                         Object.entries(layerButtons).forEach(([key, btn]) => {
                             if (btn) btn.classList.toggle('active', key === activeFilterLayer);
@@ -18501,97 +18614,133 @@
                         if (popup) popup.style.display = 'none';
                     }
                     // ── Map Stitching ─────────────────────────────────────
-                    function openStitchPopup() {
-                        const p = document.getElementById('stitch-popup');
-                        if (!p) return;
-                        p.classList.add('open');
-                        if (!p.dataset.dragged) {
-                            p.style.left = '50%';
-                            p.style.top = '80px';
-                            p.style.transform = 'translateX(-50%)';
+                    function updateStitchMapOptions() {
+                        const select = document.getElementById('stitch-map-select');
+                        if (!select) return;
+                        const activePath = String(document.getElementById('active-map-display')?.getAttribute('data-map-path') || '').trim();
+                        const previous = String(select.value || '').trim();
+                        const options = stitchMapCatalog.filter((map) => String(map.yaml_path || '').trim() && String(map.yaml_path || '').trim() !== activePath);
+                        select.innerHTML = '';
+                        if (options.length === 0) {
+                            const empty = document.createElement('option');
+                            empty.value = '';
+                            empty.textContent = 'No alternate maps available';
+                            select.appendChild(empty);
+                            return;
                         }
-                        makeDraggable(p, p.querySelector('.params-popup-hdr'));
-                        // Auto-populate posegraph + save paths from the currently loaded map
-                        fetch('/api/map/get_active').then(r => r.json()).then(d => {
-                            const mapPath = String(d.map_yaml_path || d.map_path || '').trim();
-                            if (!mapPath) return;
-                            const basePath = mapPath.replace(/\.yaml$/i, '');
-                            const pgInput = document.getElementById('stitch-posegraph-path');
-                            if (pgInput) pgInput.value = basePath + '.posegraph';
-                            const saveInput = document.getElementById('stitch-save-path');
-                            if (saveInput) saveInput.value = basePath;
-                        }).catch(() => {});
+                        options.forEach((map) => {
+                            const option = document.createElement('option');
+                            option.value = String(map.yaml_path || '').trim();
+                            option.textContent = `${map.name} · ${map.location || 'workspace'}`;
+                            select.appendChild(option);
+                        });
+                        const nextValue = options.some((map) => String(map.yaml_path || '').trim() === previous)
+                            ? previous
+                            : String(options[0].yaml_path || '').trim();
+                        select.value = nextValue;
                     }
+
+                    function openStitchPopup(preselectedMapPath = '') {
+                        if (!editModeEnabled) {
+                            showStatus('Enable Edit mode before starting map stitch.', 'error');
+                            return;
+                        }
+                        const popup = document.getElementById('stitch-popup');
+                        if (!popup) return;
+                        popup.classList.add('open');
+                        if (!popup.dataset.dragged) {
+                            popup.style.left = '50%';
+                            popup.style.top = '80px';
+                            popup.style.transform = 'translateX(-50%)';
+                        }
+                        makeDraggable(popup, popup.querySelector('.params-popup-hdr'));
+                        refreshStitchUi();
+                        if (typeof refreshActiveMap === 'function') refreshActiveMap();
+                        if (typeof fetchAvailableMaps === 'function') fetchAvailableMaps().then(() => {
+                            updateStitchMapOptions();
+                            if (preselectedMapPath) {
+                                const select = document.getElementById('stitch-map-select');
+                                if (select) select.value = String(preselectedMapPath || '').trim();
+                            }
+                            refreshStitchUi();
+                        });
+                    }
+
                     function closeStitchPopup() {
-                        const p = document.getElementById('stitch-popup');
-                        if (p) p.classList.remove('open');
+                        const popup = document.getElementById('stitch-popup');
+                        if (popup) popup.classList.remove('open');
                     }
-                    function _setStitchStatus(elId, msg, type) {
-                        const el = document.getElementById(elId);
-                        if (!el) return;
-                        el.style.display = msg ? '' : 'none';
-                        el.style.color = type === 'error' ? '#f87171'
-                            : type === 'success' ? '#4caf50'
-                            : type === 'info' ? 'var(--accent-normal)'
-                            : 'var(--text-secondary)';
-                        el.textContent = msg;
-                    }
-                    async function stitchDeserializeMap() {
-                        const path = (document.getElementById('stitch-posegraph-path')?.value || '').trim();
-                        if (!path) {
-                            _setStitchStatus('stitch-deserialize-status', 'Enter a path to a .posegraph file first.', 'error');
+
+                    async function loadSelectedStitchMap() {
+                        const select = document.getElementById('stitch-map-select');
+                        const mapPath = String(select?.value || '').trim();
+                        if (!mapPath) {
+                            showStatus('Choose a map from the list before loading stitch.', 'error');
                             return;
                         }
-                        _setStitchStatus('stitch-deserialize-status', 'Calling /slam_toolbox/deserialize_map…', 'info');
+                        showStatus('Loading stitched map overlay…', 'info');
                         try {
-                            const r = await fetch('/api/slam/deserialize', {
+                            const response = await fetch('/api/map/stitch/load', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ file: path })
+                                body: JSON.stringify({ map_path: mapPath }),
                             });
-                            const d = await r.json();
-                            if (d.ok) {
-                                _setStitchStatus('stitch-deserialize-status', '✓ Pose graph loaded: ' + (d.message || path), 'success');
-                                showStatus('Pose graph deserialized — drive robot to overlap area then continue mapping.', 'success');
-                            } else {
-                                _setStitchStatus('stitch-deserialize-status', 'Error: ' + (d.message || 'Deserialize failed'), 'error');
-                                showStatus(d.message || 'Deserialize failed', 'error');
+                            const result = await response.json();
+                            if (!result.ok) {
+                                throw new Error(result.message || 'Failed to load stitched map');
                             }
-                        } catch (e) {
-                            _setStitchStatus('stitch-deserialize-status', 'Request failed: ' + e, 'error');
+                            const img = new Image();
+                            img.onload = () => {
+                                stitchedMap = {
+                                    mapPath,
+                                    width: Number(result.width || img.width || 0),
+                                    height: Number(result.height || img.height || 0),
+                                    resolution: Number(result.resolution || 0.05),
+                                    origin: Array.isArray(result.origin) ? result.origin : [0, 0, 0],
+                                    image: img,
+                                };
+                                ensureImageData(stitchedMap);
+                                stitchTransform = { x: 0, y: 0, rotation: 0, scale: 1 };
+                                regionMatching = { selection: null, selectionStart: null, lastScore: null };
+                                referencePointMatching = { pairs: [], pendingBasePoint: null, lastError: null };
+                                alignmentMode = null;
+                                stitchState = 'stitching_map_loaded';
+                                stitchInteractionMode = 'move';
+                                refreshStitchUi();
+                                requestMapDraw();
+                                showStatus('Stitched map loaded. Drag it into rough position, then Confirm.', 'success');
+                            };
+                            img.onerror = () => showStatus('Failed to decode stitched map image.', 'error');
+                            img.src = `data:image/png;base64,${result.image}`;
+                        } catch (error) {
+                            showStatus(`Failed to load stitched map: ${error.message}`, 'error');
                         }
                     }
-                    async function stitchSerializeMap() {
-                        const path = (document.getElementById('stitch-save-path')?.value || '').trim();
-                        if (!path) {
-                            _setStitchStatus('stitch-serialize-status', 'Enter a destination path (no extension needed).', 'error');
+
+                    function setStitchTool(tool) {
+                        stitchInteractionMode = tool;
+                        refreshStitchUi();
+                        updateCursor();
+                    }
+
+                    function rotateStitch(deltaDeg) {
+                        if (!stitchedMap) {
+                            showStatus('Load a stitch map before rotating it.', 'error');
                             return;
                         }
-                        _setStitchStatus('stitch-serialize-status', 'Calling /slam_toolbox/serialize_map…', 'info');
-                        try {
-                            const r = await fetch('/api/slam/serialize', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ file: path })
-                            });
-                            const d = await r.json();
-                            if (d.ok) {
-                                _setStitchStatus('stitch-serialize-status', '✓ Pose graph saved: ' + (d.message || path + '.posegraph'), 'success');
-                                showStatus('Pose graph serialized — extended map saved.', 'success');
-                            } else {
-                                _setStitchStatus('stitch-serialize-status', 'Error: ' + (d.message || 'Serialize failed'), 'error');
-                                showStatus(d.message || 'Serialize failed', 'error');
-                            }
-                        } catch (e) {
-                            _setStitchStatus('stitch-serialize-status', 'Request failed: ' + e, 'error');
+                        stitchTransform.rotation += (Number(deltaDeg || 0) * Math.PI / 180);
+                        if (stitchState === 'stitching_map_loaded') {
+                            stitchState = 'rough_placement';
                         }
+                        refreshStitchUi();
+                        requestMapDraw();
                     }
-                    function stitchRelocalize() {
-                        closeStitchPopup();
-                        togglePoseEstimateMode();
-                        if (poseEstimateMode) {
-                            showStatus('Place Robot: click robot position, then click again to set heading for stitching alignment.', 'info');
-                        }
+
+                    function clearReferencePairs() {
+                        referencePointMatching = { pairs: [], pendingBasePoint: null, lastError: null };
+                        refreshStitchUi();
+                        requestMapDraw();
+                        showStatus('Reference-point pairs cleared.', 'info');
                     }
 
                     function openLayoutsPanel() {
@@ -22111,6 +22260,481 @@
                         });
                     }
 
+                    function syncBaseMapState() {
+                        if (!mapData || !mapData.image) {
+                            baseMap = null;
+                            return null;
+                        }
+                        baseMap = {
+                            width: Number(mapData.width || mapData.image.width || 0),
+                            height: Number(mapData.height || mapData.image.height || 0),
+                            resolution: Number(mapData.resolution || 0.05),
+                            origin: Array.isArray(mapData.origin) ? mapData.origin.slice(0, 3) : [0, 0, 0],
+                            image: mapData.image,
+                        };
+                        return baseMap;
+                    }
+
+                    function getStitchPopupElements() {
+                        return {
+                            select: document.getElementById('stitch-map-select'),
+                            state: document.getElementById('stitch-state-label'),
+                            mode: document.getElementById('stitch-mode-label'),
+                            pairs: document.getElementById('stitch-pairs-label'),
+                            base: document.getElementById('stitch-base-map-label'),
+                        };
+                    }
+
+                    function refreshStitchUi() {
+                        syncBaseMapState();
+                        const els = getStitchPopupElements();
+                        if (els.base) {
+                            const activePath = String(document.getElementById('active-map-display')?.getAttribute('data-map-path') || '').trim();
+                            els.base.textContent = `Base map: ${activePath || 'current map'}`;
+                        }
+                        if (els.state) {
+                            els.state.textContent = `State: ${stitchState}`;
+                        }
+                        if (els.mode) {
+                            els.mode.textContent = `Alignment: ${alignmentMode || '--'} · Tool: ${stitchInteractionMode}`;
+                        }
+                        if (els.pairs) {
+                            els.pairs.textContent = `Pairs: ${referencePointMatching.pairs.length}${referencePointMatching.pendingBasePoint ? ' + pending base' : ''}`;
+                        }
+                        document.querySelectorAll('[data-stitch-tool]').forEach((btn) => {
+                            btn.classList.toggle('active', btn.getAttribute('data-stitch-tool') === stitchInteractionMode);
+                        });
+                    }
+
+                    function resetStitchState(nextState = 'idle') {
+                        stitchedMap = null;
+                        stitchTransform = { x: 0, y: 0, rotation: 0, scale: 1 };
+                        regionMatching = { selection: null, selectionStart: null, lastScore: null };
+                        referencePointMatching = { pairs: [], pendingBasePoint: null, lastError: null };
+                        alignmentMode = null;
+                        stitchState = nextState;
+                        stitchInteractionMode = 'move';
+                        stitchDrag = { active: false, startWorld: null, startTransform: null };
+                        refreshStitchUi();
+                        requestMapDraw();
+                    }
+
+                    function ensureImageData(target) {
+                        if (!target || !target.image) return null;
+                        if (target.imageData) return target.imageData;
+                        const temp = document.createElement('canvas');
+                        temp.width = Number(target.width || target.image.width || 0);
+                        temp.height = Number(target.height || target.image.height || 0);
+                        const tempCtx = temp.getContext('2d', { willReadFrequently: true });
+                        tempCtx.drawImage(target.image, 0, 0);
+                        target.imageData = tempCtx.getImageData(0, 0, temp.width, temp.height);
+                        return target.imageData;
+                    }
+
+                    function stitchedImagePixelToWorld(imgX, imgY) {
+                        if (!stitchedMap) return null;
+                        const resolution = Number(stitchedMap.resolution || 0);
+                        if (!Number.isFinite(resolution) || resolution <= 0) return null;
+                        const origin = Array.isArray(stitchedMap.origin) ? stitchedMap.origin : [0, 0, 0];
+                        const ox = Number(origin[0] || 0);
+                        const oy = Number(origin[1] || 0);
+                        const oyaw = Number(origin[2] || 0);
+                        const localX = Number(imgX) * resolution;
+                        const localY = (Number(stitchedMap.height) - Number(imgY)) * resolution;
+                        const cosYaw = Math.cos(oyaw);
+                        const sinYaw = Math.sin(oyaw);
+                        return {
+                            x: ox + (localX * cosYaw) - (localY * sinYaw),
+                            y: oy + (localX * sinYaw) + (localY * cosYaw),
+                        };
+                    }
+
+                    function stitchedWorldToImagePixel(wx, wy) {
+                        if (!stitchedMap) return null;
+                        const resolution = Number(stitchedMap.resolution || 0);
+                        if (!Number.isFinite(resolution) || resolution <= 0) return null;
+                        const origin = Array.isArray(stitchedMap.origin) ? stitchedMap.origin : [0, 0, 0];
+                        const ox = Number(origin[0] || 0);
+                        const oy = Number(origin[1] || 0);
+                        const oyaw = Number(origin[2] || 0);
+                        const dx = Number(wx) - ox;
+                        const dy = Number(wy) - oy;
+                        const cosYaw = Math.cos(oyaw);
+                        const sinYaw = Math.sin(oyaw);
+                        const localX = dx * cosYaw + dy * sinYaw;
+                        const localY = -dx * sinYaw + dy * cosYaw;
+                        return {
+                            x: localX / resolution,
+                            y: Number(stitchedMap.height) - (localY / resolution),
+                        };
+                    }
+
+                    function stitchedCenterWorld() {
+                        if (!stitchedMap) return null;
+                        return stitchedImagePixelToWorld(Number(stitchedMap.width) / 2, Number(stitchedMap.height) / 2);
+                    }
+
+                    function applyStitchTransformWorld(point, transform = stitchTransform) {
+                        const center = stitchedCenterWorld();
+                        if (!point || !center) return null;
+                        const dx = Number(point.x) - center.x;
+                        const dy = Number(point.y) - center.y;
+                        const scaleValue = Number(transform?.scale || 1);
+                        const rotation = Number(transform?.rotation || 0);
+                        const cosR = Math.cos(rotation);
+                        const sinR = Math.sin(rotation);
+                        return {
+                            x: center.x + Number(transform?.x || 0) + (dx * scaleValue * cosR) - (dy * scaleValue * sinR),
+                            y: center.y + Number(transform?.y || 0) + (dx * scaleValue * sinR) + (dy * scaleValue * cosR),
+                        };
+                    }
+
+                    function invertStitchTransformWorld(point, transform = stitchTransform) {
+                        const center = stitchedCenterWorld();
+                        if (!point || !center) return null;
+                        const scaleValue = Number(transform?.scale || 1);
+                        if (!Number.isFinite(scaleValue) || Math.abs(scaleValue) < 1e-6) return null;
+                        const px = Number(point.x) - center.x - Number(transform?.x || 0);
+                        const py = Number(point.y) - center.y - Number(transform?.y || 0);
+                        const rotation = -Number(transform?.rotation || 0);
+                        const cosR = Math.cos(rotation);
+                        const sinR = Math.sin(rotation);
+                        return {
+                            x: center.x + ((px * cosR) - (py * sinR)) / scaleValue,
+                            y: center.y + ((px * sinR) + (py * cosR)) / scaleValue,
+                        };
+                    }
+
+                    function stitchedImagePixelToBaseImagePixel(imgX, imgY, transform = stitchTransform) {
+                        const stitchWorld = stitchedImagePixelToWorld(imgX, imgY);
+                        const baseWorld = applyStitchTransformWorld(stitchWorld, transform);
+                        if (!baseWorld) return null;
+                        const point = worldToMapImagePixel(baseWorld.x, baseWorld.y);
+                        return point ? { x: point[0], y: point[1] } : null;
+                    }
+
+                    function getStitchedAffine(transform = stitchTransform) {
+                        if (!stitchedMap || !baseMap) return null;
+                        const q0 = stitchedImagePixelToBaseImagePixel(0, 0, transform);
+                        const q1 = stitchedImagePixelToBaseImagePixel(Number(stitchedMap.width), 0, transform);
+                        const q2 = stitchedImagePixelToBaseImagePixel(0, Number(stitchedMap.height), transform);
+                        if (!q0 || !q1 || !q2) return null;
+                        const width = Math.max(1, Number(stitchedMap.width));
+                        const height = Math.max(1, Number(stitchedMap.height));
+                        return {
+                            a: (q1.x - q0.x) / width,
+                            b: (q1.y - q0.y) / width,
+                            c: (q2.x - q0.x) / height,
+                            d: (q2.y - q0.y) / height,
+                            e: q0.x,
+                            f: q0.y,
+                        };
+                    }
+
+                    function drawStitchedOverlay() {
+                        if (!stitchedMap || !stitchedMap.image || !baseMap) return;
+                        const affine = getStitchedAffine();
+                        if (!affine) return;
+                        ctx.save();
+                        ctx.translate(offsetX, offsetY);
+                        ctx.scale(scale, scale);
+                        ctx.globalAlpha = 0.52;
+                        ctx.transform(affine.a, affine.b, affine.c, affine.d, affine.e, affine.f);
+                        ctx.drawImage(stitchedMap.image, 0, 0);
+                        ctx.restore();
+                    }
+
+                    function drawStitchRegionSelection() {
+                        const selection = regionMatching.selection;
+                        const start = regionMatching.selectionStart;
+                        if (!selection && !start) return;
+                        const rect = selection || start;
+                        if (!rect) return;
+                        const x1 = Number(rect.x1 ?? rect.x ?? 0);
+                        const y1 = Number(rect.y1 ?? rect.y ?? 0);
+                        const x2 = Number(rect.x2 ?? rect.x ?? 0);
+                        const y2 = Number(rect.y2 ?? rect.y ?? 0);
+                        const left = Math.min(x1, x2) * scale + offsetX;
+                        const top = Math.min(y1, y2) * scale + offsetY;
+                        const width = Math.abs(x2 - x1) * scale;
+                        const height = Math.abs(y2 - y1) * scale;
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(96, 165, 250, 0.95)';
+                        ctx.fillStyle = 'rgba(96, 165, 250, 0.12)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([8, 6]);
+                        ctx.fillRect(left, top, width, height);
+                        ctx.strokeRect(left, top, width, height);
+                        ctx.restore();
+                    }
+
+                    function drawStitchMarker(worldPoint, color, label) {
+                        if (!worldPoint) return;
+                        const [px, py] = worldToPixel(worldPoint.x, worldPoint.y);
+                        ctx.save();
+                        ctx.fillStyle = color;
+                        ctx.strokeStyle = '#0f172a';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.font = '700 10px Inter, Arial, sans-serif';
+                        ctx.fillStyle = color;
+                        ctx.fillText(label, px + 10, py - 8);
+                        ctx.restore();
+                    }
+
+                    function drawReferenceMatching() {
+                        referencePointMatching.pairs.forEach((pair, index) => {
+                            drawStitchMarker(pair.base, '#38bdf8', `B${index + 1}`);
+                            const transformed = applyStitchTransformWorld(pair.stitched);
+                            if (transformed) {
+                                drawStitchMarker(transformed, '#f97316', `S${index + 1}`);
+                            }
+                        });
+                        if (referencePointMatching.pendingBasePoint) {
+                            drawStitchMarker(referencePointMatching.pendingBasePoint, '#fde047', 'Base');
+                        }
+                    }
+
+                    function sampleGray(imageData, x, y) {
+                        const px = Math.round(Number(x));
+                        const py = Math.round(Number(y));
+                        if (!imageData || px < 0 || py < 0 || px >= imageData.width || py >= imageData.height) return null;
+                        const idx = (py * imageData.width + px) * 4;
+                        return imageData.data[idx];
+                    }
+
+                    function occupancyValue(gray) {
+                        if (gray === null || gray === undefined) return null;
+                        if (gray < 80) return 1;
+                        if (gray > 220) return 0;
+                        return 0.5;
+                    }
+
+                    function evaluateRegionCandidate(transform, rect) {
+                        const baseImageData = ensureImageData(syncBaseMapState());
+                        const stitchedImageData = ensureImageData(stitchedMap);
+                        if (!baseImageData || !stitchedImageData) return Number.POSITIVE_INFINITY;
+                        const x1 = Math.max(0, Math.floor(Math.min(rect.x1, rect.x2)));
+                        const y1 = Math.max(0, Math.floor(Math.min(rect.y1, rect.y2)));
+                        const x2 = Math.min(baseImageData.width - 1, Math.ceil(Math.max(rect.x1, rect.x2)));
+                        const y2 = Math.min(baseImageData.height - 1, Math.ceil(Math.max(rect.y1, rect.y2)));
+                        let score = 0;
+                        let count = 0;
+                        const step = Math.max(2, Math.round(Math.min(x2 - x1, y2 - y1) / 36) || 4);
+                        for (let by = y1; by <= y2; by += step) {
+                            for (let bx = x1; bx <= x2; bx += step) {
+                                const baseGray = sampleGray(baseImageData, bx, by);
+                                const baseOcc = occupancyValue(baseGray);
+                                const world = mapImagePixelToWorld(bx, by);
+                                if (!world) continue;
+                                const stitchWorld = invertStitchTransformWorld({ x: world[0], y: world[1] }, transform);
+                                const stitchPx = stitchedWorldToImagePixel(stitchWorld?.x, stitchWorld?.y);
+                                const stitchGray = sampleGray(stitchedImageData, stitchPx?.x, stitchPx?.y);
+                                const stitchOcc = occupancyValue(stitchGray);
+                                if (baseOcc === null || stitchOcc === null) continue;
+                                const diff = Math.abs(baseOcc - stitchOcc);
+                                score += diff * diff;
+                                count += 1;
+                            }
+                        }
+                        return count > 0 ? score / count : Number.POSITIVE_INFINITY;
+                    }
+
+                    async function applyRegionMatching() {
+                        if (!stitchedMap) {
+                            showStatus('Load a stitch map before region matching.', 'error');
+                            return;
+                        }
+                        if (stitchState !== 'alignment_active' && stitchState !== 'region_matching_active' && stitchState !== 'reference_point_matching_active') {
+                            showStatus('Confirm rough placement before alignment.', 'error');
+                            return;
+                        }
+                        const rect = regionMatching.selection;
+                        if (!rect || Math.abs(Number(rect.x2) - Number(rect.x1)) < 8 || Math.abs(Number(rect.y2) - Number(rect.y1)) < 8) {
+                            showStatus('Draw a valid shared-feature rectangle first.', 'error');
+                            return;
+                        }
+                        const start = { ...stitchTransform };
+                        let best = { ...stitchTransform };
+                        let bestScore = evaluateRegionCandidate(best, rect);
+                        const rotationSteps = [-4, -2, -1, -0.5, 0, 0.5, 1, 2, 4].map((deg) => deg * Math.PI / 180);
+                        const translationSteps = [-0.30, -0.15, -0.05, 0, 0.05, 0.15, 0.30];
+                        rotationSteps.forEach((dr) => {
+                            translationSteps.forEach((dx) => {
+                                translationSteps.forEach((dy) => {
+                                    const candidate = {
+                                        x: start.x + dx,
+                                        y: start.y + dy,
+                                        rotation: start.rotation + dr,
+                                        scale: 1,
+                                    };
+                                    const score = evaluateRegionCandidate(candidate, rect);
+                                    if (score < bestScore) {
+                                        best = candidate;
+                                        bestScore = score;
+                                    }
+                                });
+                            });
+                        });
+                        stitchTransform = { ...best, scale: 1 };
+                        stitchState = 'region_matching_active';
+                        alignmentMode = 'regionMatching';
+                        regionMatching.lastScore = bestScore;
+                        refreshStitchUi();
+                        requestMapDraw();
+                        showStatus(`Region matching applied${Number.isFinite(bestScore) ? ` (score ${bestScore.toFixed(3)})` : ''}.`, 'success');
+                    }
+
+                    function computeReferenceSimilarityTransform(pairs, allowScale = true) {
+                        if (!Array.isArray(pairs) || pairs.length < 2) return null;
+                        const src = pairs.map((pair) => pair.stitched);
+                        const dst = pairs.map((pair) => pair.base);
+                        const srcCentroid = src.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+                        const dstCentroid = dst.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+                        srcCentroid.x /= src.length;
+                        srcCentroid.y /= src.length;
+                        dstCentroid.x /= dst.length;
+                        dstCentroid.y /= dst.length;
+                        let sxx = 0;
+                        let sxy = 0;
+                        let norm = 0;
+                        src.forEach((point, index) => {
+                            const sx = point.x - srcCentroid.x;
+                            const sy = point.y - srcCentroid.y;
+                            const dx = dst[index].x - dstCentroid.x;
+                            const dy = dst[index].y - dstCentroid.y;
+                            sxx += (sx * dx) + (sy * dy);
+                            sxy += (sx * dy) - (sy * dx);
+                            norm += (sx * sx) + (sy * sy);
+                        });
+                        if (norm <= 1e-9) return null;
+                        const rotation = Math.atan2(sxy, sxx);
+                        const cosR = Math.cos(rotation);
+                        const sinR = Math.sin(rotation);
+                        let scaleValue = 1;
+                        if (allowScale) {
+                            scaleValue = Math.sqrt((sxx * sxx) + (sxy * sxy)) / norm;
+                            scaleValue = Math.max(0.85, Math.min(1.15, scaleValue));
+                        }
+                        const tx = dstCentroid.x - scaleValue * ((srcCentroid.x * cosR) - (srcCentroid.y * sinR));
+                        const ty = dstCentroid.y - scaleValue * ((srcCentroid.x * sinR) + (srcCentroid.y * cosR));
+                        return { rotation, scale: scaleValue, tx, ty };
+                    }
+
+                    function similarityToStitchTransform(solution) {
+                        const center = stitchedCenterWorld();
+                        if (!solution || !center) return null;
+                        const cosR = Math.cos(solution.rotation);
+                        const sinR = Math.sin(solution.rotation);
+                        return {
+                            rotation: solution.rotation,
+                            scale: solution.scale,
+                            x: solution.tx - center.x + (solution.scale * ((center.x * cosR) - (center.y * sinR))),
+                            y: solution.ty - center.y + (solution.scale * ((center.x * sinR) + (center.y * cosR))),
+                        };
+                    }
+
+                    async function applyReferenceMatching() {
+                        if (!stitchedMap) {
+                            showStatus('Load a stitch map before reference matching.', 'error');
+                            return;
+                        }
+                        if (stitchState !== 'alignment_active' && stitchState !== 'reference_point_matching_active' && stitchState !== 'region_matching_active') {
+                            showStatus('Confirm rough placement before alignment.', 'error');
+                            return;
+                        }
+                        if (referencePointMatching.pairs.length < 2) {
+                            showStatus('Pick at least two valid reference-point pairs.', 'error');
+                            return;
+                        }
+                        const solution = computeReferenceSimilarityTransform(referencePointMatching.pairs, true);
+                        if (!solution) {
+                            showStatus('Reference-point matching could not solve a transform.', 'error');
+                            return;
+                        }
+                        const nextTransform = similarityToStitchTransform(solution);
+                        if (!nextTransform) {
+                            showStatus('Reference-point matching could not update the stitch transform.', 'error');
+                            return;
+                        }
+                        stitchTransform = nextTransform;
+                        stitchState = 'reference_point_matching_active';
+                        alignmentMode = 'referencePointMatching';
+                        refreshStitchUi();
+                        requestMapDraw();
+                        showStatus(`Reference matching applied using ${referencePointMatching.pairs.length} pair(s).`, 'success');
+                    }
+
+                    function mergeStitchedMapIntoBase64() {
+                        syncBaseMapState();
+                        if (!baseMap || !stitchedMap) return null;
+                        const affine = getStitchedAffine();
+                        if (!affine) return null;
+                        const temp = document.createElement('canvas');
+                        temp.width = Number(baseMap.width || baseMap.image.width || 0);
+                        temp.height = Number(baseMap.height || baseMap.image.height || 0);
+                        const tempCtx = temp.getContext('2d');
+                        tempCtx.drawImage(baseMap.image, 0, 0);
+                        tempCtx.save();
+                        tempCtx.globalCompositeOperation = 'darken';
+                        tempCtx.transform(affine.a, affine.b, affine.c, affine.d, affine.e, affine.f);
+                        tempCtx.drawImage(stitchedMap.image, 0, 0);
+                        tempCtx.restore();
+                        return temp.toDataURL('image/png').split(',')[1];
+                    }
+
+                    async function confirmStitch() {
+                        if (!stitchedMap) {
+                            showStatus('Load a stitch map first.', 'error');
+                            return;
+                        }
+                        if (stitchState === 'stitching_map_loaded' || stitchState === 'rough_placement') {
+                            stitchState = 'alignment_active';
+                            refreshStitchUi();
+                            showStatus('Rough placement confirmed. Choose Region or Ref Pts to refine alignment.', 'success');
+                            return;
+                        }
+                        const merged = mergeStitchedMapIntoBase64();
+                        if (!merged) {
+                            showStatus('Unable to build the merged stitch preview.', 'error');
+                            return;
+                        }
+                        syncBaseMapState();
+                        showStatus('Saving stitched map…', 'info');
+                        try {
+                            const overwriteResponse = await fetch('/api/editor/map/overwrite', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ image: merged, origin: Array.isArray(baseMap?.origin) ? baseMap.origin : [0, 0, 0] }),
+                            });
+                            const overwriteResult = await overwriteResponse.json();
+                            if (!overwriteResult.ok && !overwriteResult.success) {
+                                throw new Error(overwriteResult.message || 'Overwrite failed');
+                            }
+                            const saveResponse = await fetch('/api/editor/map/save_current', { method: 'POST' });
+                            const saveResult = await saveResponse.json();
+                            if (!saveResult.ok && !saveResult.success) {
+                                throw new Error(saveResult.message || 'Save current failed');
+                            }
+                            await fetch('/api/map/reload', { method: 'POST' });
+                            await loadMap();
+                            resetStitchState('confirmed');
+                            closeStitchPopup();
+                            showStatus('Map stitch confirmed and merged into the active map.', 'success');
+                        } catch (error) {
+                            showStatus(`Failed to confirm stitch: ${error.message}`, 'error');
+                        }
+                    }
+
+                    function cancelStitch() {
+                        resetStitchState('cancelled');
+                        closeStitchPopup();
+                        showStatus('Map stitch cancelled. Base map was left unchanged.', 'info');
+                    }
+
                     function scheduleRobotPosePoll() {
                         if (!robotPosePollingStarted) {
                             return;
@@ -25201,6 +25825,8 @@
                             return;
                         }
 
+                        syncBaseMapState();
+
                         const renderPose = getRenderRobotPose();
 
                         // Clear canvas properly (reset transform, clear in buffer pixels, restore transform)
@@ -25216,6 +25842,10 @@
                         ctx.scale(scale, scale);
                         ctx.drawImage(mapData.image, 0, 0);
                         ctx.restore();
+
+                        drawStitchedOverlay();
+                        drawStitchRegionSelection();
+                        drawReferenceMatching();
 
                         drawFilterLayers();
                         drawFilterPreview();
@@ -27087,6 +27717,35 @@
 
                         const [wx, wy] = pixelToWorld(x, y);
 
+                        if (stitchedMap && stitchState !== 'cancelled' && stitchInteractionMode === 'reference') {
+                            if (stitchState !== 'alignment_active' && stitchState !== 'reference_point_matching_active' && stitchState !== 'region_matching_active') {
+                                showStatus('Confirm rough placement before collecting reference points.', 'error');
+                                return;
+                            }
+                            if (!referencePointMatching.pendingBasePoint) {
+                                referencePointMatching.pendingBasePoint = { x: wx, y: wy };
+                                refreshStitchUi();
+                                requestMapDraw();
+                                showStatus('Base reference point saved. Click the matching point on the stitched overlay next.', 'info');
+                            } else {
+                                const basePoint = referencePointMatching.pendingBasePoint;
+                                const stitchedWorld = invertStitchTransformWorld({ x: wx, y: wy });
+                                if (!stitchedWorld) {
+                                    showStatus('Could not map that click back onto the stitched overlay.', 'error');
+                                    return;
+                                }
+                                referencePointMatching.pairs.push({
+                                    base: basePoint,
+                                    stitched: stitchedWorld,
+                                });
+                                referencePointMatching.pendingBasePoint = null;
+                                refreshStitchUi();
+                                requestMapDraw();
+                                showStatus(`Reference pair ${referencePointMatching.pairs.length} saved.`, 'success');
+                            }
+                            return;
+                        }
+
                         if (poseEstimateMode) {
                             if (poseStep === 0) {
                                 poseStart = { x: wx, y: wy };
@@ -27584,6 +28243,36 @@
                     }
 
                     function onMouseDown(e) {
+                        if (e.button === 0 && stitchedMap && stitchInteractionMode === 'move') {
+                            const rect = canvas.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const y = e.clientY - rect.top;
+                            const [wx, wy] = pixelToWorld(x, y);
+                            stitchDrag = {
+                                active: true,
+                                startWorld: { x: wx, y: wy },
+                                startTransform: { ...stitchTransform },
+                            };
+                            canvas.style.cursor = 'grabbing';
+                            e.preventDefault();
+                            return;
+                        }
+                        if (e.button === 0 && stitchedMap && stitchInteractionMode === 'region') {
+                            if (stitchState !== 'alignment_active' && stitchState !== 'reference_point_matching_active' && stitchState !== 'region_matching_active') {
+                                showStatus('Confirm rough placement before region matching.', 'error');
+                                return;
+                            }
+                            const rect = canvas.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const y = e.clientY - rect.top;
+                            const imgX = (x - offsetX) / scale;
+                            const imgY = (y - offsetY) / scale;
+                            regionMatching.selectionStart = { x1: imgX, y1: imgY, x2: imgX, y2: imgY };
+                            regionMatching.selection = null;
+                            requestMapDraw();
+                            e.preventDefault();
+                            return;
+                        }
                         if (e.button === 0 && currentMapMode === 'paths' && pathCurveEditMode && !pathFollowingActive) {
                             const rect = canvas.getBoundingClientRect();
                             const x = e.clientX - rect.left;
@@ -27680,6 +28369,24 @@
                             poseCursorCanvas = { x, y };
                         }
                         const [wx, wy] = pixelToWorld(x, y);
+
+                        if (stitchedMap && stitchDrag.active && stitchDrag.startWorld && stitchDrag.startTransform) {
+                            stitchTransform.x = Number(stitchDrag.startTransform.x || 0) + (wx - stitchDrag.startWorld.x);
+                            stitchTransform.y = Number(stitchDrag.startTransform.y || 0) + (wy - stitchDrag.startWorld.y);
+                            if (stitchState === 'stitching_map_loaded') {
+                                stitchState = 'rough_placement';
+                            }
+                            refreshStitchUi();
+                            requestMapDraw();
+                            return;
+                        }
+
+                        if (stitchedMap && regionMatching.selectionStart && stitchInteractionMode === 'region') {
+                            regionMatching.selectionStart.x2 = (x - offsetX) / scale;
+                            regionMatching.selectionStart.y2 = (y - offsetY) / scale;
+                            requestMapDraw();
+                            return;
+                        }
 
                         // ── Coordinate HUD + Zone Snap ──────────────────────
                         const _coordHud = document.getElementById('map-coord-hud');
@@ -27957,6 +28664,22 @@
                     }
 
                     function onMouseUp(e) {
+                        if (stitchedMap && stitchDrag.active) {
+                            stitchDrag.active = false;
+                            if (stitchState === 'stitching_map_loaded') {
+                                stitchState = 'rough_placement';
+                            }
+                            refreshStitchUi();
+                            updateCursor();
+                            return;
+                        }
+                        if (stitchedMap && regionMatching.selectionStart && stitchInteractionMode === 'region') {
+                            regionMatching.selection = { ...regionMatching.selectionStart };
+                            regionMatching.selectionStart = null;
+                            refreshStitchUi();
+                            requestMapDraw();
+                            return;
+                        }
                         if (draggingPathCurveHandleSegment >= 0) {
                             draggingPathCurveHandleSegment = -1;
                             draggingPathCurveHandleIndex = -1;
@@ -28333,6 +29056,15 @@
                         const prePointCfg = (actionPointConfig.pre_point && typeof actionPointConfig.pre_point === 'object') ? actionPointConfig.pre_point : null;
                         const prePointEnabled = Boolean(prePointCfg);
                         const prePointZoneName = prePointCfg ? (prePointCfg.zone_name || '') : '';
+                        
+                        const angleEnabled = actionPointConfig.angle_enabled !== undefined ? Boolean(actionPointConfig.angle_enabled) : true;
+                        const follow = Boolean(actionPointConfig.follow);
+                        const usePgv = Boolean(actionPointConfig.use_pgv);
+                        const pgvDx = parseFloat(actionPointConfig.pgv_dx || 0.0);
+                        const pgvDy = parseFloat(actionPointConfig.pgv_dy || 0.0);
+                        const pgvDtheta = parseFloat(actionPointConfig.pgv_dtheta || 0.0);
+                        const description = String(actionPointConfig.description || '');
+
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
                         const posY = (zone.position && zone.position.y !== undefined) ? zone.position.y : 0;
                         const headingDeg = getZoneHeadingDegrees(zone);
@@ -28346,7 +29078,19 @@
                 <div style="padding:16px 18px;">
                     <div style="${rowStyle}">
                         <label style="${labelStyle}">Zone Name</label>
-                        <input type="text" id="ez-name" value="${name}" style="${inputStyle}">
+                        <input type="text" id="ez-name" value="${escapeHtml(name)}" style="${inputStyle}">
+                    </div>
+                    <div style="${rowStyle}">
+                        <label style="${labelStyle}">Description</label>
+                        <textarea id="ez-description" style="${inputStyle} height:50px;resize:vertical;">${escapeHtml(description)}</textarea>
+                    </div>
+                    <div style="display:flex;gap:12px;${rowStyle}">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+                            <input type="checkbox" id="ez-angle-enabled" ${angleEnabled ? 'checked' : ''}> Angle Enabled
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+                            <input type="checkbox" id="ez-follow" ${follow ? 'checked' : ''}> Follow
+                        </label>
                     </div>
                     <div style="${rowStyle}">
                         <label style="${labelStyle}">Zone Type</label>
@@ -28367,9 +29111,32 @@
                         </div>
                     </div>
                     <div style="${rowStyle}">
-                        <label style="${labelStyle}">Heading (degrees, 0 = east, CCW+)</label>
+                        <label style="${labelStyle}">Heading (degrees)</label>
                         <input type="number" id="ez-heading" value="${headingDeg.toFixed(2)}" step="1" min="-180" max="180" style="${inputStyle}">
                     </div>
+                    
+                    <div style="padding:10px;background:#161b22;border-radius:8px;margin-bottom:13px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;margin-bottom:8px;font-weight:600;">
+                            <input type="checkbox" id="ez-use-pgv" ${usePgv ? 'checked' : ''} onchange="const g=document.getElementById('ez-pgv-group'); if(g) g.style.display=this.checked?'block':'none'"> Use PGV Positioning
+                        </label>
+                        <div id="ez-pgv-group" style="display:${usePgv ? 'block' : 'none'};">
+                            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                                <div style="flex:1;">
+                                    <label style="font-size:10px;color:#8b949e;display:block;">DX (m)</label>
+                                    <input type="number" id="ez-pgv-dx" value="${pgvDx}" step="0.001" style="${inputStyle}">
+                                </div>
+                                <div style="flex:1;">
+                                    <label style="font-size:10px;color:#8b949e;display:block;">DY (m)</label>
+                                    <input type="number" id="ez-pgv-dy" value="${pgvDy}" step="0.001" style="${inputStyle}">
+                                </div>
+                                <div style="flex:1;">
+                                    <label style="font-size:10px;color:#8b949e;display:block;">DTheta (deg)</label>
+                                    <input type="number" id="ez-pgv-dtheta" value="${pgvDtheta}" step="0.1" style="${inputStyle}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div style="${rowStyle}">
                         <label style="${labelStyle}">Speed (m/s)</label>
                         <input type="number" id="ez-speed" value="${speed}" step="0.05" min="0.05" max="3.0" style="${inputStyle}">
@@ -28386,6 +29153,12 @@
                             <option value="pallet"${pointType==='pallet'?' selected':''}>Pallet</option>
                             <option value="dock"${pointType==='dock'?' selected':''}>Dock</option>
                             <option value="fixture"${pointType==='fixture'?' selected':''}>Fixture</option>
+                            <option value="charger"${pointType==='charger'?' selected':''}>Charger</option>
+                            <option value="battery"${pointType==='battery'?' selected':''}>Battery</option>
+                            <option value="chargespot"${pointType==='chargespot'?' selected':''}>Chargespot</option>
+                            <option value="leg"${pointType==='leg'?' selected':''}>Leg</option>
+                            <option value="tag"${pointType==='tag'?' selected':''}>Tag</option>
+                            <option value="polygon"${pointType==='polygon'?' selected':''}>Polygon</option>
                         </select>
                     </div>
                     <div id="ez-shelf-config-group" style="${rowStyle}display:${zoneType==='action' && pointType==='shelf' ? 'block' : 'none'};">
@@ -28435,6 +29208,14 @@
                                 style: 'success',
                                 action: async () => {
                                     const nameEl = document.getElementById('ez-name');
+                                    const descEl = document.getElementById('ez-description');
+                                    const angleEnabledEl = document.getElementById('ez-angle-enabled');
+                                    const followEl = document.getElementById('ez-follow');
+                                    const usePgvEl = document.getElementById('ez-use-pgv');
+                                    const pgvDxEl = document.getElementById('ez-pgv-dx');
+                                    const pgvDyEl = document.getElementById('ez-pgv-dy');
+                                    const pgvDthetaEl = document.getElementById('ez-pgv-dtheta');
+
                                     const typeEl = document.getElementById('ez-type');
                                     const xEl = document.getElementById('ez-x');
                                     const yEl = document.getElementById('ez-y');
@@ -28449,6 +29230,14 @@
                                     }
 
                                     const newName      = String(nameEl.value || '').trim();
+                                    const newDescription = String(descEl ? descEl.value : '').trim();
+                                    const newAngleEnabled = Boolean(angleEnabledEl && angleEnabledEl.checked);
+                                    const newFollow = Boolean(followEl && followEl.checked);
+                                    const newUsePgv = Boolean(usePgvEl && usePgvEl.checked);
+                                    const newPgvDx = parseFloat(pgvDxEl ? pgvDxEl.value : 0);
+                                    const newPgvDy = parseFloat(pgvDyEl ? pgvDyEl.value : 0);
+                                    const newPgvDtheta = parseFloat(pgvDthetaEl ? pgvDthetaEl.value : 0);
+
                                     const newType      = String(typeEl.value || '').trim();
                                     const newX         = parseFloat(xEl.value);
                                     const newY         = parseFloat(yEl.value);
@@ -28485,6 +29274,13 @@
                                         template_id: actionPointPayload.template_id,
                                         recognize: actionPointPayload.recognize,
                                         pre_point: actionPointPayload.pre_point || null,
+                                        angle_enabled: newAngleEnabled,
+                                        follow: newFollow,
+                                        use_pgv: newUsePgv,
+                                        pgv_dx: newPgvDx,
+                                        pgv_dy: newPgvDy,
+                                        pgv_dtheta: newPgvDtheta,
+                                        description: newDescription,
                                     };
 
                                     const saveZonePayload = async (overwrite = false) => {
@@ -30085,6 +30881,21 @@
                                     <div class="property-label"><i class="fas fa-arrows-left-right"></i>Directionality</div>
                                     <div class="property-value">${getPathDirectionLabel(settings?.direction || 'uni')}</div>
                                 </div>
+                                <div class="property-group">
+                                    <div class="property-label"><i class="fas fa-road"></i>Road Width</div>
+                                    <div class="property-value">${Number(settings?.road_width || 0.0).toFixed(2)} m</div>
+                                </div>
+                                ${settings?.description ? `
+                                <div class="property-group">
+                                    <div class="property-label"><i class="fas fa-comment-dots"></i>Description</div>
+                                    <div class="property-value" style="font-size:11px;color:var(--text-secondary);">${escapeHtml(settings.description)}</div>
+                                </div>
+                                ` : ''}
+                                <div class="property-actions">
+                                    <button class="property-action-btn primary" onclick="editPathParameters('${elementName}', ${JSON.stringify(elementData).replace(/"/g, '&quot;')})">
+                                        <i class="fas fa-edit"></i> Parameters
+                                    </button>
+                                </div>
                                 ${source !== 'current' ? `
                                 <div class="property-group">
                                     <div class="property-label"><i class="fas fa-edit"></i>Override Direction</div>
@@ -30177,18 +30988,27 @@
                                 </div>
                             `;
 
-                            if (zoneType === 'action' && (metadata.action || zone.action)) {
-                                html += `
-                                    <div class="property-group">
-                                        <div class="property-label"><i class="fas fa-bolt"></i>Action Script</div>
-                                        <div class="property-value"><code>${metadata.action || zone.action}</code></div>
-                                    </div>
-                                `;
-                            }
-
                             const actionPointConfig = (zone.action_point_config && typeof zone.action_point_config === 'object')
                                 ? zone.action_point_config
                                 : ((metadata.action_point && typeof metadata.action_point === 'object') ? metadata.action_point : null);
+
+                            if (actionPointConfig && actionPointConfig.description) {
+                                html += `
+                                <div class="property-group">
+                                    <div class="property-label"><i class="fas fa-comment-dots"></i>Description</div>
+                                    <div class="property-value" style="font-size:11px;color:var(--text-secondary);">${escapeHtml(actionPointConfig.description)}</div>
+                                </div>
+                                `;
+                            }
+
+                            if (zoneType === 'action' && (metadata.action || zone.action)) {
+                                html += `
+                                    <div class="property-group">
+                                    <div class="property-label"><i class="fas fa-bolt"></i>Action Script</div>
+                                    <div class="property-value"><code>${metadata.action || zone.action}</code></div>
+                                </div>
+                                `;
+                            }
                             
                             if (zoneType === 'action' && actionPointConfig) {
                                 const pointType = String(actionPointConfig.point_type || 'generic').trim().toLowerCase();
@@ -30938,7 +31758,11 @@
                     }
 
                     function updateCursor() {
-                        if (poseEstimateMode) {
+                        if (stitchedMap && stitchInteractionMode === 'move') {
+                            canvas.style.cursor = stitchDrag.active ? 'grabbing' : 'grab';
+                        } else if (stitchedMap && (stitchInteractionMode === 'region' || stitchInteractionMode === 'reference')) {
+                            canvas.style.cursor = 'crosshair';
+                        } else if (poseEstimateMode) {
                             canvas.style.cursor = 'none';
                         } else if (pathWaypointOrientationMode) {
                             canvas.style.cursor = 'crosshair';
@@ -31099,6 +31923,93 @@
                             if (!manualModeActive) return;
                             sendVelocity(joystickLinearCmd, joystickAngularCmd);
                         }, 50);
+                    }
+
+                    async function editPathParameters(name, elementData) {
+                        const settings = (elementData?.settings && typeof elementData.settings === 'object') ? elementData.settings : {};
+                        const source = String(elementData?.source || 'saved').toLowerCase();
+                        
+                        const direction = String(settings.direction || 'uni').toLowerCase();
+                        const roadWidth = Number(settings.road_width || 0.0);
+                        const description = String(settings.description || '');
+
+                        const inputStyle = 'width:100%;padding:7px 10px;background:#2d333b;color:#e6edf3;border:1px solid #30363d;border-radius:6px;box-sizing:border-box;font-size:13px;';
+                        const labelStyle = 'display:block;margin-bottom:4px;color:#8b949e;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;';
+                        const rowStyle = 'margin-bottom:13px;';
+
+                        const html = `
+                <div style="padding:16px 18px;">
+                    <div style="${rowStyle}">
+                        <label style="${labelStyle}">Path Name</label>
+                        <input type="text" id="ep-name" value="${escapeHtml(name)}" ${source === 'current' ? 'disabled' : ''} style="${inputStyle} ${source === 'current' ? 'opacity:0.6;' : ''}">
+                    </div>
+                    <div style="${rowStyle}">
+                        <label style="${labelStyle}">Description</label>
+                        <textarea id="ep-description" style="${inputStyle} height:60px;resize:vertical;">${escapeHtml(description)}</textarea>
+                    </div>
+                    <div style="${rowStyle}">
+                        <label style="${labelStyle}">Default Direction</label>
+                        <select id="ep-direction" style="${inputStyle}">
+                            <option value="uni" ${direction==='uni'?'selected':''}>Unidirectional</option>
+                            <option value="bi" ${direction==='bi'?'selected':''}>Bidirectional</option>
+                            <option value="reverse" ${direction==='reverse'?'selected':''}>Reverse</option>
+                        </select>
+                    </div>
+                    <div style="${rowStyle}">
+                        <label style="${labelStyle}">Road Width (m)</label>
+                        <input type="number" id="ep-road-width" value="${roadWidth}" step="0.1" min="0" style="${inputStyle}">
+                    </div>
+                </div>`;
+
+                        showNotification('✎', `Edit Path: ${name}`, html, [
+                            {
+                                text: 'Save',
+                                style: 'success',
+                                action: async () => {
+                                    const newName = document.getElementById('ep-name').value.trim();
+                                    const newDesc = document.getElementById('ep-description').value.trim();
+                                    const newDir = document.getElementById('ep-direction').value;
+                                    const newWidth = parseFloat(document.getElementById('ep-road-width').value);
+
+                                    if (!newName) { showStatus('Path name cannot be empty', 'error'); return; }
+                                    
+                                    const newSettings = JSON.parse(JSON.stringify(settings));
+                                    newSettings.direction = newDir;
+                                    newSettings.road_width = isNaN(newWidth) ? 0.0 : newWidth;
+                                    newSettings.description = newDesc;
+
+                                    closeNotification();
+                                    
+                                    if (source === 'current') {
+                                        activePathDirection = newDir;
+                                        activePathRoadWidth = newSettings.road_width;
+                                        activePathDescription = newDesc;
+                                        showStatus('Current path parameters updated', 'success');
+                                        drawMap();
+                                    } else {
+                                        showStatus(`Saving path "${newName}"...`, 'info');
+                                        const response = await fetch('/api/path/save', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                name: newName,
+                                                path: elementData.path,
+                                                settings: newSettings,
+                                                overwrite: true,
+                                            })
+                                        });
+                                        const data = await response.json();
+                                        if (data.ok) {
+                                            showStatus(data.message, 'success');
+                                            loadSavedPaths();
+                                        } else {
+                                            showStatus(data.message || 'Failed to save path', 'error');
+                                        }
+                                    }
+                                }
+                            },
+                            { text: 'Cancel', style: 'secondary', action: closeNotification }
+                        ]);
                     }
 
                     function stopJoystickHoldStream() {
@@ -31457,6 +32368,22 @@
                         // Don't trigger if typing in an input field
                         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
                             return;
+                        }
+
+                        if (e.key === 'Escape' && stitchedMap) {
+                            if (regionMatching.selectionStart) {
+                                regionMatching.selectionStart = null;
+                                requestMapDraw();
+                                showStatus('Region selection cleared.', 'info');
+                                return;
+                            }
+                            if (referencePointMatching.pendingBasePoint) {
+                                referencePointMatching.pendingBasePoint = null;
+                                refreshStitchUi();
+                                requestMapDraw();
+                                showStatus('Pending base reference point cleared.', 'info');
+                                return;
+                            }
                         }
 
                         // Don't trigger WASD if manual control is active
@@ -33032,63 +33959,55 @@
     <div id="stitch-popup" class="params-popup" style="width:480px;">
         <div class="params-popup-hdr">
             <i class="fas fa-object-group" style="font-size:12px;color:var(--text-field-label);"></i>
-            <span class="params-popup-title">Map Stitching — Extend Existing Map</span>
+            <span class="params-popup-title">Map Stitch</span>
             <button class="params-popup-close" onclick="closeStitchPopup()">&#215;</button>
         </div>
         <div class="params-popup-body" style="flex-direction:column;padding:14px;gap:14px;overflow-y:auto;display:flex;">
-
-            <!-- How it works -->
-            <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--border-primary);border-radius:4px;">
-                <strong style="color:var(--text-primary);">How map stitching works:</strong><br>
-                slam_toolbox stores a <em>pose graph</em> (not just a .pgm image). Loading the old pose graph lets the robot localize itself into the existing map geometry, then continue extending it with new scans. The result is one unified, consistent map.
-            </div>
-
-            <!-- Step 1 -->
             <div class="settings-card">
                 <div class="settings-card-header">
-                    <h4 class="settings-card-title"><span class="stitch-step-badge">1</span> Load Existing Pose Graph</h4>
+                    <h4 class="settings-card-title"><span class="stitch-step-badge">1</span> Load Stitch Map</h4>
                 </div>
-                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 8px;">Point to the <code>.posegraph</code> file saved by a previous SLAM session. slam_toolbox will deserialize it and the robot will localize into that map.</p>
-                <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="text" id="stitch-posegraph-path" class="settings-input" placeholder="/path/to/map.posegraph" style="flex:1;" value="">
-                    <button class="btn" onclick="stitchDeserializeMap()" style="white-space:nowrap;flex-shrink:0;"><i class="fas fa-folder-open"></i> Deserialize</button>
-                </div>
-                <div id="stitch-deserialize-status" class="nav2-editor-status" style="margin-top:6px;display:none;"></div>
-            </div>
-
-            <!-- Step 2 -->
-            <div class="settings-card">
-                <div class="settings-card-header">
-                    <h4 class="settings-card-title"><span class="stitch-step-badge">2</span> Start Continued / Lifelong Mapping</h4>
-                </div>
-                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 8px;">Start the robot in a place that overlaps the old map. SLAM will match incoming scans to the existing pose graph and extend it as you drive into new areas.</p>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    <button class="btn" onclick="toggleSlamMode(); closeStitchPopup();"><i class="fas fa-map-marked-alt"></i> Toggle 2D MAP (SLAM)</button>
-                    <button class="btn" onclick="stitchRelocalize()" style="background:var(--bg-elevated);"><i class="fas fa-bullseye"></i> Set Initial Pose</button>
-                </div>
-                <div id="stitch-slam-status" class="nav2-editor-status" style="margin-top:6px;display:none;"></div>
-            </div>
-
-            <!-- Step 3 -->
-            <div class="settings-card">
-                <div class="settings-card-header">
-                    <h4 class="settings-card-title"><span class="stitch-step-badge">3</span> Save Extended Map</h4>
-                </div>
-                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 8px;">When done driving, serialize the extended pose graph and save the new .pgm/.yaml map for navigation.</p>
+                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 8px;">Select a second map from the existing Map Manager list. It stays temporary until you confirm the final merge.</p>
                 <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                    <input type="text" id="stitch-save-path" class="settings-input" placeholder="/path/to/extended_map" style="flex:1;" value="">
-                    <button class="btn" onclick="stitchSerializeMap()" style="white-space:nowrap;flex-shrink:0;"><i class="fas fa-save"></i> Serialize</button>
-                    <button class="btn" onclick="finishSlamAndSaveMap()" style="white-space:nowrap;flex-shrink:0;background:rgba(76,175,80,0.2);border-color:#4caf50;"><i class="fas fa-floppy-disk"></i> Save .pgm</button>
+                    <select id="stitch-map-select" class="settings-input" style="flex:1;min-width:220px;"></select>
+                    <button class="btn" type="button" onclick="fetchAvailableMaps()" style="white-space:nowrap;flex-shrink:0;"><i class="fas fa-rotate"></i> Refresh</button>
+                    <button class="btn" type="button" onclick="loadSelectedStitchMap()" style="white-space:nowrap;flex-shrink:0;background:rgba(59,130,246,0.20);border-color:rgba(96,165,250,0.42);"><i class="fas fa-folder-open"></i> Load</button>
                 </div>
-                <div id="stitch-serialize-status" class="nav2-editor-status" style="margin-top:6px;display:none;"></div>
+                <div id="stitch-base-map-label" class="nav2-editor-status" style="margin-top:6px;display:block;color:var(--text-secondary);">Base map: current map</div>
             </div>
-
-            <!-- Reference -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <h4 class="settings-card-title"><span class="stitch-step-badge">2</span> Rough Place And Align</h4>
+                </div>
+                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 8px;">Move first for rough placement, then confirm it. After that you can refine with region matching or reference points.</p>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn" type="button" data-stitch-tool="move" onclick="setStitchTool('move')"><i class="fas fa-up-down-left-right"></i> Move</button>
+                    <button class="btn" type="button" data-stitch-tool="region" onclick="setStitchTool('region')"><i class="fas fa-vector-square"></i> Region</button>
+                    <button class="btn" type="button" data-stitch-tool="reference" onclick="setStitchTool('reference')"><i class="fas fa-crosshairs"></i> Ref Pts</button>
+                    <button class="btn" type="button" onclick="rotateStitch(-2)"><i class="fas fa-rotate-left"></i> -2°</button>
+                    <button class="btn" type="button" onclick="rotateStitch(2)"><i class="fas fa-rotate-right"></i> +2°</button>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+                    <button class="btn" type="button" onclick="applyRegionMatching()" style="background:rgba(56,189,248,0.16);border-color:rgba(56,189,248,0.36);"><i class="fas fa-wand-magic-sparkles"></i> Apply Region</button>
+                    <button class="btn" type="button" onclick="applyReferenceMatching()" style="background:rgba(249,115,22,0.16);border-color:rgba(249,115,22,0.36);"><i class="fas fa-link"></i> Apply Ref</button>
+                    <button class="btn" type="button" onclick="clearReferencePairs()"><i class="fas fa-broom"></i> Clear Ref</button>
+                </div>
+            </div>
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <h4 class="settings-card-title"><span class="stitch-step-badge">3</span> Confirm Or Cancel</h4>
+                </div>
+                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 8px;">Confirm once after rough placement, then confirm again after alignment to merge into the base map. Cancel resets the temporary stitch layer safely.</p>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn" type="button" onclick="confirmStitch()" style="background:rgba(76,175,80,0.20);border-color:#4caf50;"><i class="fas fa-check"></i> Confirm</button>
+                    <button class="btn" type="button" onclick="cancelStitch()" style="color:#fca5a5;border-color:rgba(248,113,113,0.35);"><i class="fas fa-xmark"></i> Cancel</button>
+                </div>
+                <div id="stitch-state-label" class="nav2-editor-status" style="margin-top:6px;display:block;color:var(--text-secondary);">State: idle</div>
+                <div id="stitch-mode-label" class="nav2-editor-status" style="display:block;color:var(--text-secondary);">Alignment: --</div>
+                <div id="stitch-pairs-label" class="nav2-editor-status" style="display:block;color:var(--text-secondary);">Pairs: 0</div>
+            </div>
             <div style="font-size:10px;color:var(--text-field-label);line-height:1.6;">
-                slam_toolbox services used:
-                <code>/slam_toolbox/deserialize_map</code> &nbsp;|&nbsp;
-                <code>/slam_toolbox/serialize_map</code> &nbsp;|&nbsp;
-                <code>/initialpose</code> (for relocalization)
+                Region matching rotates and translates only. Reference matching can also apply limited scale correction. Use corners, columns, and fixed structural landmarks for the best results.
             </div>
         </div>
     </div>
@@ -41072,6 +41991,8 @@
                     display.style.color = 'var(--accent-blue)';
                     // Store for export
                     display.setAttribute('data-map-path', data.map_path);
+                    updateStitchMapOptions();
+                    refreshStitchUi();
                 } else {
                     display.textContent = 'Error: ' + data.message;
                     display.style.color = 'var(--accent-red)';
@@ -41090,15 +42011,18 @@
                 const data = await res.json();
                 const requestOk = (data && (data.ok === true || data.success === true));
                 const maps = Array.isArray(data?.maps) ? data.maps : [];
+                stitchMapCatalog = maps.slice();
 
                 // Keep backward compatibility: render map list whenever maps are provided.
                 if (!requestOk && maps.length === 0) {
                     container.innerHTML = `<div class="status error">${data.message || 'Failed to load maps'}</div>`;
+                    updateStitchMapOptions();
                     return;
                 }
 
                 if (maps.length === 0) {
                     container.innerHTML = '<em style="color: #888;">No maps found in maps or DownloadedMaps</em>';
+                    updateStitchMapOptions();
                     return;
                 }
 
@@ -41128,19 +42052,28 @@
                     const loadBtn = document.createElement('button');
                     loadBtn.textContent = 'Set Active';
                     loadBtn.className = 'btn';
-                    loadBtn.style.width = '140px';
+                    loadBtn.style.width = '110px';
                     loadBtn.onclick = async () => {
                         await setActiveMap(map.yaml_path);
                         refreshActiveMap();
                     };
 
+                    const stitchBtn = document.createElement('button');
+                    stitchBtn.textContent = 'Stitch';
+                    stitchBtn.className = 'btn';
+                    stitchBtn.style.width = '90px';
+                    stitchBtn.onclick = () => openStitchPopup(map.yaml_path);
+
                     row.appendChild(info);
                     buttons.appendChild(loadBtn);
+                    buttons.appendChild(stitchBtn);
                     row.appendChild(buttons);
                     container.appendChild(row);
                 });
+                updateStitchMapOptions();
             } catch (error) {
                 container.innerHTML = `<div class="status error">${error.message}</div>`;
+                updateStitchMapOptions();
             }
         }
 
@@ -41477,6 +42410,130 @@
     </script>
 
     <script src="/static/dev_recognition.js"></script>
+
+<!-- Translation/Rotation Test Control Modal -->
+<style>
+    #motion-control-modal {
+        position: fixed; bottom: 80px; right: 20px; z-index: 5001;
+        background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+        padding: 14px; width: 280px; color: #e0e0e0;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        font-size: 12px; display: none;
+    }
+    #motion-control-modal.open { display: block; }
+    #motion-control-modal h3 {
+        margin: 0 0 10px; color: #4fc3f7; font-size: 13px;
+        border-bottom: 1px solid #0f3460; padding-bottom: 6px;
+    }
+    #motion-control-modal .mc-tabs {
+        display: flex; gap: 4px; margin-bottom: 10px;
+    }
+    #motion-control-modal .mc-tab {
+        flex: 1; background: #1e3a5f; border: 1px solid #2d5986;
+        color: #cfd8dc; padding: 5px; border-radius: 3px;
+        cursor: pointer; font-size: 11px;
+    }
+    #motion-control-modal .mc-tab.active { background: #1565c0; border-color: #42a5f5; color: #fff; }
+    #motion-control-modal label { display: block; font-size: 10px; color: #90a4ae; margin-top: 6px; }
+    #motion-control-modal input, #motion-control-modal select {
+        width: 100%; background: #0d1b2a; border: 1px solid #2d5986;
+        color: #cfd8dc; padding: 4px 6px; border-radius: 3px; font-size: 11px;
+        margin-top: 2px;
+    }
+    #motion-control-modal .mc-actions {
+        display: flex; gap: 6px; margin-top: 10px;
+    }
+    #motion-control-modal button.mc-send {
+        flex: 1; background: #1b5e20; border: 1px solid #388e3c;
+        color: #a5d6a7; padding: 6px; border-radius: 3px;
+        cursor: pointer; font-size: 11px;
+    }
+    #motion-control-modal button.mc-send:hover { background: #2e7d32; }
+    #motion-control-modal button.mc-stop {
+        flex: 1; background: #b71c1c; border: 1px solid #e53935;
+        color: #ffcdd2; padding: 6px; border-radius: 3px;
+        cursor: pointer; font-size: 11px;
+    }
+    #motion-control-modal button.mc-stop:hover { background: #c62828; }
+    #motion-control-modal .mc-status {
+        font-size: 10px; color: #80cbc4; margin-top: 8px;
+        min-height: 14px; text-align: center;
+    }
+</style>
+<div id="motion-control-modal">
+    <h3>Translation / Rotation Test</h3>
+    <div class="mc-tabs">
+        <div class="mc-tab active" data-mc-tab="translate" onclick="motionSetTab('translate')">Translation</div>
+        <div class="mc-tab" data-mc-tab="rotate" onclick="motionSetTab('rotate')">Rotation</div>
+    </div>
+    <div data-mc-pane="translate">
+        <label>Distance (m)</label>
+        <input id="mc-distance" type="number" step="0.05" value="0.5">
+        <label>vx speed (m/s) — positive=forward, negative=backward</label>
+        <input id="mc-vx" type="number" step="0.05" value="0.2">
+        <label>Mode</label>
+        <select id="mc-mode">
+            <option value="positioning">Positioning (laser)</option>
+            <option value="mileage">Mileage (encoder)</option>
+        </select>
+    </div>
+    <div data-mc-pane="rotate" style="display:none;">
+        <label>Rotation angle (°)</label>
+        <input id="mc-angle" type="number" step="5" value="90">
+        <label>Angular velocity (°/s)</label>
+        <input id="mc-angular-vel" type="number" step="5" value="30">
+    </div>
+    <div class="mc-actions">
+        <button class="mc-send" onclick="motionSend()">Send</button>
+        <button class="mc-stop" onclick="motionStop()">Stop</button>
+    </div>
+    <div class="mc-status" id="mc-status"></div>
+</div>
+<script>
+    (function () {
+        let activeTab = "translate";
+        window.motionSetTab = function (tab) {
+            activeTab = tab;
+            document.querySelectorAll("#motion-control-modal .mc-tab").forEach(b => {
+                b.classList.toggle("active", b.dataset.mcTab === tab);
+            });
+            document.querySelectorAll("#motion-control-modal [data-mc-pane]").forEach(p => {
+                p.style.display = (p.dataset.mcPane === tab) ? "" : "none";
+            });
+        };
+        const setStatus = (msg) => { const el = document.getElementById("mc-status"); if (el) el.textContent = msg; };
+        const post = async (path, body) => {
+            const r = await fetch(path, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body || {}),
+            });
+            try { return await r.json(); } catch (e) { return { ok: false }; }
+        };
+        window.motionSend = async function () {
+            if (activeTab === "translate") {
+                const distance = parseFloat(document.getElementById("mc-distance").value) || 0;
+                const vx = parseFloat(document.getElementById("mc-vx").value) || 0;
+                const mode = document.getElementById("mc-mode").value;
+                if (Math.abs(vx) < 1e-6) { setStatus("vx must be nonzero"); return; }
+                setStatus(`Translating ${distance}m at vx=${vx}m/s (${mode})...`);
+                const r = await post("/api/motion/translate", { distance, vx, mode });
+                setStatus(r.ok ? `Sent (duration ${(r.duration||0).toFixed(2)}s)` : `Error: ${r.message || "failed"}`);
+            } else {
+                const angle_deg = parseFloat(document.getElementById("mc-angle").value) || 0;
+                const angular_vel_dps = parseFloat(document.getElementById("mc-angular-vel").value) || 0;
+                if (Math.abs(angular_vel_dps) < 1e-6) { setStatus("angular velocity must be nonzero"); return; }
+                setStatus(`Rotating ${angle_deg}° at ${angular_vel_dps}°/s...`);
+                const r = await post("/api/motion/rotate", { angle_deg, angular_vel_dps });
+                setStatus(r.ok ? `Sent (duration ${(r.duration||0).toFixed(2)}s)` : `Error: ${r.message || "failed"}`);
+            }
+        };
+        window.motionStop = async function () {
+            await post("/api/motion/stop", {});
+            setStatus("Stopped.");
+        };
+    })();
+</script>
+
 </body>
 
 </html>
