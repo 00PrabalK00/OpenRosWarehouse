@@ -13,6 +13,7 @@
             <div class="header-info">
                 <span id="resolution-info">Resolution: --</span>
                 <span id="map-size">Map: -- x --</span>
+                <label class="editing-toggle"><input type="checkbox" id="editing-enabled"> Enable Editing</label>
             </div>
         </header>
 
@@ -76,9 +77,13 @@
                 <label><input type="checkbox" id="dotted-view"> Dotted View</label>
                 <div id="dotted-params" style="display:none; margin-top:6px;">
                     <label style="display:block; margin-bottom:4px;">
-                        Spacing:
-                        <input type="number" id="dot-spacing" value="15" min="5" max="60" step="1" style="width:50px;">
-                        px
+                        Preset:
+                        <select id="dot-preset" style="width:90px;">
+                            <option value="balanced">Balanced</option>
+                            <option value="balanced_plus">Balanced+</option>
+                            <option value="quality">Quality</option>
+                            <option value="speed">Speed</option>
+                        </select>
                     </label>
                     <label style="display:block; margin-bottom:4px;">
                         Dot size:
@@ -92,10 +97,39 @@
                             <option value="plus">Plus</option>
                         </select>
                     </label>
-                    <label style="display:block;">
-                        <input type="checkbox" id="dot-thin" checked> Thin walls
-                    </label>
                 </div>
+            </div>
+
+            <div class="tool-group stitch-group">
+                <h3>Map Stitching</h3>
+                <button class="action-btn stitch-load-btn" id="btn-stitch-map">Stitch Map</button>
+                <input type="text" id="stitch-map-path" class="stitch-input" placeholder="/path/to/stitched_map.yaml">
+                <button class="tool-btn stitch-tool-btn" data-tool="stitch-move" id="tool-stitch-move">Move Overlay</button>
+                <div class="stitch-rotate-row">
+                    <button class="tool-btn stitch-small-btn" id="btn-stitch-rotate-left" type="button">Rotate -2°</button>
+                    <button class="tool-btn stitch-small-btn" id="btn-stitch-rotate-right" type="button">Rotate +2°</button>
+                </div>
+                <button class="tool-btn stitch-tool-btn" data-tool="stitch-region" id="tool-stitch-region">Region Matching</button>
+                <button class="tool-btn stitch-tool-btn" data-tool="stitch-reference" id="tool-stitch-reference">Reference Points</button>
+                <button class="action-btn stitch-secondary-btn" id="btn-apply-reference">Apply Reference Match</button>
+                <button class="action-btn stitch-secondary-btn" id="btn-clear-reference">Clear Reference Pairs</button>
+                <button class="action-btn success" id="btn-confirm-stitch">Confirm Placement</button>
+                <button class="action-btn stitch-cancel-btn" id="btn-cancel-stitch">Cancel Stitch</button>
+                <div class="stitch-meta">
+                    <div id="stitch-state-label">State: idle</div>
+                    <div id="stitch-mode-label">Alignment: --</div>
+                    <div id="stitch-pairs-label">Pairs: 0</div>
+                </div>
+            </div>
+
+            <div class="tool-group">
+                <h3>Zoom</h3>
+                <div class="zoom-controls">
+                    <button class="tool-btn stitch-small-btn" id="btn-zoom-out" type="button">-</button>
+                    <span id="zoom-label">100%</span>
+                    <button class="tool-btn stitch-small-btn" id="btn-zoom-in" type="button">+</button>
+                </div>
+                <button class="tool-btn" id="btn-zoom-reset" type="button">Reset Zoom</button>
             </div>
 
             <div class="tool-group">
@@ -109,7 +143,9 @@
         </div>
 
         <div class="canvas-container">
-            <canvas id="map-canvas"></canvas>
+            <div class="canvas-stage">
+                <canvas id="map-canvas"></canvas>
+            </div>
             <div class="coords-display" id="coords-display">X: -- Y: --</div>
             <div class="instructions" id="instructions">
                 Select a tool to begin editing

@@ -5633,6 +5633,40 @@
             }
         }
 
+        .battery-history-container {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .battery-chart-svg {
+            width: 100%;
+            height: 100px;
+            overflow: visible;
+        }
+        .battery-chart-path {
+            fill: none;
+            stroke: var(--accent-normal);
+            stroke-width: 2;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+            transition: d 0.3s ease;
+        }
+        .battery-chart-area {
+            fill: rgba(66, 153, 225, 0.1);
+            transition: d 0.3s ease;
+        }
+        .battery-chart-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            font-family: 'Roboto Mono', monospace;
+        }
+
         /* Keep native <select> popup options readable in dark UI */
         select.settings-input option,
         select.settings-input optgroup {
@@ -14302,6 +14336,7 @@
                         present: null,
                         chargeCycles: null,
                         updatedAt: null,
+                        history: [],
                     };
                     let actionNodePublishers = {};
                     let actionNodeExtensions = {};
@@ -22878,12 +22913,58 @@
                             batteryTelemetry[key] = value;
                         });
                         batteryTelemetry.updatedAt = Date.now();
+                        
+                        // Update usage history
                         if (Number.isFinite(Number(batteryTelemetry.percentage))) {
+                            const now = Date.now();
+                            const lastEntry = batteryTelemetry.history[batteryTelemetry.history.length - 1];
+                            // Only add a point if 1 second has passed since the last one to avoid over-sampling
+                            if (!lastEntry || now - lastEntry.time >= 1000) {
+                                batteryTelemetry.history.push({
+                                    time: now,
+                                    value: batteryTelemetry.percentage
+                                });
+                                // Keep last 5 minutes (300 seconds)
+                                while (batteryTelemetry.history.length > 300) {
+                                    batteryTelemetry.history.shift();
+                                }
+                            }
+
                             updateGlobalHeaderStatus('battery', batteryTelemetry.percentage);
                             const diagBat = document.getElementById('diag-bat-val');
                             if (diagBat) diagBat.textContent = `${Math.round(batteryTelemetry.percentage)}%`;
                         }
                         renderBatteryTelemetry();
+                    }
+
+                    function renderBatteryHistoryChart() {
+                        const pathEl = document.getElementById('battery-chart-path');
+                        const areaEl = document.getElementById('battery-chart-area');
+                        if (!pathEl || !areaEl || !batteryTelemetry.history.length) return;
+
+                        const data = batteryTelemetry.history;
+                        const width = 400;
+                        const height = 80;
+                        const padding = 5;
+                        
+                        const maxPoints = 300;
+                        const step = width / (maxPoints - 1);
+                        
+                        let d = '';
+                        data.forEach((point, i) => {
+                            // Map index to X, accounting for current history length relative to maxPoints
+                            const x = (maxPoints - data.length + i) * step;
+                            // Map value (0-100) to Y (height-0)
+                            const y = height - (point.value / 100 * (height - 2 * padding) + padding);
+                            d += (i === 0 ? 'M' : 'L') + `${x.toFixed(1)},${y.toFixed(1)} `;
+                        });
+
+                        pathEl.setAttribute('d', d);
+                        
+                        if (d) {
+                            const areaD = d + `L${width},${height} L0,${height} Z`;
+                            areaEl.setAttribute('d', areaD);
+                        }
                     }
 
                     function batteryStatusLabel(value) {
@@ -22962,6 +23043,8 @@
                         if (gauge) gauge.style.setProperty('--battery-pct', `${safePct}%`);
                         const tempFillEl = document.getElementById('battery-settings-temp-fill');
                         if (tempFillEl) tempFillEl.style.height = `${tempFill}%`;
+
+                        renderBatteryHistoryChart();
                     }
 
                     // Subscribe to velocity sources for speed display
@@ -31836,6 +31919,25 @@
                                                 <span class="battery-kv-label">Charge Cycles</span>
                                                 <span class="battery-kv-value" id="battery-settings-cycles">—</span>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card" id="battery-history-card">
+                                    <div class="settings-card-header">
+                                        <h4 class="settings-card-title">
+                                            <i class="fas fa-chart-line" style="margin-right:6px;"></i>Usage History
+                                        </h4>
+                                        <span style="font-size:11px;color:var(--text-tertiary);">Last 5 minutes</span>
+                                    </div>
+                                    <div class="battery-history-container">
+                                        <svg class="battery-chart-svg" viewBox="0 0 400 80" preserveAspectRatio="none">
+                                            <path id="battery-chart-area" class="battery-chart-area" d=""></path>
+                                            <path id="battery-chart-path" class="battery-chart-path" d=""></path>
+                                        </svg>
+                                        <div class="battery-chart-labels">
+                                            <span>5m ago</span>
+                                            <span>Now</span>
                                         </div>
                                     </div>
                                 </div>
