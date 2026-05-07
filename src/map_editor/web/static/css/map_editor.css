@@ -45,6 +45,18 @@ header h1 {
     display: flex;
     gap: 20px;
     font-size: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.editing-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 13px;
 }
 
 .toolbar {
@@ -88,6 +100,13 @@ header h1 {
     background: #f0f0f0;
     border-color: #667eea;
     transform: translateY(-2px);
+}
+
+.tool-btn:disabled,
+.action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
 }
 
 .tool-btn.active {
@@ -145,17 +164,23 @@ header h1 {
     position: relative;
     flex: 1;
     background: #2c3e50;
+    overflow: auto;
+    padding: 28px;
+}
+
+.canvas-stage {
+    min-width: 100%;
+    min-height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow: hidden;
 }
 
 #map-canvas {
-    max-width: 100%;
-    max-height: 100%;
     cursor: crosshair;
     background: white;
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+    transform-origin: top left;
 }
 
 .coords-display {
@@ -205,4 +230,72 @@ header h1 {
     text-align: center;
     font-weight: 600;
     color: #856404;
+}
+
+.stitch-group {
+    min-width: 260px;
+}
+
+.stitch-input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    margin: 6px 0;
+}
+
+.stitch-load-btn {
+    background: #4c6ef5;
+    border-color: #4c6ef5;
+}
+
+.stitch-load-btn:hover {
+    background: #3b5bdb;
+}
+
+.stitch-secondary-btn {
+    background: #f59f00;
+    border-color: #f59f00;
+}
+
+.stitch-secondary-btn:hover {
+    background: #e67700;
+}
+
+.stitch-cancel-btn {
+    background: #868e96;
+    border-color: #868e96;
+}
+
+.stitch-cancel-btn:hover {
+    background: #6c757d;
+}
+
+.stitch-rotate-row,
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stitch-small-btn {
+    margin: 0;
+    padding: 8px 10px;
+}
+
+.zoom-controls span {
+    min-width: 48px;
+    text-align: center;
+    font-weight: 600;
+    color: #495057;
+}
+
+.stitch-meta {
+    margin-top: 8px;
+    padding: 10px;
+    background: #f1f3f5;
+    border-radius: 8px;
+    color: #495057;
+    font-size: 12px;
+    line-height: 1.6;
 }
