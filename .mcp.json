@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gitnexus": {
+      "type": "stdio",
+      "command": "/home/next/.nvm/versions/node/v22.22.3/bin/gitnexus",
+      "args": ["mcp", "--repo", "/home/next/testBuild"]
+    }
+  }
+}

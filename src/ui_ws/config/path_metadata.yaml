@@ -177,8 +177,8 @@ FullRun:
   - x: 6.1
     y: 11.44
     zone_name: A2
-  - x: 11.09
-    y: 6.673845
+  - x: 11.106752
+    y: 6.651509
     zone_name: A3
   - x: 11.747371
     y: 5.680441
@@ -186,14 +186,14 @@ FullRun:
   - x: 12.57
     y: 4.9
     zone_name: zelf
-  - x: 10.08
-    y: 5.521904
+  - x: 10.074416
+    y: 5.533071
     zone_name: A4
   - x: 11.747371
     y: 5.680441
     zone_name: PRE-POINT
-  - x: 10.08
-    y: 5.521904
+  - x: 10.074416
+    y: 5.533071
     zone_name: A4
   settings:
     loop_type: closed
@@ -204,4 +204,6 @@ FullRun:
     segment_attrs:
       '1':
         direction: bi
+      '2':
+        maxspeed: 0.3
     has_curves: false
