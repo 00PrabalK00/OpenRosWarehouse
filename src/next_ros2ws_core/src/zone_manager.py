@@ -6338,6 +6338,41 @@ class ZoneManager(Node):
                 return cfg
             return {}
 
+        def _is_transient_waypoint(index: int) -> bool:
+            """Return True if waypoint can be tracked continuously without stopping."""
+            if index <= 0 or index >= (total - 1):
+                return False
+
+            # Phase 2: Align
+            align_pose, _, _ = _semantic_align_target_at(index)
+            if align_pose is not None:
+                return False
+
+            # Phase 3: Stop Timer
+            stop_timer_s, _ = _zone_stop_timer_at(index)
+            if stop_timer_s > 0.0:
+                return False
+
+            # Phase 4: Shelf Check / Pre-Point
+            if _shelf_check_enabled_at(index) or _shelf_recognition_cfg_at(index):
+                return False
+            pre_pose, _, _ = _pre_point_pose_for_shelf_action_at(index)
+            if pre_pose is not None:
+                return False
+
+            # Phase 5: Zone Action
+            zone_meta = _zone_meta_at(index)
+            zone_action_id = normalize_action_id(zone_meta.get('action', ''))
+            zone_type = str(zone_meta.get('type', 'normal') or 'normal').strip().lower()
+            if zone_action_id or zone_type == 'action':
+                return False
+
+            # Reverse retreat
+            if _incoming_segment_bidirectional_at(index):
+                return False
+
+            return True
+
         def _pre_point_zone_name_from_cfg(cfg: Dict[str, Any]) -> str:
             pre_point_cfg = cfg.get('pre_point')
             if isinstance(pre_point_cfg, str):
@@ -6784,9 +6819,8 @@ class ZoneManager(Node):
                         f'ALIGN_AT_POINT precheck: robot {pos_dist:.2f}m from waypoint '
                         f'{waypoint_index + 1}/{total} (tol {pos_tol:.2f}m) → re-approach'
                     )
-                    _wrapped, phase_err = await _run_follow_segment_phase_with_retries(
-                        max(0, waypoint_index - 1),
-                        waypoint_index,
+                    _wrapped, phase_err = await _run_follow_path_batch_with_retries(
+                        [max(0, waypoint_index - 1), waypoint_index],
                         'MOVE_TO_POINT',
                         max(0, waypoint_index - 1),
                         enforce_end_orientation_override=False,
@@ -6923,9 +6957,8 @@ class ZoneManager(Node):
                         f'STOP_TIMER precheck: distance {dist_err:.2f}m > {pos_tol:.2f}m '
                         f'at waypoint {waypoint_index + 1}/{total} -> retry move/align'
                     )
-                    _wrapped, phase_err = await _run_follow_segment_phase_with_retries(
-                        max(0, waypoint_index - 1),
-                        waypoint_index,
+                    _wrapped, phase_err = await _run_follow_path_batch_with_retries(
+                        [max(0, waypoint_index - 1), waypoint_index],
                         'MOVE_TO_POINT',
                         max(0, waypoint_index - 1),
                         enforce_end_orientation_override=False,
@@ -7416,9 +7449,8 @@ class ZoneManager(Node):
                 poi_name,
             )
 
-        async def _run_follow_segment_phase(
-            segment_index: int,
-            waypoint_index: int,
+        async def _run_follow_path_batch(
+            indices: List[int],
             phase_label: str,
             progress_index: int,
             *,
@@ -7436,50 +7468,84 @@ class ZoneManager(Node):
                     return None, wait_err
                 return None, obstacle_wait_retry
 
-            is_terminal_segment = waypoint_index >= (total - 1)
-            is_curve_segment = bool(
-                self.path_curve_motion_leniency_enabled
-                and self._segment_has_curve_transition(stamped_waypoints, segment_index)
-            )
-            segment_spacing = (
-                self.path_curve_segment_spacing
-                if is_curve_segment
-                else self.path_follow_segment_spacing
-            )
-            if enforce_end_orientation_override is None:
-                enforce_end_orientation = bool(self.path_enforce_waypoint_orientation)
-                if is_terminal_segment and bool(self.path_require_final_heading):
-                    enforce_end_orientation = True
-                elif (not is_terminal_segment) and bool(self.path_align_intermediate_waypoints):
-                    enforce_end_orientation = True
-            else:
-                enforce_end_orientation = bool(enforce_end_orientation_override)
-            if (
-                is_curve_segment
-                and self.path_curve_relax_waypoint_orientation
-                and (not is_terminal_segment)
-            ):
-                enforce_end_orientation = False
+            if not indices:
+                return None, 'No indices provided for path batch'
 
+            start_idx = indices[0]
+            end_idx = indices[-1]
+            waypoint_count = len(indices)
+            is_terminal_batch = end_idx >= (total - 1)
+
+            # Build the batch poses
+            batch_poses = [stamped_waypoints[i] for i in indices]
             if start_pose_override is not None:
-                segment_start_pose = self._copy_pose_stamped(start_pose_override)
-                segment_start_pose.header.stamp = self.get_clock().now().to_msg()
-                start_gap = 0.0
-                used_live_start = False
+                batch_poses[0] = self._copy_pose_stamped(start_pose_override)
+                batch_poses[0].header.stamp = self.get_clock().now().to_msg()
             else:
-                segment_start_pose, start_gap, used_live_start = _resolve_segment_start_pose(segment_index)
-            target_pose = end_pose_override if end_pose_override is not None else stamped_waypoints[waypoint_index]
-            if used_live_start:
-                self.get_logger().warn(
-                    f'FollowPath segment {segment_index + 1}/{max(1, total - 1)} using live start pose '
-                    f'(gap {start_gap:.2f}m from anchor) to avoid heading bias'
+                segment_start_pose, start_gap, used_live_start = _resolve_segment_start_pose(start_idx)
+                if used_live_start:
+                    batch_poses[0] = segment_start_pose
+                    self.get_logger().warn(
+                        f'FollowPath batch {start_idx + 1}->{end_idx + 1}/{total} using live start pose '
+                        f'(gap {start_gap:.2f}m from anchor) to avoid heading bias'
+                    )
+            
+            if end_pose_override is not None:
+                batch_poses[-1] = self._copy_pose_stamped(end_pose_override)
+
+            # Build a continuous NavPath through all segments in the batch
+            nav_path = NavPath()
+            nav_path.header.frame_id = base_frame
+            nav_path.header.stamp = self.get_clock().now().to_msg()
+            full_poses = []
+
+            for i in range(waypoint_count - 1):
+                seg_start_idx = indices[i]
+                # seg_end_idx = indices[i+1] # unused
+                is_last_in_batch = (i == waypoint_count - 2)
+
+                is_curve_segment = bool(
+                    self.path_curve_motion_leniency_enabled
+                    and self._segment_has_curve_transition(stamped_waypoints, seg_start_idx)
                 )
-            segment_path = self._build_segment_follow_path(
-                segment_start_pose,
-                target_pose,
-                segment_spacing=segment_spacing,
-                enforce_end_orientation=enforce_end_orientation,
-            )
+                segment_spacing = (
+                    self.path_curve_segment_spacing
+                    if is_curve_segment
+                    else self.path_follow_segment_spacing
+                )
+
+                if is_last_in_batch:
+                    if enforce_end_orientation_override is None:
+                        enforce_end_orientation = bool(self.path_enforce_waypoint_orientation)
+                        if is_terminal_batch and bool(self.path_require_final_heading):
+                            enforce_end_orientation = True
+                        elif (not is_terminal_batch) and bool(self.path_align_intermediate_waypoints):
+                            enforce_end_orientation = True
+                    else:
+                        enforce_end_orientation = bool(enforce_end_orientation_override)
+                    
+                    if (
+                        is_curve_segment
+                        and self.path_curve_relax_waypoint_orientation
+                        and (not is_terminal_batch)
+                    ):
+                        enforce_end_orientation = False
+                else:
+                    # Transient waypoints ALWAYS use travel bearing to ensure smoothness
+                    enforce_end_orientation = False
+
+                seg = self._build_segment_follow_path(
+                    batch_poses[i],
+                    batch_poses[i+1],
+                    segment_spacing=segment_spacing,
+                    enforce_end_orientation=enforce_end_orientation,
+                ).poses
+                
+                if i > 0 and seg:
+                    seg = seg[1:]
+                full_poses.extend(seg)
+
+            nav_path.poses = full_poses
 
             def _follow_feedback(feedback_msg):
                 try:
@@ -7498,7 +7564,7 @@ class ZoneManager(Node):
             nav_accept_attempts = max(1, int(self.nav_goal_accept_attempts))
             for accept_attempt in range(1, nav_accept_attempts + 1):
                 follow_goal = Nav2FollowPath.Goal()
-                follow_goal.path = segment_path
+                follow_goal.path = nav_path
                 if hasattr(follow_goal, 'controller_id'):
                     follow_goal.controller_id = str(self.follow_path_controller_id or 'FollowPath')
                 if hasattr(follow_goal, 'goal_checker_id'):
@@ -7518,7 +7584,7 @@ class ZoneManager(Node):
                 self.get_logger().warn(
                     f'FollowPath phase "{phase_label}" rejected attempt '
                     f'{accept_attempt}/{nav_accept_attempts} at waypoint '
-                    f'{waypoint_index + 1}/{total}'
+                    f'{end_idx + 1}/{total}'
                 )
                 if accept_attempt < nav_accept_attempts:
                     await self._non_blocking_wait(0.25)
@@ -7526,7 +7592,7 @@ class ZoneManager(Node):
             if nav_goal_handle is None or (not nav_goal_handle.accepted):
                 return None, (
                     f'Nav2 rejected phase "{phase_label}" at waypoint '
-                    f'{waypoint_index + 1}/{total}'
+                    f'{end_idx + 1}/{total}'
                 )
 
             self.follow_path_nav_goal = nav_goal_handle
@@ -7579,12 +7645,14 @@ class ZoneManager(Node):
                         nav_parts.append(f'd={dist_v:.2f}m')
                     if math.isfinite(speed_v):
                         nav_parts.append(f'v={speed_v:.2f}m/s')
-                    if phase_label == 'MOVE_TO_POINT' and progress_index != waypoint_index:
+                    
+                    if start_idx != end_idx:
                         base_status = (
-                            f'{phase_label}: waypoint {progress_index + 1}->{waypoint_index + 1}/{total}'
+                            f'{phase_label}: waypoints {start_idx + 1}->{end_idx + 1}/{total}'
                         )
                     else:
-                        base_status = f'{phase_label}: waypoint {waypoint_index + 1}/{total}'
+                        base_status = f'{phase_label}: waypoint {end_idx + 1}/{total}'
+                    
                     _publish_feedback(
                         progress_index,
                         base_status + (f' | {", ".join(nav_parts)}' if nav_parts else ''),
@@ -7608,19 +7676,18 @@ class ZoneManager(Node):
 
             if phase_label in ('MOVE_TO_POINT', 'MOVE_TO_PRE_POINT', 'REVERSE_RETREAT'):
                 arrival_err = await _validate_follow_move_arrival(
-                    waypoint_index,
+                    end_idx,
                     phase_label,
-                    target_pose=target_pose,
-                    is_terminal_segment=is_terminal_segment,
+                    target_pose=batch_poses[-1],
+                    is_terminal_segment=is_terminal_batch,
                 )
                 if arrival_err:
                     return None, arrival_err
 
             return wrapped, ''
 
-        async def _run_follow_segment_phase_with_retries(
-            segment_index: int,
-            waypoint_index: int,
+        async def _run_follow_path_batch_with_retries(
+            indices: List[int],
             phase_label: str,
             progress_index: int,
             *,
@@ -7632,10 +7699,12 @@ class ZoneManager(Node):
             max_attempts = max(1, int(self.path_max_retries))
             last_err = ''
             attempt = 1
+            start_idx = indices[0]
+            end_idx = indices[-1]
+
             while attempt <= max_attempts:
-                wrapped, phase_err = await _run_follow_segment_phase(
-                    segment_index,
-                    waypoint_index,
+                wrapped, phase_err = await _run_follow_path_batch(
+                    indices,
                     phase_label,
                     progress_index,
                     start_pose_override=start_pose_override,
@@ -7646,14 +7715,14 @@ class ZoneManager(Node):
                     if attempt > 1:
                         self.get_logger().info(
                             f'{phase_label} recovered on attempt {attempt}/{max_attempts} '
-                            f'at waypoint {waypoint_index + 1}/{total}'
+                            f'at waypoint {end_idx + 1}/{total}'
                         )
                     return wrapped, ''
 
                 if phase_err == obstacle_wait_retry:
                     self.get_logger().info(
                         f'{phase_label}: obstacle cleared, resuming at waypoint '
-                        f'{waypoint_index + 1}/{total}'
+                        f'{end_idx + 1}/{total}'
                     )
                     continue
 
@@ -7668,7 +7737,7 @@ class ZoneManager(Node):
                         return None, wait_err
                     self.get_logger().info(
                         f'{phase_label}: obstacle-cleared retry at waypoint '
-                        f'{waypoint_index + 1}/{total}'
+                        f'{end_idx + 1}/{total}'
                     )
                     continue
                 retry_on_aborted = (
@@ -7684,19 +7753,23 @@ class ZoneManager(Node):
 
                 self.get_logger().warn(
                     f'{phase_label} attempt {attempt}/{max_attempts} failed at waypoint '
-                    f'{waypoint_index + 1}/{total}: {last_err} -> retrying'
+                    f'{end_idx + 1}/{total}: {last_err} -> retrying'
                 )
                 await self._non_blocking_wait(1.0)
                 attempt += 1
 
             return None, (
                 f'{phase_label} failed after {max_attempts} attempts at waypoint '
-                f'{waypoint_index + 1}/{total}: {last_err}'
+                f'{end_idx + 1}/{total}: {last_err}'
             )
 
+
         try:
-            # Execute each segment in strict order.
-            for seg_idx in range(total - 1):
+            # Execute segments in batches. Transient waypoints (like Bezier samples)
+            # are grouped and sent as a single continuous path to Nav2 to avoid
+            # stopping at every point.
+            current_seg_idx = 0
+            while current_seg_idx < total - 1:
                 if goal_handle.is_cancel_requested:
                     goal_handle.canceled()
                     result.success = False
@@ -7711,7 +7784,14 @@ class ZoneManager(Node):
                     result.message = 'E-STOP active'
                     return result
 
-                target_idx = seg_idx + 1
+                # Look ahead to group transient waypoints into one batch.
+                batch_indices = [current_seg_idx]
+                target_idx = current_seg_idx + 1
+                while target_idx < (total - 1) and _is_transient_waypoint(target_idx):
+                    batch_indices.append(target_idx)
+                    target_idx += 1
+                batch_indices.append(target_idx)
+
                 pre_point_pose, pre_point_name, pre_point_err = _pre_point_pose_for_shelf_action_at(target_idx)
                 shelf_pre_point_flow = pre_point_pose is not None
                 if pre_point_err:
@@ -7724,23 +7804,23 @@ class ZoneManager(Node):
                     goal_handle.abort()
                     return result
 
-                # Phase 1: MOVE_TO_POINT using a segment FollowPath so the controller
-                # retains lookahead. Semantic POI alignment is handled explicitly
-                # afterward in this state machine, not implicitly in the move phase.
+                # Phase 1: MOVE_TO_POINT (or PRE_POINT) using a batch FollowPath so the
+                # controller maintains continuous motion through transient waypoints.
                 if shelf_pre_point_flow:
                     _publish_feedback(
                         target_idx,
                         f'MOVE_TO_PRE_POINT: "{pre_point_name}" before shelf action '
                         f'"{_zone_name_at(target_idx)}"',
                     )
-                _wrapped, phase_err = await _run_follow_segment_phase_with_retries(
-                    seg_idx,
-                    target_idx,
+                
+                _wrapped, phase_err = await _run_follow_path_batch_with_retries(
+                    batch_indices,
                     'MOVE_TO_PRE_POINT' if shelf_pre_point_flow else 'MOVE_TO_POINT',
-                    seg_idx,
+                    current_seg_idx,
                     end_pose_override=pre_point_pose if shelf_pre_point_flow else None,
                     enforce_end_orientation_override=False,
                 )
+
                 if phase_err:
                     if phase_err == terminal_error:
                         return result
@@ -7749,6 +7829,9 @@ class ZoneManager(Node):
                     result.message = phase_err
                     goal_handle.abort()
                     return result
+
+                # Move loop to the next start index (the target of the current batch)
+                current_seg_idx = target_idx
 
                 # Phase 2: semantic POI heading alignment only if the reached anchor
                 # has an explicit POI heading and the current robot heading is outside
@@ -8190,21 +8273,17 @@ class ZoneManager(Node):
         points = []
         for entry in raw_points:
             if isinstance(entry, dict):
-                x = self._safe_float(entry.get('x', 0.0))
-                y = self._safe_float(entry.get('y', 0.0))
-                z = self._safe_float(entry.get('z', 0.0))
+                # Preserve all metadata (Bezier info, zone_name, shelf_check, etc.)
+                points.append(dict(entry))
             elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
                 x = self._safe_float(entry[0], 0.0)
                 y = self._safe_float(entry[1], 0.0)
                 z = self._safe_float(entry[2], 0.0) if len(entry) > 2 else 0.0
-            else:
-                continue
-
-            points.append({
-                'x': float(x),
-                'y': float(y),
-                'z': float(z),
-            })
+                points.append({
+                    'x': float(x),
+                    'y': float(y),
+                    'z': float(z),
+                })
 
         return {
             'frame_id': frame_id,

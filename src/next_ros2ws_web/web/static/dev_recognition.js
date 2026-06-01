@@ -1,9 +1,98 @@
 (function () {
     const CATEGORY_META = {
+        chargers: { label: 'Chargers', icon: 'fas fa-plug', singular: 'Charger' },
+        batteries: { label: 'Batteries', icon: 'fas fa-car-battery', singular: 'Battery' },
+        chargespots: { label: 'Charge Spots', icon: 'fas fa-charging-station', singular: 'Chargespot' },
+        legs: { label: 'Legs', icon: 'fas fa-person-walking', singular: 'Leg' },
+        tags: { label: 'Tags', icon: 'fas fa-qrcode', singular: 'Tag' },
+        polygons: { label: 'Polygon Templates', icon: 'fas fa-draw-polygon', singular: 'Polygon Template' },
         shelves: { label: 'Shelves', icon: 'fas fa-boxes-stacked', singular: 'Shelf' },
         pallets: { label: 'Pallets', icon: 'fas fa-pallet', singular: 'Pallet' },
         docks: { label: 'Docks', icon: 'fas fa-warehouse', singular: 'Dock' },
         fixtures: { label: 'Fixtures', icon: 'fas fa-ruler-combined', singular: 'Fixture' },
+    };
+    const RECOGNITION_METADATA_FIELDS = {
+        chargers: [
+            { path: 'metadata.device_name', label: 'Device Name', type: 'text' },
+            { path: 'metadata.minwidth', label: 'Min Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.maxwidth', label: 'Max Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.dx', label: 'DX (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.dy', label: 'DY (m)', type: 'number', step: '0.01' },
+        ],
+        batteries: [
+            { path: 'metadata.device_name', label: 'Device Name', type: 'text' },
+            { path: 'metadata.backLength', label: 'Back Length', type: 'number', step: '0.01' },
+            { path: 'metadata.aheadLength', label: 'Ahead Length', type: 'number', step: '0.01' },
+            { path: 'metadata.upHeight', label: 'Up Height', type: 'number', step: '0.01' },
+            { path: 'metadata.recHeightTor', label: 'Recognition Height Tol', type: 'number', step: '0.01' },
+            { path: 'metadata.goLateralDist', label: 'Go Lateral Dist', type: 'number', step: '0.01' },
+            { path: 'metadata.maxAdjustTime', label: 'Max Adjust Time', type: 'number', step: '0.01' },
+        ],
+        chargespots: [
+            { path: 'metadata.device_name', label: 'Device Name', type: 'text' },
+            { path: 'metadata.ip', label: 'IP Address', type: 'text' },
+            { path: 'metadata.port', label: 'Port', type: 'number', step: '1' },
+        ],
+        legs: [
+            { path: 'metadata.minwidth', label: 'Min Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.maxwidth', label: 'Max Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.maxdistance', label: 'Max Distance (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.method_type', label: 'Method Type', type: 'select', options: [
+                { value: 'by_legshape', label: 'By Leg Shape' },
+            ] },
+        ],
+        shelves: [
+            { path: 'metadata.leg_width', label: 'Reflective Strip Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.align_depth', label: 'Align Depth (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.anti_align_depth', label: 'Anti-Align Depth (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.y_align_depth', label: 'Y Align Depth (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.y_anti_align_depth', label: 'Y Anti-Align Depth (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.rec_off_x', label: 'Recognition Offset X (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.rec_off_y', label: 'Recognition Offset Y (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.rec_off_angle', label: 'Recognition Offset Angle (deg)', type: 'number', step: '0.1' },
+            { path: 'metadata.outer_width', label: 'Outer Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.outer_length', label: 'Outer Length (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.extra_dist', label: 'Extra Distance (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.detect_direction', label: 'Detect Direction', type: 'select', options: [
+                { value: 'x', label: 'X' },
+                { value: 'y', label: 'Y' },
+                { value: '-x', label: '-X' },
+                { value: '-y', label: '-Y' },
+            ] },
+            { path: 'metadata.leg_type', label: 'Leg Type', type: 'select', options: [
+                { value: 'cube', label: 'Cube' },
+                { value: 'cylinder', label: 'Cylinder' },
+            ] },
+            { path: 'metadata.method_type', label: 'Method Type', type: 'select', options: [
+                { value: 'by_reflector', label: 'By Reflector' },
+                { value: 'by_legshape', label: 'By Leg Shape' },
+            ] },
+            { path: 'metadata.continue_detect', label: 'Continue Detect', type: 'checkbox' },
+            { path: 'metadata.side_block', label: 'Side Block', type: 'checkbox' },
+        ],
+        pallets: [
+            { path: 'metadata.pallet_width', label: 'Pallet Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.pallet_height', label: 'Pallet Height (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.pallet_length', label: 'Pallet Length (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.block_laser', label: 'Block Laser', type: 'checkbox' },
+            { path: 'metadata.pocket_width', label: 'Pocket Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.pocket_height', label: 'Pocket Height (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.pocket_spacing', label: 'Pocket Spacing (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.in_global_framework', label: 'In Global Framework', type: 'checkbox' },
+        ],
+        tags: [
+            { path: 'metadata.X_Dis', label: 'X Distance (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.Y_Dis', label: 'Y Distance (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.Z_Dis', label: 'Z Distance (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.goodsWidth', label: 'Goods Width (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.goodsLength', label: 'Goods Length (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.tagDistance', label: 'Tag Distance (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.tagSize', label: 'Tag Size (m)', type: 'number', step: '0.01' },
+            { path: 'metadata.Tagtype', label: 'Tag Type', type: 'text' },
+        ],
+        polygons: [
+            { path: 'metadata.image_path', label: 'Image Path', type: 'text' },
+        ],
     };
 
     const DEFAULT_VIEW = {
@@ -22,7 +111,7 @@
         usingDemoData: false,
         templates: [],
         zones: {},
-        activeCategory: 'shelves',
+        activeCategory: 'chargers',
         search: '',
         toolbarStatus: 'Recognition library ready',
         activeTemplateId: '',
@@ -68,6 +157,12 @@
 
     function normalizeCategory(raw) {
         const value = String(raw || '').trim().toLowerCase();
+        if (value === 'charger') return 'chargers';
+        if (value === 'battery') return 'batteries';
+        if (value === 'chargespot' || value === 'charge_spot') return 'chargespots';
+        if (value === 'leg') return 'legs';
+        if (value === 'tag') return 'tags';
+        if (value === 'polygon' || value === 'polygon_template') return 'polygons';
         if (value === 'shelf') return 'shelves';
         if (value === 'pallet') return 'pallets';
         if (value === 'dock') return 'docks';
@@ -77,7 +172,7 @@
 
     function normalizePointType(raw) {
         const value = String(raw || '').trim().toLowerCase();
-        if (['shelf', 'pallet', 'dock', 'fixture'].includes(value)) return value;
+        if (['charger', 'battery', 'chargespot', 'leg', 'tag', 'polygon', 'shelf', 'pallet', 'dock', 'fixture'].includes(value)) return value;
         return 'generic';
     }
 
@@ -129,6 +224,12 @@
     function buildDefaultTemplate(category = 'shelves', overrides = {}) {
         const normalizedCategory = normalizeCategory(category);
         const baseName = {
+            chargers: 'Charger Pile',
+            batteries: 'Battery Profile',
+            chargespots: 'Charge Spot',
+            legs: 'Human Leg',
+            tags: 'QR Tag',
+            polygons: 'Polygon Template',
             shelves: 'Shelf Std 1200',
             pallets: 'Pallet Euro Face',
             docks: 'Dock Gate Standard',
@@ -142,6 +243,12 @@
             name: baseName,
             category: normalizedCategory,
             geometry_type: {
+                chargers: 'charger_profile',
+                batteries: 'battery_profile',
+                chargespots: 'chargespot_profile',
+                legs: 'leg_profile',
+                tags: 'tag_profile',
+                polygons: 'polygon_profile',
                 shelves: 'shelf_profile',
                 pallets: 'pallet_profile',
                 docks: 'dock_profile',
@@ -151,32 +258,54 @@
             status: normalizedCategory === 'shelves' ? 'published' : 'draft',
             parent_template_id: '',
             dimensions: {
-                width: normalizedCategory === 'shelves' ? 1.20 : (normalizedCategory === 'pallets' ? 0.80 : 1.10),
-                depth: normalizedCategory === 'shelves' ? 0.92 : (normalizedCategory === 'pallets' ? 1.20 : 0.70),
-                height: normalizedCategory === 'shelves' ? 0.35 : 0.0,
-                opening_width: normalizedCategory === 'shelves' ? 0.96 : 0.74,
-                capture_depth: normalizedCategory === 'shelves' ? 0.72 : 0.64,
+                width: ({
+                    chargers: 0.10,
+                    batteries: 0.60,
+                    chargespots: 0.60,
+                    legs: 0.20,
+                    tags: 0.20,
+                    polygons: 1.00,
+                    shelves: 1.20,
+                    pallets: 0.80,
+                    docks: 1.10,
+                    fixtures: 1.10,
+                })[normalizedCategory] || 1.0,
+                depth: ({
+                    chargers: 0.10,
+                    batteries: 0.30,
+                    chargespots: 0.30,
+                    legs: 0.20,
+                    tags: 0.20,
+                    polygons: 1.00,
+                    shelves: 0.92,
+                    pallets: 1.20,
+                    docks: 0.70,
+                    fixtures: 0.70,
+                })[normalizedCategory] || 1.0,
+                height: normalizedCategory === 'shelves' ? 0.35 : (normalizedCategory === 'pallets' ? 0.15 : 0.0),
+                opening_width: normalizedCategory === 'shelves' ? 0.96 : (normalizedCategory === 'pallets' ? 0.74 : 0.20),
+                capture_depth: normalizedCategory === 'shelves' ? 0.72 : (normalizedCategory === 'pallets' ? 0.64 : 0.20),
                 clearance: 0.08,
             },
             geometry: {
-                points: [
+                points: normalizedCategory === 'polygons' ? [] : [
                     { id: 'entry_left', name: 'Entry Left', x: -0.48, y: -0.36, required: true, kind: 'endpoint' },
                     { id: 'entry_right', name: 'Entry Right', x: 0.48, y: -0.36, required: true, kind: 'endpoint' },
                     { id: 'rear_left', name: 'Rear Left', x: -0.48, y: 0.36, required: false, kind: 'anchor' },
                     { id: 'rear_right', name: 'Rear Right', x: 0.48, y: 0.36, required: false, kind: 'anchor' },
                     { id: 'center', name: 'Center', x: 0.0, y: 0.0, required: true, kind: 'center' },
                 ],
-                segments: [
+                segments: normalizedCategory === 'polygons' ? [] : [
                     { id: 'front_span', start: 'entry_left', end: 'entry_right', role: 'opening', distance: 0.96 },
                 ],
-                rectangles: [
+                rectangles: normalizedCategory === 'polygons' ? [] : [
                     { id: 'capture_zone', role: 'capture_zone', x: -0.60, y: -0.46, width: 1.20, height: 0.92 },
                 ],
-                annotations: [
+                annotations: normalizedCategory === 'polygons' ? [] : [
                     { id: 'centerline', type: 'centerline', x1: 0.0, y1: -0.46, x2: 0.0, y2: 0.46 },
                 ],
             },
-            constraints: [
+            constraints: normalizedCategory === 'polygons' ? [] : [
                 { id: 'opening_width', type: 'distance', target: 'front_span', value: 0.96, label: 'Opening width', required: true },
                 { id: 'center_lock', type: 'center_lock', target: 'center', label: 'Center lock', required: true },
             ],
@@ -189,6 +318,7 @@
             usage: [],
             usage_count: 0,
             notes: '',
+            metadata: buildDefaultMetadata(normalizedCategory),
         };
         const merged = { ...defaults, ...clone(overrides) };
         if (overrides && typeof overrides === 'object') {
@@ -209,8 +339,87 @@
             if (Array.isArray(overrides.constraints)) {
                 merged.constraints = clone(overrides.constraints);
             }
+            if (overrides.metadata && typeof overrides.metadata === 'object') {
+                merged.metadata = { ...defaults.metadata, ...clone(overrides.metadata) };
+            }
         }
         return merged;
+    }
+
+    function buildDefaultMetadata(category = 'shelves') {
+        const normalizedCategory = normalizeCategory(category);
+        const defaults = {
+            chargers: {
+                device_name: 'charger_default',
+                minwidth: 0.04,
+                maxwidth: 0.10,
+                dx: 0.0,
+                dy: 0.0,
+            },
+            batteries: {
+                device_name: 'battery_default',
+                backLength: 0.0,
+                aheadLength: 0.0,
+                upHeight: 0.0,
+                recHeightTor: 0.0,
+                goLateralDist: 0.0,
+                maxAdjustTime: 0.0,
+            },
+            chargespots: {
+                device_name: 'chargespot_default',
+                ip: '',
+                port: 0,
+            },
+            legs: {
+                minwidth: 0.05,
+                maxwidth: 0.20,
+                maxdistance: 0.50,
+                method_type: 'by_legshape',
+            },
+            shelves: {
+                leg_width: 0.05,
+                align_depth: 0.0,
+                anti_align_depth: 0.0,
+                y_align_depth: 0.0,
+                y_anti_align_depth: 0.0,
+                rec_off_x: 0.0,
+                rec_off_y: 0.0,
+                rec_off_angle: 0.0,
+                outer_width: 0.0,
+                outer_length: 0.0,
+                extra_dist: 0.0,
+                continue_detect: true,
+                side_block: false,
+                detect_direction: 'x',
+                leg_type: 'cube',
+                method_type: 'by_reflector',
+            },
+            pallets: {
+                pallet_width: 1.20,
+                pallet_height: 0.15,
+                pallet_length: 1.00,
+                block_laser: true,
+                pocket_width: 0.30,
+                pocket_height: 0.10,
+                pocket_spacing: 0.30,
+                in_global_framework: false,
+            },
+            tags: {
+                X_Dis: 0.0,
+                Y_Dis: 0.0,
+                Z_Dis: 0.0,
+                goodsWidth: 1.0,
+                goodsLength: 1.0,
+                tagDistance: 0.5,
+                tagSize: 0.05,
+                Tagtype: 'aruco',
+            },
+            polygons: {
+                points: [],
+                image_path: '',
+            },
+        };
+        return clone(defaults[normalizedCategory] || {});
     }
 
     function normalizeTemplate(rawTemplate, existingTemplate = null) {
@@ -246,6 +455,10 @@
         template.usage = Array.isArray(template.usage) ? template.usage : [];
         template.usage_count = Number(template.usage_count) || template.usage.length || 0;
         template.notes = String(template.notes || '').trim();
+        template.metadata = {
+            ...buildDefaultMetadata(template.category),
+            ...(template.metadata && typeof template.metadata === 'object' ? template.metadata : {}),
+        };
         template.validation = validateTemplate(template);
         return template;
     }
@@ -338,6 +551,17 @@
     }
 
     function buildDemoTemplates() {
+        const charger = buildDefaultTemplate('chargers', {
+            template_id: 'chargers_charger_pile__v1',
+            family_key: 'chargers_charger_pile',
+            name: 'Charger Pile',
+            status: 'published',
+            usage_count: 1,
+            usage: [
+                { zone_name: 'CHARGE_A', action_id: 'dock', point_type: 'charger', recognize: true },
+            ],
+            notes: 'Reference charger profile for dock-in alignment.',
+        });
         const shelf = buildDefaultTemplate('shelves', {
             status: 'published',
             usage_count: 3,
@@ -409,6 +633,26 @@
             usage: [],
             notes: 'Prepared for future pallet-aware pick and drop stations.',
         });
+        const tag = buildDefaultTemplate('tags', {
+            template_id: 'tags_qr_tag__v1',
+            family_key: 'tags_qr_tag',
+            name: 'QR Tag',
+            status: 'draft',
+            usage_count: 1,
+            usage: [
+                { zone_name: 'TAG_PICKUP_01', action_id: 'locate', point_type: 'tag', recognize: true },
+            ],
+            notes: 'Default QR tag template for precise localization.',
+        });
+        const polygon = buildDefaultTemplate('polygons', {
+            template_id: 'polygons_polygon_template__v1',
+            family_key: 'polygons_polygon_template',
+            name: 'Polygon Template',
+            status: 'draft',
+            usage_count: 0,
+            usage: [],
+            notes: 'Use point and segment tools to trace polygon recognition assets.',
+        });
         const dock = buildDefaultTemplate('docks', {
             template_id: 'docks_dock_gate_standard__v1',
             family_key: 'docks_dock_gate_standard',
@@ -432,7 +676,7 @@
             usage_count: 0,
             usage: [],
         });
-        return [shelf, shelfCompact, pallet, dock, fixture].map((item) => normalizeTemplate(item));
+        return [charger, shelf, shelfCompact, pallet, tag, polygon, dock, fixture].map((item) => normalizeTemplate(item));
     }
 
     function getStageElement() {
@@ -978,39 +1222,6 @@
     }
 
     function renderTopToolbar() {
-        const template = getActiveTemplate();
-        const card = document.getElementById('recognition-toolbar-card');
-        if (card) {
-            if (!template) {
-                card.innerHTML = '<i class="fas fa-eye"></i><div class="recognition-toolbar-card-meta"><span class="recognition-toolbar-card-title">No template</span><span class="recognition-toolbar-card-sub">Create or select a recognition asset</span></div>';
-            } else {
-                const validation = template.validation || { summary: {} };
-                const summary = validation.summary || {};
-                const validationChip = summary.errors > 0
-                    ? `<span class="recognition-toolbar-chip error">${summary.errors} error${summary.errors === 1 ? '' : 's'}</span>`
-                    : (summary.warnings > 0
-                        ? `<span class="recognition-toolbar-chip warn">${summary.warnings} warn${summary.warnings === 1 ? '' : 's'}</span>`
-                        : '<span class="recognition-toolbar-chip success">ready</span>');
-                const usageCount = Number(template.usage_count) || getCurrentTemplateUsage().length || 0;
-                const savedLabel = isLocalTemplate(template)
-                    ? 'Local draft'
-                    : `Saved ${safeHtml(formatSavedLabel(template.updated_at))}`;
-                card.innerHTML = `
-                    <i class="${CATEGORY_META[normalizeCategory(template.category)].icon}"></i>
-                    <div class="recognition-toolbar-card-meta">
-                        <span class="recognition-toolbar-card-title">${safeHtml(template.name)}</span>
-                        <span class="recognition-toolbar-card-sub">
-                            <span>${safeHtml(CATEGORY_META[normalizeCategory(template.category)].singular)}</span>
-                            <span>v${Number(template.version || 1)}</span>
-                            <span class="recognition-toolbar-chip ${template.status === 'published' ? 'success' : (template.status === 'deprecated' ? 'error' : '')}">${safeHtml(template.status || 'draft')}</span>
-                            <span>${usageCount} use${usageCount === 1 ? '' : 's'}</span>
-                            <span>${savedLabel}</span>
-                            ${validationChip}
-                        </span>
-                    </div>
-                `;
-            }
-        }
         setToolbarStatus(state.toolbarStatus);
     }
 
@@ -1244,6 +1455,20 @@
                             </div>
                         </div>
                     </div>
+                    ${(() => {
+                        const metadataFields = RECOGNITION_METADATA_FIELDS[normalizeCategory(template.category)] || [];
+                        if (!metadataFields.length) return '';
+                        return `
+                            <div class="rcg-inspector-card">
+                                <div class="rcg-card-kicker">Category Parameters</div>
+                                <div class="rcg-card-title">${safeHtml(CATEGORY_META[normalizeCategory(template.category)].singular)} Metadata</div>
+                                <div class="rcg-pane-subtitle">Saved with the recognition template and used by runtime solve logic.</div>
+                                <div class="rcg-form-grid">
+                                    ${metadataFields.map((field) => renderMetadataField(template, field)).join('')}
+                                </div>
+                            </div>
+                        `;
+                    })()}
                 </div>
             `;
         } else if (state.inspectorTab === 'geometry') {
@@ -1444,6 +1669,44 @@
         }
     }
 
+    function renderMetadataField(template, field) {
+        const metadata = template && template.metadata && typeof template.metadata === 'object' ? template.metadata : {};
+        const key = String(field.path || '').split('.').slice(1).join('.');
+        const value = metadata[key];
+        if (field.type === 'checkbox') {
+            return `
+                <div class="rcg-form-field">
+                    <label>${safeHtml(field.label)}</label>
+                    <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:11px;">
+                        <input type="checkbox" ${value ? 'checked' : ''} onchange="recognitionUpdateTemplateField('${safeHtml(field.path)}', this.checked)">
+                        Enabled
+                    </label>
+                </div>
+            `;
+        }
+        if (field.type === 'select') {
+            return `
+                <div class="rcg-form-field">
+                    <label>${safeHtml(field.label)}</label>
+                    <select class="rcg-form-select" onchange="recognitionUpdateTemplateField('${safeHtml(field.path)}', this.value)">
+                        ${(field.options || []).map((option) => `<option value="${safeHtml(option.value)}"${String(value) === String(option.value) ? ' selected' : ''}>${safeHtml(option.label)}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+        }
+        const inputType = field.type === 'number' ? 'number' : 'text';
+        const inputValue = field.type === 'number'
+            ? (Number.isFinite(Number(value)) ? String(value) : '0')
+            : String(value ?? '');
+        const stepAttr = field.type === 'number' && field.step ? ` step="${safeHtml(field.step)}"` : '';
+        return `
+            <div class="rcg-form-field">
+                <label>${safeHtml(field.label)}</label>
+                <input class="rcg-form-input" type="${inputType}"${stepAttr} value="${safeHtml(inputValue)}" oninput="recognitionUpdateTemplateField('${safeHtml(field.path)}', this.value)">
+            </div>
+        `;
+    }
+
     function renderRecognition() {
         renderTopToolbar();
         renderLibrary();
@@ -1456,7 +1719,7 @@
 
     function bindToolbarButtons() {
         document.querySelectorAll('[data-rcg-category]').forEach((button) => {
-            button.classList.toggle('active', String(button.getAttribute('data-rcg-category') || '') === state.activeCategory);
+            button.classList.toggle('active', normalizeCategory(String(button.getAttribute('data-rcg-category') || '')) === state.activeCategory);
         });
         document.querySelectorAll('[data-rcg-inspector-tab]').forEach((button) => {
             button.classList.toggle('active', String(button.getAttribute('data-rcg-inspector-tab') || '') === state.inspectorTab);
@@ -1743,6 +2006,15 @@
         });
     }
 
+    function syncInspectorCollapsedState() {
+        const grid = document.getElementById('recognition-body');
+        const toggle = document.getElementById('recognition-inspector-toggle');
+        if (!grid || !toggle) return;
+        grid.classList.toggle('rcg-inspector-collapsed', !!state.inspectorCollapsed);
+        toggle.title = state.inspectorCollapsed ? 'Expand inspector' : 'Collapse inspector';
+        toggle.setAttribute('aria-expanded', String(!state.inspectorCollapsed));
+    }
+
     function bindLibraryResizer() {
         const handle = document.getElementById('recognition-library-resizer');
         const grid = document.getElementById('recognition-body');
@@ -1822,6 +2094,12 @@
         state.domBound = true;
         bindLibraryResizer();
         bindInspectorResizer();
+        try {
+            state.inspectorCollapsed = localStorage.getItem('recognitionInspectorCollapsed') === '1';
+        } catch (_) {
+            state.inspectorCollapsed = false;
+        }
+        syncInspectorCollapsedState();
         const stage = getStageElement();
         if (stage) {
             stage.addEventListener('pointerdown', pointerDown);
@@ -2143,6 +2421,11 @@
         createLocalTemplate(category || state.activeCategory);
         setToolbarStatus('New draft created');
     };
+    window.recognitionLoadLibrary = async function recognitionLoadLibrary() {
+        await loadRecognitionData({ force: true });
+        renderRecognition();
+        setToolbarStatus('Recognition library reloaded');
+    };
     window.recognitionDuplicateActive = async function recognitionDuplicateActive(optionalTemplateId) {
         const sourceId = String(optionalTemplateId || (state.editorTemplate && state.editorTemplate.template_id) || '').trim();
         if (!sourceId) {
@@ -2184,6 +2467,12 @@
                 window.showStatus(`Failed to duplicate template: ${error.message || error}`, 'error');
             }
         }
+    };
+    window.recognitionSaveAll = async function recognitionSaveAll() {
+        await window.recognitionSaveDraft();
+    };
+    window.recognitionSaveAs = async function recognitionSaveAs() {
+        await window.recognitionDuplicateActive();
     };
     window.recognitionCopyGeometry = function recognitionCopyGeometry(optionalTemplateId) {
         const source = optionalTemplateId
@@ -2433,6 +2722,14 @@
         state.history.push(clone(next));
         restoreFromHistory(next);
     };
+    window.recognitionHelp = function recognitionHelp() {
+        state.inspectorCollapsed = false;
+        syncInspectorCollapsedState();
+        state.inspectorTab = 'usage';
+        renderRecognition();
+        bindToolbarButtons();
+        setToolbarStatus('Recognition guidance opened');
+    };
     window.recognitionDeleteSelection = deleteSelection;
     window.recognitionUpdateTemplateField = function recognitionUpdateTemplateField(path, rawValue) {
         const template = ensureActiveTemplate();
@@ -2447,6 +2744,19 @@
         } else if (path.startsWith('dimensions.')) {
             const key = path.split('.')[1];
             template.dimensions[key] = Number(value);
+        } else if (path.startsWith('metadata.')) {
+            const key = path.split('.')[1];
+            if (!template.metadata || typeof template.metadata !== 'object') {
+                template.metadata = buildDefaultMetadata(template.category);
+            }
+            if (typeof value === 'boolean') {
+                template.metadata[key] = value;
+            } else if (value === '' || value === null || value === undefined) {
+                template.metadata[key] = '';
+            } else {
+                const parsed = Number(value);
+                template.metadata[key] = Number.isFinite(parsed) && String(value).trim() !== '' ? parsed : String(value);
+            }
         } else if (path === 'notes') {
             template.notes = String(value || '');
         }
@@ -2547,13 +2857,21 @@
             return;
         }
         const rect = button.getBoundingClientRect();
-        menu.style.left = `${Math.min(rect.left, window.innerWidth - 240)}px`;
+        const menuWidth = Math.min(260, Math.max(220, menu.offsetWidth || 240));
+        menu.style.left = `${Math.max(8, rect.right - menuWidth)}px`;
         menu.style.top = `${rect.bottom + 6}px`;
         menu.classList.add('open');
     };
     window.recognitionCloseMenus = function recognitionCloseMenus() {
         const menu = document.getElementById('recognition-overflow-menu');
         if (menu) menu.classList.remove('open');
+    };
+    window.recognitionToggleInspector = function recognitionToggleInspector() {
+        state.inspectorCollapsed = !state.inspectorCollapsed;
+        try {
+            localStorage.setItem('recognitionInspectorCollapsed', state.inspectorCollapsed ? '1' : '0');
+        } catch (_) { /* ignore */ }
+        syncInspectorCollapsedState();
     };
     window.recognitionGetActionPointPayloadFromForm = getActionPointPayloadFromForm;
     window.recognitionRefreshActionPointForm = refreshActionPointForm;

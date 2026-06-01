@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -208,6 +209,78 @@ def _capture_camera_frame(source_path: str) -> bytes:
 def _json_body() -> Dict[str, Any]:
     data = request.get_json(force=True, silent=True)
     return data if isinstance(data, dict) else {}
+
+
+def _unique_text_values(values: List[str]) -> List[str]:
+    result: List[str] = []
+    seen = set()
+    for value in values:
+        text = str(value or '').strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+@functools.lru_cache(maxsize=1)
+def _detect_server_ipv4_hosts() -> List[str]:
+    hosts: List[str] = []
+
+    try:
+        output = subprocess.check_output(['hostname', '-I'], text=True, timeout=1.5)
+        hosts.extend(output.split())
+    except Exception:
+        pass
+
+    try:
+        _, _, addr_list = socket.gethostbyname_ex(socket.gethostname())
+        hosts.extend(addr_list)
+    except Exception:
+        pass
+
+    return _unique_text_values(hosts)
+
+
+def _rosbridge_url_candidates_for_request() -> List[str]:
+    explicit_urls = _unique_text_values(
+        re.split(r'[\s,]+', str(os.getenv('NEXT_UI_ROSBRIDGE_URLS', '') or '').strip())
+    )
+    if explicit_urls:
+        return explicit_urls
+
+    scheme = 'wss' if request.is_secure else 'ws'
+    port = str(os.getenv('NEXT_UI_ROSBRIDGE_PORT', '9090') or '9090').strip() or '9090'
+    env_hosts = _unique_text_values(
+        re.split(r'[\s,]+', str(os.getenv('NEXT_UI_ROSBRIDGE_HOSTS', '') or '').strip())
+    )
+
+    request_hosts: List[str] = []
+    for raw_host in (
+        request.headers.get('X-Forwarded-Host', ''),
+        request.host,
+        request.host.split(':', 1)[0] if request.host else '',
+    ):
+        host = str(raw_host or '').strip()
+        if not host:
+            continue
+        if ',' in host:
+            request_hosts.extend(part.strip() for part in host.split(','))
+            continue
+        request_hosts.append(host)
+
+    normalized_hosts: List[str] = []
+    for host in request_hosts + env_hosts + _detect_server_ipv4_hosts() + ['localhost', '127.0.0.1']:
+        text = str(host or '').strip()
+        if not text:
+            continue
+        if text.startswith('[') and ']' in text:
+            text = text[1:text.index(']')]
+        elif text.count(':') == 1 and text.replace(':', '').replace('.', '').isalnum():
+            text = text.split(':', 1)[0]
+        normalized_hosts.append(text)
+
+    return [f'{scheme}://{host}:{port}' for host in _unique_text_values(normalized_hosts)]
 
 
 def _as_bool(value: Any, default: bool = False) -> bool:
@@ -617,7 +690,13 @@ def next_robotics_footer():
 def index():
     role = _current_role_name()
     if _role_can_access_admin(role):
-        return render_template('index.html', user_page=False, current_role=role, current_user=_current_user_name())
+        return render_template(
+            'index.html',
+            user_page=False,
+            current_role=role,
+            current_user=_current_user_name(),
+            rosbridge_url_candidates=_rosbridge_url_candidates_for_request(),
+        )
     return _render_access_portal(
         error='Admin access is required for the full control workspace.',
         selected_target='admin',
@@ -688,6 +767,7 @@ def operator_ui():
         user_page=True,
         current_role=_current_role_name(),
         current_user=_current_user_name(),
+        rosbridge_url_candidates=_rosbridge_url_candidates_for_request(),
     )
 
 

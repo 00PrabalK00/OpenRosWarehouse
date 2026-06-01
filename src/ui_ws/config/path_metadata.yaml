@@ -18,6 +18,8 @@ Main:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs: {}
     has_curves: false
 back:
@@ -34,6 +36,8 @@ back:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs: {}
     has_curves: false
 zlef:
@@ -56,6 +60,8 @@ zlef:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs:
       '1':
         direction: bi
@@ -86,6 +92,8 @@ zelf multiple:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs: {}
     has_curves: false
 new:
@@ -120,6 +128,8 @@ new:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs: {}
     has_curves: false
 innershelf:
@@ -139,6 +149,8 @@ innershelf:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs: {}
     has_curves: false
 zelfy:
@@ -167,6 +179,8 @@ zelfy:
     curved_segments: []
     curved_segment_controls: {}
     direction: uni
+    road_width: 0.0
+    description: ''
     segment_attrs: {}
     has_curves: false
 FullRun:
@@ -198,12 +212,22 @@ FullRun:
   settings:
     loop_type: closed
     loop_mode: true
-    curved_segments: []
-    curved_segment_controls: {}
-    direction: uni
+    curved_segments:
+    - 1
+    curved_segment_controls:
+      '1':
+      - x: 7.212584
+        y: 8.693443
+      - x: 9.270168
+        y: 9.702451
+      - x: 11.377214
+        y: 9.009995
+    direction: bi
+    road_width: 0.0
+    description: ''
     segment_attrs:
       '1':
         direction: bi
       '2':
         maxspeed: 0.3
-    has_curves: false
+    has_curves: true

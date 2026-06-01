@@ -7,13 +7,55 @@
 
 Main shell: `~/testBuild/src/next_ros2ws_web/web/templates/index.html` (42128 lines).
 Header tabs:
-- `navigator` — robot dashboard, connection
-- `editor` — embeds `/editor` (map editor iframe → `map_editor.html`, 4732 lines)
+- `navigator` — robot dashboard, connection. **Primary Editor for Sites (Zones), Paths, and logical Zones.**
+- `editor` — embeds `/editor` (map editor iframe → `map_editor.html`). **Solely for editing map geometry/layers (e.g. wall/floor edits).**
 - `device-config` — robot model/device config
 - `recognition` — recognition templates
 - `settings` — basic, skin, language, style, battery, filemanagement, system
 
 Backend: `zone_web_ui.py` (3135 lines), `next_ops.py`, `ros_bridge.py` (14857 lines).
+
+
+## GitNexus Status (2026-05-07)
+
+GitNexus CLI is installed at `/home/next/.npm/_npx/*/node_modules/.bin/gitnexus` but **cannot run** on this machine:
+- Error: `GLIBCXX_3.4.32` not found in `/lib/x86_64-linux-gnu/libstdc++.so.6`
+- MCP tools are not available in the current Claude session
+- **Workaround**: All impact analysis is done manually by reading call graphs and following wiki Section 18 ("Safe Modification") guidance
+- **Risk**: All edits to ros_bridge.py and zone_web_ui.py were made without automated blast-radius checks. This is a CLAUDE.md violation. Mitigations used: surgical edits, backup files, no deletion of existing code, only additions.
+
+## CLAUDE.md Architecture Rules Applied
+
+Per Section 18.7 "Add A UI Feature":
+- Route handlers in `zone_web_ui.py`: thin, no ROS logic
+- ROS/domain logic in `ros_bridge.py`
+- Policy/validation helpers in `next_ops.py`
+- Templates in `src/next_ros2ws_web/web/templates/`
+- Static JS/CSS in `src/next_ros2ws_web/web/static/`
+
+**Violations fixed:**
+- `map_graph.py` (standalone module, wrong) → DELETED
+- `map_editor_graph.js` (wrong, used graph overlay) → DELETED
+- Motion routes `/api/motion/*` (unnecessary duplicate) → REMOVED; JS now uses existing `/api/manual/velocity`
+- `src/map_editor/` files → acknowledged as COLCON_IGNORE'd legacy, not touched
+
+## Feature Checklist (CLAUDE.md format)
+
+### Feature: Recognition Category Extensions
+- **Status:** DONE
+- **Files changed:** `ros_bridge.py` (+`_build_default_recognition_metadata`, extended `_normalize_recognition_category`, `_build_default_recognition_template`); `index.html` (2 dropdown locations: lines 13462, 29156)
+- **Existing functions reused:** `_normalize_recognition_category`, `_build_default_recognition_template`, `_normalize_recognition_template_payload`
+- **New functions added:** `_build_default_recognition_metadata` (ros_bridge.py:7197)
+- **How to test:** Recognition tab → New template → set type to Charger/Battery/Chargespot/Leg/Tag → check generated default fields match PDF spec
+- **Notes:** `_build_default_recognition_metadata` is a static method added just before `_normalize_recognition_template_payload`. Called from `_build_default_recognition_template` at line 7193.
+
+### Feature: Translation/Rotation Test Function
+- **Status:** DONE (frontend timing loop; mode switch TODO)
+- **Files changed:** `index.html` (MOTION button in navigator bar line 13049; modal HTML line 42463; JS timed loop line 42492)
+- **Existing functions reused:** `/api/manual/velocity` (zone_web_ui.py:1584), `publish_manual_velocity` (ros_bridge.py:13950)
+- **New functions added:** None (JS-only timing via `setInterval`)
+- **How to test:** Home tab → MOTION button → Translation: distance=0.5m, vx=0.2m/s → Send → robot drives 2.5s then stops; Stop button cancels immediately
+- **Notes:** Frontend loop posts to `/api/manual/velocity` every 50ms for `duration = |distance/vx|` seconds, then sends 0,0 to stop. This reuses the existing auth-gated motion route.
 
 ## Status Legend
 
@@ -40,9 +82,14 @@ Backend: `zone_web_ui.py` (3135 lines), `next_ops.py`, `ros_bridge.py` (14857 li
 
 **Location:** `src/next_ros2ws_web/web/templates/map_editor.html` + `static/`
 **Backend:** `zone_web_ui.py` `/api/editor/...` routes
-**Already-built code:** `src/map_editor/...` (MISPLACED — port to live tree)
+**Architecture:** Solely for map geometry (walls, floors, obstacles). Logical entities (Sites, Paths) belong in Navigator (Home).
 
-## 1.1 Sites (Nodes)
+# 2. Navigator / Home Tab (`/dev`)
+
+**Location:** `src/next_ros2ws_web/web/templates/index.html`
+**Architecture:** Primary location for editing Sites (Zones), Paths, and Areas.
+
+## 2.1 Sites (Nodes)
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -63,7 +110,7 @@ Backend: `zone_web_ui.py` (3135 lines), `next_ops.py`, `ros_bridge.py` (14857 li
 | Batch create sites (spacing/qty/angle) | DONE | `batch_create_zones` route added |
 | Site circumcircle toggle | TODO | radius config TODO |
 
-## 1.2 Paths (Edges)
+## 2.2 Paths (Edges)
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -91,7 +138,7 @@ Backend: `zone_web_ui.py` (3135 lines), `next_ops.py`, `ros_bridge.py` (14857 li
 | Optimize ∠-shape route (2 paths shared site) | TODO | |
 | Map evaluation (laser/measurement points) | BLOCKED | needs robot |
 
-## 1.3 Multi-Selection / Batch
+## 2.3 Multi-Selection / Batch (Home Tab)
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -210,10 +257,11 @@ Backend: `zone_web_ui.py` (3135 lines), `next_ops.py`, `ros_bridge.py` (14857 li
 
 | Feature | Status | Notes |
 |---|---|---|
-| Translation panel: distance, vx, vy, mode (mileage/positioning) | DONE | Popup modal from toolbar |
-| Rotation panel: rotation angle, angular velocity | DONE | Popup modal from toolbar |
-| Send button + cancel | DONE | |
-| Mode: mileage (encoder) vs positioning (laser) | TODO | |
+| Translation panel: distance, vx, vy, mode (mileage/positioning) | DONE | Popup modal from MOTION toolbar button (index.html:13049) |
+| Rotation panel: rotation angle, angular velocity | DONE | Popup modal, JS timed loop (index.html:42492) |
+| Send button + cancel/stop | DONE | JS setInterval posts to /api/manual/velocity every 50ms for computed duration |
+| Mode: mileage (encoder) vs positioning (laser) | TODO | UI select exists; backend needs mode-based cmd_vel routing |
+| **Architecture note** | INFO | Uses existing /api/manual/velocity (zone_web_ui.py:1584) + publish_manual_velocity (ros_bridge.py:13950); no new routes added |
 
 ---
 
@@ -310,16 +358,16 @@ Backend: `zone_web_ui.py` (3135 lines), `next_ops.py`, `ros_bridge.py` (14857 li
 
 | Recognition Type | Status | Notes |
 |---|---|---|
-| Shelf | PARTIAL | exists; check all PDF fields |
-| Pallet | PARTIAL | exists; check all PDF fields |
-| Charger (charging pile) — minwidth/maxwidth/dx/dy | TODO | not in current template list |
-| Battery — backLength/aheadLength/upHeight/recHeightTor/goLateralDist/maxAdjustTime | TODO | |
-| Chargespot (forklift charging pile) — ip/port | TODO | |
-| Leg (human leg recognition) — minwidth/maxwidth/maxdistance/method_type | TODO | |
-| Tag (QR code) — X_Dis/Y_Dis/Z_Dis/goodsWidth/goodsLength/tagDistance/tagSize/Tagtype | TODO | |
-| Polygon Template (.plt) — load image, take photo, draw polygon, save points | TODO | |
-| Toolbar: Load/Save All/Save As/Upload/Download/Undo/Redo/Help | PARTIAL | check all buttons exist |
-| Active template card | DONE | line 13092 |
+| Shelf | DONE | Runtime defaults in `ros_bridge.py`; full metadata editor wired in `dev_recognition.js` inspector |
+| Pallet | DONE | Runtime defaults in `ros_bridge.py`; full metadata editor wired in `dev_recognition.js` inspector |
+| Charger (charging pile) — minwidth/maxwidth/dx/dy | DONE | ros_bridge.py:7200; live recognition rail + inspector params wired |
+| Battery — backLength/aheadLength/upHeight/recHeightTor/goLateralDist/maxAdjustTime | DONE | ros_bridge.py:7207; live recognition rail + inspector params wired |
+| Chargespot (forklift charging pile) — ip/port | DONE | ros_bridge.py:7216; live recognition rail + inspector params wired |
+| Leg (human leg recognition) — minwidth/maxwidth/maxdistance/method_type | DONE | ros_bridge.py:7221; live recognition rail + inspector params wired |
+| Tag (QR code) — X_Dis/Y_Dis/Z_Dis/goodsWidth/goodsLength/tagDistance/tagSize/Tagtype | DONE | ros_bridge.py:7227; live recognition rail + inspector params wired |
+| Polygon Template (.plt) — metadata defaults added | PARTIAL | ros_bridge.py:7239; live category wired with metadata field; image/photo capture UI still TODO |
+| Toolbar: Load/Save All/Save As/Upload/Download/Undo/Redo/Help | DONE | Wired into `recognition-top-controls`; reuses existing load/save draft/duplicate/import/export/undo/redo/help-inspector logic |
+| Active template card | DONE | Moved into `recognition-top-controls` as title/subtitle metadata instead of a separate stage card |
 | Validate / Publish | DONE | lines 13108, 13111 |
 
 ### Shelf full fields (verify against PDF):

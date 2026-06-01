@@ -595,8 +595,10 @@ class MapEditorManager(Node):
 
             dotted_result = self._ensure_dotted_truth(map_yaml_path, context='save current editor map')
             if not bool(dotted_result.get('ok')):
+                msg = str(dotted_result.get('message', 'Failed to prepare dotted truth map'))
+                self.get_logger().error(f'Save current map failed at dotted truth stage: {msg}')
                 response.ok = False
-                response.message = str(dotted_result.get('message', 'Failed to prepare dotted truth map'))
+                response.message = msg
                 response.map_yaml_path = ''
                 response.map_image_path = ''
                 return response
@@ -604,6 +606,7 @@ class MapEditorManager(Node):
             self._stage_map_yaml_path = os.path.abspath(map_yaml_path)
             self._save_stage_cache_locked()
 
+            self.get_logger().info(f'Map edits successfully saved to {map_yaml_path}')
             response.ok = True
             response.message = 'Map edits saved to active map'
             response.map_yaml_path = os.path.abspath(map_yaml_path)

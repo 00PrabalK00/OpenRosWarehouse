@@ -7295,6 +7295,12 @@ class RosBridge(Node):
                 merged = copy.deepcopy(base.get(key) if isinstance(base.get(key), dict) else {})
                 merged.update(copy.deepcopy(source.get(key)))
                 base[key] = merged
+        if isinstance(source.get('metadata'), dict):
+            merged_metadata = copy.deepcopy(base.get('metadata') if isinstance(base.get('metadata'), dict) else {})
+            merged_metadata.update(copy.deepcopy(source.get('metadata')))
+            base['metadata'] = merged_metadata
+        elif not isinstance(base.get('metadata'), dict):
+            base['metadata'] = copy.deepcopy(self._build_default_recognition_metadata(normalized_category))
 
         geometry = copy.deepcopy(base.get('geometry') if isinstance(base.get('geometry'), dict) else {})
         incoming_geometry = source.get('geometry') if isinstance(source.get('geometry'), dict) else {}
@@ -9237,6 +9243,75 @@ class RosBridge(Node):
 
         return sampled
 
+    def _build_path_execution_points(
+        self,
+        anchors: List[Dict[str, Any]],
+        *,
+        settings: Optional[Dict[str, Any]] = None,
+        curve_sample_count: int = 24,
+    ) -> List[Dict[str, Any]]:
+        """Sample Bezier curves into dense poses while preserving metadata for anchors.
+        
+        Transient sampled points will have NO metadata (no zone_name, etc.),
+        identifying them as tracking references for continuous motion.
+        """
+        if len(anchors) < 2:
+            return anchors
+
+        normalized_settings = self._normalize_path_settings(
+            settings or {},
+            point_count=len(anchors),
+        )
+        loop_type = str(normalized_settings.get('loop_type', 'none') or 'none')
+        closed_loop = loop_type == 'closed'
+        curved_segments = set(normalized_settings.get('curved_segments', []))
+        curved_controls = normalized_settings.get('curved_segment_controls', {})
+        segment_count = len(anchors) if closed_loop else (len(anchors) - 1)
+
+        sampled: List[Dict[str, Any]] = [dict(anchors[0])]
+        sample_count = max(2, int(curve_sample_count or 24))
+
+        for segment_idx in range(segment_count):
+            start = anchors[segment_idx]
+            end = anchors[0] if (closed_loop and segment_idx == len(anchors) - 1) else anchors[segment_idx + 1]
+
+            if segment_idx not in curved_segments:
+                sampled.append(dict(end))
+                continue
+
+            controls_raw = curved_controls.get(str(segment_idx), [])
+            controls = []
+            if isinstance(controls_raw, list):
+                for entry in controls_raw:
+                    try:
+                        controls.append({
+                            'x': float(entry.get('x', 0.0)),
+                            'y': float(entry.get('y', 0.0)),
+                        })
+                    except Exception:
+                        continue
+
+            if not controls:
+                controls = [{
+                    'x': (float(start['x']) + float(end['x'])) / 2.0,
+                    'y': (float(start['y']) + float(end['y'])) / 2.0,
+                }]
+
+            nodes = [start, *controls, end]
+            for sample_idx in range(1, sample_count):
+                point_xy = self._bezier_point_xy(nodes, sample_idx / sample_count)
+                if point_xy:
+                    # Transient point: only geometry, no metadata.
+                    sampled.append({
+                        'x': float(point_xy['x']),
+                        'y': float(point_xy['y']),
+                    })
+            
+            # Finally add the end anchor with its full metadata
+            sampled.append(dict(end))
+
+        return sampled
+
     def _compute_path_length_m(self, points: Any, *, settings: Optional[Dict[str, Any]] = None) -> float:
         sampled_points = self._build_path_metric_points(points, settings=settings)
         if len(sampled_points) < 2:
@@ -9997,9 +10072,18 @@ class RosBridge(Node):
         self._loop_retry_fail_streak = 0
         self._loop_display_waypoint_count = len(points) if self._loop_enabled else 0
 
-        execution_points = list(points)
+        # Sample Bezier curves into dense transient waypoints before execution.
+        # If the loop is 'closed', we first remove any explicit closure duplicate
+        # from the anchors so that _build_path_execution_points can generate 
+        # the closing edge samples correctly.
+        sampling_anchors = list(points)
+        if requested_loop_type == 'closed':
+            sampling_anchors = self._prepare_loop_execution_points(sampling_anchors)
+
+        execution_points = self._build_path_execution_points(sampling_anchors, settings=settings)
+        
         if self._loop_enabled:
-            execution_points = self._prepare_loop_execution_points(points)
+            execution_points = self._prepare_loop_execution_points(execution_points)
             if len(execution_points) < 2:
                 self._loop_enabled = False
                 self._loop_type = 'none'
@@ -10131,12 +10215,15 @@ class RosBridge(Node):
         points = self._parse_path_points(path_points)
         if len(points) < 2:
             return self._ok(False, 'Path must have at least 2 points')
-    
+
+        # Sample Bezier curves into dense points before saving so that the 
+        # database contains the actual intended geometry.
+        execution_points = self._build_path_execution_points(points, settings=settings)
+
         req = SavePath.Request()
         req.name = path_name
-        req.x_coords = [float(point.get('x', 0.0)) for point in points]
-        req.y_coords = [float(point.get('y', 0.0)) for point in points]
-    
+        req.x_coords = [float(point.get('x', 0.0)) for point in execution_points]
+        req.y_coords = [float(point.get('y', 0.0)) for point in execution_points]
         response, err = self._call_service(self.save_path_client, req, wait_timeout=1.0, response_timeout=6.0)
         if err == 'service_not_available':
             return self._ok(False, 'SavePath service not available')
@@ -10542,7 +10629,7 @@ class RosBridge(Node):
                 except (TypeError, ValueError):
                     continue
 
-        response, err = self._call_service(self.editor_overwrite_client, req, wait_timeout=1.0, response_timeout=5.0)
+        response, err = self._call_service(self.editor_overwrite_client, req, wait_timeout=1.0, response_timeout=30.0)
         if err == 'service_not_available':
             return self._ok(False, 'MapEditorManager overwrite service not available')
         if err == 'timeout':
@@ -10553,7 +10640,7 @@ class RosBridge(Node):
 
     def save_current_editor_map(self):
         req = SaveCurrentMap.Request()
-        response, err = self._call_service(self.editor_save_current_client, req, wait_timeout=1.0, response_timeout=8.0)
+        response, err = self._call_service(self.editor_save_current_client, req, wait_timeout=1.0, response_timeout=60.0)
         if err == 'service_not_available':
             return self._ok(False, 'MapEditorManager save_current service not available')
         if err == 'timeout':
@@ -10571,7 +10658,7 @@ class RosBridge(Node):
 
     def reload_editor_map(self):
         req = ReloadEditorMap.Request()
-        response, err = self._call_service(self.editor_reload_client, req, wait_timeout=1.0, response_timeout=6.0)
+        response, err = self._call_service(self.editor_reload_client, req, wait_timeout=1.0, response_timeout=30.0)
         if err == 'service_not_available':
             return self._ok(False, 'MapEditorManager reload service not available')
         if err == 'timeout':
@@ -10594,7 +10681,7 @@ class RosBridge(Node):
     def export_editor_map(self, map_name: str):
         req = ExportEditorMap.Request()
         req.map_name = str(map_name or '').strip()
-        response, err = self._call_service(self.editor_export_client, req, wait_timeout=1.0, response_timeout=8.0)
+        response, err = self._call_service(self.editor_export_client, req, wait_timeout=1.0, response_timeout=60.0)
         if err == 'service_not_available':
             return self._ok(False, 'MapEditorManager export service not available')
         if err == 'timeout':
@@ -14195,7 +14282,7 @@ class RosBridge(Node):
         req.yaml_content = str(yaml_content or '')
         req.pgm_base64 = str(pgm_b64 or '')
 
-        response, err = self._call_service(self.upload_map_client, req, wait_timeout=2.0, response_timeout=12.0)
+        response, err = self._call_service(self.upload_map_client, req, wait_timeout=2.0, response_timeout=30.0)
         if err == 'service_not_available':
             return self._ok(False, 'Map upload service not available')
         if err == 'timeout':
@@ -14214,7 +14301,7 @@ class RosBridge(Node):
         req = SetActiveMap.Request()
         req.map_yaml_path = str(map_yaml_path or '')
 
-        response, err = self._call_service(self.set_active_map_client, req, wait_timeout=2.0, response_timeout=10.0)
+        response, err = self._call_service(self.set_active_map_client, req, wait_timeout=2.0, response_timeout=30.0)
         if err == 'service_not_available':
             return self._ok(False, 'Set active map service not available')
         if err == 'timeout':
@@ -14252,7 +14339,7 @@ class RosBridge(Node):
 
     def get_active_map(self):
         req = GetActiveMap.Request()
-        response, err = self._call_service(self.get_active_map_client, req, wait_timeout=1.0, response_timeout=4.0)
+        response, err = self._call_service(self.get_active_map_client, req, wait_timeout=1.0, response_timeout=10.0)
         if err == 'service_not_available':
             return self._ok(False, 'Get active map service not available')
         if err == 'timeout':
@@ -14338,7 +14425,7 @@ class RosBridge(Node):
         req = SlamSaveMap.Request()
         req.name.data = map_base
 
-        response, err = self._call_service(self.slam_save_map_client, req, wait_timeout=2.0, response_timeout=12.0)
+        response, err = self._call_service(self.slam_save_map_client, req, wait_timeout=2.0, response_timeout=30.0)
         if err == 'service_not_available':
             return self._ok(False, 'slam_toolbox save_map service not available')
         if err == 'timeout':
