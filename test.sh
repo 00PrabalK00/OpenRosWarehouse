@@ -73,4 +73,35 @@ set -u
 
 strip_blocked_overlay "$BLOCKED_OVERLAY_ROOT"
 
+# Start the standalone PGV reader (Pepperl+Fuchs R3138 over RS-485).
+# Backgrounded so it does not block the foreground ros2 launch. It is not part
+# of the bringup launch graph on purpose - the package is standalone. If the
+# serial device is absent the node just retries, so launch is always safe.
+PGV_PORT="${PGV_PORT:-/dev/next/pgv}"
+PGV_POLL_HZ="${PGV_POLL_HZ:-1.0}"
+PGV_LOG="${PGV_LOG:-$WORKSPACE_ROOT/pgv_reader.log}"
+if [[ "${NEXT_LAUNCH_PGV:-1}" != "0" ]]; then
+  echo "[test.sh] Launching PGV reader on $PGV_PORT @ ${PGV_POLL_HZ} Hz (log: $PGV_LOG)"
+  nohup ros2 run next_ros2ws_pgv pgv_reader \
+    --ros-args -p "port:=$PGV_PORT" -p "poll_hz:=$PGV_POLL_HZ" \
+    >"$PGV_LOG" 2>&1 &
+else
+  echo "[test.sh] NEXT_LAUNCH_PGV=0; skipping PGV reader launch."
+fi
+
+# Start Node-RED (workflows UI on :1880) unless something already listens there.
+# Backgrounded so the foreground ros2 launch below stays the main process.
+NODE_RED_PORT="${NODE_RED_PORT:-1880}"
+NODE_RED_LOG="${NODE_RED_LOG:-$WORKSPACE_ROOT/node-red.log}"
+if command -v node-red >/dev/null 2>&1; then
+  if ss -ltnH "sport = :$NODE_RED_PORT" 2>/dev/null | grep -q ":$NODE_RED_PORT"; then
+    echo "[test.sh] Node-RED already running on :$NODE_RED_PORT; skipping launch."
+  else
+    echo "[test.sh] Launching Node-RED on :$NODE_RED_PORT (log: $NODE_RED_LOG)"
+    nohup node-red -p "$NODE_RED_PORT" >"$NODE_RED_LOG" 2>&1 &
+  fi
+else
+  echo "[test.sh] node-red not found on PATH; skipping Node-RED launch." >&2
+fi
+
 exec ros2 launch ugv_bringup zone_nav_ui.launch.py
