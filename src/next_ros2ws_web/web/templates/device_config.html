@@ -8,6 +8,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
   <style>
     /* Global Custom Scrollbar for Dark UI */
     ::-webkit-scrollbar {
@@ -304,6 +306,14 @@
       display: flex; align-items: center; gap: 1px;
       background: var(--bg-canvas); border: 1px solid var(--border-chrome); border-radius: 4px; padding: 2px;
     }
+    .cvs-layer-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-field-label);
+      margin-left: 4px;
+    }
     .cvs-view-btn {
       height: 24px; padding: 0 10px; border-radius: 2px; border: none; background: transparent;
       font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
@@ -332,6 +342,46 @@
     #robot-svg {
       position: absolute; inset: 0; width: 100%; height: 100%;
       overflow: visible;
+    }
+    #robot-3d-view {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow: hidden;
+    }
+    #robot-3d-view.active {
+      display: block;
+    }
+    #robot-3d-view canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      cursor: grab;
+    }
+    #robot-3d-view canvas:active {
+      cursor: grabbing;
+    }
+    .canvas-3d-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 4;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(96, 165, 250, 0.28);
+      background: rgba(10, 14, 20, 0.82);
+      color: var(--text-secondary);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      backdrop-filter: blur(8px);
+    }
+    .canvas-3d-badge.active {
+      display: inline-flex;
     }
 
     /* Floating view controls cluster — bottom right, like map controls on home page */
@@ -382,7 +432,41 @@
     #inspector {
       width: var(--inspector-w); min-width: var(--inspector-w); flex-shrink: 0;
       background: var(--bg-inspector); border-left: 1px solid var(--border-chrome);
-      display: flex; flex-direction: column; overflow: hidden;
+      display: flex; flex-direction: column; overflow: hidden; position: relative;
+    }
+    #main-viewport.inspector-collapsed #inspector {
+      width: 22px; min-width: 22px;
+    }
+    #main-viewport.inspector-collapsed #inspector > :not(#device-inspector-toggle) {
+      display: none;
+    }
+    #device-inspector-toggle {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 54px;
+      border: 1px solid var(--border-chrome);
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      background: rgba(17, 22, 31, 0.96);
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+      cursor: pointer;
+    }
+    #device-inspector-toggle:hover {
+      color: var(--text-primary);
+      border-color: var(--border-secondary);
+    }
+    #device-inspector-toggle i {
+      transition: transform 0.14s ease;
+    }
+    #main-viewport.inspector-collapsed #device-inspector-toggle i {
+      transform: rotate(180deg);
     }
 
     /* Inspector header */
@@ -494,7 +578,9 @@
       font-size: 8px; color: var(--text-tertiary); cursor: pointer;
     }
     .tree-node-icon { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; width: 14px; text-align: center; }
+    .tree-node-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
     .tree-node-name { font-size: 11px; color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-node-sub { font-size: 9px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tree-node-badge {
       font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 2px; flex-shrink: 0;
       background: var(--bg-elevated); color: var(--text-field-label);
@@ -610,6 +696,18 @@
     }
     .robot-frame-dot {
       fill: rgba(66,153,225,0.7); r: 2.5;
+    }
+    .robot-link-edge {
+      stroke: rgba(96, 165, 250, 0.28);
+      stroke-width: 1.2;
+      stroke-dasharray: 4 4;
+      pointer-events: none;
+    }
+    .robot-heading-arrow {
+      fill: rgba(96, 165, 250, 0.14);
+      stroke: rgba(96, 165, 250, 0.55);
+      stroke-width: 1.1;
+      pointer-events: none;
     }
     .robot-axis-x { stroke: rgba(252,129,129,0.7); stroke-width: 1.5; }
     .robot-axis-y { stroke: rgba(134,239,172,0.7); stroke-width: 1.5; }
@@ -837,10 +935,11 @@
         </div>
 
         <!-- Visual layer toggles -->
+        <span class="cvs-layer-label">Display</span>
         <button class="btn" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-frames" onclick="toggleLayer('frames', this)"><i class="fas fa-crosshairs"></i> Frames</button>
         <button class="btn" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-collision" onclick="toggleLayer('collision', this)"><i class="fas fa-vector-square"></i> Collision</button>
-        <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-sensors" onclick="toggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensors</button>
-        <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-safety" onclick="toggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety</button>
+        <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-sensors" onclick="toggleLayer('sensors', this)"><i class="fas fa-broadcast-tower"></i> Sensor FOV</button>
+        <button class="btn active" style="height:24px;padding:0 8px;font-size:9px;" id="toggle-safety" onclick="toggleLayer('safety', this)"><i class="fas fa-shield-alt"></i> Safety Zone</button>
 
         <div class="cvs-spacer"></div>
 
@@ -940,6 +1039,8 @@
           </g>
 
         </svg>
+        <div id="robot-3d-view" aria-label="3D robot viewport"></div>
+        <div id="canvas-3d-badge" class="canvas-3d-badge"><i class="fas fa-cube"></i> Live 3D</div>
 
         <!-- Floating view controls — bottom right -->
         <div id="view-controls">
@@ -963,6 +1064,9 @@
 
     <!-- ── Inspector Panel ─────────────────────────────────────── -->
     <aside id="inspector">
+      <button id="device-inspector-toggle" type="button" title="Collapse properties panel" aria-expanded="true" onclick="toggleDeviceInspectorCollapsed()">
+        <i class="fas fa-chevron-right"></i>
+      </button>
       <div class="insp-header">
         <span class="insp-header-title" id="insp-header-title">Inspector</span>
         <span class="insp-mode-badge" id="insp-mode-badge">Structure</span>
@@ -1076,7 +1180,7 @@
         <div id="hierarchy-tree" style="flex:1;overflow-y:auto;">
 
           <!-- base_footprint -->
-          <div class="tree-node" data-link="base_footprint" onclick="selectLink('base_footprint')">
+          <div class="tree-node" data-link="base_footprint" onclick="selectLink('base_footprint', { preserveTab: true })">
             <span class="tree-node-expand"><i class="fas fa-chevron-down"></i></span>
             <span class="tree-node-icon" style="color:var(--accent-blue);"><i class="fas fa-crosshairs"></i></span>
             <span class="tree-node-name">base_footprint</span>
@@ -1084,7 +1188,7 @@
           </div>
 
           <!-- base_link (child of base_footprint) -->
-          <div class="tree-node" data-link="base_link" onclick="selectLink('base_link')" style="padding-left:24px;">
+          <div class="tree-node" data-link="base_link" onclick="selectLink('base_link', { preserveTab: true })" style="padding-left:24px;">
             <span class="tree-node-expand"><i class="fas fa-chevron-down"></i></span>
             <span class="tree-node-icon"><i class="fas fa-cube"></i></span>
             <span class="tree-node-name">base_link</span>
@@ -1092,25 +1196,25 @@
           </div>
 
           <!-- Wheels -->
-          <div class="tree-node" data-link="wheel_left_front" onclick="selectLink('wheel_left_front')" style="padding-left:38px;">
+          <div class="tree-node" data-link="wheel_left_front" onclick="selectLink('wheel_left_front', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
             <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
             <span class="tree-node-name">wheel_left_front</span>
             <span class="tree-node-badge wheel">wheel</span>
           </div>
-          <div class="tree-node" data-link="wheel_right_front" onclick="selectLink('wheel_right_front')" style="padding-left:38px;">
+          <div class="tree-node" data-link="wheel_right_front" onclick="selectLink('wheel_right_front', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
             <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
             <span class="tree-node-name">wheel_right_front</span>
             <span class="tree-node-badge wheel">wheel</span>
           </div>
-          <div class="tree-node" data-link="wheel_left_rear" onclick="selectLink('wheel_left_rear')" style="padding-left:38px;">
+          <div class="tree-node" data-link="wheel_left_rear" onclick="selectLink('wheel_left_rear', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
             <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
             <span class="tree-node-name">wheel_left_rear</span>
             <span class="tree-node-badge wheel">wheel</span>
           </div>
-          <div class="tree-node" data-link="wheel_right_rear" onclick="selectLink('wheel_right_rear')" style="padding-left:38px;">
+          <div class="tree-node" data-link="wheel_right_rear" onclick="selectLink('wheel_right_rear', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i class="fas fa-chevron-right"></i></span>
             <span class="tree-node-icon" style="color:#86efac;"><i class="fas fa-circle-notch"></i></span>
             <span class="tree-node-name">wheel_right_rear</span>
@@ -1118,13 +1222,13 @@
           </div>
 
           <!-- Casters -->
-          <div class="tree-node" data-link="caster_front" onclick="selectLink('caster_front')" style="padding-left:38px;">
+          <div class="tree-node" data-link="caster_front" onclick="selectLink('caster_front', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i></i></span>
             <span class="tree-node-icon" style="color:#fde68a;"><i class="fas fa-circle"></i></span>
             <span class="tree-node-name">caster_front</span>
             <span class="tree-node-badge caster">caster</span>
           </div>
-          <div class="tree-node" data-link="caster_rear" onclick="selectLink('caster_rear')" style="padding-left:38px;">
+          <div class="tree-node" data-link="caster_rear" onclick="selectLink('caster_rear', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i></i></span>
             <span class="tree-node-icon" style="color:#fde68a;"><i class="fas fa-circle"></i></span>
             <span class="tree-node-name">caster_rear</span>
@@ -1132,19 +1236,19 @@
           </div>
 
           <!-- Sensors -->
-          <div class="tree-node" data-link="lidar_main" onclick="selectLink('lidar_main')" style="padding-left:38px;">
+          <div class="tree-node" data-link="lidar_main" onclick="selectLink('lidar_main', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i></i></span>
             <span class="tree-node-icon" style="color:#c084fc;"><i class="fas fa-broadcast-tower"></i></span>
             <span class="tree-node-name">lidar_main</span>
             <span class="tree-node-badge sensor">sensor</span>
           </div>
-          <div class="tree-node" data-link="camera_front" onclick="selectLink('camera_front')" style="padding-left:38px;">
+          <div class="tree-node" data-link="camera_front" onclick="selectLink('camera_front', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i></i></span>
             <span class="tree-node-icon" style="color:#7dd3fc;"><i class="fas fa-video"></i></span>
             <span class="tree-node-name">camera_front</span>
             <span class="tree-node-badge sensor">sensor</span>
           </div>
-          <div class="tree-node" data-link="imu_link" onclick="selectLink('imu_link')" style="padding-left:38px;">
+          <div class="tree-node" data-link="imu_link" onclick="selectLink('imu_link', { preserveTab: true })" style="padding-left:38px;">
             <span class="tree-node-expand" style="opacity:0;"><i></i></span>
             <span class="tree-node-icon" style="color:#7dd3fc;"><i class="fas fa-microchip"></i></span>
             <span class="tree-node-name">imu_link</span>
@@ -1418,7 +1522,13 @@ const DC = {
   generatedBundle: null,
   undoStack: [],
   redoStack: [],
+  dragState: null,
+  inspectorCollapsed: false,
+  pending3DFit: false,
 };
+
+const DEVICE_INSPECTOR_COLLAPSED_KEY = 'deviceConfigInspectorCollapsed';
+let DC3D = null;
 
 function dcConfigState() {
   return (DC.profile && typeof DC.profile.config_state === 'object' && DC.profile.config_state)
@@ -1586,6 +1696,40 @@ function dcCurrentProfileFields() {
   };
 }
 
+function dcBlankRobotBuilder(baseLink = 'base_link') {
+  const cleanBase = String(baseLink || 'base_link').trim() || 'base_link';
+  return {
+    schema_version: 1,
+    source: 'draft',
+    base_link: cleanBase,
+    links: [
+      {
+        name: cleanBase,
+        parent: '',
+        joint_type: 'fixed',
+        joint_xyz: [0, 0, 0],
+        joint_rpy: [0, 0, 0],
+      },
+    ],
+    shapes: [],
+    updated_at: Math.floor(Date.now() / 1000),
+  };
+}
+
+function dcBlankProfileFields(robotId, sourceProfile = {}) {
+  const profile = sourceProfile && typeof sourceProfile === 'object' ? sourceProfile : {};
+  return {
+    robot_id: String(robotId || '').trim() || 'UGV-01',
+    namespace: String(profile.namespace || '/').trim() || '/',
+    base_frame: 'base_link',
+    nav2_params_file: String(profile.nav2_params_file || '').trim(),
+    urdf_source: '',
+    map_association: (profile.map_association && typeof profile.map_association === 'object') ? profile.map_association : {},
+    topics: (profile.topics && typeof profile.topics === 'object') ? profile.topics : {},
+    mappings: (profile.mappings && typeof profile.mappings === 'object') ? profile.mappings : {},
+  };
+}
+
 function dcDeepCopy(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -1698,6 +1842,21 @@ function dcUniqueId(seed) {
   return `${clean}_${index}`;
 }
 
+function dcUniqueLinkName(seed, currentName = '') {
+  const preferred = String(seed || 'link').trim() || 'link';
+  const current = String(currentName || '').trim();
+  const used = new Set(
+    dcModelLinks()
+      .map((link) => String(link?.name || '').trim())
+      .filter((name) => name && name !== current)
+  );
+  let candidate = preferred.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'link';
+  if (!used.has(candidate)) return candidate;
+  let index = 2;
+  while (used.has(`${candidate}_${index}`)) index += 1;
+  return `${candidate}_${index}`;
+}
+
 function dcDefaultShapeForCategory(categoryName) {
   const [label, semantic] = dcCategoryDefByName(categoryName);
   const id = dcUniqueId(semantic);
@@ -1733,8 +1892,8 @@ function dcModeConfig(mode) {
       label: 'Structure',
       preferredView: 'top',
       preferredTab: 'hierarchy',
-      layers: { frames: true, collision: true, sensors: false, safety: false },
-      labelsByDefault: false,
+      layers: { frames: true, collision: true, sensors: true, safety: true },
+      labelsByDefault: true,
       categories: ['Chassis', 'Collision Shape', 'Transform'],
       fallbackMatch: /(base|chassis|collision|footprint|frame|wheel|caster)/,
     },
@@ -1852,6 +2011,9 @@ function setMode(mode) {
 
 /* ─── Inspector tabs ──────────────────────────────────────── */
 function openInspectorTab(tab) {
+  if (DC.inspectorCollapsed) {
+    setDeviceInspectorCollapsed(false);
+  }
   document.querySelectorAll('.insp-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
@@ -1866,9 +2028,51 @@ function openInspectorTab(tab) {
   }
 }
 
+function currentInspectorTab() {
+  const active = document.querySelector('.insp-tab.active');
+  return active ? String(active.dataset.tab || 'properties') : 'properties';
+}
+
+function syncDeviceInspectorCollapsedState() {
+  const viewport = document.getElementById('main-viewport');
+  const toggle = document.getElementById('device-inspector-toggle');
+  if (viewport) {
+    viewport.classList.toggle('inspector-collapsed', !!DC.inspectorCollapsed);
+  }
+  if (toggle) {
+    toggle.title = DC.inspectorCollapsed ? 'Expand properties panel' : 'Collapse properties panel';
+    toggle.setAttribute('aria-expanded', String(!DC.inspectorCollapsed));
+  }
+}
+
+function setDeviceInspectorCollapsed(nextCollapsed) {
+  DC.inspectorCollapsed = !!nextCollapsed;
+  try {
+    window.localStorage.setItem(DEVICE_INSPECTOR_COLLAPSED_KEY, DC.inspectorCollapsed ? '1' : '0');
+  } catch (_err) {
+    // ignore storage failures
+  }
+  syncDeviceInspectorCollapsedState();
+}
+
+function toggleDeviceInspectorCollapsed() {
+  setDeviceInspectorCollapsed(!DC.inspectorCollapsed);
+}
+
+function dcSyncCanvasViewportState() {
+  const svg = document.getElementById('robot-svg');
+  const view3d = document.getElementById('robot-3d-view');
+  const badge = document.getElementById('canvas-3d-badge');
+  const isIso3d = DC.canvasView === 'iso';
+  if (svg) svg.style.display = isIso3d ? 'none' : '';
+  if (view3d) view3d.classList.toggle('active', isIso3d);
+  if (badge) badge.classList.toggle('active', isIso3d);
+}
+
 /* ─── Canvas view ─────────────────────────────────────────── */
 function setCanvasView(view, btn) {
   DC.canvasView = view;
+  DC.pending3DFit = view === 'iso';
   document.querySelectorAll('.cvs-view-btn').forEach(b => b.classList.remove('active'));
   const targetBtn = btn || document.querySelector(`.cvs-view-btn[onclick*="setCanvasView('${view}'"]`);
   if (targetBtn) targetBtn.classList.add('active');
@@ -1878,9 +2082,12 @@ function setCanvasView(view, btn) {
   if (view === 'iso') {
     DC.layers = Object.assign({}, DC.layers, { frames: true, collision: true });
   }
+  dcSyncCanvasViewportState();
   syncCanvasControlState();
   renderCanvasFromModel();
-  canvasFit();
+  if (view !== 'iso') {
+    canvasFit();
+  }
 }
 
 /* ─── Layer toggles ───────────────────────────────────────── */
@@ -1907,13 +2114,39 @@ function applySvgScale() {
   const hh = (height / 2 + padding) / svgScale;
   svg.setAttribute('viewBox', `${(cx - hw).toFixed(2)} ${(cy - hh).toFixed(2)} ${(hw * 2).toFixed(2)} ${(hh * 2).toFixed(2)}`);
 }
-function canvasZoomIn()  { svgScale = Math.min(svgScale * 1.2, 8); applySvgScale(); }
-function canvasZoomOut() { svgScale = Math.max(svgScale / 1.2, 0.3); applySvgScale(); }
-function canvasFit()     { svgScale = 1.0; applySvgScale(); }
+function canvasZoomIn()  {
+  if (DC.canvasView === 'iso' && DC3D) {
+    const offset = DC3D.camera.position.clone().sub(DC3D.controls.target).multiplyScalar(0.84);
+    DC3D.camera.position.copy(DC3D.controls.target.clone().add(offset));
+    return;
+  }
+  svgScale = Math.min(svgScale * 1.2, 8);
+  applySvgScale();
+}
+function canvasZoomOut() {
+  if (DC.canvasView === 'iso' && DC3D) {
+    const offset = DC3D.camera.position.clone().sub(DC3D.controls.target).multiplyScalar(1.19);
+    DC3D.camera.position.copy(DC3D.controls.target.clone().add(offset));
+    return;
+  }
+  svgScale = Math.max(svgScale / 1.2, 0.3);
+  applySvgScale();
+}
+function canvasFit()     {
+  if (DC.canvasView === 'iso') {
+    dcFit3DView();
+    return;
+  }
+  svgScale = 1.0;
+  applySvgScale();
+}
 
 function toggleGrid(btn) {
   DC.gridVisible = !DC.gridVisible;
   btn.classList.toggle('active', DC.gridVisible);
+  if (DC3D?.grid) {
+    DC3D.grid.visible = DC.gridVisible;
+  }
   document.getElementById('robot-canvas-area').style.backgroundImage = DC.gridVisible ? '' : 'none';
 }
 function toggleLabels(btn) {
@@ -1923,16 +2156,339 @@ function toggleLabels(btn) {
 }
 
 function syncCanvasControlState() {
+  const overlayLabel = document.querySelector('.cvs-layer-label');
   const framesBtn = document.getElementById('toggle-frames');
   const collisionBtn = document.getElementById('toggle-collision');
   const sensorsBtn = document.getElementById('toggle-sensors');
   const safetyBtn = document.getElementById('toggle-safety');
   const labelsBtn = document.getElementById('vc-labels');
+  const visibleByMode = {
+    structure: { frames: true, collision: true, sensors: false, safety: true },
+    sensors: { frames: true, collision: false, sensors: true, safety: false },
+    motion: { frames: true, collision: true, sensors: false, safety: false },
+    safety: { frames: false, collision: true, sensors: true, safety: true },
+    diagnostics: { frames: true, collision: true, sensors: true, safety: true },
+  };
+  const visible = visibleByMode[DC.mode] || visibleByMode.structure;
+  if (overlayLabel) {
+    overlayLabel.style.display = Object.values(visible).some(Boolean) ? '' : 'none';
+  }
+  if (framesBtn) framesBtn.style.display = visible.frames ? '' : 'none';
+  if (collisionBtn) collisionBtn.style.display = visible.collision ? '' : 'none';
+  if (sensorsBtn) sensorsBtn.style.display = visible.sensors ? '' : 'none';
+  if (safetyBtn) safetyBtn.style.display = visible.safety ? '' : 'none';
   if (framesBtn) framesBtn.classList.toggle('active', !!DC.layers.frames);
   if (collisionBtn) collisionBtn.classList.toggle('active', !!DC.layers.collision);
   if (sensorsBtn) sensorsBtn.classList.toggle('active', !!DC.layers.sensors);
   if (safetyBtn) safetyBtn.classList.toggle('active', !!DC.layers.safety);
   if (labelsBtn) labelsBtn.classList.toggle('active', !!DC.labelsVisible);
+}
+
+function dcEnsure3DViewer() {
+  if (DC3D) return true;
+  const root = document.getElementById('robot-3d-view');
+  if (!root || !window.THREE || !window.THREE.OrbitControls) return false;
+  const THREE_NS = window.THREE;
+  const scene = new THREE_NS.Scene();
+  scene.background = new THREE_NS.Color(0x13161d);
+
+  const camera = new THREE_NS.PerspectiveCamera(42, 1, 0.01, 200);
+  camera.position.set(1.6, -1.45, 1.15);
+  camera.up.set(0, 0, 1);
+
+  const renderer = new THREE_NS.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputColorSpace = THREE_NS.SRGBColorSpace;
+  root.appendChild(renderer.domElement);
+
+  const controls = new THREE_NS.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.screenSpacePanning = true;
+  controls.target.set(0, 0, 0.12);
+
+  const ambient = new THREE_NS.AmbientLight(0xffffff, 0.55);
+  const hemi = new THREE_NS.HemisphereLight(0x9ec7ff, 0x10151d, 0.82);
+  const key = new THREE_NS.DirectionalLight(0xffffff, 0.9);
+  key.position.set(2.4, -2.8, 3.6);
+  const fill = new THREE_NS.DirectionalLight(0x7ab8ff, 0.35);
+  fill.position.set(-1.6, 2.2, 1.6);
+  scene.add(ambient, hemi, key, fill);
+
+  const grid = new THREE_NS.GridHelper(6, 30, 0x334155, 0x1f2937);
+  grid.rotation.x = Math.PI / 2;
+  grid.position.z = -0.001;
+  grid.visible = DC.gridVisible;
+  scene.add(grid);
+
+  const axes = new THREE_NS.AxesHelper(0.28);
+  scene.add(axes);
+
+  const frameGroup = new THREE_NS.Group();
+  const overlayGroup = new THREE_NS.Group();
+  const modelGroup = new THREE_NS.Group();
+  scene.add(frameGroup, overlayGroup, modelGroup);
+
+  const raycaster = new THREE_NS.Raycaster();
+  const pointer = new THREE_NS.Vector2();
+
+  DC3D = {
+    THREE: THREE_NS,
+    root,
+    scene,
+    camera,
+    renderer,
+    controls,
+    grid,
+    axes,
+    frameGroup,
+    overlayGroup,
+    modelGroup,
+    raycaster,
+    pointer,
+    interactive: [],
+  };
+
+  const resize = () => {
+    if (!DC3D || !DC3D.root) return;
+    const width = Math.max(1, DC3D.root.clientWidth || 1);
+    const height = Math.max(1, DC3D.root.clientHeight || 1);
+    DC3D.camera.aspect = width / height;
+    DC3D.camera.updateProjectionMatrix();
+    DC3D.renderer.setSize(width, height, false);
+  };
+
+  DC3D.resize = resize;
+  if (typeof ResizeObserver === 'function') {
+    const observer = new ResizeObserver(() => resize());
+    observer.observe(root);
+    DC3D.resizeObserver = observer;
+  } else {
+    window.addEventListener('resize', resize);
+  }
+
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (!DC3D || DC.canvasView !== 'iso') return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects(DC3D.interactive, true).find((entry) => entry.object?.userData?.part);
+    if (hit && hit.object?.userData?.part) {
+      event.stopPropagation();
+      selectLink(String(hit.object.userData.part));
+      return;
+    }
+    event.stopPropagation();
+    showOverview();
+  });
+
+  const renderLoop = () => {
+    if (!DC3D) return;
+    DC3D.controls.update();
+    DC3D.renderer.render(scene, camera);
+  };
+  renderer.setAnimationLoop(renderLoop);
+  resize();
+  return true;
+}
+
+function dcClearThreeGroup(group) {
+  if (!group) return;
+  while (group.children.length) {
+    const child = group.children[0];
+    group.remove(child);
+    if (child.geometry && typeof child.geometry.dispose === 'function') child.geometry.dispose();
+    if (child.material) {
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => {
+        if (material && typeof material.dispose === 'function') material.dispose();
+      });
+    }
+  }
+}
+
+function dcShapeWorldPose(shape, absTransforms) {
+  const linkName = String(shape?.link || DC.model?.base_link || 'base_link').trim() || String(DC.model?.base_link || 'base_link');
+  const linkPose = absTransforms[linkName] || { x: 0, y: 0, z: 0, yaw: 0 };
+  const localX = Number(shape?.x || 0);
+  const localY = Number(shape?.y || 0);
+  const localZ = Number(shape?.z || 0);
+  const localYaw = Number(shape?.yaw || 0);
+  const cos = Math.cos(linkPose.yaw || 0);
+  const sin = Math.sin(linkPose.yaw || 0);
+  return {
+    x: linkPose.x + (localX * cos - localY * sin),
+    y: linkPose.y + (localX * sin + localY * cos),
+    z: linkPose.z + localZ,
+    yaw: (linkPose.yaw || 0) + localYaw,
+  };
+}
+
+function dcFit3DView() {
+  if (!DC3D) return;
+  const THREE_NS = DC3D.THREE;
+  const bounds = new THREE_NS.Box3().setFromObject(DC3D.modelGroup);
+  if (bounds.isEmpty()) {
+    DC3D.controls.target.set(0, 0, 0.1);
+    DC3D.camera.position.set(1.6, -1.45, 1.15);
+    return;
+  }
+  const size = bounds.getSize(new THREE_NS.Vector3());
+  const center = bounds.getCenter(new THREE_NS.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 0.35);
+  const distance = Math.max(1.1, maxDim * 2.2);
+  DC3D.controls.target.copy(center);
+  DC3D.camera.position.set(center.x + distance, center.y - distance * 1.15, center.z + distance * 0.7);
+  DC3D.camera.near = 0.01;
+  DC3D.camera.far = Math.max(25, distance * 12);
+  DC3D.camera.updateProjectionMatrix();
+  DC3D.controls.update();
+}
+
+function dcRenderCanvas3D({ absTransforms, visibleBodyShapes, collisionShapes, safetyShapes, selectedId, showFrames, showCollision, showSafety }) {
+  if (!dcEnsure3DViewer()) return false;
+  const THREE_NS = DC3D.THREE;
+  dcClearThreeGroup(DC3D.frameGroup);
+  dcClearThreeGroup(DC3D.overlayGroup);
+  dcClearThreeGroup(DC3D.modelGroup);
+  DC3D.interactive = [];
+
+  const materialForKind = (kind, selected = false) => {
+    const palette = {
+      wheel: 0x1f2937,
+      laser: 0x9b7cf5,
+      camera: 0x6cbff6,
+      collision: 0xf59e0b,
+      safety: 0xf97316,
+      frame: 0x94a3b8,
+      chassis: 0x2a3444,
+      caster: 0x475569,
+      default: 0x344054,
+    };
+    const color = selected ? 0x3b82f6 : (palette[kind] || palette.default);
+    return new THREE_NS.MeshStandardMaterial({
+      color,
+      emissive: selected ? 0x1d4ed8 : 0x000000,
+      emissiveIntensity: selected ? 0.38 : 0,
+      roughness: 0.58,
+      metalness: kind === 'wheel' ? 0.18 : 0.08,
+      transparent: false,
+      opacity: 1,
+    });
+  };
+
+  const addMesh = (geometry, material, pose, partId, extraRotation = 0) => {
+    const mesh = new THREE_NS.Mesh(geometry, material);
+    mesh.position.set(pose.x, pose.y, pose.z);
+    mesh.rotation.set(0, 0, pose.yaw + extraRotation);
+    mesh.userData.part = partId;
+    DC3D.modelGroup.add(mesh);
+    DC3D.interactive.push(mesh);
+    return mesh;
+  };
+
+  visibleBodyShapes.forEach((shape) => {
+    const kind = dcShapeKind(shape);
+    const partId = String(shape?.id || shape?.name || '').trim();
+    const pose = dcShapeWorldPose(shape, absTransforms);
+    const selected = partId && partId === selectedId;
+    const type = String(shape?.type || '').toLowerCase();
+    const width = Math.max(0.04, Number(shape?.width || shape?.radius || 0.18));
+    const length = Math.max(0.04, Number(shape?.length || shape?.depth || shape?.radius || 0.18));
+    const height = Math.max(0.04, Number(shape?.height || shape?.radius || 0.12));
+    const radius = Math.max(0.02, Number(shape?.radius || Math.min(width, length) * 0.5 || 0.06));
+
+    if (type === 'sphere') {
+      addMesh(new THREE_NS.SphereGeometry(radius, 24, 16), materialForKind(kind, selected), pose, partId);
+      return;
+    }
+    if (type === 'cylinder') {
+      addMesh(new THREE_NS.CylinderGeometry(radius, radius, Math.max(height, length, width), 28), materialForKind(kind, selected), pose, partId, Math.PI / 2);
+      return;
+    }
+    addMesh(new THREE_NS.BoxGeometry(length, width, height), materialForKind(kind === 'device' ? 'default' : kind, selected), pose, partId);
+  });
+
+  const overlayMaterial = (color, opacity) => new THREE_NS.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+  });
+
+  if (showCollision) {
+    collisionShapes.forEach((shape) => {
+      const pose = dcShapeWorldPose(shape, absTransforms);
+      const type = String(shape?.type || '').toLowerCase();
+      const radius = Math.max(0.04, Number(shape?.radius || 0.2));
+      const width = Math.max(0.04, Number(shape?.width || radius * 2));
+      const length = Math.max(0.04, Number(shape?.length || shape?.depth || radius * 2));
+      const height = Math.max(0.02, Number(shape?.height || 0.06));
+      const material = overlayMaterial(0xf59e0b, 0.18);
+      const mesh = type === 'sphere'
+        ? new THREE_NS.Mesh(new THREE_NS.SphereGeometry(radius, 18, 14), material)
+        : new THREE_NS.Mesh(new THREE_NS.BoxGeometry(length, width, height), material);
+      mesh.position.set(pose.x, pose.y, pose.z);
+      mesh.rotation.z = pose.yaw;
+      DC3D.overlayGroup.add(mesh);
+    });
+  }
+
+  if (showSafety) {
+    safetyShapes.forEach((shape) => {
+      const pose = dcShapeWorldPose(shape, absTransforms);
+      const radius = Math.max(0.08, Number(shape?.radius || shape?.range_m || 0.45));
+      const material = overlayMaterial(0xf97316, 0.12);
+      const mesh = new THREE_NS.Mesh(new THREE_NS.CylinderGeometry(radius, radius, Math.max(0.03, Number(shape?.height || 0.03)), 48), material);
+      mesh.position.set(pose.x, pose.y, pose.z);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.rotation.z = pose.yaw;
+      DC3D.overlayGroup.add(mesh);
+    });
+  }
+
+  if (showFrames) {
+    const lineMaterial = new THREE_NS.LineBasicMaterial({ color: 0x4f8ee8, transparent: true, opacity: 0.42 });
+    dcModelLinks().forEach((link) => {
+      const linkName = String(link?.name || '').trim();
+      if (!linkName || !absTransforms[linkName]) return;
+      const pose = absTransforms[linkName];
+      const origin = new THREE_NS.Vector3(pose.x, pose.y, pose.z);
+      const sphere = new THREE_NS.Mesh(
+        new THREE_NS.SphereGeometry(linkName === selectedId ? 0.022 : 0.015, 12, 10),
+        new THREE_NS.MeshBasicMaterial({ color: linkName === selectedId ? 0x3b82f6 : 0x94a3b8 })
+      );
+      sphere.position.copy(origin);
+      sphere.userData.part = linkName;
+      DC3D.frameGroup.add(sphere);
+      DC3D.interactive.push(sphere);
+
+      const axes = new THREE_NS.AxesHelper(linkName === selectedId ? 0.18 : 0.11);
+      axes.position.copy(origin);
+      axes.rotation.z = pose.yaw || 0;
+      DC3D.frameGroup.add(axes);
+
+      const parent = String(link?.parent || '').trim();
+      if (parent && absTransforms[parent]) {
+        const parentPose = absTransforms[parent];
+        const geometry = new THREE_NS.BufferGeometry().setFromPoints([
+          new THREE_NS.Vector3(parentPose.x, parentPose.y, parentPose.z),
+          origin,
+        ]);
+        const line = new THREE_NS.Line(geometry, lineMaterial);
+        DC3D.frameGroup.add(line);
+      }
+    });
+  }
+
+  if (DC.pending3DFit) {
+    dcFit3DView();
+    DC.pending3DFit = false;
+  }
+  if (DC3D.resize) DC3D.resize();
+  return true;
 }
 
 /* Mouse wheel zoom on canvas */
@@ -2061,7 +2617,8 @@ let PART_DATA = {
   },
 };
 
-function selectLink(linkName) {
+function selectLink(linkName, options = {}) {
+  const preserveTab = Boolean(options && options.preserveTab);
   DC.selectedLink = linkName;
   renderCanvasFromModel();
 
@@ -2078,7 +2635,7 @@ function selectLink(linkName) {
   if (svgEl) svgEl.classList.add('selected-highlight');
 
   // Populate inspector detail state
-  showDetailEditor(linkName);
+  showDetailEditor(linkName, { revealProperties: !preserveTab });
 }
 
 function dcShapeKind(shape) {
@@ -2176,7 +2733,7 @@ function selectAndShowIssue(partName) {
 }
 
 /* ─── Detail editor ───────────────────────────────────────── */
-function showDetailEditor(linkName) {
+function showDetailEditor(linkName, { revealProperties = true } = {}) {
   const data = PART_DATA[linkName];
   if (!data) return;
 
@@ -2189,7 +2746,9 @@ function showDetailEditor(linkName) {
   const title = document.getElementById('insp-header-title');
   if (title) title.textContent = linkName;
 
-  openInspectorTab('properties');
+  if (revealProperties || currentInspectorTab() === 'properties') {
+    openInspectorTab('properties');
+  }
 }
 
 function showOverview() {
@@ -2207,6 +2766,7 @@ function showOverview() {
 
 function buildDetailHTML(name, d) {
   const shape = dcFindShape(name);
+  const link = dcFindLink(name);
   const issueBar = (d.hasError || d.isWarn) ? `
     <div style="margin:8px 10px 0;padding:6px 9px;border-radius:3px;
       background:${d.hasError ? 'rgba(196,43,43,0.1)' : 'rgba(168,84,0,0.1)'};
@@ -2220,7 +2780,9 @@ function buildDetailHTML(name, d) {
 
   let sections = shape ? buildShapeEditorHTML(name, shape, d) : '';
 
-  if (!shape && d.type === 'wheel') {
+  if (!shape && link) {
+    sections = buildLinkEditorHTML(name, link, d);
+  } else if (!shape && d.type === 'wheel') {
     sections = `
       <div class="insp-section">Geometry</div>
       ${propRow('Radius', d.radius, true)}
@@ -2293,6 +2855,37 @@ function buildDetailHTML(name, d) {
   `;
 }
 
+function buildLinkEditorHTML(name, link, d) {
+  const baseLink = String(DC.model?.base_link || 'base_link').trim() || 'base_link';
+  const isBase = name === baseLink;
+  const parentOptions = ['']
+    .concat(
+      dcModelLinks()
+        .map((entry) => String(entry?.name || '').trim())
+        .filter((entryName) => entryName && entryName !== name)
+    );
+  const jointType = String(link.joint_type || 'fixed').toLowerCase();
+  const jointX = Number(link?.joint_xyz?.[0] || 0);
+  const jointY = Number(link?.joint_xyz?.[1] || 0);
+  const jointZ = Number(link?.joint_xyz?.[2] || 0);
+  const jointYaw = Number(link?.joint_rpy?.[2] || 0);
+  return `
+    <div class="insp-section">Frame</div>
+    ${editableLinkRow('Name', name, 'name', name)}
+    ${selectLinkRow('Parent Frame', name, 'parent', String(link.parent || ''), parentOptions, isBase)}
+    ${selectLinkRow('Joint Type', name, 'joint_type', jointType, ['fixed', 'revolute', 'continuous', 'prismatic', 'floating', 'planar'])}
+    <div class="insp-section">Transform</div>
+    ${editableLinkRow('X', name, 'joint_x', jointX, 'number')}
+    ${editableLinkRow('Y', name, 'joint_y', jointY, 'number')}
+    ${editableLinkRow('Z', name, 'joint_z', jointZ, 'number')}
+    ${editableLinkRow('Yaw', name, 'joint_yaw', jointYaw, 'number')}
+    <div class="insp-section">Context</div>
+    ${propRow('Type', d.type)}
+    ${propRow('Joint Type', d.jointType)}
+    ${propRow('Hint', isBase ? 'Base frame stays at origin.' : 'Drag this frame in top view to reposition it.')}
+  `;
+}
+
 function propRow(label, value, mono=false) {
   return `<div class="prop-row">
     <span class="prop-lbl">${label}</span>
@@ -2307,6 +2900,29 @@ function editableRow(label, shapeId, field, value, kind = 'text') {
     <span class="prop-lbl">${dcEscapeHtml(label)}</span>
     <input class="prop-input" type="${inputType}"${step} value="${dcAttr(value ?? '')}"
       onchange="handleShapeFieldChange('${dcJsString(shapeId)}','${dcJsString(field)}',this.value,'${dcJsString(kind)}')">
+  </div>`;
+}
+
+function editableLinkRow(label, linkName, field, value, kind = 'text') {
+  const inputType = kind === 'number' ? 'number' : 'text';
+  const step = kind === 'number' ? ' step="0.001"' : '';
+  return `<div class="prop-row">
+    <span class="prop-lbl">${dcEscapeHtml(label)}</span>
+    <input class="prop-input" type="${inputType}"${step} value="${dcAttr(value ?? '')}"
+      onchange="handleLinkFieldChange('${dcJsString(linkName)}','${dcJsString(field)}',this.value,'${dcJsString(kind)}')">
+  </div>`;
+}
+
+function selectLinkRow(label, linkName, field, value, options, disabled = false) {
+  const rows = options.map((option) => {
+    const optionValue = String(option || '');
+    const optionLabel = optionValue || '(none)';
+    const selected = optionValue === String(value || '') ? ' selected' : '';
+    return `<option value="${dcAttr(optionValue)}"${selected}>${dcEscapeHtml(optionLabel)}</option>`;
+  }).join('');
+  return `<div class="prop-row">
+    <span class="prop-lbl">${dcEscapeHtml(label)}</span>
+    <select class="prop-select" ${disabled ? 'disabled' : ''} onchange="handleLinkFieldChange('${dcJsString(linkName)}','${dcJsString(field)}',this.value,'text')">${rows}</select>
   </div>`;
 }
 
@@ -2389,6 +3005,60 @@ function handleShapeFieldChange(shapeId, field, rawValue, kind = 'text') {
   dcSetMessage(`Updated ${shapeId}.${field}`);
 }
 
+function handleLinkFieldChange(linkName, field, rawValue, kind = 'text') {
+  const link = dcFindLink(linkName);
+  if (!link) return;
+  dcPushUndo();
+  const baseLink = String(DC.model?.base_link || 'base_link').trim() || 'base_link';
+  const currentName = String(link.name || '').trim();
+  let selectedName = currentName;
+
+  if (field === 'name') {
+    const nextName = dcUniqueLinkName(rawValue || currentName || 'link', currentName);
+    if (nextName !== currentName) {
+      dcModelLinks().forEach((candidate) => {
+        if (String(candidate?.parent || '') === currentName) candidate.parent = nextName;
+      });
+      dcModelShapes().forEach((shape) => {
+        if (String(shape?.link || '') === currentName) shape.link = nextName;
+        if (String(shape?.child_frame || '') === currentName) shape.child_frame = nextName;
+      });
+      if (String(DC.model?.base_link || '') === currentName) {
+        DC.model.base_link = nextName;
+      }
+      link.name = nextName;
+      selectedName = nextName;
+    }
+  } else if (field === 'parent') {
+    const nextParent = String(rawValue || '').trim();
+    link.parent = nextParent && nextParent !== currentName ? nextParent : '';
+  } else if (field === 'joint_type') {
+    const normalized = String(rawValue || 'fixed').trim().toLowerCase();
+    link.joint_type = ['fixed', 'revolute', 'continuous', 'prismatic', 'floating', 'planar'].includes(normalized) ? normalized : 'fixed';
+  } else if (field === 'joint_x' || field === 'joint_y' || field === 'joint_z') {
+    if (!Array.isArray(link.joint_xyz)) link.joint_xyz = [0, 0, 0];
+    const indexMap = { joint_x: 0, joint_y: 1, joint_z: 2 };
+    const parsed = Number(rawValue);
+    link.joint_xyz[indexMap[field]] = Number.isFinite(parsed) ? parsed : 0;
+  } else if (field === 'joint_yaw') {
+    if (!Array.isArray(link.joint_rpy)) link.joint_rpy = [0, 0, 0];
+    const parsed = Number(rawValue);
+    link.joint_rpy[2] = Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (currentName === baseLink && field === 'parent') {
+    link.parent = '';
+  }
+
+  DC.model.updated_at = Math.floor(Date.now() / 1000);
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  selectLink(selectedName);
+  dcSetMessage(`Updated ${selectedName}.${field}`);
+}
+
 function dcShapeDimensionsLabel(shape) {
   if (!shape) return '—';
   const type = String(shape.type || '').toLowerCase();
@@ -2417,55 +3087,129 @@ function dcCategoryForPart(name, data) {
   return 'Devices';
 }
 
+function dcHierarchyIconForData(name, data) {
+  const type = String(data?.type || '').toLowerCase();
+  if (type === 'root') return 'crosshairs';
+  if (type === 'chassis') return 'cube';
+  if (type === 'wheel') return 'circle-notch';
+  if (type === 'caster') return 'circle';
+  if (type === 'sensor') {
+    const sensorType = String(data?.sensorType || name || '').toLowerCase();
+    if (/camera/.test(sensorType)) return 'video';
+    if (/lidar|laser/.test(sensorType)) return 'broadcast-tower';
+    return 'microchip';
+  }
+  if (type === 'frame') return 'project-diagram';
+  return data.enabled === false ? 'ban' : 'cube';
+}
+
+function dcHierarchyBadgeClass(data) {
+  const type = String(data?.type || '').toLowerCase();
+  if (type === 'sensor') return ' sensor';
+  if (type === 'wheel') return ' wheel';
+  if (type === 'caster') return ' caster';
+  return '';
+}
+
+function dcRenderHierarchyNode(name, data, depth = 0, { dimmed = false } = {}) {
+  const selected = DC.selectedLink === name ? ' selected' : '';
+  const indent = depth > 0 ? `padding-left:${10 + depth * 16}px;` : '';
+  const styleAttr = indent || dimmed ? ` style="${indent}${dimmed ? 'opacity:0.72;' : ''}"` : '';
+  return `
+    <div class="tree-node${selected}" data-link="${dcAttr(name)}" onclick="selectLink('${dcJsString(name)}', { preserveTab: true })"${styleAttr}>
+      <span class="tree-node-expand" style="opacity:${depth > 0 ? '0.55' : '1'};"><i class="fas fa-${depth > 0 ? 'turn-up' : 'chevron-down'}"></i></span>
+      <span class="tree-node-icon"><i class="fas fa-${dcHierarchyIconForData(name, data)}"></i></span>
+      <div class="tree-node-main">
+        <div class="tree-node-name">${dcEscapeHtml(name)}</div>
+        <div class="tree-node-sub">${dcEscapeHtml(dcText(data.type))} · ${dcEscapeHtml(dcText(data.parentFrame || data.mountFrame || 'root'))}</div>
+      </div>
+      ${data.hasError ? '<span class="val-chip error"><i class="fas fa-times-circle"></i></span>' : ''}
+      ${data.isWarn && !data.hasError ? '<span class="val-chip warn"><i class="fas fa-exclamation-triangle"></i></span>' : ''}
+      <span class="tree-node-badge${dcHierarchyBadgeClass(data)}">${dcEscapeHtml(dcText(data.type))}</span>
+    </div>`;
+}
+
 function renderHierarchyFromModel() {
   dcRebuildPartData();
   const tree = document.getElementById('hierarchy-tree');
   if (!tree) return;
-  const groups = {};
-  DEVICE_CATEGORY_DEFS.forEach(([label]) => { groups[label] = []; });
-  Object.entries(PART_DATA).forEach(([name, data]) => {
-    const group = dcCategoryForPart(name, data);
-    if (!groups[group]) groups[group] = [];
-    groups[group].push([name, data]);
-  });
+  const links = dcModelLinks();
+  const linkNames = new Set(links.map((link) => String(link?.name || '').trim()).filter(Boolean));
   const modeCategories = new Set(dcModeConfig(DC.mode).categories || []);
-  const orderedGroups = Object.keys(groups).sort((a, b) => {
-    const aScore = modeCategories.has(a) ? 0 : 1;
-    const bScore = modeCategories.has(b) ? 0 : 1;
-    if (aScore !== bScore) return aScore - bScore;
-    return a.localeCompare(b);
+  const childrenByParent = {};
+  links.forEach((link) => {
+    const parent = String(link?.parent || '').trim();
+    const key = parent || '__root__';
+    if (!childrenByParent[key]) childrenByParent[key] = [];
+    childrenByParent[key].push(link);
   });
-  tree.innerHTML = orderedGroups.map(group => {
-    const [_label, _semantic, supported] = dcCategoryDefByName(group);
-    const enabledCount = groups[group].filter(([_name, data]) => data.enabled !== false).length;
-    const relevantGroup = modeCategories.has(group);
-    const rows = groups[group].map(([name, data]) => `
-      <div class="tree-node${DC.selectedLink === name ? ' selected' : ''}" data-link="${dcAttr(name)}" onclick="selectLink('${dcJsString(name)}')"${relevantGroup ? '' : ' style="opacity:0.72;"'}>
-        <div class="tree-node-icon"><i class="fas fa-${data.enabled === false ? 'ban' : 'cube'}"></i></div>
-        <div class="tree-node-main">
-          <div class="tree-node-name">${dcEscapeHtml(name)}</div>
-          <div class="tree-node-sub">${dcEscapeHtml(dcText(data.type))} · ${dcEscapeHtml(dcText(data.parentFrame))}</div>
-        </div>
-        ${data.hasError ? '<span class="val-chip error"><i class="fas fa-times-circle"></i></span>' : ''}
-      </div>`).join('');
-    const empty = `<div class="tree-node" style="opacity:.55;" onclick="handleAddObject('${dcJsString(group)}')">
-      <div class="tree-node-icon"><i class="fas fa-plus"></i></div>
-      <div class="tree-node-main">
-        <div class="tree-node-name">Add ${dcEscapeHtml(group)}</div>
-        <div class="tree-node-sub">0 configured · supported ${supported}</div>
-      </div>
-    </div>`;
-    return `<div class="insp-section" style="display:flex;justify-content:space-between;gap:8px;${relevantGroup ? '' : 'opacity:0.8;'}">
-      <span>${dcEscapeHtml(group)} · ${groups[group].length}/${supported} · ${enabledCount} enabled</span>
-      <button class="btn" style="height:18px;padding:0 6px;font-size:9px;" onclick="handleAddObject('${dcJsString(group)}')"><i class="fas fa-plus"></i></button>
-    </div>${rows || empty}`;
-  }).join('');
+  Object.values(childrenByParent).forEach((items) => items.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''))));
+
+  const deviceEntries = Object.entries(PART_DATA)
+    .filter(([name]) => !linkNames.has(String(name || '').trim()))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  const devicesByParent = {};
+  deviceEntries.forEach(([name, data]) => {
+    const key = String(data?.parentFrame || data?.mountFrame || DC.model?.base_link || '').trim() || '__orphan__';
+    if (!devicesByParent[key]) devicesByParent[key] = [];
+    devicesByParent[key].push([name, data]);
+  });
+
+  const renderBranch = (linkName, depth = 0) => {
+    const data = PART_DATA[linkName] || {
+      type: linkName === String(DC.model?.base_link || '') ? 'chassis' : 'frame',
+      parentFrame: dcText(dcFindLink(linkName)?.parent, 'root'),
+    };
+    const relevant = modeCategories.has(dcCategoryForPart(linkName, data));
+    let html = dcRenderHierarchyNode(linkName, data, depth, { dimmed: !relevant && DC.mode !== 'diagnostics' });
+    (devicesByParent[linkName] || []).forEach(([name, deviceData]) => {
+      const relevantDevice = modeCategories.has(dcCategoryForPart(name, deviceData));
+      html += dcRenderHierarchyNode(name, deviceData, depth + 1, { dimmed: !relevantDevice && DC.mode !== 'diagnostics' });
+    });
+    (childrenByParent[linkName] || []).forEach((childLink) => {
+      html += renderBranch(String(childLink?.name || '').trim(), depth + 1);
+    });
+    return html;
+  };
+
+  const baseName = String(DC.model?.base_link || '').trim();
+  const roots = (childrenByParent.__root__ || [])
+    .filter((link) => String(link?.name || '').trim())
+    .sort((a, b) => {
+      const aName = String(a?.name || '').trim();
+      const bName = String(b?.name || '').trim();
+      if (aName === baseName) return -1;
+      if (bName === baseName) return 1;
+      return aName.localeCompare(bName);
+    });
+  const linkTree = roots.map((link) => renderBranch(String(link?.name || '').trim(), 0)).join('');
+
+  const unlinkedDevices = (devicesByParent.__orphan__ || [])
+    .map(([name, data]) => dcRenderHierarchyNode(name, data, 0))
+    .join('');
+  const quickGroups = ['Transform', 'Laser', 'Camera', 'Collision Shape'];
+  const quickActions = quickGroups.map((group) => `
+    <button class="btn" style="height:18px;padding:0 6px;font-size:9px;" onclick="handleAddObject('${dcJsString(group)}')">
+      <i class="fas fa-plus"></i> ${dcEscapeHtml(group)}
+    </button>
+  `).join('');
+
+  tree.innerHTML = `
+    <div class="insp-section" style="display:flex;justify-content:space-between;gap:8px;">
+      <span>Transforms · ${links.length} frames · ${deviceEntries.length} attached objects</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${quickActions}</div>
+    </div>
+    ${linkTree || '<div class="tree-node" style="opacity:.55;"><div class="tree-node-main"><div class="tree-node-name">No transform frames yet</div><div class="tree-node-sub">Add a base frame to start the robot layout.</div></div></div>'}
+    ${unlinkedDevices ? `<div class="insp-section">Unattached Objects</div>${unlinkedDevices}` : ''}
+  `;
 }
 
 function renderCanvasFromModel() {
   const svg = document.getElementById('robot-svg');
   if (!svg || !DC.model) return;
+  dcSyncCanvasViewportState();
   const absTransforms = dcComputeAbsoluteTransforms();
+  const baseLinkName = String(DC.model?.base_link || 'base_link').trim() || 'base_link';
   const shapes = dcModelShapes();
   const bodyShapes = shapes.filter(shape => {
     const name = String(shape?.name || shape?.id || '').toLowerCase();
@@ -2481,7 +3225,7 @@ function renderCanvasFromModel() {
   const showSensors = !!DC.layers.sensors;
   const showSafety = !!DC.layers.safety;
   const selectedId = String(DC.selectedLink || '').trim();
-  const view = String(DC.canvasView || 'top');
+  let view = String(DC.canvasView || 'top');
   const mode = String(DC.mode || 'structure');
   const bounds = { minX: -110, maxX: 110, minY: -90, maxY: 90 };
   const extendBounds = (x, y, rx = 0, ry = rx) => {
@@ -2518,10 +3262,12 @@ function renderCanvasFromModel() {
       return { id, x, y: z, yaw: 0, width: length, length: height, height, radius };
     }
     if (view === 'iso') {
+      const isoX = (x * 0.62) - ((-y) * 0.62);
+      const isoY = (x * -0.18) + ((-y) * -0.18) + (z * 0.88);
       return {
         id,
-        x: (x - (-y)) * 0.78,
-        y: ((x + (-y)) * -0.34) + (z * 0.92),
+        x: isoX,
+        y: isoY,
         yaw: 0,
         width,
         length,
@@ -2579,6 +3325,8 @@ function renderCanvasFromModel() {
     if (id === selectedId) return true;
     if (!DC.labelsVisible) return false;
     if (view !== 'top' && mode !== 'diagnostics') return false;
+    if (/_shape_\d+$/i.test(id) && mode !== 'diagnostics') return false;
+    if (mode === 'structure') return false;
     return mode === 'sensors' || mode === 'diagnostics';
   };
   const shouldShowLinkLabel = (link) => {
@@ -2586,9 +3334,77 @@ function renderCanvasFromModel() {
     if (!id) return false;
     if (id === selectedId) return true;
     if (!DC.labelsVisible) return false;
-    return mode === 'diagnostics' && view === 'top';
+    if (view !== 'top') return false;
+    if (mode === 'diagnostics') return true;
+    if (mode !== 'structure') return false;
+    return /wheel/.test(id);
   };
   const visibleBodyShapes = bodyShapes.filter(shouldRenderShapeInMode);
+  if (view === 'iso') {
+    const rendered3d = dcRenderCanvas3D({
+      absTransforms,
+      visibleBodyShapes,
+      collisionShapes: collisionShapes.filter(shouldRenderShapeInMode),
+      safetyShapes: safetyShapes.filter(shouldRenderShapeInMode),
+      selectedId,
+      showFrames,
+      showCollision,
+      showSafety,
+    });
+    if (!rendered3d) {
+      dcSetMessage('3D viewer failed to load, falling back to 2D projection', 'warn');
+      DC.canvasView = 'top';
+      view = 'top';
+      dcSyncCanvasViewportState();
+    } else {
+      return;
+    }
+  }
+  const normalizeCanvasLabelId = (rawId) => String(rawId || '')
+    .replace(/_shape_\d+$/i, '')
+    .replace(/_shape$/i, '')
+    .replace(/_frame$/i, '')
+    .replace(/_link$/i, '');
+  const formatCanvasLabel = (rawId) => normalizeCanvasLabelId(rawId)
+    .replace(/caster_front_left/ig, 'caster FL')
+    .replace(/caster_front_right/ig, 'caster FR')
+    .replace(/caster_rear_left/ig, 'caster RL')
+    .replace(/caster_rear_right/ig, 'caster RR')
+    .replace(/laser_front/ig, 'laser front')
+    .replace(/laser_rear/ig, 'laser rear')
+    .replace(/base_footprint/ig, 'base')
+    .replace(/_/g, ' ');
+  const placedLabels = [];
+  const usedLabelKeys = new Set();
+  const labelBoundsOverlap = (a, b) => !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  const placeCanvasLabel = (text, x, y, { selected = false, preferredOffsets = [], key = '' } = {}) => {
+    if (!text) return '';
+    if (!selected && key && usedLabelKeys.has(key)) return null;
+    const width = Math.max(28, text.length * 7.1);
+    const height = 13;
+    const offsets = preferredOffsets.length ? preferredOffsets : [
+      { dx: 14, dy: -10 },
+      { dx: 14, dy: 14 },
+      { dx: -14 - width, dy: -10 },
+      { dx: -14 - width, dy: 14 },
+      { dx: -width / 2, dy: -16 },
+      { dx: -width / 2, dy: 20 },
+    ];
+    for (const offset of offsets) {
+      const left = x + offset.dx;
+      const top = y + offset.dy - height;
+      const bounds = { left, top, right: left + width, bottom: top + height };
+      if (!selected && placedLabels.some((entry) => labelBoundsOverlap(entry, bounds))) continue;
+      placedLabels.push(bounds);
+      if (key) usedLabelKeys.add(key);
+      const textX = x + offset.dx;
+      const textY = y + offset.dy;
+      return { x: textX, y: textY };
+    }
+    if (!selected) return null;
+    const fallback = offsets[0] || { dx: 14, dy: -10 };
+    return { x: x + fallback.dx, y: y + fallback.dy };
+  };
   const renderShape = (shape, cls, fillExtra = '') => {
     const pose = project(shape);
     const type = String(shape?.type || 'box').toLowerCase();
@@ -2598,19 +3414,44 @@ function renderCanvasFromModel() {
     const opacity = selectedId && !selected && source !== 'visual' ? ' opacity="0.58"' : '';
     if (type === 'cylinder' || type === 'sphere') {
       extendBounds(pose.x, pose.y, pose.radius);
-      return `<circle class="${cls}" data-part="${dcAttr(pose.id)}" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${pose.radius.toFixed(2)}"${opacity} ${fillExtra}/>`;
+      return `<circle class="${cls}" data-part="${dcAttr(pose.id)}" data-draggable-kind="shape" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${pose.radius.toFixed(2)}"${opacity} ${fillExtra}/>`;
     }
     extendBounds(pose.x, pose.y, pose.width / 2, pose.length / 2);
-    return `<rect class="${cls}" data-part="${dcAttr(pose.id)}" x="${(-pose.width / 2).toFixed(2)}" y="${(-pose.length / 2).toFixed(2)}" width="${pose.width.toFixed(2)}" height="${pose.length.toFixed(2)}" rx="6" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"${opacity} ${fillExtra}/>`;
+    return `<rect class="${cls}" data-part="${dcAttr(pose.id)}" data-draggable-kind="shape" x="${(-pose.width / 2).toFixed(2)}" y="${(-pose.length / 2).toFixed(2)}" width="${pose.width.toFixed(2)}" height="${pose.length.toFixed(2)}" rx="6" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"${opacity} ${fillExtra}/>`;
   };
   const sensorLabels = visibleBodyShapes.map(shape => {
     const pose = project(shape);
     const id = pose.id;
     const kind = dcShapeKind(shape);
     if (!shouldShowShapeLabel(shape)) return '';
-    if (!/laser|camera|distance|sensor/.test(kind + id.toLowerCase())) return '';
-    return `<text class="canvas-label${id === selectedId ? ' canvas-label-highlight' : ''}" x="${(pose.x + 14).toFixed(1)}" y="${(pose.y - 10).toFixed(1)}">${dcEscapeHtml(id)}</text>`;
+    const label = formatCanvasLabel(id || kind);
+    const point = placeCanvasLabel(label, pose.x, pose.y, {
+      selected: id === selectedId,
+      key: normalizeCanvasLabelId(id || kind),
+      preferredOffsets: pose.y < 0
+        ? [{ dx: 14, dy: 16 }, { dx: 14, dy: -10 }, { dx: -14 - Math.max(28, label.length * 7.1), dy: 16 }]
+        : [{ dx: 14, dy: -10 }, { dx: 14, dy: 16 }, { dx: -14 - Math.max(28, label.length * 7.1), dy: -10 }],
+    });
+    if (!point) return '';
+    return `<text class="canvas-label${id === selectedId ? ' canvas-label-highlight' : ''}" x="${point.x.toFixed(1)}" y="${point.y.toFixed(1)}">${dcEscapeHtml(label)}</text>`;
   }).join('');
+  const frameEdges = showFrames ? (DC.model.links || []).filter((link) => {
+    const parent = String(link?.parent || '').trim();
+    const name = String(link?.name || '').trim();
+    return parent && name && absTransforms[parent] && absTransforms[name] && shouldRenderLinkInMode(link);
+  }).map((link) => {
+    const parentPose = project({ name: String(link.parent || '').trim() }, true);
+    const childPose = project(link, true);
+    extendBounds(parentPose.x, parentPose.y, 8);
+    extendBounds(childPose.x, childPose.y, 8);
+    return `<line class="robot-link-edge" x1="${parentPose.x.toFixed(2)}" y1="${parentPose.y.toFixed(2)}" x2="${childPose.x.toFixed(2)}" y2="${childPose.y.toFixed(2)}"/>`;
+  }).join('') : '';
+  const basePose = project({ name: baseLinkName }, true);
+  const headingArrow = view === 'top' ? `
+    <g transform="translate(${basePose.x.toFixed(2)} ${basePose.y.toFixed(2)}) rotate(${basePose.yaw.toFixed(2)})">
+      <polygon class="robot-heading-arrow" points="0,-54 13,-34 -13,-34"/>
+    </g>
+  ` : '';
   const safetyLayer = showSafety
     ? `${safetyShapes.filter(shouldRenderShapeInMode).length ? safetyShapes.filter(shouldRenderShapeInMode).map(shape => renderShape(shape, 'robot-safety-zone')).join('') : '<ellipse class="robot-safety-zone" cx="0" cy="0" rx="110" ry="96" opacity="0.42"/>'}`
     : '';
@@ -2647,12 +3488,26 @@ function renderCanvasFromModel() {
     const selected = link.name === selectedId;
     const opacity = selectedId && !selected ? '0.4' : '1.0';
     return `
-      <g class="link-marker" transform="translate(${pose.x.toFixed(2)}, ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"
-         opacity="${opacity}" style="cursor:pointer;" onclick="event.stopPropagation(); selectLink('${dcJsString(link.name)}')">
+      <g class="link-marker" data-part="${dcAttr(link.name)}" data-draggable-kind="link" transform="translate(${pose.x.toFixed(2)}, ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"
+         opacity="${opacity}" style="cursor:pointer;">
         <circle r="3.5" fill="${selected ? 'var(--accent-blue)' : 'var(--text-tertiary)'}" />
         <line x1="0" y1="0" x2="14" y2="0" stroke="rgba(252,129,129,0.85)" stroke-width="1.5" />
         <line x1="0" y1="0" x2="0" y2="-14" stroke="rgba(134,239,172,0.85)" stroke-width="1.5" />
-        ${shouldShowLinkLabel(link) ? `<text class="canvas-label" x="6" y="-6" style="fill:${selected ? 'var(--accent-blue)' : 'var(--text-secondary)'};font-size:9px;">${dcEscapeHtml(link.name)}</text>` : ''}
+        ${(() => {
+          if (!shouldShowLinkLabel(link)) return '';
+          const label = formatCanvasLabel(link.name);
+          const point = placeCanvasLabel(label, pose.x, pose.y, {
+            selected,
+            key: normalizeCanvasLabelId(link.name),
+            preferredOffsets: [
+              { dx: pose.x >= 0 ? 16 : -16 - Math.max(28, label.length * 7.1), dy: pose.y >= 0 ? -10 : 16 },
+              { dx: pose.x >= 0 ? 16 : -16 - Math.max(28, label.length * 7.1), dy: pose.y >= 0 ? 16 : -10 },
+              { dx: -Math.max(28, label.length * 7.1) / 2, dy: pose.y >= 0 ? -18 : 22 },
+            ],
+          });
+          if (!point) return '';
+          return `<text class="canvas-label" x="${point.x.toFixed(1)}" y="${point.y.toFixed(1)}" style="fill:${selected ? 'var(--accent-blue)' : 'var(--text-secondary)'};font-size:9px;">${dcEscapeHtml(label)}</text>`;
+        })()}
       </g>`;
   }).join('') : '';
 
@@ -2661,10 +3516,12 @@ function renderCanvasFromModel() {
     ${sensorCoverage}
     ${collisionLayer}
     ${visibleBodyShapes.map(shape => renderShape(shape, dcShapeKind(shape) === 'wheel' ? 'robot-wheel' : dcShapeKind(shape) === 'laser' ? 'robot-sensor-lidar' : dcShapeKind(shape) === 'camera' ? 'robot-sensor-camera' : 'robot-chassis')).join('')}
+    ${headingArrow}
     <g class="robot-origin-cross">
       <line x1="-24" y1="0" x2="48" y2="0" class="robot-axis-x" stroke="rgba(252,129,129,0.5)"/>
       <line x1="0" y1="24" x2="0" y2="-48" class="robot-axis-y" stroke="rgba(134,239,172,0.5)"/>
     </g>
+    ${frameEdges}
     ${linkFrames}
     <text class="canvas-label" x="52" y="4"${DC.labelsVisible ? '' : ' style="display:none;"'}>X</text>
     <text class="canvas-label" x="6" y="-52"${DC.labelsVisible ? '' : ' style="display:none;"'}>Y</text>
@@ -2679,6 +3536,140 @@ function renderCanvasFromModel() {
     });
   });
   applySvgScale();
+}
+
+function dcSvgWorldPointFromEvent(event) {
+  if (DC.canvasView !== 'top') return null;
+  const svg = document.getElementById('robot-svg');
+  if (!svg || typeof svg.createSVGPoint !== 'function') return null;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
+  const point = svg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const local = point.matrixTransform(ctm.inverse());
+  return {
+    x: Number(local.x || 0) / 220,
+    y: -Number(local.y || 0) / 220,
+  };
+}
+
+function dcCanvasDragTargetFromElement(element) {
+  const target = element && typeof element.closest === 'function'
+    ? element.closest('[data-draggable-kind][data-part]')
+    : null;
+  if (!target) return null;
+  return {
+    kind: String(target.getAttribute('data-draggable-kind') || '').trim(),
+    id: String(target.getAttribute('data-part') || '').trim(),
+    element: target,
+  };
+}
+
+function dcBeginCanvasDrag(event) {
+  if (DC.canvasView !== 'top' || !DC.model) return;
+  const dragTarget = dcCanvasDragTargetFromElement(event.target);
+  if (!dragTarget || !dragTarget.id) return;
+
+  const world = dcSvgWorldPointFromEvent(event);
+  if (!world) return;
+
+  if (dragTarget.kind === 'shape') {
+    const shape = dcFindShape(dragTarget.id);
+    if (!shape) return;
+    const absTransforms = dcComputeAbsoluteTransforms();
+    const linkName = String(shape.link || DC.model.base_link || 'base_link').trim() || String(DC.model.base_link || 'base_link');
+    const parentPose = absTransforms[linkName] || { x: 0, y: 0, yaw: 0 };
+    const cosYaw = Math.cos(parentPose.yaw || 0);
+    const sinYaw = Math.sin(parentPose.yaw || 0);
+    const shapeWorld = {
+      x: parentPose.x + (Number(shape.x || 0) * cosYaw - Number(shape.y || 0) * sinYaw),
+      y: parentPose.y + (Number(shape.x || 0) * sinYaw + Number(shape.y || 0) * cosYaw),
+    };
+    dcPushUndo();
+    DC.dragState = {
+      kind: 'shape',
+      id: dragTarget.id,
+      offsetX: world.x - shapeWorld.x,
+      offsetY: world.y - shapeWorld.y,
+      pointerId: event.pointerId,
+    };
+    selectLink(dragTarget.id);
+  } else if (dragTarget.kind === 'link') {
+    const link = dcFindLink(dragTarget.id);
+    const baseLink = String(DC.model?.base_link || 'base_link').trim() || 'base_link';
+    if (!link || dragTarget.id === baseLink) return;
+    const absTransforms = dcComputeAbsoluteTransforms();
+    const pose = absTransforms[dragTarget.id] || { x: 0, y: 0 };
+    dcPushUndo();
+    DC.dragState = {
+      kind: 'link',
+      id: dragTarget.id,
+      offsetX: world.x - Number(pose.x || 0),
+      offsetY: world.y - Number(pose.y || 0),
+      pointerId: event.pointerId,
+    };
+    selectLink(dragTarget.id);
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  try { dragTarget.element.setPointerCapture(event.pointerId); } catch (_error) {}
+}
+
+function dcMoveCanvasDrag(event) {
+  const drag = DC.dragState;
+  if (!drag) return;
+  const world = dcSvgWorldPointFromEvent(event);
+  if (!world) return;
+
+  if (drag.kind === 'shape') {
+    const shape = dcFindShape(drag.id);
+    if (!shape) return;
+    const absTransforms = dcComputeAbsoluteTransforms();
+    const linkName = String(shape.link || DC.model.base_link || 'base_link').trim() || String(DC.model.base_link || 'base_link');
+    const parentPose = absTransforms[linkName] || { x: 0, y: 0, yaw: 0 };
+    const targetX = world.x - Number(drag.offsetX || 0);
+    const targetY = world.y - Number(drag.offsetY || 0);
+    const dx = targetX - Number(parentPose.x || 0);
+    const dy = targetY - Number(parentPose.y || 0);
+    const cosYaw = Math.cos(-(parentPose.yaw || 0));
+    const sinYaw = Math.sin(-(parentPose.yaw || 0));
+    shape.x = dx * cosYaw - dy * sinYaw;
+    shape.y = dx * sinYaw + dy * cosYaw;
+  } else if (drag.kind === 'link') {
+    const link = dcFindLink(drag.id);
+    if (!link) return;
+    const absTransforms = dcComputeAbsoluteTransforms();
+    const parentPose = absTransforms[String(link.parent || '')] || { x: 0, y: 0, yaw: 0 };
+    const targetX = world.x - Number(drag.offsetX || 0);
+    const targetY = world.y - Number(drag.offsetY || 0);
+    const dx = targetX - Number(parentPose.x || 0);
+    const dy = targetY - Number(parentPose.y || 0);
+    const cosYaw = Math.cos(-(parentPose.yaw || 0));
+    const sinYaw = Math.sin(-(parentPose.yaw || 0));
+    if (!Array.isArray(link.joint_xyz)) link.joint_xyz = [0, 0, 0];
+    link.joint_xyz[0] = dx * cosYaw - dy * sinYaw;
+    link.joint_xyz[1] = dx * sinYaw + dy * cosYaw;
+  }
+
+  DC.model.updated_at = Math.floor(Date.now() / 1000);
+  DC.dirty = true;
+  renderCanvasFromModel();
+  showDetailEditor(drag.id);
+}
+
+function dcEndCanvasDrag() {
+  if (!DC.dragState) return;
+  const dragId = DC.dragState.id;
+  DC.dragState = null;
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  selectLink(dragId);
 }
 
 function tagClass(type) {
@@ -3132,20 +4123,48 @@ function handleDuplicateSelected() {
 function handleDeleteSelected() {
   const selected = DC.selectedLink;
   const index = dcModelShapes().findIndex(shape => String(shape?.id || shape?.name || '') === String(selected || ''));
-  if (index < 0) {
+  if (index >= 0) {
+    const shape = DC.model.shapes[index];
+    if (!confirm(`Delete "${shape.id || shape.name}" from the local model?`)) return;
+    dcPushUndo();
+    DC.model.shapes.splice(index, 1);
+    dcMarkDirty(true);
+    renderHierarchyFromModel();
+    renderCanvasFromModel();
+    renderValidationReport();
+    showOverview();
+    dcSetMessage(`Deleted ${shape.id || shape.name}`);
+    return;
+  }
+
+  const linkIndex = dcModelLinks().findIndex(link => String(link?.name || '') === String(selected || ''));
+  if (linkIndex < 0) {
     dcSetMessage('Selected frame/object cannot be deleted from this panel', 'warn');
     return;
   }
-  const shape = DC.model.shapes[index];
-  if (!confirm(`Delete "${shape.id || shape.name}" from the local model?`)) return;
+  const link = dcModelLinks()[linkIndex];
+  const baseLink = String(DC.model?.base_link || 'base_link').trim() || 'base_link';
+  const linkName = String(link?.name || '').trim();
+  if (!linkName || linkName === baseLink) {
+    dcSetMessage('Base frame cannot be deleted', 'warn');
+    return;
+  }
+  if (!confirm(`Delete frame "${linkName}" from the local model? Child frames and devices will move to ${baseLink}.`)) return;
   dcPushUndo();
-  DC.model.shapes.splice(index, 1);
+  dcModelLinks().splice(linkIndex, 1);
+  dcModelLinks().forEach((candidate) => {
+    if (String(candidate?.parent || '') === linkName) candidate.parent = baseLink;
+  });
+  dcModelShapes().forEach((shape) => {
+    if (String(shape?.link || '') === linkName) shape.link = baseLink;
+    if (String(shape?.child_frame || '') === linkName) shape.child_frame = '';
+  });
   dcMarkDirty(true);
   renderHierarchyFromModel();
   renderCanvasFromModel();
   renderValidationReport();
   showOverview();
-  dcSetMessage(`Deleted ${shape.id || shape.name}`);
+  dcSetMessage(`Deleted frame ${linkName}`);
 }
 
 async function handlePreviewGeneratedBundle() {
@@ -3560,8 +4579,20 @@ async function handleNewProfile() {
       method: 'POST',
       body: JSON.stringify({ robot_id: robotId, activate: true }),
     });
+    const createdRobotId = String(data.active_robot_id || data.target_robot_id || data.profile?.robot_id || robotId).trim();
+    await dcFetch('/api/settings/robot_profiles/robot_editor/save', {
+      method: 'POST',
+      body: JSON.stringify({
+        robot_id: createdRobotId,
+        profile_fields: dcBlankProfileFields(createdRobotId, data.profile || {}),
+        robot_builder: dcBlankRobotBuilder('base_link'),
+        compile_urdf: false,
+        apply_runtime: false,
+      }),
+    });
     await loadProfiles();
-    dcSetMessage(data.message || 'Profile created');
+    await loadRobotEditor(createdRobotId);
+    dcSetMessage(`Created blank model workspace for ${createdRobotId}`, 'success');
   } catch (exc) {
     dcSetMessage(exc.message, 'error');
   }
@@ -3583,24 +4614,31 @@ document.addEventListener('click', e => {
   }
 });
 
-/* ─── Make canvas interactive (pointer cursor on parts) ───── */
-document.querySelectorAll('[data-part]').forEach(el => {
-  el.style.cursor = 'pointer';
-  el.addEventListener('click', e => {
-    e.stopPropagation();
-    selectLink(el.getAttribute('data-part'));
-  });
-});
-
-/* ─── Canvas click on empty area deselects ────────────────── */
+/* ─── Canvas interactions ─────────────────────────────────── */
 document.getElementById('robot-canvas-area').addEventListener('click', e => {
-  if (!e.target.closest('[data-part]') && !e.target.closest('g[onclick]')) {
+  if (e.target.closest('#robot-3d-view')) return;
+  if (!e.target.closest('[data-part]')) {
     showOverview();
   }
 });
 
+const robotSvgEl = document.getElementById('robot-svg');
+if (robotSvgEl) {
+  robotSvgEl.addEventListener('pointerdown', dcBeginCanvasDrag);
+  robotSvgEl.addEventListener('pointermove', dcMoveCanvasDrag);
+  robotSvgEl.addEventListener('pointerup', dcEndCanvasDrag);
+  robotSvgEl.addEventListener('pointercancel', dcEndCanvasDrag);
+  robotSvgEl.addEventListener('mouseleave', dcEndCanvasDrag);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   dcCheckEmbedded();
+  try {
+    DC.inspectorCollapsed = window.localStorage.getItem(DEVICE_INSPECTOR_COLLAPSED_KEY) === '1';
+  } catch (_err) {
+    DC.inspectorCollapsed = false;
+  }
+  syncDeviceInspectorCollapsedState();
   syncCanvasControlState();
   setMode(DC.mode);
   loadProfiles().catch(exc => {

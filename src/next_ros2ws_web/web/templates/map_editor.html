@@ -840,6 +840,8 @@
 
         #map-editor-shell .tool-sidebar-header {
             display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: start;
             gap: 3px;
             padding: 8px 10px;
             border: 1px solid var(--border-chrome);
@@ -859,6 +861,33 @@
             display: grid;
             gap: 3px;
             min-width: 0;
+        }
+
+        #map-editor-shell .tool-flyout-toggle {
+            width: 22px;
+            height: 22px;
+            border: 1px solid var(--border-chrome);
+            border-radius: 4px;
+            background: rgba(35, 41, 51, 0.92);
+            color: var(--text-secondary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        #map-editor-shell .tool-flyout-toggle:hover {
+            color: var(--text-primary);
+            border-color: var(--border-secondary);
+        }
+
+        #map-editor-shell .tool-flyout-toggle i {
+            transition: transform 0.14s ease;
+        }
+
+        #map-editor-shell .tool-flyout.is-collapsed .tool-flyout-toggle i {
+            transform: rotate(-180deg);
         }
 
         #map-editor-shell .tool-sidebar-title {
@@ -887,6 +916,10 @@
 
         #map-editor-shell .sidebar-panel.active-panel {
             display: flex;
+        }
+
+        #map-editor-shell .tool-flyout.is-collapsed .sidebar-panel.active-panel {
+            display: none;
         }
 
         #map-editor-shell .tool-sidebar-scroll::-webkit-scrollbar,
@@ -1152,7 +1185,8 @@
         #map-editor-shell #inspector-toggle {
             position: absolute;
             left: 0;
-            top: 14px;
+            top: 50%;
+            transform: translateY(-50%);
             width: 22px;
             height: 54px;
             border: 1px solid var(--border-chrome);
@@ -1682,6 +1716,9 @@
                             <span class="tool-sidebar-title" id="tool-sidebar-title">Draw</span>
                             <span class="tool-sidebar-subtitle" id="tool-sidebar-subtitle">Paint the occupancy map, erase noise, and reshape walls.</span>
                         </div>
+                        <button class="tool-flyout-toggle" id="tool-flyout-toggle" type="button" title="Collapse tool panel" aria-expanded="true">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
                     </div>
 
                     <section class="sidebar-panel active-panel" data-mode-panel="draw">
@@ -1847,6 +1884,7 @@
         const dottedSessionMetaEl = document.getElementById("dotted-session-meta");
         const toolFlyoutEl = document.querySelector(".tool-flyout");
         const toolFlyoutHandleEl = document.querySelector(".tool-flyout .tool-sidebar-header");
+        const toolFlyoutToggleBtn = document.getElementById("tool-flyout-toggle");
         const sidebarCollapseToggleBtn = document.getElementById("sidebar-collapse-toggle");
         const sidebarCollapseIconEl = document.getElementById("sidebar-collapse-icon");
         const toolSidebarTitleEl = document.getElementById("tool-sidebar-title");
@@ -1895,6 +1933,7 @@
         const sidebarCollapsedStorageKey = "mapEditorSidebarCollapsed";
         const inspectorCollapsedStorageKey = "mapEditorInspectorCollapsed";
         const toolFlyoutPositionStorageKey = "mapEditorToolFlyoutPosition";
+        const toolFlyoutCollapsedStorageKey = "mapEditorToolFlyoutCollapsed";
 
         const savedBrushSize = Number(window.localStorage.getItem("mapEditorBrushSize"));
         if (Number.isFinite(savedBrushSize)) {
@@ -1914,7 +1953,7 @@
 
         const state = {
             editorMode: "draw",
-            tool: "add",
+            tool: "",
             brush: Number(brushSlider.value),
             wallLineWidth: Number(wallLineWidthSlider.value),
             pointerDown: false,
@@ -1984,6 +2023,7 @@
             snapEnabled: false,
             sidebarCollapsed: window.localStorage.getItem(sidebarCollapsedStorageKey) === "1",
             inspectorCollapsed: window.localStorage.getItem(inspectorCollapsedStorageKey) === "1",
+            toolFlyoutCollapsed: window.localStorage.getItem(toolFlyoutCollapsedStorageKey) === "1",
             toolFlyoutPosition: null,
             flyoutDrag: null,
             view: {
@@ -2015,12 +2055,6 @@
             dotted: { label: "Dotted Map", description: "Ground-truth dotted map with scan and robot overlays." },
             view: { label: "View", description: "Inspect the map, pan, and control layers." },
             graph: { label: "Graph", description: "Edit LM/AP/CP/QR sites, paths, areas, and bins over the map." }
-        };
-
-        const MODE_DEFAULT_TOOL = {
-            draw: "add",
-            dotted: "add",
-            view: "inspect"
         };
 
         const TOOL_TO_MODE = {
@@ -2075,6 +2109,7 @@
         };
 
         const TOOL_HINTS = {
+            "": "No tool selected — pick a tool when you want to edit, or use mouse pan/zoom to navigate",
             add: "Obstacle brush enabled",
             erase: "Obstacle erase brush enabled",
             wall_line: "Click start point, then end point to draw a wall line — width is adjustable in Settings",
@@ -2263,6 +2298,31 @@
             }
         }
 
+        function syncToolFlyoutCollapsedState() {
+            if (!toolFlyoutEl) {
+                return;
+            }
+            toolFlyoutEl.classList.toggle("is-collapsed", !!state.toolFlyoutCollapsed);
+            if (toolFlyoutToggleBtn) {
+                toolFlyoutToggleBtn.title = state.toolFlyoutCollapsed ? "Expand tool panel" : "Collapse tool panel";
+                toolFlyoutToggleBtn.setAttribute("aria-expanded", String(!state.toolFlyoutCollapsed));
+            }
+        }
+
+        function setToolFlyoutCollapsed(nextCollapsed) {
+            state.toolFlyoutCollapsed = !!nextCollapsed;
+            try {
+                window.localStorage.setItem(toolFlyoutCollapsedStorageKey, state.toolFlyoutCollapsed ? "1" : "0");
+            } catch (_err) {
+                // ignore storage failures
+            }
+            syncToolFlyoutCollapsedState();
+            window.requestAnimationFrame(() => {
+                applyToolFlyoutPosition();
+                resizeCanvasToViewport({ preserveView: true });
+            });
+        }
+
         function setInspectorCollapsed(nextCollapsed) {
             state.inspectorCollapsed = !!nextCollapsed;
             try {
@@ -2405,10 +2465,7 @@
             setEditorMode(normalized);
             const activeToolMode = TOOL_TO_MODE[state.tool] || TOOL_TO_MODE[resolveToolSelection(state.tool)] || "";
             if (activeToolMode !== normalized) {
-                const defaultTool = MODE_DEFAULT_TOOL[normalized];
-                if (defaultTool) {
-                    setTool(defaultTool);
-                }
+                setTool("");
             } else {
                 syncCanvasContext();
                 renderInspector();
@@ -2424,7 +2481,7 @@
         }
 
         function syncCanvasCursor() {
-            let cursor = "crosshair";
+            let cursor = state.tool ? "crosshair" : "default";
             if (state.editorMode === "graph") {
                 const graphTool = String(window.MapEditorGraph?.tool || "pointer");
                 const graphDragging = Boolean(window.MapEditorGraph?.dragging);
@@ -2723,7 +2780,14 @@
         }
 
         document.querySelectorAll("button[data-tool]").forEach(btn => {
-            btn.addEventListener("click", () => setTool(btn.dataset.tool));
+            btn.addEventListener("click", () => {
+                const requestedTool = String(btn.dataset.tool || "");
+                if (toolbarButtonMatchesTool(requestedTool, state.tool)) {
+                    setTool("");
+                    return;
+                }
+                setTool(requestedTool);
+            });
         });
 
         modePillButtons.forEach((button) => {
@@ -2750,7 +2814,15 @@
             setInspectorCollapsed(!state.inspectorCollapsed);
         });
 
+        toolFlyoutToggleBtn?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setToolFlyoutCollapsed(!state.toolFlyoutCollapsed);
+        });
+
         toolFlyoutHandleEl?.addEventListener("pointerdown", (event) => {
+            if (toolFlyoutToggleBtn && toolFlyoutToggleBtn.contains(event.target)) {
+                return;
+            }
             if (!toolFlyoutEl || !toolFlyoutEl.parentElement) {
                 return;
             }
@@ -4826,7 +4898,7 @@
                 await refreshDottedBackground();
                 await refreshRobotPose();
                 await refreshScanOverlay();
-                setTool("add");
+                setTool("");
             } else {
                 btn?.classList.remove("active");
                 if (dotPlaceRobotBtn) dotPlaceRobotBtn.style.display = "none";
@@ -4839,7 +4911,7 @@
                 state.scanPoints = [];
                 state.scanSource = "";
                 state.scanOrigin = null;
-                state.tool = "add";
+                state.tool = "";
                 document.querySelectorAll("button[data-tool]").forEach((btnEl) => {
                     btnEl.classList.toggle("active", toolbarButtonMatchesTool(btnEl.dataset.tool, state.tool));
                 });
@@ -4859,14 +4931,15 @@
             syncHistoryButtons();
             syncSidebarCollapsedState();
             syncInspectorCollapsedState();
+            syncToolFlyoutCollapsedState();
             applyToolFlyoutPosition();
             renderSidebarCollections();
             renderInspector();
             syncCanvasContext();
             syncStatusBar();
             openInspectorTab("properties");
-            setTool("add");
             setEditorMode("draw");
+            setTool("");
             syncCanvasCursor();
 
             document.getElementById("dotted-view-btn")?.addEventListener("click", toggleDottedView);

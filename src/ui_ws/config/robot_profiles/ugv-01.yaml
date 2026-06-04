@@ -1,6 +1,6 @@
 schema_version: 1
 migration_warnings: []
-profile_version: 6
+profile_version: 9
 robot_id: UGV-01
 namespace: /
 base_frame: base_link
@@ -11,7 +11,7 @@ sensor_frames:
   camera: camera_link
   lidar: base_scan
   camera_frame: camera_link
-urdf_source: ''
+urdf_source: artifacts/ugv-01/v9/robot_editor_generated.urdf
 nav2_params_file: ''
 map_association:
   active_map: ''
@@ -70,25 +70,33 @@ topics:
   subscription_slam_pose: /slam_toolbox/pose
   subscription_odom: /odom
 urdf_artifact:
-  source_filename: ''
-  source_type: ''
-  source_path: ''
-  compiled_urdf_path: ''
-  validation_report_path: ''
-  uploaded_at: 0
+  source_filename: robot_editor_generated.urdf
+  source_type: urdf
+  source_path: artifacts/ugv-01/v9/robot_editor_generated.urdf
+  compiled_urdf_path: artifacts/ugv-01/v9/compiled.urdf
+  validation_report_path: artifacts/ugv-01/v9/validation.yaml
+  uploaded_at: 1778146884
   validation:
     valid: false
-    parse_ok: false
-    tree_connected: false
-    base_link_exists: false
+    parse_ok: true
+    tree_connected: true
+    base_link_exists: true
     required_frames_ok: false
-    message: ''
-    required_frames: []
-    missing_required_frames: []
-    optional_missing_frames: []
+    message: 'missing required frames: base_scan, camera_link; optional frames absent
+      from URDF: map, odom'
+    required_frames:
+    - base_link
+    - base_scan
+    - camera_link
+    missing_required_frames:
+    - base_scan
+    - camera_link
+    optional_missing_frames:
+    - map
+    - odom
     unknown_joint_links: []
-    link_count: 0
-    joint_count: 0
+    link_count: 12
+    joint_count: 11
   runtime:
     ok: false
     message: ''
@@ -491,7 +499,7 @@ robot_builder:
     link: laser_front_frame
     child_frame: ''
     enabled: true
-    topic: ''
+    topic: /scan
     driver: ''
     safety_behavior: ''
     recovery_behavior: ''
@@ -522,7 +530,7 @@ robot_builder:
     link: laser_rear_frame
     child_frame: ''
     enabled: true
-    topic: ''
+    topic: /scan2
     driver: ''
     safety_behavior: ''
     recovery_behavior: ''
@@ -546,7 +554,7 @@ robot_builder:
     diagnostic_source: ''
     parameters: {}
     validation_records: []
-  updated_at: 1778030916
+  updated_at: 1778146884
 release:
   production: false
   production_marked_at: 0

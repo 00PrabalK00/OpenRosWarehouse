@@ -151,12 +151,17 @@ def run_dotted_truth_worker(
         )
 
     try:
+        env = os.environ.copy()
+        if workspace_root:
+            env['NEXT_WORKSPACE_ROOT'] = os.path.abspath(workspace_root)
+
         completed = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=max(1.0, float(timeout_sec)),
             check=False,
+            env=env,
         )
     except Exception as exc:
         return {
@@ -224,7 +229,7 @@ def ensure_dotted_truth_map(
     meta = map_yaml.get(DOTTED_TRUTH_META_KEY)
     meta = dict(meta) if isinstance(meta, dict) else {}
 
-    image_matches = os.path.abspath(_resolve_image_path(yaml_path, str(map_yaml.get('image', '') or ''))) == os.path.abspath(dotted_image_path)
+    image_matches = os.path.abspath(_resolve_image_path(yaml_path, str(map_yaml.get('image', '') or ''))) == os.path.abspath(source_image_path)
     source_matches = str(meta.get('source_image', '') or '').strip() == plan['source_image_ref']
     dotted_matches = str(meta.get('image', '') or '').strip() == plan['dotted_image_ref']
     version_matches = str(meta.get('generator', '') or '').strip() == DOTTED_TRUTH_VERSION
@@ -254,8 +259,8 @@ def ensure_dotted_truth_map(
         generator_ran = True
 
     updated = False
-    if str(map_yaml.get('image', '') or '').strip() != plan['dotted_image_ref']:
-        map_yaml['image'] = plan['dotted_image_ref']
+    if str(map_yaml.get('image', '') or '').strip() != plan['source_image_ref']:
+        map_yaml['image'] = plan['source_image_ref']
         updated = True
 
     desired_meta = {
