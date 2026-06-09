@@ -113,37 +113,60 @@
             border-radius: 3px !important;
         }
 
-        /* /user renders the same home template with operator nav tools only. */
-        #app-shell[data-user-page="1"] .header-tab-divider,
-        #app-shell[data-user-page="1"] [data-tab-header-btn],
+        /* /user (and embed=map) : purge the whole shell down to ONLY #map-container. */
+        #app-shell[data-user-page="1"] .global-header,
+        #app-shell[data-user-page="1"] #bottom-status-bar,
         #app-shell[data-user-page="1"] .tab-navigation,
+        #app-shell[data-user-page="1"] #navigator-top-controls,
+        #app-shell[data-user-page="1"] #sidebar,
         #app-shell[data-user-page="1"] #view-float,
         #app-shell[data-user-page="1"] .zoom-controls,
-        #app-shell[data-user-page="1"] #navigator-top-controls,
-        #app-shell[data-user-page="1"] #editor-tab,
-        #app-shell[data-user-page="1"] #settings-tab,
-        #app-shell[data-user-page="1"] #device-config-tab,
-        #app-shell[data-user-page="1"] [data-sidebar-mode="zones"],
-        #app-shell[data-user-page="1"] [data-sidebar-mode="paths"],
-        #app-shell[data-user-page="1"] [data-sidebar-mode="filters"] {
-            display: none !important;
-        }
-        #app-shell[data-user-page="1"] #container {
-            display: flex !important;
-        }
-        #app-shell[data-user-page="1"] #map-container {
-            order: 1 !important;
-        }
-        #app-shell[data-user-page="1"] #sidebar {
-            order: 2 !important;
-        }
-        #app-shell[data-user-page="1"] #canvas {
-            top: 0 !important;
-            height: 100% !important;
-        }
         #app-shell[data-user-page="1"] .map-ruler,
-        #app-shell[data-user-page="1"] .map-ruler-corner {
+        #app-shell[data-user-page="1"] .map-ruler-corner,
+        #app-shell[data-embed="map"] .global-header,
+        #app-shell[data-embed="map"] #bottom-status-bar,
+        #app-shell[data-embed="map"] .tab-navigation,
+        #app-shell[data-embed="map"] #navigator-top-controls,
+        #app-shell[data-embed="map"] #sidebar,
+        #app-shell[data-embed="map"] #view-float,
+        #app-shell[data-embed="map"] .zoom-controls,
+        #app-shell[data-embed="map"] .map-ruler,
+        #app-shell[data-embed="map"] .map-ruler-corner {
             display: none !important;
+        }
+        /* hide every tab except the navigator (which holds the map) */
+        #app-shell[data-user-page="1"] .tab-content:not(#navigator-tab),
+        #app-shell[data-embed="map"] .tab-content:not(#navigator-tab) {
+            display: none !important;
+        }
+        /* purge everything inside the navigator except the #container > #map-container subtree */
+        #app-shell[data-user-page="1"] #navigator-tab > *:not(#container),
+        #app-shell[data-embed="map"] #navigator-tab > *:not(#container),
+        #app-shell[data-user-page="1"] #container > *:not(#map-container),
+        #app-shell[data-embed="map"] #container > *:not(#map-container) {
+            display: none !important;
+        }
+        /* full-bleed the surviving map */
+        #app-shell[data-user-page="1"] .main-viewport,
+        #app-shell[data-embed="map"] .main-viewport {
+            top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+        }
+        #app-shell[data-user-page="1"] #navigator-tab,
+        #app-shell[data-embed="map"] #navigator-tab {
+            display: block !important; position: absolute !important; inset: 0 !important;
+        }
+        #app-shell[data-user-page="1"] #container,
+        #app-shell[data-embed="map"] #container {
+            display: block !important; position: absolute !important; inset: 0 !important;
+        }
+        #app-shell[data-user-page="1"] #map-container,
+        #app-shell[data-embed="map"] #map-container {
+            position: absolute !important; inset: 0 !important;
+            width: 100% !important; height: 100% !important; order: 0 !important;
+        }
+        #app-shell[data-user-page="1"] #canvas,
+        #app-shell[data-embed="map"] #canvas {
+            top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important;
         }
 
         /* ── Main Viewport — reserve space for bottom status bar ── */
@@ -4633,6 +4656,202 @@
 
         #lift-control-pip.active {
             display: block;
+        }
+
+        /* ── PGV floor-code scanner PIP (mirrors lift/shelf popups) ── */
+        #pgv-control-pip {
+            position: fixed;
+            bottom: 20px;
+            right: 640px;
+            z-index: 1001;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-secondary);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            display: none;
+            width: 320px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        #pgv-control-pip.active {
+            display: block;
+        }
+
+        .pgv-popup-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 4px 0;
+        }
+
+        .pgv-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin: 2px 0;
+        }
+
+        .pgv-btn-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .pgv-btn-row .lift-cmd-btn {
+            flex: 1 1 0;
+            min-width: 88px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .pgv-btn-row .lift-cmd-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .pgv-code-badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .pgv-code-on { background: rgba(34,197,94,0.18); color: #16a34a; }
+        .pgv-code-off { background: rgba(148,163,184,0.18); color: var(--text-secondary); }
+        .pgv-diag-ok { color: #16a34a; }
+        .pgv-diag-warn { color: #d97706; }
+        .pgv-diag-error { color: #dc2626; }
+
+        .pgv-plot-card {
+            border: 1px solid var(--border-secondary);
+            border-radius: 8px;
+            padding: 8px;
+            background: var(--bg-primary);
+        }
+
+        .pgv-plot-img {
+            width: 100%;
+            border-radius: 6px;
+            display: none;
+            background: #fff;
+        }
+
+        .pgv-plot-empty {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 10px 4px;
+        }
+
+        .pgv-note {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* ── Matrix Tag / floor-code authoring PIP ── */
+        #qr-codes-pip {
+            position: fixed;
+            bottom: 20px;
+            right: 980px;
+            z-index: 1001;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-secondary);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            display: none;
+            width: 340px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        #qr-codes-pip.active { display: block; }
+
+        .qr-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 8px;
+        }
+
+        .qr-form-grid label {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .qr-form-grid input {
+            font-size: 12px;
+            padding: 4px 6px;
+            border: 1px solid var(--border-secondary);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .qr-tag-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid var(--border-secondary);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            font-size: 11px;
+        }
+
+        .qr-tag-row {
+            display: grid;
+            grid-template-columns: 42px 1fr 1fr 0.9fr 24px;
+            gap: 4px;
+            padding: 3px 8px;
+            border-bottom: 1px solid var(--border-secondary);
+            color: var(--text-primary);
+        }
+
+        .qr-tag-row:last-child { border-bottom: none; }
+        .qr-tag-row.qr-tag-head { font-weight: 700; color: var(--text-secondary); position: sticky; top: 0; background: var(--bg-secondary); }
+        .qr-tag-row.qr-tag-dup { color: #dc2626; }
+        .qr-tag-row.qr-tag-sel { background: rgba(245, 158, 11, 0.16); box-shadow: inset 2px 0 0 #f59e0b; }
+
+        .qr-cell-input {
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 11px;
+            padding: 1px 3px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-primary);
+        }
+        .qr-cell-input:hover { border-color: var(--border-secondary); }
+        .qr-cell-input:focus { border-color: #16a34a; background: var(--bg-secondary); outline: none; }
+
+        .qr-del-btn {
+            background: transparent;
+            border: none;
+            color: #dc2626;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+            padding: 0 2px;
+        }
+        .qr-del-btn:hover { color: #991b1b; }
+
+        #qr-codes-pip .lift-cmd-btn.active {
+            outline: 2px solid #16a34a;
+            outline-offset: -2px;
         }
 
         .lift-popup-title {
@@ -12901,7 +13120,7 @@
     <link rel="stylesheet" href="/static/dev_recognition.css">
 </head>
 
-<body id="app-shell" data-mode="operate" data-user-page="{{ '1' if user_page else '0' }}" data-current-role="{{ current_role or ('viewer' if user_page else 'admin') }}" data-current-user="{{ current_user or '' }}">
+<body id="app-shell" data-mode="operate" data-user-page="{{ '1' if user_page else '0' }}" data-embed="{{ embed_mode or '' }}" data-current-role="{{ current_role or ('viewer' if user_page else 'admin') }}" data-current-user="{{ current_user or '' }}">
     <!-- ============================================
          GLOBAL FIXED HEADER - ALWAYS VISIBLE
          ============================================ -->
@@ -12929,6 +13148,9 @@
                 </button>
                 <button class="header-icon-btn header-tab-btn" data-tab-header-btn="recognition" onclick="switchTab('recognition')" title="Recognition">
                     <i class="fas fa-eye"></i>
+                </button>
+                <button class="header-icon-btn" onclick="window.open(location.protocol+'//'+location.hostname+':1880/','_blank','noopener')" title="Node-RED Automation Flows">
+                    <i class="fas fa-project-diagram"></i>
                 </button>
                 <button class="header-icon-btn header-tab-btn" data-tab-header-btn="settings" onclick="switchTab('settings')" title="Settings">
                     <i class="fas fa-cog"></i>
@@ -13068,6 +13290,7 @@
                     <button class="mctrl-btn" id="shelf-popup-btn-top" onclick="toggleShelfPopup()" title="Open shelf controls"><i class="fas fa-box"></i><span>SHELF</span></button>
                     <button class="mctrl-btn" id="motion-control-btn-top" onclick="document.getElementById('motion-control-modal').classList.toggle('open')" title="Translation/Rotation test"><i class="fas fa-arrows-up-down-left-right"></i><span>MOTION</span></button>
                     <button class="mctrl-btn" id="camera-btn-top" onclick="window.open('/dev/camera', 'camera_popup', 'width=640,height=480,menubar=no,toolbar=no,location=no,status=no')" title="Open Camera Feed"><i class="fas fa-camera"></i><span>CAMERA</span></button>
+                    <button class="mctrl-btn" id="pgv-btn-top" onclick="openPgvPopup()" title="PGV Floor-Code Scanner"><i class="fas fa-barcode"></i><span>PGV</span></button>
                     <div class="mctrl-sep"></div>
                     <button class="mctrl-btn" id="nav-mode-btn-top" onclick="toggleNavMode()" title="Toggle Navigation Stack"><i class="fas fa-wifi"></i><span>START NAV</span></button>
                     <button class="mctrl-btn" onclick="cancelNav2Goal()" title="Cancel Navigation"><i class="fas fa-ban"></i><span>CANCEL NAV</span></button>
@@ -13082,6 +13305,7 @@
                     <button class="mctrl-btn" id="dotted-map-btn" data-dotted-map-toggle onclick="toggleDottedMap()" title="Toggle dotted map display layer"><i class="fas fa-braille"></i><span>DOTTED</span></button>
                     <button class="mctrl-btn" onclick="openStitchPopup()" title="Map Stitching — load a second map, align it, and merge it into the active map"><i class="fas fa-object-group"></i><span>STITCH</span></button>
                     <button class="mctrl-btn" onclick="openLayoutsPanel()" title="Map Layout Snapshots"><i class="fas fa-th-large"></i><span>LAYOUTS</span></button>
+                    <button class="mctrl-btn" id="qr-codes-btn-top" onclick="openQrPopup()" title="Place oriented Matrix Tags and export the PGV tag map"><i class="fas fa-qrcode"></i><span>MATRIX TAGS</span></button>
                     <div class="mctrl-sep"></div>
                 </div>
 
@@ -13449,7 +13673,7 @@
                                             <option value="battery">Battery</option>
                                             <option value="chargespot">Chargespot (forklift)</option>
                                             <option value="leg">Leg (human leg)</option>
-                                            <option value="tag">Tag (QR code)</option>
+                                            <option value="tag">Matrix Tag</option>
                                             <option value="polygon">Polygon Template</option>
                                         </select>
                                     </div>
@@ -13783,7 +14007,7 @@
                                         </button>
                                         <button class="filter-btn filter-btn-type" id="filter-layer-tag_area"
                                             onclick="setFilterLayer('tag_area')" style="flex: 1 1 30%;">
-                                            <span class="filter-btn-title">Tag / QR</span>
+                                            <span class="filter-btn-title">Matrix Tag</span>
                                             <span class="filter-btn-count" id="filter-count-tag_area">(0)</span>
                                         </button>
                                         <button class="filter-btn filter-btn-type" id="filter-layer-do_area"
@@ -14047,6 +14271,148 @@
                     </div>
                 </div>
 
+                <div id="pgv-control-pip">
+                    <div class="pip-header" id="pgv-pip-header">
+                        <div class="pip-title">
+                            <i class="fas fa-barcode"></i> PGV Scanner
+                        </div>
+                        <button class="pip-close" type="button" onclick="closePgvPopup()">×</button>
+                    </div>
+                    <div class="pip-content">
+                        <div class="pgv-popup-body">
+                            <div class="pgv-section-title">Scanner stack</div>
+                            <div class="pgv-btn-row">
+                                <button id="pgv-start-cal-btn" class="lift-cmd-btn" type="button" onclick="pgvLaunch('calibration')" title="Start reader + calibrator">START CALIBRATION</button>
+                                <button id="pgv-stop-btn" class="lift-cmd-btn shelf-off" type="button" onclick="pgvShutdown()" title="Stop all PGV nodes">STOP</button>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <label for="pgv-odom-topic" class="pgv-note" style="white-space:nowrap;">Odom topic</label>
+                                <input id="pgv-odom-topic" type="text" value="/odometry/filtered" title="Continuous odometry the calibrator pairs with PGV readings" style="flex:1;min-width:0;font-size:11px;padding:3px 6px;border:1px solid var(--border-secondary);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);">
+                            </div>
+
+                            <div class="pgv-section-title">Live reading</div>
+                            <div class="lift-status-card">
+                                <div class="lift-status-row"><span>Stack</span><b id="pgv-stack-state" class="lift-status-value lift-status-neutral">Stopped</b></div>
+                                <div class="lift-status-row"><span>Code detected</span><b id="pgv-code" class="pgv-code-badge pgv-code-off">NO</b></div>
+                                <div class="lift-status-row"><span>Tag ID</span><b id="pgv-tag" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>X (mm)</span><b id="pgv-x" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Y (mm)</span><b id="pgv-y" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Angle (°)</span><b id="pgv-angle" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Accepted pose</span><b id="pgv-accepted-pose" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Diagnostics</span><b id="pgv-diag" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Last update</span><b id="pgv-age" class="lift-status-value lift-status-neutral">never</b></div>
+                            </div>
+
+                            <div class="pgv-section-title">Accepted fix</div>
+                            <div class="lift-status-card">
+                                <div class="lift-status-row"><span>Localization</span><b id="pgv-loc-status" class="lift-status-value lift-status-neutral">INIT</b></div>
+                                <div class="lift-status-row"><span>Accepted tag</span><b id="pgv-accepted-tag" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Accepted age</span><b id="pgv-accepted-age" class="lift-status-value lift-status-neutral">never</b></div>
+                                <div class="lift-status-row"><span>Residual</span><b id="pgv-residual" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Reject reason</span><b id="pgv-reject" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Detail</span><b id="pgv-loc-detail" class="lift-status-value lift-status-neutral">—</b></div>
+                            </div>
+
+                            <div class="pgv-section-title">Route status</div>
+                            <div class="lift-status-card">
+                                <div class="lift-status-row"><span>State</span><b id="pgv-route-state" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Route</span><b id="pgv-route-name" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Segment</span><b id="pgv-route-segment" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Previous</span><b id="pgv-route-previous" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Target</span><b id="pgv-route-target" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Allowed tags</span><b id="pgv-route-allowed" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Confirm count</span><b id="pgv-route-confirm" class="lift-status-value lift-status-neutral">0</b></div>
+                                <div class="lift-status-row"><span>Unexpected tags</span><b id="pgv-route-unexpected" class="lift-status-value lift-status-neutral">0</b></div>
+                                <div class="lift-status-row"><span>Distance to target</span><b id="pgv-route-distance" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Cmd vel active</span><b id="pgv-route-cmd" class="lift-status-value lift-status-neutral">NO</b></div>
+                            </div>
+
+                            <div class="pgv-section-title">Calibration</div>
+                            <div class="pgv-btn-row">
+                                <button id="pgv-cal-start" class="lift-cmd-btn" type="button" onclick="pgvCalService('start')" title="Begin collecting samples">START</button>
+                                <button id="pgv-cal-finish" class="lift-cmd-btn" type="button" onclick="pgvCalService('finish')" title="Solve + save + plot">FINISH</button>
+                                <button id="pgv-cal-cancel" class="lift-cmd-btn shelf-off" type="button" onclick="pgvCalService('cancel')" title="Discard samples">CANCEL</button>
+                            </div>
+                            <div id="pgv-cal-status" class="pgv-note">Start the calibration stack, press START, drive forward/back, spin once, then FINISH.</div>
+                            <div class="pgv-plot-card">
+                                <div class="pgv-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                                    <span>Fit quality</span>
+                                    <button class="lift-cmd-btn" type="button" style="font-size:11px;padding:2px 8px;" onclick="pgvLoadPlot()" title="Reload fit plot">REFRESH</button>
+                                </div>
+                                <img id="pgv-plot-img" class="pgv-plot-img" alt="PGV calibration fit plot">
+                                <div id="pgv-plot-empty" class="pgv-plot-empty">No calibration plot yet.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="qr-codes-pip">
+                    <div class="pip-header" id="qr-pip-header">
+                        <div class="pip-title">
+                            <i class="fas fa-qrcode"></i> Matrix Tags
+                        </div>
+                        <button class="pip-close" type="button" onclick="closeQrPopup()">×</button>
+                    </div>
+                    <div class="pip-content">
+                        <div class="pgv-popup-body">
+                            <div class="pgv-note">Matrix Tags are fixed floor landmarks with direction. Place them by clicking the map, drop one at the robot, or drive over them with auto-add. Action points are separate — add them on top and connect to a tag by id.</div>
+
+                            <div class="pgv-section-title">Next tag id</div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <input id="qr-next-id" type="number" value="39" step="1" style="flex:1;min-width:0;font-size:12px;padding:4px 6px;border:1px solid var(--border-secondary);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);">
+                                <span class="pgv-note" style="white-space:nowrap;">auto-increments</span>
+                            </div>
+                            <div class="pgv-btn-row">
+                                <button id="qr-place-btn" class="lift-cmd-btn" type="button" onclick="qrTogglePlaceMode()" title="Click on the map to drop an oriented Matrix Tag">PLACE ON MAP</button>
+                                <button id="qr-capture-btn" class="lift-cmd-btn" type="button" onclick="qrCaptureHere()" title="Drop a Matrix Tag at the PGV camera position using the robot heading as tag direction">DROP AT ROBOT</button>
+                            </div>
+                            <div class="pgv-btn-row">
+                                <button id="qr-line-btn" class="lift-cmd-btn shelf-off" type="button" onclick="qrToggleLineMode()" title="Click the first tag, click the direction, then click to drop each next tag perfectly along that line">PLACE ALONG LINE</button>
+                                <button id="qr-autoadd-btn" class="lift-cmd-btn shelf-off" type="button" onclick="qrToggleAutoAdd()" title="Drive over Matrix Tags; each newly detected tag is appended at the robot pose with direction">AUTO-ADD: OFF</button>
+                            </div>
+                            <div id="qr-action-status" class="pgv-note">Tip: align the robot with the tag direction before DROP AT ROBOT or AUTO-ADD.</div>
+
+                            <div class="pgv-section-title">Align to a line</div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <label for="qr-align-spacing" class="pgv-note" style="white-space:nowrap;">Even spacing (m)</label>
+                                <input id="qr-align-spacing" type="number" placeholder="blank = keep" step="0.01" min="0" style="flex:1;min-width:0;font-size:12px;padding:4px 6px;border:1px solid var(--border-secondary);border-radius:6px;background:var(--bg-primary);color:var(--text-primary);">
+                                <button id="qr-align-btn" class="lift-cmd-btn" type="button" onclick="qrAlign()" title="Fit a straight line through all tags, snap them onto it, and write that direction as tag yaw">ALIGN</button>
+                            </div>
+                            <div class="pgv-note">Fits the real line through the tags and writes that line direction into each tag yaw. Blank spacing = straighten only; a value evenly spaces from the first tag.</div>
+
+                            <div class="pgv-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                                <span>Matrix Tags</span>
+                                <span id="qr-tag-count" class="pgv-note">0 codes</span>
+                            </div>
+                            <div id="qr-tag-list" class="qr-tag-list"><div class="pgv-note" style="padding:8px;">No Matrix Tags yet.</div></div>
+                            <div class="pgv-btn-row">
+                                <button id="qr-refresh-btn" class="lift-cmd-btn" type="button" onclick="qrRefreshList()" title="Reload list">REFRESH</button>
+                                <button id="qr-clear-btn" class="lift-cmd-btn shelf-off" type="button" onclick="qrClearAll()" title="Delete every Matrix Tag">CLEAR ALL</button>
+                                <button id="qr-export-btn" class="lift-cmd-btn" type="button" onclick="qrExport()" title="Write tag_map.yaml for the PGV stack">EXPORT TAG MAP</button>
+                            </div>
+                            <div class="pgv-btn-row">
+                                <button id="qr-ap-btn" class="lift-cmd-btn" type="button" onclick="qrCreateActionPoints()" title="Create/update one PGV-linked action point for every Matrix Tag">CREATE AP SITES</button>
+                            </div>
+                            <div id="qr-export-status" class="pgv-note">Export writes <code>tag_map.yaml</code>; restart PGV localization (PGV popup) to load it.</div>
+
+                            <div class="pgv-section-title" style="margin-top:10px;">Tag Routes</div>
+                            <div class="pgv-note" style="margin-bottom:4px;">Draw a path between matrix codes. Enable connect mode then click FROM tag → TO tag on the map.</div>
+                            <div class="pgv-btn-row">
+                                <button id="qr-connect-btn" class="lift-cmd-btn shelf-off" type="button" onclick="qrToggleConnectMode()" title="Click two tags on the map to add a directed route edge">CONNECT TAGS</button>
+                                <button class="lift-cmd-btn" type="button" onclick="qrRefreshRouteEdges()" title="Reload route edges">REFRESH</button>
+                            </div>
+                            <div id="qr-connect-status" class="pgv-note">Connect mode off.</div>
+                            <div id="qr-route-edge-list" style="max-height:120px;overflow-y:auto;margin:4px 0;"><span class="pgv-note">No routes yet.</span></div>
+                            <div class="pgv-btn-row">
+                                <button class="lift-cmd-btn" type="button" onclick="qrFollowRoute()" title="Command route_follower to drive the route in order" style="background:var(--accent,#16a34a);color:#fff;">FOLLOW ROUTE</button>
+                                <button class="lift-cmd-btn" type="button" onclick="qrStopRoute()" title="Stop the route follower">STOP</button>
+                                <button class="lift-cmd-btn shelf-off" type="button" onclick="qrClearRoutes()" title="Delete all route edges">CLEAR ROUTES</button>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
                 <script>
                     // Stack mode logic
                     async function setStackMode(mode) {
@@ -14079,7 +14445,7 @@
                                 // SLAM expects manual driving; NAV expects autonomous control
                                 if (mode === 'slam') {
                                     await setManualMode(true, false);
-                                } else if (mode === 'nav' || mode === 'stop') {
+                                } else if (mode === 'nav' || mode === 'pgv_nav' || mode === 'stop') {
                                     await setManualMode(false, false);
                                 }
                                 await updateStackModeStatus();
@@ -14098,14 +14464,16 @@
                                         }
                                     }, 700);
                                 }
-                                if (mode === 'nav') {
+                                if (mode === 'nav' || mode === 'pgv_nav') {
                                     // Refresh map sources after NAV startup to avoid stale/empty map visuals.
                                     loadMap();
                                     refreshLiveMap();
                                     setTimeout(() => refreshLiveMap(), 1200);
                                     refreshActiveMap().catch(() => { });
                                 }
+                                return true;
                             }
+                            return false;
                         } catch (e) {
                             console.error('Failed to set stack mode:', e);
                             if (e.name === 'AbortError') {
@@ -14113,6 +14481,7 @@
                             } else {
                                 showStatus('Failed to set stack mode: ' + e.message, 'error');
                             }
+                            return false;
                         } finally {
                             btns.forEach(btn => btn.disabled = false);
                         }
@@ -14124,20 +14493,27 @@
                             const controller = new AbortController();
                             const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-                            const resp = await fetch('/api/stack/status', {
-                                signal: controller.signal
-                            });
+                            const [resp, pgvResp] = await Promise.all([
+                                fetch('/api/stack/status', { signal: controller.signal }),
+                                fetch('/api/pgv/status', { signal: controller.signal }).catch(() => null),
+                            ]);
                             clearTimeout(timeoutId);
 
                             const data = await resp.json();
-                            console.log('Stack mode status:', data);
+                            const pgvData = pgvResp ? await pgvResp.json() : {};
+                            pgvNavigationActive = !!(pgvData && pgvData.active && pgvData.mode === 'localization');
+                            if (pgvNavigationActive) navRuntimeMode = 'pgv';
+                            if (typeof setPgvBlankCanvas === 'function') setPgvBlankCanvas(pgvNavigationActive);
+                            console.log('Stack mode status:', data, 'PGV status:', pgvData);
                             const modeLabel = {
                                 nav: 'Navigation',
                                 slam: 'Mapping',
                                 stop: 'Stop Robot',
                             };
                             const normalizedMode = String(data.mode || '').toLowerCase();
-                            const modeText = modeLabel[normalizedMode] || (data.mode || 'unknown').toUpperCase();
+                            const modeText = pgvNavigationActive
+                                ? 'PGV Running'
+                                : (modeLabel[normalizedMode] || (data.mode || 'unknown').toUpperCase());
                             ['current-stack-mode', 'current-stack-mode-top', 'current-stack-mode-header'].forEach((id) => {
                                 const el = document.getElementById(id);
                                 if (el) el.textContent = modeText;
@@ -14155,6 +14531,19 @@
                                     if (btn) btn.classList.add('active');
                                 });
                             }
+                            ['nav-mode-btn', 'nav-mode-btn-top'].forEach((btnId) => {
+                                const btn = document.getElementById(btnId);
+                                if (!btn) return;
+                                const label = btn.querySelector('span');
+                                if (pgvNavigationActive) {
+                                    btn.classList.add('active');
+                                    if (label) label.textContent = 'STOP PGV';
+                                    btn.title = 'Stop PGV Mode';
+                                } else {
+                                    if (label) label.textContent = data.mode === 'nav' ? 'STOP NAV' : 'START NAV';
+                                    btn.title = 'Toggle Navigation Stack';
+                                }
+                            });
                             ['slam-save-controls', 'slam-save-controls-top'].forEach((controlsId) => {
                                 const controls = document.getElementById(controlsId);
                                 if (controls) controls.style.display = data.mode === 'slam' ? 'block' : 'none';
@@ -14535,6 +14924,8 @@
                     let savedPathMetricsCache = {};
                     let pathModeEnabled = false;
                     let pathModeSelectedPath = '';
+                    let navRuntimeMode = 'agv';
+                    let pgvNavigationActive = false;
                     let editingSavedPathName = '';
                     let segmentAttrsOverrides = {};  // { "0": {maxspeed:0.3, ...}, ... } per-segment attribute overrides
                     let currentSidebarMode = 'view';
@@ -14566,7 +14957,7 @@
                         slow_zones: { label: 'Speed', color: 'rgba(59, 130, 246, 0.56)', fill: 'rgba(59, 130, 246, 0.08)' },
                         locate_config: { label: 'Locate Config', color: 'rgba(168, 85, 247, 0.56)', fill: 'rgba(168, 85, 247, 0.08)' },
                         reflector: { label: 'Reflector', color: 'rgba(236, 72, 153, 0.56)', fill: 'rgba(236, 72, 153, 0.08)' },
-                        tag_area: { label: 'Tag / QR', color: 'rgba(34, 197, 94, 0.56)', fill: 'rgba(34, 197, 94, 0.08)' },
+                        tag_area: { label: 'Matrix Tag', color: 'rgba(34, 197, 94, 0.56)', fill: 'rgba(34, 197, 94, 0.08)' },
                         do_area: { label: 'DO Area', color: 'rgba(20, 184, 166, 0.56)', fill: 'rgba(20, 184, 166, 0.08)' },
                         di_area: { label: 'DI Area', color: 'rgba(249, 115, 22, 0.56)', fill: 'rgba(249, 115, 22, 0.08)' },
                         clean_area: { label: 'Clean Area', color: 'rgba(6, 182, 212, 0.56)', fill: 'rgba(6, 182, 212, 0.08)' },
@@ -17745,6 +18136,10 @@
                             showStatus('Finish drawing or pose estimate first', 'error');
                             return;
                         }
+                        if (navRuntimeMode === 'pgv') {
+                            await requestPgvTagRelocalize();
+                            return;
+                        }
                         const btn = document.getElementById('btnAutoRelocate');
                         if (btn) btn.disabled = true;
                         showStatus('Running auto relocalization...', 'info');
@@ -17770,6 +18165,74 @@
                             }
                         } catch (err) {
                             showStatus('Auto relocalization error', 'error');
+                        } finally {
+                            if (btn) btn.disabled = false;
+                        }
+                    }
+
+                    async function requestPgvTagRelocalize() {
+                        const btn = document.getElementById('btnAutoRelocate');
+                        if (btn) btn.disabled = true;
+                        try {
+                            const tagHint = Number.isFinite(pgvLatestTag) && pgvLatestTag > 0
+                                ? `Detected tag: ${pgvLatestTag}. `
+                                : '';
+                            const headingText = prompt(
+                                `${tagHint}Robot direction in map degrees. Leave blank to use this Matrix Tag's stored direction.`,
+                                ''
+                            );
+                            if (headingText === null) {
+                                showStatus('PGV relocalization canceled', 'info');
+                                return;
+                            }
+                            const trimmedHeading = String(headingText || '').trim();
+                            let directionDeg = null;
+                            let saveDirection = false;
+                            if (trimmedHeading !== '') {
+                                directionDeg = Number(trimmedHeading);
+                                if (!Number.isFinite(directionDeg)) {
+                                    showStatus('Invalid PGV direction', 'error');
+                                    return;
+                                }
+                                saveDirection = await showConfirm(
+                                    `Save ${directionDeg.toFixed(1)}° as this Matrix Tag's direction?`,
+                                    'Save',
+                                    'Use Once'
+                                );
+                            }
+                            showStatus('Relocalizing from detected Matrix Tag...', 'info');
+                            const resp = await fetch('/api/pgv/relocalize', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    direction_deg: directionDeg,
+                                    save_direction: saveDirection,
+                                }),
+                            });
+                            const data = await resp.json();
+                            if (data.ok) {
+                                const x = Number(data.x);
+                                const y = Number(data.y);
+                                const yaw = Number(data.yaw);
+                                if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(yaw)) {
+                                    requestedRobotPose = { x, y, theta: yaw };
+                                    requestedRobotPoseSource = 'pgv_tag_relocalize';
+                                    requestedRobotPoseAgeSec = 0.0;
+                                    robotPose = { x, y, theta: yaw };
+                                    robotPoseSource = 'pgv_tag_relocalize';
+                                    robotPoseAgeSec = 0.0;
+                                    drawMap();
+                                }
+                                if (saveDirection && typeof qrRefreshList === 'function') {
+                                    qrRefreshList();
+                                }
+                                showStatus(data.message || 'PGV relocalization complete', 'success');
+                            } else {
+                                showStatus(data.message || 'PGV relocalization failed', 'error');
+                            }
+                        } catch (err) {
+                            console.error('PGV relocalization error:', err);
+                            showStatus('PGV relocalization error', 'error');
                         } finally {
                             if (btn) btn.disabled = false;
                         }
@@ -18387,10 +18850,65 @@
                             .map((id) => document.getElementById(id))
                             .filter((btn) => btn);
                         const navActive = navButtons.some((btn) => btn.classList.contains('active'));
+                        if (pgvNavigationActive || navRuntimeMode === 'pgv') {
+                            setStackMode('stop');
+                            pgvShutdown();
+                            navRuntimeMode = 'agv';
+                            pgvNavigationActive = false;
+                            setTimeout(updateStackModeStatus, 600);
+                            return;
+                        }
                         if (navActive) {
                             setStackMode('stop');
                         } else {
-                            setStackMode('nav');
+                            showNotification('fas fa-route', 'Start Navigation', 'Choose the runtime mode for this startup.', [
+                                {
+                                    text: 'AGV Mode',
+                                    style: 'success',
+                                    action: async () => {
+                                        closeNotification();
+                                        navRuntimeMode = 'agv';
+                                        await setStackMode('nav');
+                                    },
+                                },
+                                {
+                                    text: 'PGV Mode',
+                                    style: 'success',
+                                    action: async () => {
+                                        closeNotification();
+                                        await startPgvNavigationMode();
+                                    },
+                                },
+                                { text: 'Cancel', style: 'secondary', action: closeNotification },
+                            ]);
+                        }
+                    }
+
+                    async function startPgvNavigationMode() {
+                        navRuntimeMode = 'pgv';
+                        try {
+                            await setStackMode('stop');
+                        } catch (e) {
+                            console.warn('Best-effort AGV stack stop before PGV mode failed:', e);
+                            showStatus('Could not confirm AGV stack stop; trying PGV startup anyway.', 'warning');
+                        }
+                        const launched = await pgvLaunch('localization', { localization_mode: 'pure_pgv', launch_route_follower: true });
+                        if (launched) {
+                            const navStarted = await setStackMode('pgv_nav');
+                            if (!navStarted) {
+                                showStatus('PGV localization started, but PGV navigation did not start. Check stack logs.', 'error');
+                                return;
+                            }
+                            pgvNavigationActive = true;
+                            // PGV mode uses a blank dark canvas with a faint 1m grid
+                            // instead of the occupancy map. QR tags, zones and overlays
+                            // still draw on top for positioning and navigation.
+                            setPgvBlankCanvas(true);
+                            // Auto-load the Matrix Tags so they render on the map
+                            // without opening the Matrix Tags panel (PGV only).
+                            if (typeof qrRefreshList === 'function') { try { await qrRefreshList(); } catch (e) { /* best effort */ } }
+                            await updateStackModeStatus();
+                            showStatus('PGV mode started. Matrix Tags localize; POI paths drive through Nav2.', 'info');
                         }
                     }
                     function toggleSlamMode() {
@@ -24072,6 +24590,1116 @@
                         }
                     }
 
+                    // ── PGV floor-code scanner PIP ────────────────────────────
+                    let pgvTopics = { pose: null, tag: null, angle: null, code: null, corrected: null, diag: null, status: null, route: null };
+                    let pgvLastMsgTs = 0;
+                    let pgvAcceptedLastMsgTs = 0;
+                    let pgvAgeTimer = null;
+                    let pgvStatusTimer = null;
+                    let pgvPipDraggableInit = false;
+                    let pgvLatestTag = null;
+                    let pgvLatestCodeDetected = false;
+                    let pgvLatestAcceptedTag = null;
+                    let pgvLatestLocalizationStatus = 'INIT';
+                    let pgvLatestRouteState = null;
+
+                    function pgvSetText(id, val) {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = val;
+                    }
+
+                    function pgvMark() { pgvLastMsgTs = Date.now(); }
+
+                    function pgvYaw(q) {
+                        if (!q) return 0;
+                        const siny = 2 * (q.w * q.z + q.x * q.y);
+                        const cosy = 1 - 2 * (q.y * q.y + q.z * q.z);
+                        return Math.atan2(siny, cosy) * 180 / Math.PI;
+                    }
+
+                    function pgvSetBadge(id, value, className) {
+                        const el = document.getElementById(id);
+                        if (!el) return;
+                        el.textContent = value;
+                        if (className) {
+                            el.className = className;
+                        }
+                    }
+
+                    function pgvSetRouteField(id, value) {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = value;
+                    }
+
+                    function pgvFormatRouteList(route) {
+                        if (!Array.isArray(route) || route.length === 0) return '—';
+                        return route.map((item) => String(item)).join(' -> ');
+                    }
+
+                    function pgvUpdateAcceptedAge() {
+                        const el = document.getElementById('pgv-accepted-age');
+                        if (!el) return;
+                        if (!pgvAcceptedLastMsgTs) {
+                            el.textContent = 'never';
+                            return;
+                        }
+                        const secs = (Date.now() - pgvAcceptedLastMsgTs) / 1000;
+                        el.textContent = secs < 1.5 ? 'live' : secs.toFixed(0) + 's ago';
+                    }
+
+                    function pgvApplyLocalizationStatus(statusText) {
+                        const state = String(statusText || 'INIT').trim().split(':', 1)[0].trim().toUpperCase() || 'INIT';
+                        pgvLatestLocalizationStatus = state;
+                        const className = state === 'OK'
+                            ? 'pgv-diag-ok'
+                            : (state === 'STALE' ? 'pgv-diag-error' : 'lift-status-neutral');
+                        pgvSetBadge('pgv-loc-status', state, 'lift-status-value ' + className);
+                    }
+
+                    function pgvApplyLocalizerDiag(status) {
+                        if (!status || !Array.isArray(status.values)) return;
+                        const kv = {};
+                        status.values.forEach((entry) => {
+                            if (entry && entry.key != null) {
+                                kv[String(entry.key)] = String(entry.value != null ? entry.value : '');
+                            }
+                        });
+                        if (kv.localization_status) {
+                            pgvApplyLocalizationStatus(kv.localization_status);
+                        }
+                        if (kv.last_accepted_tag_id) {
+                            pgvLatestAcceptedTag = kv.last_accepted_tag_id;
+                            pgvSetRouteField('pgv-accepted-tag', kv.last_accepted_tag_id);
+                        }
+                        if (kv.last_accepted_age_s) {
+                            pgvSetRouteField('pgv-accepted-age', `${Number(kv.last_accepted_age_s).toFixed(2)} s`);
+                        }
+                        if (kv.last_residual_m) {
+                            pgvSetRouteField('pgv-residual', `${(Number(kv.last_residual_m) * 1000).toFixed(1)} mm`);
+                        }
+                        if (kv.last_rejection_reason) {
+                            pgvSetRouteField('pgv-reject', kv.last_rejection_reason || '—');
+                        }
+                        if (kv.localization_detail) {
+                            pgvSetRouteField('pgv-loc-detail', kv.localization_detail || '—');
+                        }
+                        if (kv.last_accepted_pose) {
+                            pgvSetRouteField('pgv-accepted-pose', kv.last_accepted_pose);
+                        }
+                    }
+
+                    function pgvApplyRouteStatus(statusText) {
+                        let parsed = null;
+                        try {
+                            parsed = statusText ? JSON.parse(statusText) : null;
+                        } catch (e) {
+                            parsed = null;
+                        }
+                        pgvLatestRouteState = parsed;
+                        const state = parsed && parsed.state ? String(parsed.state) : '—';
+                        pgvSetRouteField('pgv-route-state', state);
+                        pgvSetRouteField('pgv-route-name', parsed && (parsed.route_name || Array.isArray(parsed.route))
+                            ? String(parsed.route_name || pgvFormatRouteList(parsed.route))
+                            : '—');
+                        pgvSetRouteField('pgv-route-segment', parsed && parsed.current_segment_start != null && parsed.current_segment_target != null
+                            ? `${parsed.current_segment_start} -> ${parsed.current_segment_target}`
+                            : '—');
+                        pgvSetRouteField('pgv-route-previous', parsed && parsed.previous_confirmed_tag != null ? String(parsed.previous_confirmed_tag) : '—');
+                        pgvSetRouteField('pgv-route-target', parsed && parsed.target_tag != null ? String(parsed.target_tag) : '—');
+                        pgvSetRouteField('pgv-route-allowed', parsed && Array.isArray(parsed.allowed_tags) ? parsed.allowed_tags.join(', ') : '—');
+                        pgvSetRouteField('pgv-route-confirm', parsed && parsed.target_confirm_counter != null ? String(parsed.target_confirm_counter) : '0');
+                        pgvSetRouteField('pgv-route-unexpected', parsed && parsed.unexpected_tag_counter != null ? String(parsed.unexpected_tag_counter) : '0');
+                        pgvSetRouteField('pgv-route-distance', parsed && parsed.distance_to_target != null
+                            ? `${Number(parsed.distance_to_target).toFixed(2)} m`
+                            : '—');
+                        pgvSetRouteField('pgv-route-cmd', parsed && parsed.cmd_vel_active ? 'YES' : 'NO');
+                    }
+
+                    function openPgvPopup() {
+                        const popup = document.getElementById('pgv-control-pip');
+                        if (!popup) return;
+                        popup.classList.add('active');
+                        if (!pgvPipDraggableInit) { makePgvPipDraggable(); pgvPipDraggableInit = true; }
+                        pgvRefreshStatus();
+                        pgvLoadCalibrationResult();
+                        if (!pgvStatusTimer) pgvStatusTimer = setInterval(pgvRefreshStatus, 3000);
+                        if (!pgvAgeTimer) pgvAgeTimer = setInterval(pgvUpdateAge, 1000);
+                        if (rosbridgeConnected && ros) {
+                            initPgvTopics();
+                        } else {
+                            showStatus('PGV live data needs a rosbridge connection', 'warning');
+                        }
+                    }
+
+                    function closePgvPopup() {
+                        const popup = document.getElementById('pgv-control-pip');
+                        if (popup) popup.classList.remove('active');
+                        if (pgvStatusTimer) { clearInterval(pgvStatusTimer); pgvStatusTimer = null; }
+                        if (pgvAgeTimer) { clearInterval(pgvAgeTimer); pgvAgeTimer = null; }
+                        teardownPgvTopics();
+                    }
+
+                    function teardownPgvTopics() {
+                        Object.keys(pgvTopics).forEach((k) => {
+                            const t = pgvTopics[k];
+                            if (t) { try { t.unsubscribe(); } catch (e) { /* noop */ } }
+                            pgvTopics[k] = null;
+                        });
+                    }
+
+                    function initPgvTopics() {
+                        if (!rosbridgeConnected || !ros) return;
+
+                        if (!pgvTopics.pose) {
+                            pgvTopics.pose = new ROSLIB.Topic({ ros: ros, name: '/pgv/pose', messageType: 'geometry_msgs/msg/PoseStamped' });
+                            pgvTopics.pose.subscribe((m) => {
+                                pgvMark();
+                                const p = (m && m.pose && m.pose.position) ? m.pose.position : { x: 0, y: 0 };
+                                pgvSetText('pgv-x', (p.x * 1000).toFixed(1));
+                                pgvSetText('pgv-y', (p.y * 1000).toFixed(1));
+                            });
+                        }
+                        if (!pgvTopics.tag) {
+                            pgvTopics.tag = new ROSLIB.Topic({ ros: ros, name: '/pgv/tag', messageType: 'std_msgs/msg/Int64' });
+                            pgvTopics.tag.subscribe((m) => {
+                                pgvMark();
+                                pgvLatestTag = (m && m.data != null) ? Number(m.data) : null;
+                                pgvSetText('pgv-tag', String(m && m.data != null ? m.data : '—'));
+                            });
+                        }
+                        if (!pgvTopics.angle) {
+                            pgvTopics.angle = new ROSLIB.Topic({ ros: ros, name: '/pgv/angle_deg', messageType: 'std_msgs/msg/Float32' });
+                            pgvTopics.angle.subscribe((m) => { pgvMark(); pgvSetText('pgv-angle', Number(m && m.data != null ? m.data : 0).toFixed(1)); });
+                        }
+                        if (!pgvTopics.code) {
+                            pgvTopics.code = new ROSLIB.Topic({ ros: ros, name: '/pgv/code_detected', messageType: 'std_msgs/msg/Bool' });
+                            pgvTopics.code.subscribe((m) => {
+                                pgvMark();
+                                const on = !!(m && m.data);
+                                pgvLatestCodeDetected = on;
+                                const el = document.getElementById('pgv-code');
+                                if (el) {
+                                    el.textContent = on ? 'YES' : 'NO';
+                                    el.className = 'pgv-code-badge ' + (on ? 'pgv-code-on' : 'pgv-code-off');
+                                }
+                            });
+                        }
+                        if (!pgvTopics.corrected) {
+                            pgvTopics.corrected = new ROSLIB.Topic({ ros: ros, name: '/pgv/corrected_pose', messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped' });
+                            pgvTopics.corrected.subscribe((m) => {
+                                const pp = m && m.pose && m.pose.pose ? m.pose.pose : null;
+                                if (!pp) return;
+                                pgvAcceptedLastMsgTs = Date.now();
+                                const yaw = pgvYaw(pp.orientation);
+                                pgvSetText('pgv-accepted-pose', `${pp.position.x.toFixed(2)}, ${pp.position.y.toFixed(2)} m @ ${yaw.toFixed(1)}°`);
+                            });
+                        }
+                        if (!pgvTopics.diag) {
+                            pgvTopics.diag = new ROSLIB.Topic({ ros: ros, name: '/diagnostics', messageType: 'diagnostic_msgs/msg/DiagnosticArray' });
+                            pgvTopics.diag.subscribe((m) => {
+                                const statuses = (m && m.status) ? m.status : [];
+                                let worst = null;
+                                let localizerStatus = null;
+                                statuses.forEach((s) => {
+                                    const name = (s.name || '') + ' ' + (s.hardware_id || '');
+                                    if (!/pgv/i.test(name)) return;
+                                    if (/pgv_localizer/i.test(name)) {
+                                        localizerStatus = s;
+                                    }
+                                    if (!worst || s.level > worst.level) worst = s;
+                                });
+                                const el = document.getElementById('pgv-diag');
+                                if (!el) return;
+                                if (!worst) { el.textContent = '—'; el.className = 'lift-status-value lift-status-neutral'; return; }
+                                const map = { 0: ['OK', 'pgv-diag-ok'], 1: ['WARN', 'pgv-diag-warn'], 2: ['ERROR', 'pgv-diag-error'], 3: ['STALE', 'pgv-diag-error'] };
+                                const info = map[worst.level] || ['?', ''];
+                                el.textContent = info[0] + (worst.message ? ' — ' + worst.message : '');
+                                el.className = 'lift-status-value ' + info[1];
+                                if (localizerStatus) {
+                                    pgvApplyLocalizerDiag(localizerStatus);
+                                }
+                            });
+                        }
+                        if (!pgvTopics.status) {
+                            pgvTopics.status = new ROSLIB.Topic({ ros: ros, name: '/pgv/localization_status', messageType: 'std_msgs/msg/String' });
+                            pgvTopics.status.subscribe((m) => {
+                                const text = String(m && m.data != null ? m.data : 'INIT');
+                                pgvApplyLocalizationStatus(text);
+                            });
+                        }
+                        if (!pgvTopics.route) {
+                            pgvTopics.route = new ROSLIB.Topic({ ros: ros, name: '/pgv_route/status', messageType: 'std_msgs/msg/String' });
+                            pgvTopics.route.subscribe((m) => {
+                                pgvApplyRouteStatus(String(m && m.data != null ? m.data : ''));
+                            });
+                        }
+                    }
+
+                    function pgvUpdateAge() {
+                        const el = document.getElementById('pgv-age');
+                        if (!el) return;
+                        if (!pgvLastMsgTs) { el.textContent = 'never'; return; }
+                        const secs = (Date.now() - pgvLastMsgTs) / 1000;
+                        el.textContent = secs < 1.5 ? 'live' : secs.toFixed(0) + 's ago';
+                        pgvUpdateAcceptedAge();
+                    }
+
+                    async function pgvRefreshStatus() {
+                        try {
+                            const r = await fetch('/api/pgv/status');
+                            const j = await r.json();
+                            const running = !!j.active;
+                            pgvSetText('pgv-stack-state', running ? ('Running (' + (j.mode || '') + ')') : 'Stopped');
+                            const st = document.getElementById('pgv-stack-state');
+                            if (st) st.className = 'lift-status-value ' + (running ? 'pgv-diag-ok' : 'lift-status-neutral');
+                            const calBtn = document.getElementById('pgv-start-cal-btn');
+                            if (calBtn) calBtn.disabled = running;
+                            const calRunning = (j.mode === 'calibration');
+                            ['pgv-cal-start', 'pgv-cal-finish', 'pgv-cal-cancel'].forEach((id) => {
+                                const b = document.getElementById(id);
+                                if (b) b.disabled = !calRunning;
+                            });
+                            // (Re)subscribe once a stack is up and rosbridge is live.
+                            if (running && rosbridgeConnected && ros) initPgvTopics();
+                        } catch (e) { /* status poll best-effort */ }
+                    }
+
+                    async function pgvLaunch(mode, options) {
+                        const calBtn = document.getElementById('pgv-start-cal-btn');
+                        if (calBtn) calBtn.disabled = true;
+                        const payload = { mode: mode, ...(options || {}) };
+                        if (mode === 'localization') {
+                            payload.localization_mode = payload.localization_mode || 'amcl';
+                        }
+                        if (mode === 'calibration') {
+                            const odomEl = document.getElementById('pgv-odom-topic');
+                            const odom = odomEl ? odomEl.value.trim() : '';
+                            if (odom) payload.odom_topic = odom;
+                        }
+                        try {
+                            const r = await fetch('/api/pgv/launch', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload),
+                            });
+                            const j = await r.json();
+                            showStatus(j.message || ('PGV ' + mode), r.ok ? 'success' : 'warning');
+                            setTimeout(pgvRefreshStatus, 1200);
+                            setTimeout(updateStackModeStatus, 500);
+                            return !!(r.ok && j.ok !== false);
+                        } catch (e) {
+                            showStatus('PGV launch failed: ' + e, 'error');
+                        }
+                        setTimeout(pgvRefreshStatus, 1200);
+                        return false;
+                    }
+
+                    async function pgvShutdown() {
+                        try {
+                            const r = await fetch('/api/pgv/shutdown', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: '{}',
+                            });
+                            const j = await r.json();
+                            showStatus(j.message || 'PGV stopped', r.ok ? 'success' : 'warning');
+                        } catch (e) {
+                            showStatus('PGV stop failed: ' + e, 'error');
+                        }
+                        teardownPgvTopics();
+                        setPgvBlankCanvas(false);
+                        setTimeout(pgvRefreshStatus, 600);
+                        setTimeout(updateStackModeStatus, 600);
+                    }
+
+                    function setPgvBlankCanvas(on) {
+                        pgvBlankCanvas = !!on;
+                        if (typeof requestMapDraw === 'function') requestMapDraw();
+                    }
+
+                    function pgvCalService(action) {
+                        if (!rosbridgeConnected || !ros) {
+                            showStatus('Calibration needs a rosbridge connection', 'warning');
+                            return;
+                        }
+                        const svc = new ROSLIB.Service({ ros: ros, name: '/pgv_calibrator/' + action, serviceType: 'std_srvs/srv/Trigger' });
+                        pgvSetText('pgv-cal-status', 'Calling ' + action + '…');
+                        svc.callService(new ROSLIB.ServiceRequest({}), (res) => {
+                            pgvSetText('pgv-cal-status', res.message || (res.success ? 'OK' : 'Failed'));
+                            showStatus('PGV calibration ' + action + ': ' + (res.success ? 'ok' : 'failed'), res.success ? 'success' : 'warning');
+                            if (action === 'finish' && res.success) {
+                                setTimeout(() => { pgvLoadPlot(); pgvLoadCalibrationResult(); }, 800);
+                            }
+                        }, (err) => {
+                            pgvSetText('pgv-cal-status', 'Service error: ' + err + ' (is the calibration stack running?)');
+                            showStatus('PGV calibrator service error', 'error');
+                        });
+                    }
+
+                    function pgvLoadPlot() {
+                        const img = document.getElementById('pgv-plot-img');
+                        const empty = document.getElementById('pgv-plot-empty');
+                        if (!img) return;
+                        img.onload = () => { img.style.display = 'block'; if (empty) empty.style.display = 'none'; };
+                        img.onerror = () => { img.style.display = 'none'; if (empty) { empty.style.display = 'block'; empty.textContent = 'No calibration plot yet.'; } };
+                        img.src = '/api/pgv/plot?ts=' + Date.now();
+                    }
+
+                    async function pgvLoadCalibrationResult() {
+                        try {
+                            const r = await fetch('/api/pgv/calibration');
+                            const j = await r.json();
+                            if (j && j.exists) {
+                                pgvSetText('pgv-cal-status',
+                                    `base→pgv x=${(j.base_to_pgv_x * 1000).toFixed(1)}mm y=${(j.base_to_pgv_y * 1000).toFixed(1)}mm `
+                                    + `yaw=${Number(j.base_to_pgv_yaw_deg).toFixed(2)}° · RMS ${(j.rms_position_m * 1000).toFixed(1)}mm (n=${j.num_samples})`);
+                                pgvLoadPlot();
+                            }
+                        } catch (e) { /* best-effort */ }
+                    }
+
+                    function makePgvPipDraggable() {
+                        const pip = document.getElementById('pgv-control-pip');
+                        const header = document.getElementById('pgv-pip-header');
+                        if (!pip || !header) return;
+                        let dragging = false, startX = 0, startY = 0;
+                        header.addEventListener('mousedown', (event) => {
+                            if (event.target.classList.contains('pip-close')) return;
+                            dragging = true;
+                            startX = event.clientX - pip.offsetLeft;
+                            startY = event.clientY - pip.offsetTop;
+                        });
+                        document.addEventListener('mousemove', (event) => {
+                            if (!dragging) return;
+                            event.preventDefault();
+                            let nextX = event.clientX - startX;
+                            let nextY = event.clientY - startY;
+                            const maxX = window.innerWidth - pip.offsetWidth;
+                            const maxY = window.innerHeight - pip.offsetHeight;
+                            nextX = Math.max(0, Math.min(nextX, maxX));
+                            nextY = Math.max(0, Math.min(nextY, maxY));
+                            pip.style.right = 'auto';
+                            pip.style.bottom = 'auto';
+                            pip.style.left = `${nextX}px`;
+                            pip.style.top = `${nextY}px`;
+                        });
+                        document.addEventListener('mouseup', () => { dragging = false; });
+                    }
+
+                    // ── Matrix Tag / floor-code layer (own store, separate from APs) ───
+                    let qrPipDraggableInit = false;
+                    let qrCodes = {};               // id -> {x, y, yaw_deg}
+                    let pgvBlankCanvas = false;     // PGV mode: hide occupancy map, keep overlays
+                    let qrPlaceMode = false;
+                    let qrLineMode = false;         // guided "place along a line" mode
+                    let qrLineAnchor = null;        // {x,y} world - first tag of the line
+                    let qrLineYaw = null;           // locked line heading (rad) once direction is set
+                    let qrLinePreview = null;       // {x,y} world cursor, for the live guide line
+                    let qrSelectedId = null;        // tag currently selected on the map for editing
+                    let pgvRouteEdges = [];          // [{from_tag, to_tag}] drawn as arrows on canvas
+                    let qrConnectMode = false;       // true = next two tag clicks form a directed edge
+                    let qrConnectFirst = null;       // first tag id picked in connect mode
+                    let qrAutoAdd = false;
+                    let qrAutoTagTopic = null;
+                    let qrAutoCodeTopic = null;
+                    let qrAutoTag = null;           // latest tag id from PGV
+                    let qrAutoDetected = false;     // latest code_detected
+                    let qrAutoLastAdded = null;     // last tag we appended
+                    let qrAutoOdomTopic = null;
+                    let qrAutoOdomDistance = 0.0;
+                    let qrAutoOdomLastX = null;
+                    let qrAutoOdomLastY = null;
+                    const QR_AUTO_MIN_SPACING_M = 0.40; // minimum metres between auto-placed tags
+
+                    function qrNextId() {
+                        const el = document.getElementById('qr-next-id');
+                        const v = el ? parseInt(el.value, 10) : NaN;
+                        return Number.isFinite(v) ? v : 1;
+                    }
+
+                    function qrBumpId() {
+                        const el = document.getElementById('qr-next-id');
+                        if (el) el.value = String(qrNextId() + 1);
+                    }
+
+                    function openQrPopup() {
+                        const popup = document.getElementById('qr-codes-pip');
+                        if (!popup) return;
+                        popup.classList.add('active');
+                        if (!qrPipDraggableInit) { makeQrPipDraggable(); qrPipDraggableInit = true; }
+                        qrRefreshList();
+                    }
+
+                    function closeQrPopup() {
+                        const popup = document.getElementById('qr-codes-pip');
+                        if (popup) popup.classList.remove('active');
+                        if (qrPlaceMode) qrTogglePlaceMode();
+                        if (qrLineMode) qrToggleLineMode();
+                        qrSelectedId = null;
+                        if (typeof requestMapDraw === 'function') requestMapDraw();
+                    }
+
+                    function qrTogglePlaceMode() {
+                        qrPlaceMode = !qrPlaceMode;
+                        if (qrPlaceMode && qrLineMode) qrToggleLineMode();   // mutually exclusive
+                        const btn = document.getElementById('qr-place-btn');
+                        if (btn) btn.classList.toggle('active', qrPlaceMode);
+                        if (typeof canvas !== 'undefined' && canvas) canvas.style.cursor = qrPlaceMode ? 'crosshair' : '';
+                        const st = document.getElementById('qr-action-status');
+                        if (st) st.textContent = qrPlaceMode
+                            ? `Click the map to drop Matrix Tag ${qrNextId()}. Edit yaw if its printed direction differs.`
+                            : 'Place mode off.';
+                    }
+
+                    async function qrPlaceAt(wx, wy) {
+                        const tagId = qrNextId();
+                        const r = await qrPost('/api/qr/add', { tag_id: tagId, x: wx, y: wy, yaw_deg: 0 });
+                        if (r && r.ok) {
+                            qrBumpId();
+                            const st = document.getElementById('qr-action-status');
+                            if (st) st.textContent = qrPlaceMode
+                                ? `Dropped Matrix Tag ${tagId}. Click again for Matrix Tag ${qrNextId()}.`
+                                : `Dropped Matrix Tag ${tagId}.`;
+                            qrRefreshList();
+                        }
+                    }
+
+                    // Drop the next auto-incrementing tag at a fixed pose. Awaitable so a
+                    // line can place several tags in sequence without racing the id input.
+                    async function qrDropTag(wx, wy, yawDeg) {
+                        const tagId = qrNextId();
+                        const r = await qrPost('/api/qr/add', {
+                            tag_id: tagId, x: wx, y: wy, yaw_deg: yawDeg,
+                        });
+                        if (r && r.ok) qrBumpId();
+                        return r && r.ok ? tagId : null;
+                    }
+
+                    // ── Guided "place along a line" ──────────────────────────────
+                    // 1st click = first tag; 2nd click = direction (drops tag 1 + 2);
+                    // each later click drops the next tag projected onto that line, so
+                    // every tag is perfectly straight and shares the line heading.
+                    function qrToggleLineMode() {
+                        qrLineMode = !qrLineMode;
+                        if (qrLineMode && qrPlaceMode) qrTogglePlaceMode();   // mutually exclusive
+                        qrLineAnchor = null;
+                        qrLineYaw = null;
+                        qrLinePreview = null;
+                        const btn = document.getElementById('qr-line-btn');
+                        if (btn) { btn.classList.toggle('active', qrLineMode); btn.classList.toggle('shelf-off', !qrLineMode); }
+                        if (typeof canvas !== 'undefined' && canvas) canvas.style.cursor = qrLineMode ? 'crosshair' : '';
+                        const st = document.getElementById('qr-action-status');
+                        if (st) st.textContent = qrLineMode
+                            ? `Click the map to place the FIRST tag (${qrNextId()}).`
+                            : 'Line mode off.';
+                        if (typeof requestMapDraw === 'function') requestMapDraw();
+                    }
+
+                    async function qrLineClick(wx, wy) {
+                        const st = document.getElementById('qr-action-status');
+                        if (qrLineAnchor === null) {
+                            qrLineAnchor = { x: wx, y: wy };
+                            if (st) st.textContent = 'Now click in the direction the tags should run.';
+                            if (typeof requestMapDraw === 'function') requestMapDraw();
+                            return;
+                        }
+                        if (qrLineYaw === null) {
+                            const dx = wx - qrLineAnchor.x;
+                            const dy = wy - qrLineAnchor.y;
+                            if (Math.hypot(dx, dy) < 1e-3) { if (st) st.textContent = 'Click further away to set a direction.'; return; }
+                            qrLineYaw = Math.atan2(dy, dx);
+                            const yawDeg = qrLineYaw * 180.0 / Math.PI;
+                            // Drop tag 1 (anchor) and tag 2 (this click) on the line.
+                            const id1 = await qrDropTag(qrLineAnchor.x, qrLineAnchor.y, yawDeg);
+                            const id2 = await qrDropTag(wx, wy, yawDeg);
+                            qrLinePreview = null;
+                            await qrRefreshList();
+                            if (st) st.textContent = `Dropped tags ${id1} & ${id2} at ${yawDeg.toFixed(1)}°. Click to drop each next tag along the line.`;
+                            return;
+                        }
+                        // Project the click onto the locked line and drop there.
+                        const ux = Math.cos(qrLineYaw), uy = Math.sin(qrLineYaw);
+                        const t = (wx - qrLineAnchor.x) * ux + (wy - qrLineAnchor.y) * uy;
+                        const px = qrLineAnchor.x + ux * t;
+                        const py = qrLineAnchor.y + uy * t;
+                        const id = await qrDropTag(px, py, qrLineYaw * 180.0 / Math.PI);
+                        await qrRefreshList();
+                        if (st && id != null) st.textContent = `Dropped tag ${id} on the line. Click for the next, or toggle off when done.`;
+                    }
+
+                    // Select a tag (from the map or list) and reveal it for editing.
+                    function qrSelectTag(id) {
+                        const numId = (id == null) ? null : Number(id);
+                        // Connect mode: first click = from, second click = to → create edge
+                        if (qrConnectMode && numId != null) {
+                            if (qrConnectFirst == null) {
+                                qrConnectFirst = numId;
+                                const st = document.getElementById('qr-connect-status');
+                                if (st) st.textContent = `From tag ${numId} selected — now click the destination tag.`;
+                                qrSelectedId = numId;
+                                if (typeof requestMapDraw === 'function') requestMapDraw();
+                                return;
+                            } else {
+                                const fromTag = qrConnectFirst;
+                                const toTag = numId;
+                                qrConnectFirst = null;
+                                const st = document.getElementById('qr-connect-status');
+                                if (st) st.textContent = `Adding edge ${fromTag} → ${toTag}…`;
+                                qrPost('/api/route/add', { from_tag: fromTag, to_tag: toTag }).then((r) => {
+                                    if (r && r.ok) {
+                                        if (st) st.textContent = `Edge ${fromTag} → ${toTag} added.`;
+                                        qrRefreshRouteEdges();
+                                    } else {
+                                        if (st) st.textContent = (r && r.message) ? r.message : 'Add edge failed.';
+                                    }
+                                });
+                                qrSelectedId = numId;
+                                if (typeof requestMapDraw === 'function') requestMapDraw();
+                                return;
+                            }
+                        }
+                        qrSelectedId = numId;
+                        if (typeof requestMapDraw === 'function') requestMapDraw();
+                        const row = document.getElementById('qr-row-' + qrSelectedId);
+                        if (row && typeof row.scrollIntoView === 'function') {
+                            row.scrollIntoView({ block: 'nearest' });
+                            const first = row.querySelector('input');
+                            if (first) { try { first.focus(); first.select(); } catch (e) { /* noop */ } }
+                        }
+                    }
+
+                    // Hit-test the map click against tag icons (only while the panel is open).
+                    function qrHitTest(wx, wy) {
+                        if (!qrCodes) return null;
+                        let best = null, bestD = Infinity;
+                        Object.keys(qrCodes).forEach((id) => {
+                            const t = qrCodes[id];
+                            if (!t) return;
+                            const d = Math.hypot(Number(t.x) - wx, Number(t.y) - wy);
+                            if (d < bestD) { bestD = d; best = id; }
+                        });
+                        // ~0.18 m pick radius in world units.
+                        return (best != null && bestD <= 0.18) ? Number(best) : null;
+                    }
+
+                    async function qrCaptureHere() {
+                        const tagId = qrNextId();
+                        const st = document.getElementById('qr-action-status');
+                        if (st) st.textContent = `Capturing Matrix Tag ${tagId} at robot…`;
+                        const r = await qrPost('/api/qr/capture', { tag_id: tagId });
+                        if (r && r.ok) { qrBumpId(); qrRefreshList(); }
+                        if (st) st.textContent = (r && r.message) ? r.message : 'Capture done.';
+                    }
+
+                    function qrToggleAutoAdd() {
+                        qrAutoAdd = !qrAutoAdd;
+                        const btn = document.getElementById('qr-autoadd-btn');
+                        if (btn) {
+                            btn.textContent = 'AUTO-ADD: ' + (qrAutoAdd ? 'ON' : 'OFF');
+                            btn.classList.toggle('shelf-off', !qrAutoAdd);
+                            btn.classList.toggle('active', qrAutoAdd);
+                        }
+                        const st = document.getElementById('qr-action-status');
+                        if (qrAutoAdd) {
+                            if (!rosbridgeConnected || !ros) {
+                                showStatus('Auto-add needs a rosbridge connection', 'warning');
+                                qrAutoAdd = false;
+                                if (btn) { btn.textContent = 'AUTO-ADD: OFF'; btn.classList.add('shelf-off'); btn.classList.remove('active'); }
+                                return;
+                            }
+                            qrAutoLastAdded = null;
+                            qrAutoOdomDistance = 0.0;
+                            qrAutoOdomLastX = null;
+                            qrAutoOdomLastY = null;
+                            qrInitAutoTopics();
+                            if (st) st.textContent = 'Auto-add ON — align with each tag direction and drive over Matrix Tags in sequence.';
+                        } else {
+                            qrTeardownAutoTopics();
+                            if (st) st.textContent = 'Auto-add off.';
+                        }
+                    }
+
+                    function qrInitAutoTopics() {
+                        if (!ros) return;
+                        if (!qrAutoTagTopic) {
+                            qrAutoTagTopic = new ROSLIB.Topic({ ros: ros, name: '/pgv/tag', messageType: 'std_msgs/msg/Int64' });
+                            qrAutoTagTopic.subscribe((m) => { qrAutoTag = (m && m.data != null) ? Number(m.data) : null; qrAutoMaybeCapture(); });
+                        }
+                        if (!qrAutoCodeTopic) {
+                            qrAutoCodeTopic = new ROSLIB.Topic({ ros: ros, name: '/pgv/code_detected', messageType: 'std_msgs/msg/Bool' });
+                            qrAutoCodeTopic.subscribe((m) => { qrAutoDetected = !!(m && m.data); qrAutoMaybeCapture(); });
+                        }
+                        if (!qrAutoOdomTopic) {
+                            // Track the robot's odom position so we only place a tag when the
+                            // robot has actually travelled a meaningful distance. This stops
+                            // double-reads from the same tag as the robot wiggles in place.
+                            const odomTopicName = (document.getElementById('pgv-odom-topic') && document.getElementById('pgv-odom-topic').value) || '/odometry/filtered';
+                            qrAutoOdomTopic = new ROSLIB.Topic({ ros: ros, name: odomTopicName, messageType: 'nav_msgs/msg/Odometry' });
+                            qrAutoOdomTopic.subscribe((m) => {
+                                if (!m || !m.pose || !m.pose.pose || !m.pose.pose.position) return;
+                                const x = Number(m.pose.pose.position.x);
+                                const y = Number(m.pose.pose.position.y);
+                                if (qrAutoOdomLastX == null || qrAutoOdomLastY == null) {
+                                    qrAutoOdomLastX = x;
+                                    qrAutoOdomLastY = y;
+                                    return;
+                                }
+                                const dx = x - qrAutoOdomLastX;
+                                const dy = y - qrAutoOdomLastY;
+                                qrAutoOdomDistance += Math.hypot(dx, dy);
+                                qrAutoOdomLastX = x;
+                                qrAutoOdomLastY = y;
+                            });
+                        }
+                    }
+
+                    function qrTeardownAutoTopics() {
+                        [qrAutoTagTopic, qrAutoCodeTopic, qrAutoOdomTopic].forEach((t) => { if (t) { try { t.unsubscribe(); } catch (e) { /* noop */ } } });
+                        qrAutoTagTopic = null;
+                        qrAutoCodeTopic = null;
+                        qrAutoOdomTopic = null;
+                        qrAutoOdomDistance = 0.0;
+                        qrAutoOdomLastX = null;
+                        qrAutoOdomLastY = null;
+                    }
+
+                    async function qrAutoMaybeCapture() {
+                        if (!qrAutoAdd) return;
+                        if (!qrAutoDetected) return;
+                        const tag = qrAutoTag;
+                        if (tag == null || !Number.isFinite(tag)) return;
+
+                        // Already in the database — just remember it so we skip it on re-reads.
+                        if (qrCodes && Object.prototype.hasOwnProperty.call(qrCodes, String(tag))) {
+                            qrAutoLastAdded = tag;
+                            return;
+                        }
+
+                        // Re-read of the same tag we just added? Only place again after
+                        // the robot has actually moved away (odometry gate).
+                        if (tag === qrAutoLastAdded && qrAutoOdomDistance < QR_AUTO_MIN_SPACING_M) {
+                            return;
+                        }
+
+                        qrAutoLastAdded = tag;
+                        const r = await qrPost('/api/qr/capture', { tag_id: tag });
+                        if (r && r.ok) {
+                            // Reset distance accumulator so the next tag needs a real move.
+                            qrAutoOdomDistance = 0.0;
+                            const st = document.getElementById('qr-action-status');
+                            if (st) st.textContent = `Auto-added Matrix Tag ${tag} at (${Number(r.x).toFixed(2)}, ${Number(r.y).toFixed(2)}°, yaw ${Number(r.yaw_deg || 0).toFixed(1)}°).`;
+                            showStatus('Auto-added Matrix Tag ' + tag, 'success');
+                            qrRefreshList();
+                        } else {
+                            const st = document.getElementById('qr-action-status');
+                            if (st) st.textContent = (r && r.message) ? r.message : ('Auto-add failed for Matrix Tag ' + tag);
+                        }
+                    }
+
+                    async function qrPost(url, body) {
+                        try {
+                            const r = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(body || {}),
+                            });
+                            const j = await r.json();
+                            if (!r.ok) showStatus(j.message || 'Matrix Tag request failed', 'warning');
+                            return j;
+                        } catch (e) {
+                            showStatus('Matrix Tag request error: ' + e, 'error');
+                            return null;
+                        }
+                    }
+
+                    async function qrRefreshList() {
+                        const list = document.getElementById('qr-tag-list');
+                        const countEl = document.getElementById('qr-tag-count');
+                        try {
+                            const r = await fetch('/api/qr/list');
+                            const j = await r.json();
+                            qrCodes = (j && j.tags) ? j.tags : {};
+                            const ids = Object.keys(qrCodes).map(Number).sort((a, b) => a - b);
+                            if (countEl) countEl.textContent = ids.length + ' tag' + (ids.length === 1 ? '' : 's');
+                            if (list) {
+                                if (!ids.length) {
+                                    list.innerHTML = '<div class="pgv-note" style="padding:8px;">No Matrix Tags yet.</div>';
+                                } else {
+                                    let html = '<div class="qr-tag-row qr-tag-head"><span>Tag ID</span><span>X (m)</span><span>Y (m)</span><span>Yaw°</span><span></span></div>';
+                                    ids.forEach((id) => {
+                                        const t = qrCodes[id];
+                                        const selCls = (qrSelectedId != null && Number(id) === qrSelectedId) ? ' qr-tag-sel' : '';
+                                        html += `<div class="qr-tag-row${selCls}" id="qr-row-${id}"><span><input class="qr-cell-input qr-id-input" type="number" step="1" min="0" value="${id}" title="Change tag ID (click number to select on map)" onclick="qrSelectTag(${id})" onchange="qrChangeId(${id}, this.value)"></span>`
+                                            + `<span><input class="qr-cell-input" type="number" step="0.01" value="${Number(t.x).toFixed(2)}" onchange="qrSaveCoord(${id}, 'x', this.value)"></span>`
+                                            + `<span><input class="qr-cell-input" type="number" step="0.01" value="${Number(t.y).toFixed(2)}" onchange="qrSaveCoord(${id}, 'y', this.value)"></span>`
+                                            + `<span><input class="qr-cell-input" type="number" step="1" value="${Number(t.yaw_deg || 0).toFixed(1)}" onchange="qrSaveCoord(${id}, 'yaw_deg', this.value)"></span>`
+                                            + `<span style="text-align:right;"><button class="qr-del-btn" type="button" title="Delete Matrix Tag ${id}" onclick="qrDelete(${id})">✕</button></span></div>`;
+                                    });
+                                    list.innerHTML = html;
+                                }
+                            }
+                            if (typeof requestMapDraw === 'function') requestMapDraw();
+                            qrRefreshRouteEdges();
+                        } catch (e) {
+                        if (list) list.innerHTML = '<div class="pgv-note" style="padding:8px;">Failed to load Matrix Tags.</div>';
+                        }
+                    }
+
+                    async function qrRefreshRouteEdges() {
+                        try {
+                            const r = await fetch('/api/route/list');
+                            const j = await r.json();
+                            pgvRouteEdges = (j && Array.isArray(j.edges)) ? j.edges : [];
+                            // Refresh edge list UI
+                            const el = document.getElementById('qr-route-edge-list');
+                            if (el) {
+                                if (!pgvRouteEdges.length) {
+                                    el.innerHTML = '<span class="pgv-note">No routes yet.</span>';
+                                } else {
+                                    el.innerHTML = pgvRouteEdges.map((e) =>
+                                        `<div class="qr-tag-row" style="justify-content:space-between;padding:3px 4px;">` +
+                                        `<span style="font-size:12px;">${e.from_tag} → ${e.to_tag}</span>` +
+                                        `<button class="qr-del-btn" type="button" onclick="qrDeleteEdge(${e.from_tag},${e.to_tag})">✕</button></div>`
+                                    ).join('');
+                                }
+                            }
+                            if (typeof requestMapDraw === 'function') requestMapDraw();
+                        } catch (e) { pgvRouteEdges = []; }
+                    }
+
+                    async function qrDeleteEdge(from_tag, to_tag) {
+                        const r = await qrPost('/api/route/delete', { edge_id: `${from_tag}_${to_tag}` });
+                        if (r && r.ok) qrRefreshRouteEdges();
+                    }
+
+                    async function qrClearRoutes() {
+                        if (!confirm('Delete all route edges?')) return;
+                        const r = await qrPost('/api/route/clear', {});
+                        if (r && r.ok) { pgvRouteEdges = []; qrRefreshRouteEdges(); showStatus('Routes cleared', 'success'); }
+                    }
+
+                    function qrToggleConnectMode() {
+                        qrConnectMode = !qrConnectMode;
+                        qrConnectFirst = null;
+                        const btn = document.getElementById('qr-connect-btn');
+                        if (btn) {
+                            btn.textContent = qrConnectMode ? 'CONNECT: ON' : 'CONNECT TAGS';
+                            btn.classList.toggle('active', qrConnectMode);
+                            btn.classList.toggle('shelf-off', !qrConnectMode);
+                        }
+                        const st = document.getElementById('qr-connect-status');
+                        if (st) st.textContent = qrConnectMode
+                            ? 'Click first tag (FROM), then second tag (TO) to draw a route.'
+                            : 'Connect mode off.';
+                    }
+
+                    async function qrFollowRoute() {
+                        if (!pgvRouteEdges || !pgvRouteEdges.length) {
+                            showStatus('No route edges defined — connect tags first', 'warning'); return;
+                        }
+                        // Build ordered tag sequence from directed edges (chain from first edge).
+                        const edgeMap = {};
+                        pgvRouteEdges.forEach((e) => { edgeMap[e.from_tag] = e.to_tag; });
+                        const allTo = new Set(pgvRouteEdges.map((e) => e.to_tag));
+                        const starts = pgvRouteEdges.map((e) => e.from_tag).filter((t) => !allTo.has(t));
+                        let chain = [];
+                        if (starts.length) {
+                            let cur = starts[0];
+                            const visited = new Set();
+                            while (cur != null && !visited.has(cur)) {
+                                chain.push(cur);
+                                visited.add(cur);
+                                cur = edgeMap[cur] != null ? edgeMap[cur] : null;
+                            }
+                            if (cur != null) chain.push(cur);
+                        } else {
+                            // Cycle — just use insertion order
+                            chain = pgvRouteEdges.map((e) => e.from_tag);
+                            chain.push(pgvRouteEdges[pgvRouteEdges.length - 1].to_tag);
+                        }
+                        const st = document.getElementById('qr-connect-status');
+                        if (st) st.textContent = `Following route: ${chain.join(' → ')}`;
+                        const r = await qrPost('/api/pgv_route/follow', { tags: chain });
+                        if (r && r.ok) {
+                            showStatus('Route started: ' + chain.join(' → '), 'success');
+                        } else {
+                            if (st) st.textContent = (r && r.message) ? r.message : 'Follow failed';
+                            showStatus('Route follow failed', 'error');
+                        }
+                    }
+
+                    async function qrStopRoute() {
+                        const r = await qrPost('/api/pgv_route/stop', {});
+                        if (r && r.ok) showStatus('Route stopped', 'success');
+                    }
+
+                    async function qrDelete(id) {
+                        const r = await qrPost('/api/qr/delete', { tag_id: id });
+                        if (r && r.ok) qrRefreshList();
+                    }
+
+                    async function qrClearAll() {
+                        if (!confirm('Delete every Matrix Tag? This cannot be undone.')) return;
+                        const r = await qrPost('/api/qr/clear', {});
+                        if (r && r.ok) { qrRefreshList(); showStatus(r.message || 'Cleared', 'success'); }
+                    }
+
+                    async function qrExport() {
+                        const statusEl = document.getElementById('qr-export-status');
+                        if (statusEl) statusEl.textContent = 'Exporting…';
+                        const j = await qrPost('/api/qr/export-tagmap', {});
+                        if (statusEl) statusEl.textContent = (j && j.message) ? j.message : 'Export failed';
+                        if (j && j.ok) showStatus(j.message || 'Tag map exported', 'success');
+                    }
+
+                    async function qrCreateActionPoints() {
+                        const statusEl = document.getElementById('qr-export-status');
+                        if (statusEl) statusEl.textContent = 'Creating AP sites…';
+                        const j = await qrPost('/api/qr/create-action-points', { prefix: 'QR' });
+                        if (statusEl) statusEl.textContent = (j && j.message) ? j.message : 'AP site creation failed';
+                        if (j && j.ok) {
+                            showStatus(j.message || 'AP sites created', 'success');
+                            if (typeof loadZones === 'function') loadZones();
+                        }
+                    }
+
+                    async function qrAlign() {
+                        const el = document.getElementById('qr-align-spacing');
+                        const raw = el ? el.value.trim() : '';
+                        const body = {};
+                        if (raw !== '') {
+                            const v = parseFloat(raw);
+                            if (!Number.isFinite(v) || v <= 0) { showStatus('Spacing must be a positive number (or blank)', 'warning'); return; }
+                            body.spacing = v;
+                        }
+                        const st = document.getElementById('qr-action-status');
+                        if (st) st.textContent = 'Aligning…';
+                        const j = await qrPost('/api/qr/align', body);
+                        if (st) st.textContent = (j && j.message) ? j.message : 'Align failed';
+                        if (j && j.ok) { showStatus(j.message || 'Aligned', 'success'); qrRefreshList(); }
+                    }
+
+                    async function qrChangeId(oldId, value) {
+                        const newId = parseInt(value, 10);
+                        if (!Number.isInteger(newId) || newId < 0) {
+                            showStatus('Tag ID must be a non-negative integer', 'warning');
+                            qrRefreshList();
+                            return;
+                        }
+                        if (newId === Number(oldId)) return;
+                        if (qrCodes && Object.prototype.hasOwnProperty.call(qrCodes, String(newId))) {
+                            showStatus(`Tag ID ${newId} already exists`, 'warning');
+                            qrRefreshList();
+                            return;
+                        }
+                        const cur = qrCodes[oldId];
+                        if (!cur) return;
+                        // Re-create the tag under the new id (same pose), then drop the old id.
+                        const add = await qrPost('/api/qr/add', {
+                            tag_id: newId,
+                            x: Number(cur.x),
+                            y: Number(cur.y),
+                            yaw_deg: Number(cur.yaw_deg || 0),
+                        });
+                        if (!add || !add.ok) { qrRefreshList(); return; }
+                        await qrPost('/api/qr/delete', { tag_id: Number(oldId) });
+                        if (qrSelectedId === Number(oldId)) qrSelectedId = newId;
+                        showStatus(`Tag ${oldId} → ${newId}`, 'success');
+                        qrRefreshList();
+                    }
+
+                    async function qrSaveCoord(id, axis, value) {
+                        const v = parseFloat(value);
+                        if (!Number.isFinite(v)) { qrRefreshList(); return; }
+                        const cur = qrCodes[id];
+                        if (!cur) return;
+                        const body = {
+                            tag_id: Number(id),
+                            x: axis === 'x' ? v : Number(cur.x),
+                            y: axis === 'y' ? v : Number(cur.y),
+                            yaw_deg: axis === 'yaw_deg' ? v : Number(cur.yaw_deg || 0),
+                        };
+                        const r = await qrPost('/api/qr/add', body);
+                        if (r && r.ok) qrRefreshList();
+                    }
+
+                    // Draw a small QR-glyph icon (rounded tile + 3 finder squares + a
+                    // few data cells) centred at px,py so tags read as scannable codes
+                    // and are easy to spot/click on the map.
+                    function drawQrGlyph(context, px, py, r) {
+                        const s = r * 2;
+                        context.fillStyle = '#ffffff';
+                        context.strokeStyle = '#0b3d1f';
+                        context.lineWidth = 1.5;
+                        context.beginPath();
+                        if (context.roundRect) context.roundRect(px - r, py - r, s, s, 2);
+                        else context.rect(px - r, py - r, s, s);
+                        context.fill();
+                        context.stroke();
+                        const u = s / 7;                      // 7x7 module grid
+                        const ox = px - r, oy = py - r;
+                        context.fillStyle = '#0b3d1f';
+                        const finder = (gx, gy) => {          // 3x3 finder pattern square
+                            context.fillRect(ox + gx * u, oy + gy * u, u * 3, u * 3);
+                            context.fillStyle = '#ffffff';
+                            context.fillRect(ox + (gx + 1) * u, oy + (gy + 1) * u, u, u);
+                            context.fillStyle = '#0b3d1f';
+                        };
+                        finder(0, 0); finder(4, 0); finder(0, 4);
+                        // a few data cells for texture
+                        context.fillRect(ox + 5 * u, oy + 5 * u, u, u);
+                        context.fillRect(ox + 4 * u, oy + 6 * u, u, u);
+                        context.fillRect(ox + 6 * u, oy + 4 * u, u, u);
+                    }
+
+                    function drawQrCodes(context) {
+                        if (!context) return;
+                        context.save();
+
+                        // Guide line + anchor while placing along a direction.
+                        if (qrLineMode && qrLineAnchor) {
+                            const [apx, apy] = worldToPixel(qrLineAnchor.x, qrLineAnchor.y);
+                            let endX = apx, endY = apy;
+                            if (qrLineYaw !== null) {
+                                const [ex, ey] = worldToPixel(
+                                    qrLineAnchor.x + Math.cos(qrLineYaw) * 2.0,
+                                    qrLineAnchor.y + Math.sin(qrLineYaw) * 2.0
+                                );
+                                endX = ex; endY = ey;
+                            } else if (qrLinePreview) {
+                                const [ex, ey] = worldToPixel(qrLinePreview.x, qrLinePreview.y);
+                                endX = ex; endY = ey;
+                            }
+                            context.strokeStyle = 'rgba(22,163,74,0.9)';
+                            context.lineWidth = 2;
+                            context.setLineDash([6, 4]);
+                            context.beginPath();
+                            context.moveTo(apx, apy);
+                            context.lineTo(endX, endY);
+                            context.stroke();
+                            context.setLineDash([]);
+                            context.fillStyle = '#16a34a';
+                            context.beginPath();
+                            context.arc(apx, apy, 4, 0, Math.PI * 2);
+                            context.fill();
+                        }
+
+                        // Draw route edges as cyan arrows underneath the tag icons.
+                        if (pgvRouteEdges && pgvRouteEdges.length) {
+                            pgvRouteEdges.forEach((edge) => {
+                                const ft = qrCodes[String(edge.from_tag)];
+                                const tt = qrCodes[String(edge.to_tag)];
+                                if (!ft || !tt) return;
+                                const [fx, fy] = worldToPixel(Number(ft.x), Number(ft.y));
+                                const [tx, ty] = worldToPixel(Number(tt.x), Number(tt.y));
+                                const angle = Math.atan2(ty - fy, tx - fx);
+                                const len = Math.hypot(tx - fx, ty - fy);
+                                if (len < 2) return;
+                                const hs = Math.min(14, len * 0.3); // arrowhead size
+                                // shaft
+                                context.strokeStyle = 'rgba(0,230,230,0.85)';
+                                context.lineWidth = 2.5;
+                                context.beginPath();
+                                context.moveTo(fx, fy);
+                                context.lineTo(tx - Math.cos(angle) * hs * 0.5, ty - Math.sin(angle) * hs * 0.5);
+                                context.stroke();
+                                // arrowhead
+                                context.fillStyle = 'rgba(0,230,230,0.95)';
+                                context.beginPath();
+                                context.moveTo(tx, ty);
+                                context.lineTo(tx - Math.cos(angle - 0.42) * hs, ty - Math.sin(angle - 0.42) * hs);
+                                context.lineTo(tx - Math.cos(angle + 0.42) * hs, ty - Math.sin(angle + 0.42) * hs);
+                                context.closePath();
+                                context.fill();
+                                // mid-label
+                                const mx = (fx + tx) / 2, my = (fy + ty) / 2;
+                                context.fillStyle = 'rgba(0,230,230,0.9)';
+                                context.font = 'bold 10px Arial';
+                                context.textAlign = 'center';
+                                context.textBaseline = 'middle';
+                                context.fillText(`${edge.from_tag}→${edge.to_tag}`, mx, my - 8);
+                            });
+                        }
+
+                        const ids = qrCodes ? Object.keys(qrCodes) : [];
+                        // Size the glyph to a ~0.30 m floor tag scaled with zoom so it
+                        // is easy to see/click, clamped so it never gets tiny or huge.
+                        let half = 16;
+                        try {
+                            const res = Number(mapData && mapData.resolution);
+                            if (Number.isFinite(res) && res > 0) {
+                                half = Math.max(13, Math.min(46, ((0.30 / res) * scale) / 2));
+                            }
+                        } catch (e) { /* fall back to fixed size */ }
+                        ids.forEach((id) => {
+                            const t = qrCodes[id];
+                            if (!t) return;
+                            const [px, py] = worldToPixel(t.x, t.y);
+                            const yaw = Number(t.yaw_deg || 0) * Math.PI / 180.0;
+                            const [ax, ay] = worldToPixel(
+                                Number(t.x) + Math.cos(yaw) * 0.28,
+                                Number(t.y) + Math.sin(yaw) * 0.28
+                            );
+                            const selected = (qrSelectedId != null && Number(id) === qrSelectedId);
+                            // direction arrow
+                            context.strokeStyle = '#16a34a';
+                            context.lineWidth = 3;
+                            context.beginPath();
+                            context.moveTo(px, py);
+                            context.lineTo(ax, ay);
+                            context.stroke();
+                            context.fillStyle = '#16a34a';
+                            context.beginPath();
+                            context.arc(ax, ay, 3.5, 0, Math.PI * 2);
+                            context.fill();
+                            // selection halo
+                            if (selected) {
+                                context.strokeStyle = '#f59e0b';
+                                context.lineWidth = 2.5;
+                                context.beginPath();
+                                context.arc(px, py, half + 4, 0, Math.PI * 2);
+                                context.stroke();
+                            }
+                            // QR icon
+                            drawQrGlyph(context, px, py, half);
+                            // id label (scales with the glyph)
+                            context.fillStyle = selected ? '#b45309' : '#0b6b2f';
+                            context.font = `bold ${Math.round(Math.max(11, half * 0.85))}px Arial`;
+                            context.textAlign = 'center';
+                            context.textBaseline = 'bottom';
+                            context.fillText(String(id), px, py - half - 2);
+                        });
+                        context.restore();
+                    }
+
+                    function makeQrPipDraggable() {
+                        const pip = document.getElementById('qr-codes-pip');
+                        const header = document.getElementById('qr-pip-header');
+                        if (!pip || !header) return;
+                        let dragging = false, startX = 0, startY = 0;
+                        header.addEventListener('mousedown', (event) => {
+                            if (event.target.classList.contains('pip-close')) return;
+                            dragging = true;
+                            startX = event.clientX - pip.offsetLeft;
+                            startY = event.clientY - pip.offsetTop;
+                        });
+                        document.addEventListener('mousemove', (event) => {
+                            if (!dragging) return;
+                            event.preventDefault();
+                            let nextX = event.clientX - startX;
+                            let nextY = event.clientY - startY;
+                            const maxX = window.innerWidth - pip.offsetWidth;
+                            const maxY = window.innerHeight - pip.offsetHeight;
+                            nextX = Math.max(0, Math.min(nextX, maxX));
+                            nextY = Math.max(0, Math.min(nextY, maxY));
+                            pip.style.right = 'auto';
+                            pip.style.bottom = 'auto';
+                            pip.style.left = `${nextX}px`;
+                            pip.style.top = `${nextY}px`;
+                        });
+                        document.addEventListener('mouseup', () => { dragging = false; });
+                    }
+
                     function openLiftPopup() {
                         const popup = document.getElementById('lift-control-pip');
                         if (!popup) return;
@@ -25896,11 +27524,37 @@
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
                         ctx.restore();
 
-                        // Draw map
+                        // In PGV mode hide the occupancy map and show a clean dark
+                        // canvas (matches the app background) so tags/robot/lidar read
+                        // crisply. Fill the WHOLE view in screen space first to avoid
+                        // any patchiness outside the map image.
+                        if (pgvBlankCanvas) {
+                            ctx.save();
+                            ctx.setTransform(1, 0, 0, 1, 0, 0);
+                            ctx.fillStyle = '#0a0e14';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.restore();
+                        }
+
                         ctx.save();
                         ctx.translate(offsetX, offsetY);
                         ctx.scale(scale, scale);
-                        ctx.drawImage(mapData.image, 0, 0);
+                        if (pgvBlankCanvas) {
+                            // Ultra-subtle 1 m reference grid only (no harsh lines).
+                            const iw = mapData.image.width, ih = mapData.image.height;
+                            const res = Number(mapData.resolution) || 0.05;
+                            const stepPx = 1.0 / res;
+                            if (stepPx > 4 && stepPx < 4000) {
+                                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+                                ctx.lineWidth = 1 / scale;
+                                ctx.beginPath();
+                                for (let gx = 0; gx <= iw; gx += stepPx) { ctx.moveTo(gx, 0); ctx.lineTo(gx, ih); }
+                                for (let gy = 0; gy <= ih; gy += stepPx) { ctx.moveTo(0, gy); ctx.lineTo(iw, gy); }
+                                ctx.stroke();
+                            }
+                        } else {
+                            ctx.drawImage(mapData.image, 0, 0);
+                        }
                         ctx.restore();
 
                         drawStitchedOverlay();
@@ -27157,6 +28811,7 @@
                             }
                         }
 
+                        try { drawQrCodes(ctx); } catch (e) { /* qr overlay best-effort */ }
                     }
 
                     function drawFilterLayers() {
@@ -27816,6 +29471,23 @@
 
                         const [wx, wy] = pixelToWorld(x, y);
 
+                        if (qrPlaceMode) {
+                            qrPlaceAt(wx, wy);
+                            return;
+                        }
+
+                        if (qrLineMode) {
+                            qrLineClick(wx, wy);
+                            return;
+                        }
+
+                        // Click a tag icon to select + edit it (only while the panel is open).
+                        const qrPip = document.getElementById('qr-codes-pip');
+                        if (qrPip && qrPip.classList.contains('active')) {
+                            const hitId = qrHitTest(wx, wy);
+                            if (hitId != null) { qrSelectTag(hitId); return; }
+                        }
+
                         if (stitchedMap && stitchState !== 'cancelled' && stitchInteractionMode === 'reference') {
                             if (stitchState !== 'alignment_active' && stitchState !== 'reference_point_matching_active' && stitchState !== 'region_matching_active') {
                                 showStatus('Confirm rough placement before collecting reference points.', 'error');
@@ -28387,6 +30059,12 @@
                             poseCursorCanvas = { x, y };
                         }
                         const [wx, wy] = pixelToWorld(x, y);
+
+                        // Live guide line while placing tags along a direction.
+                        if (qrLineMode && qrLineAnchor) {
+                            qrLinePreview = { x: wx, y: wy };
+                            if (typeof requestMapDraw === 'function') requestMapDraw();
+                        }
 
                         if (stitchedMap && stitchDrag.active && stitchDrag.startWorld && stitchDrag.startTransform) {
                             stitchTransform.x = Number(stitchDrag.startTransform.x || 0) + (wx - stitchDrag.startWorld.x);
@@ -29081,6 +30759,9 @@
                         const pgvDx = parseFloat(actionPointConfig.pgv_dx || 0.0);
                         const pgvDy = parseFloat(actionPointConfig.pgv_dy || 0.0);
                         const pgvDtheta = parseFloat(actionPointConfig.pgv_dtheta || 0.0);
+                        const linkedTagId = actionPointConfig.tag_id !== undefined && actionPointConfig.tag_id !== null
+                            ? String(actionPointConfig.tag_id)
+                            : '';
                         const description = String(actionPointConfig.description || '');
 
                         const posX = (zone.position && zone.position.x !== undefined) ? zone.position.x : 0;
@@ -29151,6 +30832,10 @@
                                     <label style="font-size:10px;color:#8b949e;display:block;">DTheta (deg)</label>
                                     <input type="number" id="ez-pgv-dtheta" value="${pgvDtheta}" step="0.1" style="${inputStyle}">
                                 </div>
+                            </div>
+                            <div>
+                                <label style="font-size:10px;color:#8b949e;display:block;">Matrix Tag ID</label>
+                                <input type="number" id="ez-pgv-tag-id" value="${escapeHtml(linkedTagId)}" step="1" min="0" style="${inputStyle}">
                             </div>
                         </div>
                     </div>
@@ -29233,6 +30918,7 @@
                                     const pgvDxEl = document.getElementById('ez-pgv-dx');
                                     const pgvDyEl = document.getElementById('ez-pgv-dy');
                                     const pgvDthetaEl = document.getElementById('ez-pgv-dtheta');
+                                    const pgvTagIdEl = document.getElementById('ez-pgv-tag-id');
 
                                     const typeEl = document.getElementById('ez-type');
                                     const xEl = document.getElementById('ez-x');
@@ -29255,6 +30941,8 @@
                                     const newPgvDx = parseFloat(pgvDxEl ? pgvDxEl.value : 0);
                                     const newPgvDy = parseFloat(pgvDyEl ? pgvDyEl.value : 0);
                                     const newPgvDtheta = parseFloat(pgvDthetaEl ? pgvDthetaEl.value : 0);
+                                    const newPgvTagRaw = String(pgvTagIdEl ? pgvTagIdEl.value : '').trim();
+                                    const newPgvTagId = newPgvTagRaw === '' ? null : parseInt(newPgvTagRaw, 10);
 
                                     const newType      = String(typeEl.value || '').trim();
                                     const newX         = parseFloat(xEl.value);
@@ -29271,6 +30959,7 @@
                                     if (isNaN(newX) || isNaN(newY)) { showStatus('Invalid coordinates', 'error'); return; }
                                     if (isNaN(newHeadingDeg)) { showStatus('Invalid heading value', 'error'); return; }
                                     if (isNaN(newSpeed)) { showStatus('Invalid speed value', 'error'); return; }
+                                    if (newPgvTagRaw !== '' && !Number.isInteger(newPgvTagId)) { showStatus('Invalid Matrix Tag ID', 'error'); return; }
                                     if (newType === 'action' && actionPointPayload.point_type === 'shelf' && !actionPointPayload.template_id) {
                                         showStatus('Select a shelf template for shelf-aware action points', 'error');
                                         return;
@@ -29298,6 +30987,7 @@
                                         pgv_dx: newPgvDx,
                                         pgv_dy: newPgvDy,
                                         pgv_dtheta: newPgvDtheta,
+                                        tag_id: newPgvTagId,
                                         description: newDescription,
                                     };
 
@@ -29512,7 +31202,8 @@
                             ? `Path Mode routing to ${destination} on "${pathModeSelectedPath}"...`
                             : `Path Mode routing to ${destination} across connected paths...`, 'info');
 
-                        fetch('/api/path_mode/goto', {
+                        const endpoint = navRuntimeMode === 'pgv' ? '/api/pgv_path_mode/goto' : '/api/path_mode/goto';
+                        fetch(endpoint, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -29526,7 +31217,9 @@
                                     const plan = data.plan || {};
                                     const start = plan.start_poi || data.start_poi || 'nearest POI';
                                     const routeEdges = Array.isArray(plan.route_edges) ? plan.route_edges.length : 0;
-                                    showStatus(`Path Mode route started: ${start} -> ${destination}${routeEdges ? ` (${routeEdges} directed edge${routeEdges === 1 ? '' : 's'})` : ''}`, 'success');
+                                    const tagCount = Array.isArray(data.tags) ? data.tags.length : 0;
+                                    const prefix = navRuntimeMode === 'pgv' ? 'PGV Path Mode route started' : 'Path Mode route started';
+                                    showStatus(`${prefix}: ${start} -> ${destination}${routeEdges ? ` (${routeEdges} directed edge${routeEdges === 1 ? '' : 's'})` : ''}${tagCount ? ` · ${tagCount} Matrix Tags` : ''}`, 'success');
                                     loadPathFollowingStatus();
                                 } else {
                                     showStatus(data.message || 'Path Mode route failed', 'error');
@@ -29968,6 +31661,35 @@
                     }
 
                     async function followSavedPath(name) {
+                        if (navRuntimeMode === 'pgv') {
+                            const pathName = String(name || '').trim();
+                            if (!pathName) {
+                                showStatus('Select a saved path to follow', 'error');
+                                return;
+                            }
+                            showStatus(`Starting PGV saved path "${pathName}"...`, 'info');
+                            fetch('/api/pgv_path/follow_saved', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ path_name: pathName }),
+                            })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.ok) {
+                                        const tagCount = Array.isArray(data.tags) ? data.tags.length : 0;
+                                        const poiCount = Array.isArray(data.poi_sequence) ? data.poi_sequence.length : 0;
+                                        showStatus(`${data.message || 'PGV path started'}${poiCount ? ` (${poiCount} POIs` : ''}${tagCount ? `, ${tagCount} Matrix Tags` : ''}${poiCount ? ')' : ''}`, 'success');
+                                        loadPathFollowingStatus();
+                                    } else {
+                                        showStatus(data.message || 'PGV saved path failed', 'error');
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('PGV saved path error:', error);
+                                    showStatus('Error: ' + error, 'error');
+                                });
+                            return;
+                        }
                         fetch(`/api/path/load/${encodeURIComponent(name)}`)
                             .then(response => response.json())
                             .then(data => {

@@ -1,0 +1,163 @@
+# Parameters for the PGV localization stack.
+# tag_map_path is injected by the launch file (resolved to the installed
+# config dir), so it is intentionally left blank here.
+
+pgv_reader:
+  ros__parameters:
+    port: /dev/next/pgv
+    baud: 115200
+    # 1 Hz is far too slow to hold a fix while driving (a tag passes under the
+    # reader in well under a second). 8 Hz keeps a fix while moving; the reader
+    # assembles split frames so a partial read no longer corrupts the position.
+    poll_hz: 8.0
+    # The RS-485 link occasionally splits the 21-byte reply across reads. Give
+    # each poll enough time to assemble a whole frame (the reader loops until 21
+    # bytes or this deadline) so we stop decoding misaligned partial frames.
+    read_timeout: 0.12
+    frame_id: pgv_link
+    # Reject frames whose XOR checksum does not match. With a flaky link this is
+    # essential: a misaligned/partial frame that happens to be 21 bytes would
+    # otherwise decode as a garbage position and teleport the robot.
+    strict_checksum: true
+    # Reader-frame convention. Keep these NEUTRAL by default. A lone yaw-sign
+    # flip is geometrically inconsistent (it negates the rotation but not the
+    # x/y handedness) and makes the computed pose jump to a garbage point - a
+    # heading flip belongs in the MOUNT (base_to_pgv_yaw_deg / URDF rpy), which
+    # is a proper rotation. Only use pose_*_sign for a genuine mirrored reader
+    # frame, and then flip pose_y_sign AND pose_yaw_sign together.
+    pose_x_sign: 1.0
+    pose_y_sign: 1.0
+    pose_yaw_sign: 1.0
+    pose_yaw_offset_deg: 0.0
+
+pgv_localizer:
+  ros__parameters:
+    # Publishes /pgv/corrected_pose and mirrors it to /initialpose so Nav2 /
+    # AMCL can consume Matrix Tag corrections as normal localization updates.
+    # Mission/route decisions remain outside this stack.
+
+    # The URDF/static TF base_link -> pgv_link is the source of truth for the
+    # camera mount. The fallback params below are used only if TF is unavailable
+    # and allow_param_mount_fallback is true.
+    base_frame: base_link
+    pgv_frame: pgv_link
+    # The PGV mount now matches the URDF: pgv_link is axis-aligned with base_link
+    # and sits behind the rear edge of the chassis.
+    use_tf_mount: true
+    allow_param_mount_fallback: true
+
+    # Fallback base_link -> pgv_link mounting offset.
+    #
+    # Physical mounting (REP-103: +x forward, +y left, +z up):
+    #   PGV camera is rear-mounted, downward-facing, behind the rear chassis.
+    #     x = -0.52 m   (chassis_length=0.80 m => -0.40 m from center to rear edge
+    #                     and a further 0.12 m behind that edge)
+    #     y =  0.00 m   (laterally centered)
+    #     z =  0.10 m   (10 cm above base_link plane)
+    #     yaw = 0 deg   (pgv_link axes stay aligned with base_link)
+    #
+    # z is represented in the URDF as base_link -> pgv_link, but is not used by
+    # the planar 2D localizer. Run pgv_calibration to refine x/y/yaw.
+    base_to_pgv_x: -0.52
+    base_to_pgv_y: 0.0
+    base_to_pgv_yaw_deg: 0.0
+    use_pgv_yaw: false
+    max_reader_age_s: 0.5
+    # Correction gates. max_offset_m is a sanity bound on how far the tag may sit
+    # from the reader's optical centre. The R3138 only reports a tag while it is
+    # inside the sensor window, so a wider bound is safe and lets legitimate reads through.
+    # Reject reading if tag center is farther than this from the PGV optical axis.
+    max_offset_m: 0.55
+    # Accept a tag on the FIRST valid read. A fast-moving robot may only pass a
+    # floor tag under the reader for a single 8 Hz frame; requiring 2 consecutive
+    # reads dropped those brief sightings, so the route follower never saw the
+    # tag and overshot/stopped. Single-frame misreads are still caught downstream:
+    # the route follower re-confirms the SAME target tag over target_confirm_frames
+    # before it counts as arrival, and the correction-jump gate below rejects any
+    # read that would teleport the pose.
+    stable_frames: 1
+    # Hard safety gate: reject any correction that would move the robot more
+    # than this far from the current AMCL estimate. A real tag read can only
+    # nudge the pose; a jump this large means a bad frame, a wrong/duplicate tag
+    # id, or a mis-configured mount - never teleport AMCL to a random point.
+    max_correction_jump_m: 2.0
+    # Staleness gate: reject readings older than this from the PGV reader timestamp.
+    max_reader_age_s: 0.5
+    # Localization mode:
+    #   amcl     - publish /initialpose; AMCL primary on lidar, tags re-anchor it.
+    #   pure_pgv - this node owns localization: predict on wheel odometry, correct
+    #              at tags, broadcast a filtered map->odom TF. Turn AMCL OFF when
+    #              using this mode (only one node may own map->odom).
+    localization_mode: amcl
+    # Use EKF fused odom so pgv_localizer and the odom->base TF share the
+    # same data source — map->odom and odom->base then cancel consistently.
+    odom_topic: /odometry/filtered
+    odom_frame: odom
+    tf_publish_rate_hz: 20.0
+    publish_odom_base_tf: false
+    odom_flip_180: false
+    # Staleness gates. Keep generous so route_follower can dead-reckon
+    # between tags that are several metres apart without triggering a STALE
+    # halt (route_follower has its own overshoot/recovery logic).
+    max_dead_reckon_m: 5.0
+    max_dead_reckon_s: 30.0
+    # Localization zone (map frame). When enabled, corrections only apply
+    # while the corrected pose falls inside this rectangle.
+    zone_enabled: false
+    zone_min_x: -1.0
+    zone_min_y: -1.0
+    zone_max_x: 5.0
+    zone_max_y: 2.0
+    # Output to the navigation/localization stack.
+    map_frame: map
+    publish_initialpose: true
+    position_covariance: 0.0025
+    yaw_covariance: 0.0025
+    # Fused mode (Option B): AMCL stays primary on lidar+odom; PGV re-anchors it
+    # only when it has drifted past the deadband, once per tag detection event.
+    # Readings are EMA-smoothed first so reader jitter never reaches AMCL.
+
+    amcl_pose_topic: amcl_pose
+    correction_deadband_xy: 0.02        # m  - skip correction when AMCL within this
+    correction_deadband_yaw_deg: 1.0    # deg
+    smoothing_alpha: 0.4                # EMA weight on each new reading (0..1)
+
+pgv_calibrator:
+  ros__parameters:
+    # Calibration uses the live URDF/static TF base_link -> pgv_link as the
+    # mount reference and least-squares initial guess. These params are only the
+    # fallback reference when TF is unavailable.
+    base_frame: base_link
+    pgv_frame: pgv_link
+    use_tf_mount: true
+    base_to_pgv_x: -0.52
+    base_to_pgv_y: 0.0
+    base_to_pgv_yaw_deg: 0.0
+
+pgv_diagnostics:
+  ros__parameters:
+    stale_timeout_s: 2.0
+    publish_rate_hz: 1.0
+
+route_follower:
+  ros__parameters:
+    # Graph-based AGV motion: follow an ordered list of tag ids (the mission
+    # planner supplies branch decisions). Drives on /cmd_vel_tracker so it never
+    # fights Nav2. Idle until commanded on /pgv_route/command.
+    map_frame: map
+    base_frame: base_link
+    cmd_vel_topic: /cmd_vel_tracker
+    odom_topic: /wheel_controller/odom
+    control_rate_hz: 20.0
+    cruise_speed: 0.25
+    approach_speed: 0.10
+    max_angular: 0.6
+    k_lateral: 1.5
+    k_heading: 1.2
+    arrive_radius: 0.60
+    max_lateral_error: 0.25
+    max_yaw_error_deg: 45.0
+    overshoot_margin: 0.40
+    recovery_creep_m: 0.25
+    target_confirm_frames: 3
+    target_confirm_min_duration_s: 0.30
