@@ -498,8 +498,8 @@ class PgvLocalizer(Node):
                 # so robot_yaw = camera_yaw_in_map.
                 # Chain: map ← tag ← (inv pgv_angle) ← camera ← (inv mount_yaw=0) ← robot
                 byaw = math.atan2(
-                    math.sin(_tyaw - pyaw),
-                    math.cos(_tyaw - pyaw),
+                    math.sin(_tyaw - pyaw + math.pi),
+                    math.cos(_tyaw - pyaw + math.pi),
                 )
             else:
                 map_est = self._map_estimate()
