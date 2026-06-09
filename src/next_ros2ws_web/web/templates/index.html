@@ -4759,14 +4759,14 @@
         #qr-codes-pip {
             position: fixed;
             bottom: 20px;
-            right: 980px;
+            right: 640px;
             z-index: 1001;
             background: var(--bg-secondary);
             border: 2px solid var(--border-secondary);
             border-radius: 12px;
             box-shadow: var(--shadow-lg);
             display: none;
-            width: 340px;
+            width: 420px;
             max-height: calc(100vh - 40px);
             overflow-y: auto;
             backdrop-filter: blur(10px);
@@ -13290,7 +13290,6 @@
                     <button class="mctrl-btn" id="shelf-popup-btn-top" onclick="toggleShelfPopup()" title="Open shelf controls"><i class="fas fa-box"></i><span>SHELF</span></button>
                     <button class="mctrl-btn" id="motion-control-btn-top" onclick="document.getElementById('motion-control-modal').classList.toggle('open')" title="Translation/Rotation test"><i class="fas fa-arrows-up-down-left-right"></i><span>MOTION</span></button>
                     <button class="mctrl-btn" id="camera-btn-top" onclick="window.open('/dev/camera', 'camera_popup', 'width=640,height=480,menubar=no,toolbar=no,location=no,status=no')" title="Open Camera Feed"><i class="fas fa-camera"></i><span>CAMERA</span></button>
-                    <button class="mctrl-btn" id="pgv-btn-top" onclick="openPgvPopup()" title="PGV Floor-Code Scanner"><i class="fas fa-barcode"></i><span>PGV</span></button>
                     <div class="mctrl-sep"></div>
                     <button class="mctrl-btn" id="nav-mode-btn-top" onclick="toggleNavMode()" title="Toggle Navigation Stack"><i class="fas fa-wifi"></i><span>START NAV</span></button>
                     <button class="mctrl-btn" onclick="cancelNav2Goal()" title="Cancel Navigation"><i class="fas fa-ban"></i><span>CANCEL NAV</span></button>
@@ -14271,15 +14270,16 @@
                     </div>
                 </div>
 
-                <div id="pgv-control-pip">
-                    <div class="pip-header" id="pgv-pip-header">
+                <div id="qr-codes-pip">
+                    <div class="pip-header" id="qr-pip-header">
                         <div class="pip-title">
-                            <i class="fas fa-barcode"></i> PGV Scanner
+                            <i class="fas fa-qrcode"></i> Matrix Tags
                         </div>
-                        <button class="pip-close" type="button" onclick="closePgvPopup()">×</button>
+                        <button class="pip-close" type="button" onclick="closeQrPopup()">×</button>
                     </div>
                     <div class="pip-content">
                         <div class="pgv-popup-body">
+
                             <div class="pgv-section-title">Scanner stack</div>
                             <div class="pgv-btn-row">
                                 <button id="pgv-start-cal-btn" class="lift-cmd-btn" type="button" onclick="pgvLaunch('calibration')" title="Start reader + calibrator">START CALIBRATION</button>
@@ -14342,20 +14342,9 @@
                                 <img id="pgv-plot-img" class="pgv-plot-img" alt="PGV calibration fit plot">
                                 <div id="pgv-plot-empty" class="pgv-plot-empty">No calibration plot yet.</div>
                             </div>
-                        </div>
-                    </div>
-                </div>
 
-                <div id="qr-codes-pip">
-                    <div class="pip-header" id="qr-pip-header">
-                        <div class="pip-title">
-                            <i class="fas fa-qrcode"></i> Matrix Tags
-                        </div>
-                        <button class="pip-close" type="button" onclick="closeQrPopup()">×</button>
-                    </div>
-                    <div class="pip-content">
-                        <div class="pgv-popup-body">
-                            <div class="pgv-note">Matrix Tags are fixed floor landmarks with direction. Place them by clicking the map, drop one at the robot, or drive over them with auto-add. Action points are separate — add them on top and connect to a tag by id.</div>
+                            <div class="pgv-section-title" style="margin-top:6px;">Tag placement</div>
+                            <div class="pgv-note">Matrix Tags are fixed floor landmarks with direction. Place them by clicking the map, drop one at the robot, or drive over them with auto-add.</div>
 
                             <div class="pgv-section-title">Next tag id</div>
                             <div style="display:flex;align-items:center;gap:6px;">
@@ -14393,7 +14382,7 @@
                             <div class="pgv-btn-row">
                                 <button id="qr-ap-btn" class="lift-cmd-btn" type="button" onclick="qrCreateActionPoints()" title="Create/update one PGV-linked action point for every Matrix Tag">CREATE AP SITES</button>
                             </div>
-                            <div id="qr-export-status" class="pgv-note">Export writes <code>tag_map.yaml</code>; restart PGV localization (PGV popup) to load it.</div>
+                            <div id="qr-export-status" class="pgv-note">Export writes <code>tag_map.yaml</code>; restart PGV localization to load it.</div>
 
                             <div class="pgv-section-title" style="margin-top:10px;">Tag Routes</div>
                             <div class="pgv-note" style="margin-bottom:4px;">Draw a path between matrix codes. Enable connect mode then click FROM tag → TO tag on the map.</div>
@@ -24715,29 +24704,8 @@
                         pgvSetRouteField('pgv-route-cmd', parsed && parsed.cmd_vel_active ? 'YES' : 'NO');
                     }
 
-                    function openPgvPopup() {
-                        const popup = document.getElementById('pgv-control-pip');
-                        if (!popup) return;
-                        popup.classList.add('active');
-                        if (!pgvPipDraggableInit) { makePgvPipDraggable(); pgvPipDraggableInit = true; }
-                        pgvRefreshStatus();
-                        pgvLoadCalibrationResult();
-                        if (!pgvStatusTimer) pgvStatusTimer = setInterval(pgvRefreshStatus, 3000);
-                        if (!pgvAgeTimer) pgvAgeTimer = setInterval(pgvUpdateAge, 1000);
-                        if (rosbridgeConnected && ros) {
-                            initPgvTopics();
-                        } else {
-                            showStatus('PGV live data needs a rosbridge connection', 'warning');
-                        }
-                    }
-
-                    function closePgvPopup() {
-                        const popup = document.getElementById('pgv-control-pip');
-                        if (popup) popup.classList.remove('active');
-                        if (pgvStatusTimer) { clearInterval(pgvStatusTimer); pgvStatusTimer = null; }
-                        if (pgvAgeTimer) { clearInterval(pgvAgeTimer); pgvAgeTimer = null; }
-                        teardownPgvTopics();
-                    }
+                    function openPgvPopup() { openQrPopup(); }
+                    function closePgvPopup() { closeQrPopup(); }
 
                     function teardownPgvTopics() {
                         Object.keys(pgvTopics).forEach((k) => {
@@ -25028,6 +24996,11 @@
                         popup.classList.add('active');
                         if (!qrPipDraggableInit) { makeQrPipDraggable(); qrPipDraggableInit = true; }
                         qrRefreshList();
+                        pgvRefreshStatus();
+                        pgvLoadCalibrationResult();
+                        if (!pgvStatusTimer) pgvStatusTimer = setInterval(pgvRefreshStatus, 3000);
+                        if (!pgvAgeTimer) pgvAgeTimer = setInterval(pgvUpdateAge, 1000);
+                        if (rosbridgeConnected && ros) initPgvTopics();
                     }
 
                     function closeQrPopup() {
@@ -25036,6 +25009,9 @@
                         if (qrPlaceMode) qrTogglePlaceMode();
                         if (qrLineMode) qrToggleLineMode();
                         qrSelectedId = null;
+                        if (pgvStatusTimer) { clearInterval(pgvStatusTimer); pgvStatusTimer = null; }
+                        if (pgvAgeTimer) { clearInterval(pgvAgeTimer); pgvAgeTimer = null; }
+                        teardownPgvTopics();
                         if (typeof requestMapDraw === 'function') requestMapDraw();
                     }
 
