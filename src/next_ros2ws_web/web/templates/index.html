@@ -24600,7 +24600,7 @@
                     let pgvLatestRouteState = null;
                     let pgvLatestAngleDeg = null;     // R3138 reported angle
                     let pgvLatestOdomYawDeg = null;   // current robot yaw from odom
-                    const PGV_MOUNT_YAW_DEG = 0.0;   // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
+                    const PGV_MOUNT_YAW_DEG = 180.0;  // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
 
                     function pgvComputeAndShowYaw() {
                         const tagId = pgvLatestTag;
