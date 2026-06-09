@@ -24599,7 +24599,7 @@
                     let pgvLatestRouteState = null;
                     let pgvLatestAngleDeg = null;     // R3138 reported angle
                     let pgvLatestOdomYawDeg = null;   // current robot yaw from odom
-                    const PGV_MOUNT_YAW_DEG = 180.0;  // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
+                    const PGV_MOUNT_YAW_DEG = 0.0;  // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
 
                     function pgvComputeAndShowYaw() {
                         const angleDeg = pgvLatestAngleDeg;
@@ -24607,8 +24607,12 @@
                             pgvSetText('pgv-computed-yaw', '—');
                             return;
                         }
-                        // robot_heading = pgv_angle - mount_yaw
-                        let computedDeg = angleDeg - PGV_MOUNT_YAW_DEG;
+                        // robot_heading = mount_yaw - pgv_angle
+                        // pgv_angle is negated: R3138 reports the tag angle in
+                        // the sensor frame, which rotates opposite to the robot
+                        // (visible on this rear-camera diff-drive when turning).
+                        // Matches pgv_localizer byaw = mount_yaw - pyaw.
+                        let computedDeg = PGV_MOUNT_YAW_DEG - angleDeg;
                         // Normalize to [-180, 180]
                         computedDeg = ((computedDeg + 180) % 360 + 360) % 360 - 180;
                         pgvSetText('pgv-computed-yaw', computedDeg.toFixed(1) + '°');
