@@ -476,37 +476,25 @@ class PgvLocalizer(Node):
             t_map_base = compose(t_map_pgv, inverse(t_base_pgv))
             bx, by, byaw = t_map_base
         else:
-            # Position-only mode, using the MEASURED tag offset for accuracy.
+            # Position-only mode. Snap base_link to the tag's map coordinate,
+            # offset by the rear-camera MOUNT only (the measured sub-tag offset
+            # px/py is NOT used here: its frame convention vs the 190° code
+            # angle is unresolved and using it raw threw the pose ~0.7 m off).
             #
-            # The reader reports the tag's pose in the CAMERA frame: (px, py)
-            # metres + measured yaw. (px, py) tells us exactly where the tag
-            # sits under the reader, so we can recover base_link's true pose
-            # instead of just snapping it to the tag centre.
-            #
-            # We interpret that camera-frame offset using the robot's CURRENT
-            # heading (from odom/EKF) - never the tag's stored yaw - so this
-            # stays position-only: the tag contributes position, odom owns yaw.
-            #
-            # Geometry (REP-103), all in metres / radians:
-            #   tag, relative to base, expressed in base-aligned axes:
-            #       t_base_tag = T_base_pgv ∘ (px, py, 0)
-            #   tag is known at (tx, ty) in the map, and base_link's heading is
-            #   byaw, so:
-            #       base = (tx, ty) - R(byaw) · t_base_tag_xy
-            #   pgv_link's 180° mount yaw is carried by T_base_pgv, so the
-            #   offset rotates the correct way automatically.
+            # The tag's map coordinate is where the PGV camera sits. base_link
+            # is ~0.52 m ahead of the camera, rotated through the robot's
+            # current heading (from odom/EKF, never the tag) so it lands right
+            # for any orientation:
+            #       base = (tx, ty) - R(byaw) · mount_translation_xy
             tx, ty, _tyaw = self.tags[tag_id]
             map_est = self._map_estimate()
             byaw = map_est[2] if map_est is not None else (
                 self._odom_pose[2] if self._odom_pose is not None else 0.0
             )
-            # Tag position in the base frame (includes the rear-camera mount
-            # translation AND its 180° rotation, plus the measured tag offset).
-            t_base_tag = compose(t_base_pgv, (px, py, 0.0))
-            cby = math.cos(byaw)
-            sby = math.sin(byaw)
-            bx = tx - (cby * t_base_tag[0] - sby * t_base_tag[1])
-            by = ty - (sby * t_base_tag[0] + cby * t_base_tag[1])
+            # Only the mount TRANSLATION matters for placing the camera origin;
+            # strip the 180° mount rotation so it cannot flip the offset.
+            mount_xy = (t_base_pgv[0], t_base_pgv[1], 0.0)
+            bx, by, _ = compose((tx, ty, byaw), inverse(mount_xy))
 
         residual = 0.0
         if reference_pose is not None:
