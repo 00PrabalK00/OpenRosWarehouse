@@ -67,13 +67,19 @@ class PgvLocalizer(Node):
         self.declare_parameter("base_to_pgv_y", 0.0)
         self.declare_parameter("base_to_pgv_yaw_deg", 0.0)
         self.declare_parameter("use_pgv_yaw", False)
-        # Use the R3138 relative angle to derive robot heading in map.
-        # Formula: robot_yaw = tag_yaw_map - pgv_angle
-        # This works because the R3138 reports how much the tag appears rotated
-        # in the camera frame; since the tag is fixed in the map, inverting that
-        # relative angle gives the camera (and robot) heading in map coordinates.
-        # Only active when use_pgv_yaw is False (position-only mode).
-        self.declare_parameter("use_pgv_angle_for_yaw", False)
+        # Derive robot heading from the R3138 relative angle + tag map heading.
+        # Formula: robot_yaw = pgv_angle + tag_yaw_map - pgv_camera_mount_yaw
+        #
+        # Derivation (ROS CCW convention, 0=right, 90=up, 180=left, 270=down):
+        #   R3138 reports α = camera_heading_in_map - tag_heading_in_map
+        #   camera_heading = robot_heading + mount_yaw
+        #   → robot_heading = α + tag_heading - mount_yaw
+        #
+        # pgv_camera_mount_yaw_deg: yaw of pgv_link in base_link frame.
+        # Use 0.0 when pgv_link axes are aligned with base_link (default URDF comment).
+        # Use 180.0 if the sensor reports with a 180° flip relative to robot forward.
+        self.declare_parameter("use_pgv_angle_for_yaw", True)
+        self.declare_parameter("pgv_camera_mount_yaw_deg", 0.0)
         self.declare_parameter("max_reader_age_s", 0.5)
         # Gates.
         self.declare_parameter("max_offset_m", 0.30)
@@ -133,6 +139,9 @@ class PgvLocalizer(Node):
         )
         self.use_pgv_yaw = bool(self.get_parameter("use_pgv_yaw").value)
         self.use_pgv_angle_for_yaw = bool(self.get_parameter("use_pgv_angle_for_yaw").value)
+        self.pgv_camera_mount_yaw = math.radians(
+            float(self.get_parameter("pgv_camera_mount_yaw_deg").value)
+        )
         self.max_reader_age_s = float(self.get_parameter("max_reader_age_s").value)
         self.param_base_to_pgv = (
             float(self.get_parameter("base_to_pgv_x").value),
@@ -489,17 +498,24 @@ class PgvLocalizer(Node):
             tx, ty, _tyaw = self.tags[tag_id]
 
             if self.use_pgv_angle_for_yaw:
-                # Derive robot heading from the R3138 relative angle.
-                # The sensor reports how much the tag appears rotated in the
-                # camera frame (tag_in_camera_yaw = pyaw). Since the tag is
-                # fixed in the map we can invert:
-                #   camera_yaw_in_map = tag_yaw_map - pgv_angle
-                # The mount yaw is 0° per the planar config (base_to_pgv_yaw_deg),
-                # so robot_yaw = camera_yaw_in_map.
-                # Chain: map ← tag ← (inv pgv_angle) ← camera ← (inv mount_yaw=0) ← robot
+                # Correct formula (ROS CCW, 0=right, 90=up, 180=left, 270=down):
+                #   R3138 reports α = camera_heading_in_map - tag_heading_in_map
+                #   camera_heading = robot_heading + mount_yaw
+                #   → robot_heading = α + tag_heading - mount_yaw
+                #                   = pyaw + _tyaw - pgv_camera_mount_yaw
                 byaw = math.atan2(
-                    math.sin(_tyaw - pyaw),
-                    math.cos(_tyaw - pyaw),
+                    math.sin(pyaw + _tyaw - self.pgv_camera_mount_yaw),
+                    math.cos(pyaw + _tyaw - self.pgv_camera_mount_yaw),
+                )
+                # Debug: compare computed heading to odom heading
+                odom_yaw = self._odom_pose[2] if self._odom_pose is not None else float('nan')
+                self.get_logger().info(
+                    f"[PGV YAW] tag={tag_id} "
+                    f"tag_heading={math.degrees(_tyaw):.1f}° "
+                    f"pgv_angle={math.degrees(pyaw):.1f}° "
+                    f"mount_yaw={math.degrees(self.pgv_camera_mount_yaw):.1f}° "
+                    f"→ computed={math.degrees(byaw):.1f}° "
+                    f"odom={math.degrees(odom_yaw):.1f}°"
                 )
             else:
                 map_est = self._map_estimate()

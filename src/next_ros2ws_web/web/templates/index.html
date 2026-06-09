@@ -4767,8 +4767,12 @@
             box-shadow: var(--shadow-lg);
             display: none;
             width: 420px;
+            min-width: 300px;
+            min-height: 200px;
             max-height: calc(100vh - 40px);
             overflow-y: auto;
+            overflow-x: hidden;
+            resize: both;
             backdrop-filter: blur(10px);
         }
 
@@ -14297,7 +14301,10 @@
                                 <div class="lift-status-row"><span>Tag ID</span><b id="pgv-tag" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>X (mm)</span><b id="pgv-x" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Y (mm)</span><b id="pgv-y" class="lift-status-value lift-status-neutral">—</b></div>
-                                <div class="lift-status-row"><span>Angle (°)</span><b id="pgv-angle" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>PGV angle (°)</span><b id="pgv-angle" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Tag map heading (°)</span><b id="pgv-tag-heading" class="lift-status-value lift-status-neutral">—</b></div>
+                                <div class="lift-status-row"><span>Computed robot yaw (°)</span><b id="pgv-computed-yaw" class="lift-status-value lift-status-ok">—</b></div>
+                                <div class="lift-status-row"><span>Current robot yaw (°)</span><b id="pgv-odom-yaw" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Accepted pose</span><b id="pgv-accepted-pose" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Diagnostics</span><b id="pgv-diag" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Last update</span><b id="pgv-age" class="lift-status-value lift-status-neutral">never</b></div>
@@ -24580,7 +24587,7 @@
                     }
 
                     // ── PGV floor-code scanner PIP ────────────────────────────
-                    let pgvTopics = { pose: null, tag: null, angle: null, code: null, corrected: null, diag: null, status: null, route: null };
+                    let pgvTopics = { pose: null, tag: null, angle: null, code: null, corrected: null, diag: null, status: null, route: null, odom: null };
                     let pgvLastMsgTs = 0;
                     let pgvAcceptedLastMsgTs = 0;
                     let pgvAgeTimer = null;
@@ -24591,6 +24598,33 @@
                     let pgvLatestAcceptedTag = null;
                     let pgvLatestLocalizationStatus = 'INIT';
                     let pgvLatestRouteState = null;
+                    let pgvLatestAngleDeg = null;     // R3138 reported angle
+                    let pgvLatestOdomYawDeg = null;   // current robot yaw from odom
+                    const PGV_MOUNT_YAW_DEG = 0.0;   // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
+
+                    function pgvComputeAndShowYaw() {
+                        const tagId = pgvLatestTag;
+                        const angleDeg = pgvLatestAngleDeg;
+                        if (tagId == null || tagId === 0 || angleDeg == null) {
+                            pgvSetText('pgv-tag-heading', '—');
+                            pgvSetText('pgv-computed-yaw', '—');
+                            return;
+                        }
+                        // Look up configured tag heading from loaded tag list
+                        const tagData = qrCodes && qrCodes[tagId];
+                        const tagHeadingDeg = tagData ? Number(tagData.yaw_deg || 0) : null;
+                        if (tagHeadingDeg == null) {
+                            pgvSetText('pgv-tag-heading', '?');
+                            pgvSetText('pgv-computed-yaw', '—');
+                            return;
+                        }
+                        // robot_heading = pgv_angle + tag_heading - mount_yaw
+                        let computedDeg = angleDeg + tagHeadingDeg - PGV_MOUNT_YAW_DEG;
+                        // Normalize to [-180, 180]
+                        computedDeg = ((computedDeg + 180) % 360 + 360) % 360 - 180;
+                        pgvSetText('pgv-tag-heading', tagHeadingDeg.toFixed(1) + '°');
+                        pgvSetText('pgv-computed-yaw', computedDeg.toFixed(1) + '°');
+                    }
 
                     function pgvSetText(id, val) {
                         const el = document.getElementById(id);
@@ -24733,11 +24767,26 @@
                                 pgvMark();
                                 pgvLatestTag = (m && m.data != null) ? Number(m.data) : null;
                                 pgvSetText('pgv-tag', String(m && m.data != null ? m.data : '—'));
+                                pgvComputeAndShowYaw();
                             });
                         }
                         if (!pgvTopics.angle) {
                             pgvTopics.angle = new ROSLIB.Topic({ ros: ros, name: '/pgv/angle_deg', messageType: 'std_msgs/msg/Float32' });
-                            pgvTopics.angle.subscribe((m) => { pgvMark(); pgvSetText('pgv-angle', Number(m && m.data != null ? m.data : 0).toFixed(1)); });
+                            pgvTopics.angle.subscribe((m) => {
+                                pgvMark();
+                                pgvLatestAngleDeg = (m && m.data != null) ? Number(m.data) : null;
+                                pgvSetText('pgv-angle', pgvLatestAngleDeg != null ? pgvLatestAngleDeg.toFixed(1) : '—');
+                                pgvComputeAndShowYaw();
+                            });
+                        }
+                        if (!pgvTopics.odom) {
+                            pgvTopics.odom = new ROSLIB.Topic({ ros: ros, name: '/odometry/filtered', messageType: 'nav_msgs/msg/Odometry' });
+                            pgvTopics.odom.subscribe((m) => {
+                                const orient = m && m.pose && m.pose.pose && m.pose.pose.orientation;
+                                if (!orient) return;
+                                pgvLatestOdomYawDeg = pgvYaw(orient);
+                                pgvSetText('pgv-odom-yaw', pgvLatestOdomYawDeg.toFixed(1) + '°');
+                            });
                         }
                         if (!pgvTopics.code) {
                             pgvTopics.code = new ROSLIB.Topic({ ros: ros, name: '/pgv/code_detected', messageType: 'std_msgs/msg/Bool' });
