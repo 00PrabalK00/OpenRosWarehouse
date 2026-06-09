@@ -84,7 +84,7 @@ pgv_localizer:
     # than this far from the current AMCL estimate. A real tag read can only
     # nudge the pose; a jump this large means a bad frame, a wrong/duplicate tag
     # id, or a mis-configured mount - never teleport AMCL to a random point.
-    max_correction_jump_m: 2.0
+    max_correction_jump_m: 4.0
     # Staleness gate: reject readings older than this from the PGV reader timestamp.
     max_reader_age_s: 0.5
     # Localization mode:
