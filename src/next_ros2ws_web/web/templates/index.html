@@ -14302,7 +14302,6 @@
                                 <div class="lift-status-row"><span>X (mm)</span><b id="pgv-x" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Y (mm)</span><b id="pgv-y" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>PGV angle (°)</span><b id="pgv-angle" class="lift-status-value lift-status-neutral">—</b></div>
-                                <div class="lift-status-row"><span>Tag map heading (°)</span><b id="pgv-tag-heading" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Computed robot yaw (°)</span><b id="pgv-computed-yaw" class="lift-status-value lift-status-ok">—</b></div>
                                 <div class="lift-status-row"><span>Current robot yaw (°)</span><b id="pgv-odom-yaw" class="lift-status-value lift-status-neutral">—</b></div>
                                 <div class="lift-status-row"><span>Accepted pose</span><b id="pgv-accepted-pose" class="lift-status-value lift-status-neutral">—</b></div>
@@ -24603,26 +24602,15 @@
                     const PGV_MOUNT_YAW_DEG = 180.0;  // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
 
                     function pgvComputeAndShowYaw() {
-                        const tagId = pgvLatestTag;
                         const angleDeg = pgvLatestAngleDeg;
-                        if (tagId == null || tagId === 0 || angleDeg == null) {
-                            pgvSetText('pgv-tag-heading', '—');
+                        if (angleDeg == null || pgvLatestTag == null || pgvLatestTag === 0) {
                             pgvSetText('pgv-computed-yaw', '—');
                             return;
                         }
-                        // Look up configured tag heading from loaded tag list
-                        const tagData = qrCodes && qrCodes[tagId];
-                        const tagHeadingDeg = tagData ? Number(tagData.yaw_deg || 0) : null;
-                        if (tagHeadingDeg == null) {
-                            pgvSetText('pgv-tag-heading', '?');
-                            pgvSetText('pgv-computed-yaw', '—');
-                            return;
-                        }
-                        // robot_heading = pgv_angle + tag_heading - mount_yaw
-                        let computedDeg = angleDeg + tagHeadingDeg - PGV_MOUNT_YAW_DEG;
+                        // robot_heading = pgv_angle - mount_yaw
+                        let computedDeg = angleDeg - PGV_MOUNT_YAW_DEG;
                         // Normalize to [-180, 180]
                         computedDeg = ((computedDeg + 180) % 360 + 360) % 360 - 180;
-                        pgvSetText('pgv-tag-heading', tagHeadingDeg.toFixed(1) + '°');
                         pgvSetText('pgv-computed-yaw', computedDeg.toFixed(1) + '°');
                     }
 

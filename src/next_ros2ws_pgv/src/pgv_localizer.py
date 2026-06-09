@@ -67,19 +67,14 @@ class PgvLocalizer(Node):
         self.declare_parameter("base_to_pgv_y", 0.0)
         self.declare_parameter("base_to_pgv_yaw_deg", 0.0)
         self.declare_parameter("use_pgv_yaw", False)
-        # Derive robot heading from the R3138 relative angle + tag map heading.
-        # Formula: robot_yaw = pgv_angle + tag_yaw_map - pgv_camera_mount_yaw
-        #
-        # Derivation (ROS CCW convention, 0=right, 90=up, 180=left, 270=down):
-        #   R3138 reports α = camera_heading_in_map - tag_heading_in_map
-        #   camera_heading = robot_heading + mount_yaw
-        #   → robot_heading = α + tag_heading - mount_yaw
-        #
-        # pgv_camera_mount_yaw_deg: yaw of pgv_link in base_link frame.
-        # Use 0.0 when pgv_link axes are aligned with base_link (default URDF comment).
-        # Use 180.0 if the sensor reports with a 180° flip relative to robot forward.
+        # Derive robot heading from the R3138 relative angle only.
+        # Formula: robot_yaw = pgv_angle - pgv_camera_mount_yaw
+        # The R3138 reports the relative angle between camera and tag.
+        # That angle encodes absolute robot heading once mount offset is removed.
+        # Tag map yaw is NOT used — it is irrelevant to heading.
+        # pgv_camera_mount_yaw_deg: set 180.0 if computed heading is 180° off.
         self.declare_parameter("use_pgv_angle_for_yaw", True)
-        self.declare_parameter("pgv_camera_mount_yaw_deg", 0.0)
+        self.declare_parameter("pgv_camera_mount_yaw_deg", 180.0)
         self.declare_parameter("max_reader_age_s", 0.5)
         # Gates.
         self.declare_parameter("max_offset_m", 0.30)
@@ -498,20 +493,18 @@ class PgvLocalizer(Node):
             tx, ty, _tyaw = self.tags[tag_id]
 
             if self.use_pgv_angle_for_yaw:
-                # Correct formula (ROS CCW, 0=right, 90=up, 180=left, 270=down):
-                #   R3138 reports α = camera_heading_in_map - tag_heading_in_map
-                #   camera_heading = robot_heading + mount_yaw
-                #   → robot_heading = α + tag_heading - mount_yaw
-                #                   = pyaw + _tyaw - pgv_camera_mount_yaw
+                # robot_heading = pgv_angle - mount_yaw
+                # R3138 reports the relative angle between camera and tag.
+                # That angle alone encodes the robot's absolute heading once
+                # the camera mount offset is subtracted. Tag yaw is irrelevant
+                # because the R3138 reading is already in the tag's frame.
                 byaw = math.atan2(
-                    math.sin(pyaw + _tyaw - self.pgv_camera_mount_yaw),
-                    math.cos(pyaw + _tyaw - self.pgv_camera_mount_yaw),
+                    math.sin(pyaw - self.pgv_camera_mount_yaw),
+                    math.cos(pyaw - self.pgv_camera_mount_yaw),
                 )
-                # Debug: compare computed heading to odom heading
                 odom_yaw = self._odom_pose[2] if self._odom_pose is not None else float('nan')
                 self.get_logger().info(
                     f"[PGV YAW] tag={tag_id} "
-                    f"tag_heading={math.degrees(_tyaw):.1f}° "
                     f"pgv_angle={math.degrees(pyaw):.1f}° "
                     f"mount_yaw={math.degrees(self.pgv_camera_mount_yaw):.1f}° "
                     f"→ computed={math.degrees(byaw):.1f}° "
