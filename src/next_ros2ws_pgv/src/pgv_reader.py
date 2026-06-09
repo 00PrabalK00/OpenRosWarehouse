@@ -32,7 +32,7 @@ Protocol reference (P+F R3138 manual, ResultPackMode = P+F):
 
   X position : 24-bit, mm. Unsigned for code tape, signed when TAG = 1.
   Y position : 14-bit signed, mm.
-  Angle      : 14-bit unsigned, degrees.
+    Angle      : 14-bit unsigned, tenths of a degree.
   Tag number : 35-bit unsigned.
 
 This node does not depend on or wire into any other package. It only
@@ -40,6 +40,7 @@ publishes; nothing in the workspace subscribes to it by default.
 """
 
 import math
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -70,7 +71,8 @@ def parse_pgv_frame(frame, verify_checksum=True):
         tag_flag    : bool  - True when the TAG (code matrix) bit is set
         x_mm        : int   - X position in millimetres
         y_mm        : int   - Y position in millimetres
-        angle_deg   : int   - heading angle in degrees
+        angle_deg   : float - heading angle in degrees, normalized from
+                              the PGV's 0.1 degree units
         tag_number  : int   - 35-bit tag number
         checksum_ok : bool  - XOR checksum matched
 
@@ -108,8 +110,8 @@ def parse_pgv_frame(frame, verify_checksum=True):
     if y & 0x2000:                            # 14-bit two's complement
         y -= 0x4000
 
-    # Angle: 14-bit unsigned, degrees.
-    angle = (b[10] << 7) | b[11]
+    # Angle: 14-bit unsigned, reported in tenths of a degree.
+    angle = ((b[10] << 7) | b[11]) / 10.0
 
     # Tag number: 35-bit unsigned across bytes 14..18 (indices 13..17).
     tag_number = (
@@ -147,12 +149,31 @@ class PgvReader(Node):
         # worked example, so default to warn-only.
         self.declare_parameter("strict_checksum", False)
 
+        # Reader-frame convention. A rear, downward-facing camera views the
+        # floor mirrored relative to a z-up ROS frame, so its reported rotation
+        # sense and one lateral axis can be inverted vs base_link (REP-103).
+        # These map the raw R3138 reading into pgv_link before publishing, so
+        # every downstream consumer (localizer, calibrator) sees a consistent
+        # frame. Defaults are neutral (no change); set the mount-specific signs
+        # in the deployed config, e.g. pose_yaw_sign: -1.0 to fix a heading that
+        # corrects the wrong way.
+        self.declare_parameter("pose_x_sign", 1.0)
+        self.declare_parameter("pose_y_sign", 1.0)
+        self.declare_parameter("pose_yaw_sign", 1.0)
+        self.declare_parameter("pose_yaw_offset_deg", 0.0)
+
         self.port = self.get_parameter("port").value
         self.baud = int(self.get_parameter("baud").value)
         self.poll_hz = float(self.get_parameter("poll_hz").value)
         self.read_timeout = float(self.get_parameter("read_timeout").value)
         self.frame_id = self.get_parameter("frame_id").value
         self.strict_checksum = bool(self.get_parameter("strict_checksum").value)
+        self.pose_x_sign = float(self.get_parameter("pose_x_sign").value)
+        self.pose_y_sign = float(self.get_parameter("pose_y_sign").value)
+        self.pose_yaw_sign = float(self.get_parameter("pose_yaw_sign").value)
+        self.pose_yaw_offset = math.radians(
+            float(self.get_parameter("pose_yaw_offset_deg").value)
+        )
 
         self.pub_pose = self.create_publisher(PoseStamped, "pgv/pose", 10)
         self.pub_tag = self.create_publisher(Int64, "pgv/tag", 10)
@@ -202,7 +223,16 @@ class PgvReader(Node):
             self.ser.reset_input_buffer()
             self.ser.write(PGV_DATA_REQUEST)
             self.ser.flush()
-            frame = self.ser.read(PGV_RESPONSE_LEN)
+            # The RS-485 link sometimes returns the 21-byte reply in pieces. Keep
+            # reading until we have a full frame or the read deadline passes,
+            # instead of decoding a partial (misaligned) frame.
+            frame = bytearray()
+            deadline = time.monotonic() + max(self.read_timeout, 0.12)
+            while len(frame) < PGV_RESPONSE_LEN and time.monotonic() < deadline:
+                chunk = self.ser.read(PGV_RESPONSE_LEN - len(frame))
+                if chunk:
+                    frame.extend(chunk)
+            frame = bytes(frame)
         except Exception as exc:  # noqa: BLE001 - drop port, reopen next cycle
             self.get_logger().warning(f"Serial error: {exc}")
             try:
@@ -213,9 +243,10 @@ class PgvReader(Node):
             return
 
         if len(frame) != PGV_RESPONSE_LEN:
-            self.get_logger().warning(
-                f"Short read: {len(frame)} bytes ({frame.hex(' ')})"
-            )
+            if len(frame) > 0:
+                self.get_logger().warning(
+                    f"Short read: {len(frame)} bytes ({frame.hex(' ')})"
+                )
             return
 
         try:
@@ -252,11 +283,12 @@ class PgvReader(Node):
         pose = PoseStamped()
         pose.header.stamp = now
         pose.header.frame_id = self.frame_id
-        pose.pose.position.x = data["x_mm"] / 1000.0   # mm -> m
-        pose.pose.position.y = data["y_mm"] / 1000.0
+        pose.pose.position.x = self.pose_x_sign * data["x_mm"] / 1000.0   # mm -> m
+        pose.pose.position.y = self.pose_y_sign * data["y_mm"] / 1000.0
         pose.pose.position.z = 0.0
 
-        yaw = math.radians(data["angle_deg"])
+        yaw = self.pose_yaw_sign * math.radians(data["angle_deg"]) + self.pose_yaw_offset
+        yaw = math.atan2(math.sin(yaw), math.cos(yaw))  # normalize to [-pi, pi]
         pose.pose.orientation.z = math.sin(yaw / 2.0)
         pose.pose.orientation.w = math.cos(yaw / 2.0)
         self.pub_pose.publish(pose)

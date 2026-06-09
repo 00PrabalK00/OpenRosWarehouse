@@ -86,7 +86,7 @@ from rcl_interfaces.srv import GetParameters, SetParameters
 from sensor_msgs.msg import LaserScan, PointCloud2
 from sensor_msgs_py import point_cloud2
 from slam_toolbox.srv import SaveMap as SlamSaveMap, SerializePoseGraph as SlamSerializePoseGraph, DeserializePoseGraph as SlamDeserializePoseGraph
-from std_msgs.msg import Bool as BoolMsg, String
+from std_msgs.msg import Bool as BoolMsg, Int64, String
 from std_srvs.srv import SetBool, Trigger
 from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -5260,6 +5260,11 @@ class RosBridge(Node):
             self._topic('service_auto_relocate'),
             callback_group=self.cb_group,
         )
+        self.pgv_route_command_pub = self.create_publisher(
+            String,
+            '/pgv_route/command',
+            10,
+        )
         self.shelf_commit_client = self.create_client(
             Trigger,
             '/shelf/commit',
@@ -5373,6 +5378,7 @@ class RosBridge(Node):
         # Publishers owned by the web bridge for user commands.
         self.goal_pub = self.create_publisher(PoseStamped, self._topic('publisher_goal_pose'), 10)
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, self._topic('publisher_initial_pose'), 10)
+        self.pgv_set_pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/pgv/set_pose', 10)
         # cmd_vel_joy must use VOLATILE durability to prevent stale backward commands from
         # replaying on startup after a reboot or E-stop cycle.
         cmd_vel_qos = QoSProfile(
@@ -5385,6 +5391,10 @@ class RosBridge(Node):
             Twist, self._topic('publisher_cmd_vel_manual'), qos_profile=cmd_vel_qos
         )
         self.shelf_tick_pub = self.create_publisher(BoolMsg, '/tick', 10)
+        self.pgv_detected = False
+        self.pgv_detected_updated_at = 0.0
+        self.pgv_tag = None
+        self.pgv_tag_updated_at = 0.0
         self.shelf_detected = False
         self.shelf_detected_updated_at = 0.0
         self.shelf_status = self._default_shelf_status_payload()
@@ -5417,6 +5427,8 @@ class RosBridge(Node):
         self.create_subscription(String, self._topic('subscription_control_mode'), self._control_mode_callback, 10)
         self.create_subscription(BoolMsg, self._topic('subscription_set_estop'), self._estop_callback, 10)
         self.create_subscription(BoolMsg, '/shelf_detected', self._shelf_detected_callback, 10)
+        self.create_subscription(BoolMsg, '/pgv/code_detected', self._pgv_detected_callback, 10)
+        self.create_subscription(Int64, '/pgv/tag', self._pgv_tag_callback, 10)
         self.create_subscription(String, '/shelf/status_json', self._shelf_status_callback, 10)
         self.create_subscription(
             PoseWithCovarianceStamped,
@@ -5566,6 +5578,7 @@ class RosBridge(Node):
         self._ndt_occupied_points = 0
         self._ndt_origin_x = 0.0
         self._ndt_origin_y = 0.0
+        self._ndt_origin_yaw = 0.0
         self._ndt_map_resolution = 0.0
         self._ndt_map_width = 0
         self._ndt_map_height = 0
@@ -6145,6 +6158,9 @@ class RosBridge(Node):
 
         origin_x = float(map_msg.info.origin.position.x)
         origin_y = float(map_msg.info.origin.position.y)
+        origin_yaw = float(self._yaw_from_quaternion(map_msg.info.origin.orientation))
+        cos_yaw = math.cos(origin_yaw)
+        sin_yaw = math.sin(origin_yaw)
         data = map_msg.data
         if not data:
             self._ndt_models = {}
@@ -6160,6 +6176,7 @@ class RosBridge(Node):
             round(resolution, 6),
             round(origin_x, 4),
             round(origin_y, 4),
+            round(origin_yaw, 4),
             int(map_load.sec),
             int(map_load.nanosec),
             len(data),
@@ -6177,11 +6194,13 @@ class RosBridge(Node):
 
         for my in range(height):
             row = my * width
-            wy = origin_y + (float(my) + 0.5) * resolution
+            local_y = (float(my) + 0.5) * resolution
             for mx in range(width):
                 if int(data[row + mx]) < occ_threshold:
                     continue
-                wx = origin_x + (float(mx) + 0.5) * resolution
+                local_x = (float(mx) + 0.5) * resolution
+                wx = origin_x + (local_x * cos_yaw) - (local_y * sin_yaw)
+                wy = origin_y + (local_x * sin_yaw) + (local_y * cos_yaw)
                 cx = int((wx - origin_x) / cell_size)
                 cy = int((wy - origin_y) / cell_size)
                 key = (cx, cy)
@@ -6228,6 +6247,7 @@ class RosBridge(Node):
         self._ndt_occupied_points = int(occupied_points)
         self._ndt_origin_x = origin_x
         self._ndt_origin_y = origin_y
+        self._ndt_origin_yaw = origin_yaw
         self._ndt_map_resolution = resolution
         self._ndt_map_width = width
         self._ndt_map_height = height
@@ -6332,6 +6352,14 @@ class RosBridge(Node):
         if isinstance(self.shelf_status, dict):
             self.shelf_status['shelf_detected'] = bool(msg.data)
             self.shelf_status['candidate_valid'] = bool(msg.data)
+
+    def _pgv_detected_callback(self, msg: BoolMsg):
+        self.pgv_detected = bool(msg.data)
+        self.pgv_detected_updated_at = time.time()
+
+    def _pgv_tag_callback(self, msg: Int64):
+        self.pgv_tag = int(msg.data)
+        self.pgv_tag_updated_at = time.time()
 
     def _shelf_status_callback(self, msg: String):
         try:
@@ -6738,6 +6766,9 @@ class RosBridge(Node):
 
         origin_x = float(self._ndt_origin_x)
         origin_y = float(self._ndt_origin_y)
+        origin_yaw = float(getattr(self, '_ndt_origin_yaw', 0.0))
+        cos_yaw = math.cos(origin_yaw)
+        sin_yaw = math.sin(origin_yaw)
         data = self._ndt_map_data
 
         stride = max(1, len(points) // int(self._ndt_scan_sample_cap))
@@ -6761,8 +6792,12 @@ class RosBridge(Node):
             except Exception:
                 continue
 
-            mx = int((x - origin_x) / resolution)
-            my = int((y - origin_y) / resolution)
+            dx_world = x - origin_x
+            dy_world = y - origin_y
+            local_x = (dx_world * cos_yaw) + (dy_world * sin_yaw)
+            local_y = (-dx_world * sin_yaw) + (dy_world * cos_yaw)
+            mx = int(local_x / resolution)
+            my = int(local_y / resolution)
             if mx < 0 or my < 0 or mx >= width or my >= height:
                 continue
 
@@ -7125,7 +7160,7 @@ class RosBridge(Node):
             'batteries': 'Battery Profile',
             'chargespots': 'Charge Spot',
             'legs': 'Human Leg',
-            'tags': 'QR Tag',
+            'tags': 'Matrix Tag',
             'polygons': 'Polygon Template',
         }.get(normalized_category, 'Recognition Asset')
         geometry_type = {
@@ -7610,12 +7645,19 @@ class RosBridge(Node):
     ) -> Dict[str, Any]:
         zone_payload = copy.deepcopy(zone if isinstance(zone, dict) else {})
         zone_type = str(zone_payload.get('type', 'normal') or 'normal').strip().lower()
-        if zone_type != 'action':
-            zone_payload.pop('action_point_config', None)
-            return zone_payload
-
         raw_config = action_point_configs.get(zone_name, {}) if isinstance(action_point_configs, dict) else {}
         config = copy.deepcopy(raw_config if isinstance(raw_config, dict) else {})
+        if zone_type != 'action':
+            lightweight = {}
+            for key in ('angle_enabled', 'follow', 'use_pgv', 'pgv_dx', 'pgv_dy', 'pgv_dtheta', 'description', 'tag_id'):
+                if key in config:
+                    lightweight[key] = config.get(key)
+            if lightweight:
+                zone_payload['action_point_config'] = lightweight
+            else:
+                zone_payload.pop('action_point_config', None)
+            return zone_payload
+
         action_id = str(config.get('action_id', zone_payload.get('action', '')) or '').strip()
         point_type = self._normalize_action_point_type(config.get('point_type', 'generic'))
         template_id = str(config.get('template_id', '') or '').strip()
@@ -7672,6 +7714,9 @@ class RosBridge(Node):
             'template_summary': template_summary,
             'warnings': warnings,
         }
+        for key in ('angle_enabled', 'follow', 'use_pgv', 'pgv_dx', 'pgv_dy', 'pgv_dtheta', 'description', 'tag_id'):
+            if key in config:
+                normalized_config[key] = config.get(key)
         if isinstance(config.get('notes', ''), str) and str(config.get('notes', '')).strip():
             normalized_config['notes'] = str(config.get('notes', '')).strip()
 
@@ -8202,10 +8247,25 @@ class RosBridge(Node):
         pgv_dy: float = 0.0,
         pgv_dtheta: float = 0.0,
         description: str = '',
+        tag_id: Any = None,
     ):
         zone_name = (name or '').strip()
         if not zone_name:
             return self._ok(False, 'Zone name is required')
+
+        # Auto-link: an action point dropped on top of a Matrix Tag adopts
+        # that tag id (and PGV positioning), and is shifted ahead by the
+        # base->pgv offset so it sits where the robot centre is when the rear
+        # camera reads the code. Only when no tag id was pinned explicitly.
+        auto_linked = None
+        if tag_id is None and str(zone_type or '').strip().lower() == 'action':
+            near = self._nearest_qr(float(x), float(y))
+            if near is not None:
+                tid, cx, cy, cyaw = near
+                x, y = self._ap_pose_for_code(cx, cy, cyaw)
+                tag_id = tid
+                use_pgv = True
+                auto_linked = tid
 
         pose_msg = PoseStamped()
         pose_msg.header.frame_id = self._map_frame()
@@ -8250,6 +8310,7 @@ class RosBridge(Node):
             pgv_dy=pgv_dy,
             pgv_dtheta=pgv_dtheta,
             description=description,
+            tag_id=tag_id,
         )
         if not meta.get('ok'):
             return self._ok(
@@ -8257,6 +8318,12 @@ class RosBridge(Node):
                 f'{response.message}. Metadata update warning: {meta.get("message", "unknown")}',
             )
 
+        if auto_linked is not None:
+            return self._ok(
+                True,
+                f'{response.message}. Linked to Matrix Tag {auto_linked}.',
+                linked_tag_id=int(auto_linked),
+            )
         return self._ok(True, str(response.message))
 
     def delete_zone(self, name: str):
@@ -8382,6 +8449,701 @@ class RosBridge(Node):
         
         return self._ok(True, f'Created {len(created)} zones: {", ".join(created)}')
 
+    # ---------- floor Matrix Tags / PGV codes (own layer, separate from action points) ----------
+
+    def _qr_db(self):
+        manager = getattr(self, 'db_manager', None)
+        if manager is None or not hasattr(manager, 'get_qr_codes'):
+            return None
+        return manager
+
+    def _base_to_pgv_offset(self):
+        """PGV camera offset from base_link (x, y, yaw) used when capturing.
+
+        Defaults match config/pgv_localization.yaml and the URDF pgv_link;
+        override via env. A captured tag sits under the camera, so its map pose
+        is base_pose composed with this offset.
+        """
+        try:
+            dx = float(os.getenv('NEXT_PGV_BASE_TO_PGV_X', '-0.52'))
+            dy = float(os.getenv('NEXT_PGV_BASE_TO_PGV_Y', '0.0'))
+            dyaw = math.radians(float(os.getenv('NEXT_PGV_BASE_TO_PGV_YAW_DEG', '180.0')))
+        except ValueError:
+            dx, dy, dyaw = -0.52, 0.0, math.pi
+        return dx, dy, dyaw
+
+    def get_qr_codes(self):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available', tags={}, count=0)
+        try:
+            codes = manager.get_qr_codes()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load Matrix Tags: {exc}', tags={}, count=0)
+        tags = {
+            int(tid): {
+                'x': round(float(c['x']), 4),
+                'y': round(float(c['y']), 4),
+                'yaw_deg': round(math.degrees(float(c.get('yaw', 0.0))), 3),
+            }
+            for tid, c in codes.items()
+        }
+        return self._ok(True, f'{len(tags)} Matrix Tag(s)', tags=tags, count=len(tags))
+
+    def add_qr_code(self, tag_id, x, y, yaw_deg=0.0):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return self._ok(False, 'tag_id must be an integer')
+        if tid <= 0:
+            # Tag 0 is the PGV "no code / floor" sentinel - never a real tag.
+            return self._ok(False, 'Matrix Tag id must be >= 1 (0 is the no-code sentinel)')
+        ok = bool(manager.save_qr_code(tid, float(x), float(y), math.radians(float(yaw_deg or 0.0))))
+        return self._ok(ok, f'Matrix Tag {tid} saved' if ok else f'Failed to save Matrix Tag {tid}',
+                        tag_id=tid)
+
+    def capture_qr_code(self, tag_id, apply_offset=True, yaw_deg=None):
+        """Place Matrix Tag ``tag_id`` at the robot pose (+ base->pgv offset).
+
+        If ``yaw_deg`` is provided it is treated as the tag/lane direction in
+        map coordinates. Otherwise the current robot heading plus the calibrated
+        base->pgv yaw is used, which is correct when the robot is aligned with
+        the Matrix Tag direction while capturing.
+        """
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return self._ok(False, 'tag_id must be an integer')
+        if tid <= 0:
+            # Tag 0 is the PGV "no code / floor" sentinel - never a real tag.
+            return self._ok(False, 'Matrix Tag id must be >= 1 (0 is the no-code sentinel)')
+
+        pose = self.get_robot_pose().get('pose')
+        if not pose:
+            return self._ok(False, 'No robot pose available; cannot capture Matrix Tag position')
+        bx, by, byaw = float(pose['x']), float(pose['y']), float(pose['theta'])
+        if apply_offset:
+            dx, dy, dyaw = self._base_to_pgv_offset()
+            qx = bx + dx * math.cos(byaw) - dy * math.sin(byaw)
+            qy = by + dx * math.sin(byaw) + dy * math.cos(byaw)
+            qyaw = byaw + dyaw
+        else:
+            qx, qy, qyaw = bx, by, byaw
+        if yaw_deg is not None and str(yaw_deg).strip() != '':
+            qyaw = math.radians(float(yaw_deg))
+        ok = bool(manager.save_qr_code(tid, qx, qy, qyaw))
+        return self._ok(
+            ok,
+            f'Captured Matrix Tag {tid} at ({qx:.3f}, {qy:.3f}, yaw {math.degrees(qyaw):.1f} deg)'
+            if ok else f'Failed to capture Matrix Tag {tid}',
+            tag_id=tid, x=round(qx, 4), y=round(qy, 4), yaw_deg=round(math.degrees(qyaw), 3),
+        )
+
+    def delete_qr_code(self, tag_id):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return self._ok(False, 'tag_id must be an integer')
+        ok = bool(manager.delete_qr_code(tid))
+        return self._ok(ok, f'Matrix Tag {tid} deleted' if ok else f'Matrix Tag {tid} not found', tag_id=tid)
+
+    def clear_qr_codes(self):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            n = int(manager.clear_qr_codes())
+        except Exception as exc:
+            return self._ok(False, f'Failed to clear Matrix Tags: {exc}')
+        return self._ok(True, f'Cleared {n} Matrix Tag(s)', cleared=n)
+
+    def _nearest_qr(self, x, y, radius=None):
+        """Return (tag_id, cx, cy, cyaw_rad) of the closest Matrix Tag within radius."""
+        manager = self._qr_db()
+        if manager is None:
+            return None
+        if radius is None:
+            try:
+                radius = float(os.getenv('NEXT_QR_LINK_RADIUS', '0.35'))
+            except ValueError:
+                radius = 0.35
+        try:
+            codes = manager.get_qr_codes()
+        except Exception:
+            return None
+        best = None
+        best_d = radius
+        for tid, c in codes.items():
+            d = math.hypot(float(c['x']) - float(x), float(c['y']) - float(y))
+            if d <= best_d:
+                best_d = d
+                best = (int(tid), float(c['x']), float(c['y']), float(c.get('yaw', 0.0)))
+        return best
+
+    def _nearest_qr_tag(self, x, y, radius=None):
+        """Return the tag id of the Matrix Tag closest to (x, y) within radius."""
+        near = self._nearest_qr(x, y, radius)
+        return near[0] if near else None
+
+    def _ap_pose_for_code(self, cx, cy, cyaw):
+        """Where the robot centre sits when a code is read.
+
+        The PGV camera is offset from base_link, and a Matrix Tag is only read
+        once the camera passes over it, so the robot centre is ahead of the tag
+        by the base->pgv offset (rotated into the tag direction). A linked
+        action point should live there, not on the tag, so it looks right on
+        the map.
+        """
+        dx, dy, _ = self._base_to_pgv_offset()
+        ax = cx - (dx * math.cos(cyaw) - dy * math.sin(cyaw))
+        ay = cy - (dx * math.sin(cyaw) + dy * math.cos(cyaw))
+        return ax, ay
+
+    def align_qr_codes(self, spacing=None):
+        """Straighten Matrix Tags onto their best-fit line.
+
+        Fits a total-least-squares (PCA) line through every tag, so the line
+        follows however the tags were actually laid down (it does not assume an
+        axis-aligned row, which keeps the map's rotation intact). Every tag is
+        projected onto that line with the lowest-id tag held as the anchor.
+        The stored yaw is set to the fitted line direction, making Matrix Tag
+        orientation explicit for PGV/Nav2 localization.
+        """
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            codes = manager.get_qr_codes()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load Matrix Tags: {exc}')
+
+        ids = sorted(int(k) for k in codes.keys())
+        if len(ids) < 2:
+            return self._ok(False, 'Need at least 2 Matrix Tags to align')
+
+        pts = [(codes[i]['x'], codes[i]['y']) for i in ids]
+        n = len(pts)
+        cx = sum(p[0] for p in pts) / n
+        cy = sum(p[1] for p in pts) / n
+
+        ax, ay = pts[0]  # anchor = lowest-id code, kept in place
+        try:
+            space = float(spacing) if spacing is not None else None
+        except (TypeError, ValueError):
+            space = None
+
+        if space is not None and len(pts) >= 2:
+            # Explicit spacing is a layout operation: keep the first tag fixed
+            # and step from it along the existing first-row direction.
+            dx = pts[1][0] - ax
+            dy = pts[1][1] - ay
+            length = math.hypot(dx, dy)
+            if length < 1e-6:
+                dx = pts[-1][0] - ax
+                dy = pts[-1][1] - ay
+                length = math.hypot(dx, dy)
+            if length < 1e-6:
+                return self._ok(False, 'Need distinct Matrix Tag positions to set spacing')
+            ux, uy = dx / length, dy / length
+        else:
+            # Principal axis (max-variance direction) via the 2x2 covariance.
+            sxx = sum((p[0] - cx) ** 2 for p in pts)
+            syy = sum((p[1] - cy) ** 2 for p in pts)
+            sxy = sum((p[0] - cx) * (p[1] - cy) for p in pts)
+            angle = 0.5 * math.atan2(2.0 * sxy, sxx - syy)
+            ux, uy = math.cos(angle), math.sin(angle)
+
+            # Orient the axis from the first code toward the last (tag-id order).
+            if (pts[-1][0] - pts[0][0]) * ux + (pts[-1][1] - pts[0][1]) * uy < 0:
+                ux, uy = -ux, -uy
+
+        yaw = math.atan2(uy, ux)
+        updated = {}
+
+        for idx, tid in enumerate(ids):
+            if space is not None:
+                nx = ax + ux * (space * idx)
+                ny = ay + uy * (space * idx)
+            else:
+                t = (pts[idx][0] - ax) * ux + (pts[idx][1] - ay) * uy
+                nx = ax + ux * t
+                ny = ay + uy * t
+            manager.save_qr_code(tid, nx, ny, yaw)
+            updated[int(tid)] = {
+                'x': round(nx, 4), 'y': round(ny, 4),
+                'yaw_deg': round(math.degrees(yaw), 3),
+            }
+
+        mode = f'evenly spaced at {space:.3f} m' if space is not None else 'straightened'
+        return self._ok(
+            True,
+            f'Aligned {n} Matrix Tags ({mode}) along {math.degrees(yaw):.1f} deg',
+            tags=updated, count=n, line_yaw_deg=round(math.degrees(yaw), 3),
+        )
+
+    def create_action_points_for_qr_codes(self, prefix='QR'):
+        """Create/update one PGV-linked action point for every Matrix Tag."""
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            codes = manager.get_qr_codes()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load Matrix Tags: {exc}')
+
+        ids = sorted(int(k) for k in codes.keys())
+        if not ids:
+            return self._ok(False, 'No Matrix Tags to attach')
+
+        label_prefix = str(prefix or 'QR').strip() or 'QR'
+        created = []
+        failed = []
+        for tid in ids:
+            code = codes[tid]
+            cx = float(code['x'])
+            cy = float(code['y'])
+            cyaw = float(code.get('yaw', 0.0))
+            ax, ay = self._ap_pose_for_code(cx, cy, cyaw)
+            # The stored tag yaw points along the rear-facing reader (mount yaw
+            # 180), i.e. opposite the robot's travel direction. The action point
+            # is where the robot ACTS facing forward, so it must point the way the
+            # robot drives over the tag = tag yaw + 180.
+            ap_yaw = math.atan2(math.sin(cyaw + math.pi), math.cos(cyaw + math.pi))
+            name = f'{label_prefix}-{tid}'
+            result = self.save_zone(
+                name=name,
+                x=ax,
+                y=ay,
+                theta=ap_yaw,
+                zone_type='action',
+                speed=0.3,
+                point_type='generic',
+                use_pgv=True,
+                tag_id=tid,
+                description=f'PGV action point linked to Matrix Tag {tid}',
+            )
+            if result.get('ok'):
+                created.append({
+                    'name': name,
+                    'tag_id': int(tid),
+                    'x': round(ax, 4),
+                    'y': round(ay, 4),
+                    'theta': round(cyaw, 4),
+                })
+            else:
+                failed.append({'name': name, 'tag_id': int(tid), 'message': result.get('message', '')})
+
+        if failed:
+            return self._ok(
+                False,
+                f'Created {len(created)} action point(s), failed {len(failed)}',
+                action_points=created,
+                failed=failed,
+            )
+        return self._ok(
+            True,
+            f'Created/updated {len(created)} PGV action point(s)',
+            action_points=created,
+        )
+
+    def export_tag_map(self, path: str = None):
+        """Write the PGV tag map from the Matrix Tag store.
+
+        Returns ``tags`` always; writes ``tag_map.yaml`` to ``path`` when given.
+        YAML matches ``next_ros2ws_pgv/tag_map.py`` (id -> {x, y, yaw_deg}).
+        """
+        res = self.get_qr_codes()
+        tags = res.get('tags', {}) if res.get('ok') else {}
+        payload = {
+            'ok': True,
+            'count': len(tags),
+            'tags': {int(k): v for k, v in sorted(tags.items())},
+        }
+        if path:
+            doc = {
+                'frame_id': self._map_frame() or 'map',
+                'tags': {int(k): v for k, v in sorted(tags.items())},
+            }
+            try:
+                os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                with open(path, 'w') as handle:
+                    yaml.safe_dump(doc, handle, default_flow_style=False, sort_keys=True)
+            except OSError as exc:
+                return self._ok(False, f'Failed to write tag map: {exc}')
+            payload['path'] = path
+            payload['message'] = f'Exported {len(tags)} tags to {path}'
+        return payload
+
+    # ==================== PGV Route Graph ====================
+
+    def get_route_edges(self):
+        manager = self._qr_db()
+        if manager is None or not hasattr(manager, 'get_route_edges'):
+            return self._ok(False, 'Route graph store not available', edges=[], count=0)
+        try:
+            edges = manager.get_route_edges()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load route edges: {exc}', edges=[], count=0)
+        return self._ok(True, f'{len(edges)} edge(s)', edges=edges, count=len(edges))
+
+    def save_route_edge(self, from_tag, to_tag, length=None,
+                        expected_heading_deg=None, max_lateral_error=0.08,
+                        turn='straight'):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Route graph store not available')
+        try:
+            ft, tt = int(from_tag), int(to_tag)
+        except (TypeError, ValueError):
+            return self._ok(False, 'from_tag and to_tag must be integers')
+        # Derive length/heading from the tag positions when not supplied.
+        codes = {}
+        try:
+            codes = manager.get_qr_codes()
+        except Exception:
+            codes = {}
+        if (length is None or expected_heading_deg is None) and ft in codes and tt in codes:
+            dx = float(codes[tt]['x']) - float(codes[ft]['x'])
+            dy = float(codes[tt]['y']) - float(codes[ft]['y'])
+            if length is None:
+                length = math.hypot(dx, dy)
+            if expected_heading_deg is None:
+                expected_heading_deg = math.degrees(math.atan2(dy, dx))
+        ok = bool(manager.save_route_edge(
+            ft, tt, float(length or 0.0), float(expected_heading_deg or 0.0),
+            float(max_lateral_error), str(turn or 'straight')))
+        return self._ok(ok, f'Edge {ft}->{tt} saved' if ok else 'Failed to save edge',
+                        edge_id=f'{ft}_{tt}')
+
+    def delete_route_edge(self, edge_id):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Route graph store not available')
+        ok = bool(manager.delete_route_edge(str(edge_id)))
+        return self._ok(ok, f'Edge {edge_id} deleted' if ok else f'Edge {edge_id} not found')
+
+    def clear_route_edges(self):
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Route graph store not available')
+        try:
+            n = int(manager.clear_route_edges())
+        except Exception as exc:
+            return self._ok(False, f'Failed to clear route edges: {exc}')
+        return self._ok(True, f'Cleared {n} edge(s)', cleared=n)
+
+    def auto_generate_route_edges(self, max_lateral_error=0.08):
+        """Chain consecutive Matrix Tags (by id) into directed edges.
+
+        Tags placed in order along a lane (PLACE ALONG LINE / AUTO-ADD) become a
+        route: edge i -> i+1 with length + heading computed from their poses.
+        """
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Route graph store not available')
+        try:
+            codes = manager.get_qr_codes()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load Matrix Tags: {exc}')
+        ids = sorted(int(k) for k in codes.keys())
+        if len(ids) < 2:
+            return self._ok(False, 'Need at least 2 Matrix Tags to build a route')
+        manager.clear_route_edges()
+        edges = []
+        for ft, tt in zip(ids[:-1], ids[1:]):
+            dx = float(codes[tt]['x']) - float(codes[ft]['x'])
+            dy = float(codes[tt]['y']) - float(codes[ft]['y'])
+            length = math.hypot(dx, dy)
+            heading = math.degrees(math.atan2(dy, dx))
+            manager.save_route_edge(ft, tt, length, heading, float(max_lateral_error), 'straight')
+            edges.append({'from_tag': ft, 'to_tag': tt, 'length': round(length, 3),
+                          'expected_heading_deg': round(heading, 2)})
+        return self._ok(True, f'Built {len(edges)} edge(s) from {len(ids)} tags',
+                        edges=edges, count=len(edges))
+
+    def export_route_graph(self, path: str = None):
+        """Write route_graph.yaml (nodes from tags + directed edges)."""
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Route graph store not available')
+        try:
+            codes = manager.get_qr_codes()
+            edges = manager.get_route_edges()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load route graph: {exc}')
+        nodes = {
+            int(tid): {
+                'x': round(float(c['x']), 4),
+                'y': round(float(c['y']), 4),
+                'yaw_deg': round(math.degrees(float(c.get('yaw', 0.0))), 3),
+            }
+            for tid, c in codes.items()
+        }
+        payload = {'ok': True, 'nodes': len(nodes), 'edges': len(edges)}
+        if path:
+            doc = {
+                'frame_id': self._map_frame() or 'map',
+                'nodes': {int(k): v for k, v in sorted(nodes.items())},
+                'edges': [
+                    {
+                        'from': e['from_tag'], 'to': e['to_tag'],
+                        'length': round(e['length'], 3),
+                        'expected_heading_deg': round(e['expected_heading_deg'], 2),
+                        'max_lateral_error': round(e['max_lateral_error'], 3),
+                        'turn': e['turn'],
+                    }
+                    for e in edges
+                ],
+            }
+            try:
+                os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+                with open(path, 'w') as handle:
+                    yaml.safe_dump(doc, handle, default_flow_style=False, sort_keys=True)
+            except OSError as exc:
+                return self._ok(False, f'Failed to write route graph: {exc}')
+            payload['path'] = path
+            payload['message'] = f'Exported {len(nodes)} nodes / {len(edges)} edges to {path}'
+        return payload
+
+    def follow_pgv_route(self, tags=None, zones=None):
+        """Command the PGV route follower using Matrix Tag IDs."""
+        route_tags = []
+        known_tags = set()
+        manager = self._qr_db()
+        if manager is not None:
+            try:
+                known_tags = {int(tid) for tid in manager.get_qr_codes().keys()}
+            except Exception:
+                known_tags = set()
+        if tags:
+            try:
+                route_tags = [int(t) for t in tags if str(t).strip() != '']
+            except (TypeError, ValueError):
+                return self._ok(False, 'tags must be integers')
+        else:
+            wanted = [str(z).strip() for z in (zones or []) if str(z).strip()]
+            zone_payload = self.get_zones()
+            zone_map = zone_payload.get('zones', {}) if zone_payload.get('ok') else {}
+            if wanted:
+                ordered_items = [(name, zone_map.get(name, {})) for name in wanted]
+            else:
+                ordered_items = list(zone_map.items())
+            for zone_name, zone in ordered_items:
+                if not isinstance(zone, dict):
+                    continue
+                cfg = zone.get('action_point_config', {})
+                if not isinstance(cfg, dict):
+                    cfg = {}
+                tag_id = cfg.get('tag_id') if bool(cfg.get('use_pgv', False)) else None
+                if tag_id is None or str(tag_id).strip() == '':
+                    tag_id = self._infer_matrix_tag_id_from_zone_name(zone_name, known_tags)
+                if tag_id is None or str(tag_id).strip() == '':
+                    continue
+                try:
+                    route_tags.append(int(tag_id))
+                except (TypeError, ValueError):
+                    self.get_logger().warn(f'Zone "{zone_name}" has invalid Matrix Tag ID: {tag_id!r}')
+
+        deduped = []
+        for tag_id in route_tags:
+            if deduped and deduped[-1] == tag_id:
+                continue
+            deduped.append(tag_id)
+        if len(deduped) < 2:
+            return self._ok(False, 'PGV route needs at least 2 linked Matrix Tags')
+
+        msg = String()
+        msg.data = json.dumps({'action': 'follow', 'tags': deduped}, separators=(',', ':'))
+        self.pgv_route_command_pub.publish(msg)
+        return self._ok(True, f'PGV route started through {len(deduped)} Matrix Tags', tags=deduped)
+
+    @staticmethod
+    def _infer_matrix_tag_id_from_zone_name(zone_name: str, known_tags=None):
+        text = str(zone_name or '').strip()
+        match = re.match(r'^(?:QR|MT)[-_ ]?(\d+)$', text, flags=re.IGNORECASE)
+        if not match:
+            return None
+        try:
+            tag_id = int(match.group(1))
+        except (TypeError, ValueError):
+            return None
+        if known_tags and tag_id not in known_tags:
+            return None
+        return tag_id
+
+    def _linked_pgv_zone_sequence_for_path(self, path_name: str, points: List[Dict[str, Any]]) -> List[str]:
+        """Resolve a saved path into ordered POIs that have Matrix Tag links."""
+        zone_payload = self.get_zones()
+        zone_map = zone_payload.get('zones', {}) if zone_payload.get('ok') else {}
+        if not isinstance(zone_map, dict):
+            zone_map = {}
+        known_tags = set()
+        manager = self._qr_db()
+        if manager is not None:
+            try:
+                known_tags = {int(tid) for tid in manager.get_qr_codes().keys()}
+            except Exception:
+                known_tags = set()
+
+        linked_zones = {}
+        for name, zone in zone_map.items():
+            if not isinstance(zone, dict):
+                continue
+            cfg = zone.get('action_point_config', {})
+            if not isinstance(cfg, dict):
+                cfg = {}
+            tag_id = cfg.get('tag_id') if bool(cfg.get('use_pgv', False)) else None
+            if tag_id is None or str(tag_id).strip() == '':
+                tag_id = self._infer_matrix_tag_id_from_zone_name(str(name), known_tags)
+            if tag_id is None or str(tag_id).strip() == '':
+                continue
+            linked_zones[str(name)] = zone
+
+        sequence = []
+        for point in points or []:
+            zone_name = self._point_zone_name(point)
+            if zone_name and zone_name in linked_zones:
+                if not sequence or sequence[-1] != zone_name:
+                    sequence.append(zone_name)
+
+        if len(sequence) >= 2:
+            return sequence
+
+        # Fallback for saved paths that lost explicit POI metadata: infer nearby
+        # linked POIs from the path geometry, keeping path order.
+        inferred = []
+        for point in points or []:
+            try:
+                px = float(point.get('x'))
+                py = float(point.get('y'))
+            except Exception:
+                continue
+            best = None
+            for zone_name, zone in linked_zones.items():
+                pos = zone.get('position', {}) if isinstance(zone, dict) else {}
+                try:
+                    zx = float(pos.get('x'))
+                    zy = float(pos.get('y'))
+                except Exception:
+                    continue
+                dist = math.hypot(px - zx, py - zy)
+                if best is None or dist < best[0]:
+                    best = (dist, zone_name)
+            if best and best[0] <= 0.75:
+                zone_name = best[1]
+                if not inferred or inferred[-1] != zone_name:
+                    inferred.append(zone_name)
+        return inferred
+
+    def follow_pgv_saved_path(self, path_name: str):
+        """Follow saved POI/path geometry while PGV owns localization."""
+        name = str(path_name or '').strip()
+        if not name:
+            return self._ok(False, 'path_name is required')
+
+        loaded = self.load_path(name)
+        if not loaded.get('ok'):
+            return loaded
+        points = loaded.get('path', [])
+        if not isinstance(points, list):
+            points = []
+        if len(points) < 2:
+            return self._ok(False, f'Path "{name}" needs at least 2 waypoints')
+
+        settings = loaded.get('settings', {})
+        if not isinstance(settings, dict):
+            settings = {}
+        loop_type = str(settings.get('loop_type', 'none') or 'none')
+        follow = self.follow_path(
+            points,
+            loop_type=loop_type,
+            loop_mode=(loop_type != 'none'),
+            settings=settings,
+        )
+        if not follow.get('ok'):
+            return self._ok(
+                False,
+                follow.get('message', f'Failed to follow PGV saved path "{name}"'),
+                path_name=name,
+            )
+        poi_sequence = self._linked_pgv_zone_sequence_for_path(name, points)
+        return self._ok(
+            True,
+            f'PGV saved path "{name}" started with {len(points)} POI/path waypoints',
+            path_name=name,
+            poi_sequence=poi_sequence,
+            waypoint_count=len(points),
+        )
+
+    def follow_pgv_path_mode_route(
+        self,
+        destination_poi: str,
+        *,
+        selected_path: str = '',
+        current_poi: str = '',
+    ):
+        """Follow the existing POI/path graph while PGV owns localization."""
+        plan = self.plan_path_mode_route(
+            destination_poi,
+            selected_path=selected_path,
+            current_poi=current_poi,
+        )
+        if not plan.get('ok'):
+            return plan
+
+        route = plan.get('route', [])
+        if len(route) < 2:
+            return self._ok(
+                True,
+                plan.get('message', 'PGV Path Mode already at destination'),
+                plan=plan,
+                start_poi=plan.get('start_poi', ''),
+                destination_poi=plan.get('destination_poi', ''),
+                route=route,
+            )
+
+        self._path_mode_replan_attempts = 0
+        start_result = self.follow_path(
+            route,
+            loop_type='none',
+            loop_mode=False,
+            settings={},
+            path_mode_context={
+                'selected_path': plan.get('selected_path', ''),
+                'destination_poi': plan.get('destination_poi', ''),
+                'start_poi': plan.get('start_poi', ''),
+            },
+        )
+        if not start_result.get('ok'):
+            return self._ok(
+                False,
+                start_result.get('message', 'Failed to start PGV Path Mode route'),
+                plan=plan,
+            )
+        return self._ok(
+            True,
+            start_result.get('message', plan.get('message', 'PGV Path Mode route started')),
+            plan=plan,
+            start_poi=plan.get('start_poi', ''),
+            destination_poi=plan.get('destination_poi', ''),
+            route=route,
+        )
+
+    def stop_pgv_route(self):
+        msg = String()
+        msg.data = json.dumps({'action': 'stop'}, separators=(',', ':'))
+        self.pgv_route_command_pub.publish(msg)
+        return self._ok(True, 'PGV route stop sent')
+
     def reorder_zones(self, zone_names: List[str]):
         req = ReorderZones.Request()
         req.zone_names = [str(name) for name in zone_names if str(name).strip()]
@@ -8414,6 +9176,7 @@ class RosBridge(Node):
         pgv_dy: float = 0.0,
         pgv_dtheta: float = 0.0,
         description: str = '',
+        tag_id: Any = None,
     ):
         req = UpdateZoneParams.Request()
         req.name = str(name or '')
@@ -8460,7 +9223,24 @@ class RosBridge(Node):
             }
             if isinstance(effective_pre_point, (dict, str)) and effective_pre_point:
                 db_payload['pre_point'] = effective_pre_point
-            
+
+            # Floor Matrix Tag / PGV tag id. Preserve any existing tag_id when
+            # the caller does not pass one, so unrelated edits never wipe the
+            # landmark identity.
+            existing_cfg = self._load_action_point_configs_from_db().get(
+                str(name or '').strip(), {}
+            )
+            effective_tag_id = tag_id if tag_id is not None else existing_cfg.get('tag_id')
+            effective_use_pgv = bool(use_pgv) or (
+                effective_tag_id is not None and str(effective_tag_id).strip() != ''
+            )
+            db_payload['use_pgv'] = effective_use_pgv
+            if effective_tag_id is not None and str(effective_tag_id).strip() != '':
+                try:
+                    db_payload['tag_id'] = int(effective_tag_id)
+                except (TypeError, ValueError):
+                    pass
+
             self._save_action_point_config_to_db(
                 str(name or ''),
                 db_payload,
@@ -14087,6 +14867,8 @@ class RosBridge(Node):
 
         for idx in range(publish_count):
             self.initial_pose_pub.publish(msg)
+            if idx == 0:
+                self.pgv_set_pose_pub.publish(msg)
             if (idx + 1) < publish_count and publish_interval > 0.0:
                 time.sleep(publish_interval)
 
@@ -14098,7 +14880,111 @@ class RosBridge(Node):
 
         return self._ok(
             True,
-            f'Robot pose set to ({x:.2f}, {y:.2f}); holding manual pose for {self.manual_pose_lock_sec:.1f}s',
+            f'Robot pose set to ({x:.2f}, {y:.2f}); AMCL initialpose + PGV seed published',
+        )
+
+    def pgv_relocalize_on_detected_tag(
+        self,
+        *,
+        tag_id: Any = None,
+        direction_deg: Any = None,
+        save_direction: bool = False,
+    ):
+        """Seed pure-PGV localization from the currently detected Matrix Tag.
+
+        This is intentionally separate from the lidar/scan auto relocalizer:
+        PGV mode already knows the floor landmark under the reader, so we only
+        need to seed map->odom from that tag and an operator-confirmed heading.
+        """
+        detected_age = time.time() - float(self.pgv_detected_updated_at or 0.0)
+        tag_age = time.time() - float(self.pgv_tag_updated_at or 0.0)
+        if not self.pgv_detected or detected_age > 2.0:
+            return self._ok(False, 'PGV does not currently report a detected Matrix Tag')
+
+        if tag_id is None or str(tag_id).strip() == '':
+            tag_id = self.pgv_tag
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return self._ok(False, 'Detected Matrix Tag ID is invalid')
+        if tid <= 0:
+            return self._ok(False, 'PGV detected floor/no-code tag 0; move onto a Matrix Tag')
+        if tag_age > 2.0:
+            return self._ok(False, 'PGV tag ID is stale; wait for a fresh tag read')
+
+        manager = self._qr_db()
+        if manager is None:
+            return self._ok(False, 'Matrix Tag store not available')
+        try:
+            codes = manager.get_qr_codes()
+        except Exception as exc:
+            return self._ok(False, f'Failed to load Matrix Tags: {exc}')
+        if tid not in codes:
+            return self._ok(False, f'Detected Matrix Tag {tid} is not in the map; add/export it first')
+
+        tag = codes[tid]
+        tx = float(tag['x'])
+        ty = float(tag['y'])
+        stored_yaw = float(tag.get('yaw', 0.0))
+        if direction_deg is None or str(direction_deg).strip() == '':
+            yaw = stored_yaw
+            direction_source = 'stored tag direction'
+        else:
+            try:
+                yaw = math.radians(float(direction_deg))
+            except (TypeError, ValueError):
+                return self._ok(False, 'direction_deg must be a number')
+            direction_source = 'operator direction'
+            if save_direction:
+                try:
+                    manager.save_qr_code(tid, tx, ty, yaw)
+                except Exception as exc:
+                    return self._ok(False, f'Failed to save Matrix Tag direction: {exc}')
+
+        dx, dy, _dyaw = self._base_to_pgv_offset()
+        # The tag is under pgv_link. Back out the base_link pose for the chosen
+        # robot heading using the calibrated base->pgv translation.
+        bx = tx - (dx * math.cos(yaw) - dy * math.sin(yaw))
+        by = ty - (dx * math.sin(yaw) + dy * math.cos(yaw))
+
+        msg = PoseWithCovarianceStamped()
+        msg.header.frame_id = self._map_frame()
+        msg.header.stamp.sec = 0
+        msg.header.stamp.nanosec = 0
+        msg.pose.pose.position.x = bx
+        msg.pose.pose.position.y = by
+        msg.pose.pose.position.z = 0.0
+        msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
+        msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        msg.pose.covariance = [
+            0.04, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.04, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 99999.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 99999.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 99999.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0305,
+        ]
+        self.pgv_set_pose_pub.publish(msg)
+
+        self._record_requested_pose(bx, by, yaw, 'pgv_tag_relocalize')
+        self._apply_robot_pose(bx, by, yaw, 'pgv_tag_relocalize', force=True)
+        self.manual_pose_lock_until = time.time() + max(0.0, float(self.manual_pose_lock_sec))
+
+        return self._ok(
+            True,
+            (
+                f'PGV relocalized on Matrix Tag {tid}: robot=({bx:.2f}, {by:.2f}), '
+                f'yaw={math.degrees(yaw):.1f} deg using {direction_source}'
+            ),
+            tag_id=tid,
+            x=bx,
+            y=by,
+            yaw=yaw,
+            yaw_deg=math.degrees(yaw),
+            tag_x=tx,
+            tag_y=ty,
+            direction_saved=bool(save_direction and direction_source == 'operator direction'),
+            pose_reflected=True,
         )
 
     def get_robot_pose(self):

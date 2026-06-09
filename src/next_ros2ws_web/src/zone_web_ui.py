@@ -10,6 +10,8 @@ import logging
 import math
 import os
 import re
+import shlex
+import signal
 import socket
 import subprocess
 import threading
@@ -562,8 +564,12 @@ _MOTION_PATHS: frozenset = frozenset({
     '/api/mode/auto',
     '/api/zones/goto',
     '/api/path_mode/goto',
+    '/api/pgv_path_mode/goto',
+    '/api/pgv_path/follow_saved',
     '/api/path/follow',
     '/api/path/stop',
+    '/api/pgv_route/follow',
+    '/api/pgv_route/stop',
     '/api/sequence/start',
     '/api/sequence/stop',
     '/api/safety/force_resume',
@@ -571,6 +577,9 @@ _MOTION_PATHS: frozenset = frozenset({
     '/api/robot/set_pose',
     '/api/stack/mode',
     '/api/stack/shutdown',
+    '/api/pgv/launch',
+    '/api/pgv/shutdown',
+    '/api/pgv/relocalize',
     '/api/auto_relocate',
     '/api/mission/resume',
     '/api/mission/clear',
@@ -693,6 +702,7 @@ def index():
         return render_template(
             'index.html',
             user_page=False,
+            embed_mode=str(request.args.get('embed', '') or ''),
             current_role=role,
             current_user=_current_user_name(),
             rosbridge_url_candidates=_rosbridge_url_candidates_for_request(),
@@ -765,6 +775,7 @@ def operator_ui():
     return render_template(
         'index.html',
         user_page=True,
+        embed_mode=str(request.args.get('embed', '') or ''),
         current_role=_current_role_name(),
         current_user=_current_user_name(),
         rosbridge_url_candidates=_rosbridge_url_candidates_for_request(),
@@ -1011,6 +1022,7 @@ def save_zone():
         pgv_dy=float(data.get('pgv_dy', 0.0)),
         pgv_dtheta=float(data.get('pgv_dtheta', 0.0)),
         description=str(data.get('description', '')),
+        tag_id=data.get('tag_id'),
     )
     return _status(result, fail_code=503)
 
@@ -1137,6 +1149,7 @@ def update_zone_params():
         pgv_dy=float(data.get('pgv_dy', 0.0)),
         pgv_dtheta=float(data.get('pgv_dtheta', 0.0)),
         description=str(data.get('description', '')),
+        tag_id=data.get('tag_id'),
     )
     return _status(result, fail_code=503)
 
@@ -1382,6 +1395,43 @@ def goto_path_mode_route():
         current_poi=str(current_poi or ''),
     )
     return _status(result, fail_code=503)
+
+
+@app.route('/api/pgv_path_mode/goto', methods=['POST'])
+def goto_pgv_path_mode_route():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    destination = (
+        data.get('destination_poi')
+        or data.get('destination')
+        or data.get('zone_name')
+        or data.get('name')
+        or ''
+    )
+    selected_path = data.get('selected_path') or data.get('path_name') or ''
+    current_poi = data.get('current_poi') or data.get('start_poi') or ''
+
+    result = node.follow_pgv_path_mode_route(
+        str(destination),
+        selected_path=str(selected_path or ''),
+        current_poi=str(current_poi or ''),
+    )
+    return _status(result, fail_code=503)
+
+
+@app.route('/api/pgv_path/follow_saved', methods=['POST'])
+def follow_pgv_saved_path():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    path_name = data.get('path_name') or data.get('name') or ''
+    result = node.follow_pgv_saved_path(str(path_name or ''))
+    return _status(result, fail_code=400)
 
 
 @app.route('/api/path/stop', methods=['POST'])
@@ -2240,6 +2290,22 @@ def auto_relocate():
     return jsonify(result), code
 
 
+@app.route('/api/pgv/relocalize', methods=['POST'])
+def pgv_relocalize():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    result = node.pgv_relocalize_on_detected_tag(
+        tag_id=data.get('tag_id'),
+        direction_deg=data.get('direction_deg'),
+        save_direction=_as_bool(data.get('save_direction', False), default=False),
+    )
+    code = 200 if result.get('ok') else 503
+    return jsonify(result), code
+
+
 @app.route('/api/shelf/trigger', methods=['POST'])
 def trigger_shelf_detection():
     node, err = _node()
@@ -2885,6 +2951,626 @@ def run_firmware_update():
     except Exception as exc:
         return jsonify({'ok': False, 'message': f'Failed to launch firmware update: {exc}'}), 500
 
+
+
+# ---------------------------------------------------------------------------
+# PGV floor-code scanner control (standalone next_ros2ws_pgv stack)
+#
+# The PGV localization/calibration nodes are not part of the main bringup graph,
+# so the UI starts them on demand. Live reading data reaches the browser over the
+# existing rosbridge websocket (the PIP subscribes to pgv/* directly); these
+# routes only manage the node processes and serve the calibration artifacts.
+# ---------------------------------------------------------------------------
+
+_PGV_PLOT_PATH = os.getenv('NEXT_PGV_PLOT', '/tmp/pgv_calibration_fit.png')
+_PGV_CALIB_YAML = os.getenv('NEXT_PGV_CALIB_YAML', '/tmp/pgv_calibration.yaml')
+_PGV_PORT = os.getenv('NEXT_PGV_PORT', '/dev/next/pgv')
+_PGV_LOG_DIR = os.getenv('NEXT_PGV_LOG_DIR', '/tmp')
+_PGV_SETUP_SCRIPT = os.getenv(
+    'NEXT_PGV_SETUP_SCRIPT',
+    '/home/next/testBuild/install/setup.bash',
+)
+# Continuous wheel odometry the PGV stack uses when it owns localization.
+# PGV-only mode may run without EKF/Nav2 localization, while
+# /wheel_controller/odom is live on the robot and is the odom frame we verified
+# for map->odom anchoring. Overridable per-launch or via env.
+_PGV_ODOM = os.getenv('NEXT_PGV_ODOM', '/wheel_controller/odom')
+
+# mode -> ros2 launch file in next_ros2ws_pgv
+_PGV_LAUNCH_FILES = {
+    'localization': 'pgv_localization.launch.py',
+    'calibration': 'pgv_calibration.launch.py',
+}
+
+_pgv_procs: Dict[str, subprocess.Popen] = {}
+_pgv_logs: Dict[str, str] = {}
+_pgv_lock = threading.Lock()
+
+
+def _pgv_running_modes() -> List[str]:
+    """Return modes whose process is still alive (reaping dead ones)."""
+    alive = []
+    for mode, proc in list(_pgv_procs.items()):
+        if proc.poll() is None:
+            alive.append(mode)
+        else:
+            _pgv_procs.pop(mode, None)
+    return alive
+
+
+def _tail_file(path: str, max_chars: int = 1200) -> str:
+    try:
+        with open(path, 'rb') as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - max_chars))
+            return handle.read().decode('utf-8', errors='replace').strip()
+    except Exception:
+        return ''
+
+
+def _pgv_launch_command(cmd: List[str]) -> List[str]:
+    """Build a launch command that works even if the UI process was unsourced."""
+    setup_script = str(_PGV_SETUP_SCRIPT or '').strip()
+    if setup_script and os.path.isfile(setup_script):
+        quoted_cmd = ' '.join(shlex.quote(part) for part in cmd)
+        return [
+            '/bin/bash',
+            '-lc',
+            f'source {shlex.quote(setup_script)} && exec {quoted_cmd}',
+        ]
+    return cmd
+
+
+def _pgv_kill_strays() -> int:
+    """Kill any PGV stack processes not tracked in _pgv_procs.
+
+    The PGV stack is launched detached (start_new_session=True) so it survives a
+    UI/bringup restart. Without this, starting PGV mode again spawns a SECOND
+    pgv_reader that fights the first for the RS-485 port ("multiple access on
+    port" -> split/garbage frames -> the robot jumps). Reap strays by pattern so
+    only one reader ever owns the port. Returns the number signalled.
+    """
+    killed = 0
+    pattern = 'next_ros2ws_pgv'
+    for sig in (signal.SIGINT, signal.SIGKILL):
+        try:
+            result = subprocess.run(['pgrep', '-f', pattern],
+                                    stdout=subprocess.PIPE, timeout=5.0)
+            pids = [int(p) for p in result.stdout.split() if p.strip().isdigit()]
+        except Exception:  # noqa: BLE001
+            pids = []
+        # Never signal ourselves or the parent UI process.
+        pids = [p for p in pids if p not in (os.getpid(), os.getppid())]
+        if not pids:
+            break
+        for pid in pids:
+            with contextlib.suppress(Exception):
+                os.kill(pid, sig)
+                killed += 1
+        time.sleep(1.5)
+    return killed
+
+
+def _pgv_stop_all() -> int:
+    """Terminate every running PGV process group. Returns count stopped."""
+    stopped = 0
+    for mode, proc in list(_pgv_procs.items()):
+        if proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+                stopped += 1
+            except Exception:
+                with contextlib.suppress(Exception):
+                    proc.terminate()
+        _pgv_procs.pop(mode, None)
+    # Give SIGINT a moment, then hard-kill stragglers.
+    if stopped:
+        deadline = time.time() + 5.0
+        for proc in list(_pgv_procs.values()):
+            while proc.poll() is None and time.time() < deadline:
+                time.sleep(0.1)
+    return stopped
+
+
+def _pgv_set_amcl_active(active: bool) -> bool:
+    """Toggle the AMCL lifecycle node for pure_pgv localization.
+
+    In pure_pgv mode the PGV localizer is the sole owner of the map->odom
+    transform. If AMCL stays active it keeps publishing a competing map->odom
+    from lidar, so the robot pose oscillates ("jumps back and forth") between the
+    lidar estimate and the Matrix-Tag fix. Deactivating AMCL while PGV owns
+    localization removes the conflict; reactivating it on PGV shutdown restores
+    lidar localization. Best effort - returns True on success.
+    """
+    transition = 'activate' if active else 'deactivate'
+    cmd = _pgv_launch_command(['ros2', 'lifecycle', 'set', '/amcl', transition])
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=10.0,
+            env=os.environ.copy(),
+        )
+        if result.returncode != 0:
+            app.logger.warning(
+                'PGV: ros2 lifecycle set /amcl %s failed: %s',
+                transition, result.stdout.decode('utf-8', 'replace').strip(),
+            )
+            return False
+        app.logger.info('PGV: AMCL %sd for pure_pgv localization', transition)
+        return True
+    except Exception as exc:  # noqa: BLE001 - best effort
+        app.logger.warning('PGV: AMCL %s error: %s', transition, exc)
+        return False
+
+
+@app.route('/api/pgv/status', methods=['GET'])
+def pgv_status():
+    with _pgv_lock:
+        running = _pgv_running_modes()
+    plot_exists = os.path.isfile(_PGV_PLOT_PATH)
+    return jsonify({
+        'ok': True,
+        'running': running,
+        'active': bool(running),
+        'mode': running[0] if running else None,
+        'port': _PGV_PORT,
+        'plot_available': plot_exists,
+        'calibration_available': os.path.isfile(_PGV_CALIB_YAML),
+        'logs': dict(_pgv_logs),
+    })
+
+
+@app.route('/api/pgv/launch', methods=['POST'])
+def pgv_launch():
+    role = next_ops.role_from_request(request, session)
+    data = _json_body()
+    mode = str(data.get('mode', 'localization') or 'localization').strip().lower()
+    if mode not in _PGV_LAUNCH_FILES:
+        return jsonify({
+            'ok': False,
+            'message': f"Unknown PGV mode '{mode}'. Use one of: {', '.join(sorted(_PGV_LAUNCH_FILES))}.",
+        }), 400
+    if mode != 'localization' and not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
+    port = str(data.get('port', '') or '').strip() or _PGV_PORT
+
+    with _pgv_lock:
+        running = _pgv_running_modes()
+        if running:
+            # Only one process may own the RS-485 port at a time.
+            return _conflict(
+                f"PGV {running[0]} already running. Stop it before starting {mode}."
+            )
+
+        # No tracked stack: reap any detached strays leaked by a prior UI/bringup
+        # restart so a second reader can never fight for the serial port.
+        strays = _pgv_kill_strays()
+        if strays:
+            app.logger.warning('PGV launch: reaped %s stray PGV process(es)', strays)
+
+        cmd = [
+            'ros2', 'launch', 'next_ros2ws_pgv', _PGV_LAUNCH_FILES[mode],
+            f'port:={port}',
+        ]
+        # Sync the live Matrix-Tag store to tag_map.yaml and hand it to the
+        # launched stack. Without this the localizer / route follower load the
+        # stale package-default map, reject every manually placed tag, and the
+        # robot never gets a map->odom fix (so it cannot move in PGV mode).
+        tag_map_path = _pgv_tag_map_path()
+        export_node, _export_err = _node()
+        if export_node is not None:
+            try:
+                export_result = export_node.export_tag_map(tag_map_path)
+                if export_result.get('ok') and int(export_result.get('count', 0)) > 0:
+                    cmd.append(f'tag_map:={tag_map_path}')
+                    app.logger.info(
+                        'PGV launch: exported %s tag(s) to %s',
+                        export_result.get('count'), tag_map_path,
+                    )
+                elif export_result.get('ok'):
+                    app.logger.warning(
+                        'PGV launch: Matrix-Tag store empty; using default map. '
+                        'Place tags before starting PGV mode or the robot cannot localize.'
+                    )
+                else:
+                    app.logger.warning(
+                        'PGV launch: tag map export failed (%s); using default map',
+                        export_result.get('message'),
+                    )
+            except Exception as exc:  # noqa: BLE001 - best effort, fall back to default
+                app.logger.warning('PGV launch: tag map export error (%s)', exc)
+        is_pure_pgv = False
+        if mode == 'localization':
+            localization_mode = str(data.get('localization_mode', '') or 'amcl').strip().lower()
+            if localization_mode not in {'amcl', 'pure_pgv'}:
+                return jsonify({
+                    'ok': False,
+                    'message': "Invalid localization_mode. Use 'amcl' or 'pure_pgv'.",
+                }), 400
+            cmd.append(f'localization_mode:={localization_mode}')
+            odom_topic = str(data.get('odom_topic', '') or '').strip() or _PGV_ODOM
+            cmd.append(f'odom_topic:={odom_topic}')
+            is_pure_pgv = (localization_mode == 'pure_pgv')
+            launch_rf_raw = data.get('launch_route_follower')
+            if launch_rf_raw is None:
+                launch_rf = is_pure_pgv
+            else:
+                launch_rf = str(launch_rf_raw).strip().lower() in {'true', '1', 'yes'}
+            cmd.append(f'launch_route_follower:={"true" if launch_rf else "false"}')
+        if mode == 'calibration':
+            odom_topic = str(data.get('odom_topic', '') or '').strip() or _PGV_ODOM
+            cmd.append(f'odom_topic:={odom_topic}')
+            cmd.append(f'plot_path:={_PGV_PLOT_PATH}')
+            cmd.append(f'output_yaml:={_PGV_CALIB_YAML}')
+        os.makedirs(_PGV_LOG_DIR, exist_ok=True)
+        log_path = os.path.join(_PGV_LOG_DIR, f'next_pgv_{mode}.log')
+        launch_cmd = _pgv_launch_command(cmd)
+        try:
+            log_handle = open(log_path, 'ab')
+            log_handle.write(
+                (f"\n\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] launching: "
+                 f"{' '.join(cmd)}\n").encode('utf-8', errors='replace')
+            )
+            log_handle.flush()
+            proc = subprocess.Popen(
+                launch_cmd,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=os.environ.copy(),
+            )
+            log_handle.close()
+        except FileNotFoundError:
+            return jsonify({
+                'ok': False,
+                'message': 'ros2 not found on PATH. Is the workspace sourced for the UI process?',
+            }), 500
+        except Exception as exc:
+            return jsonify({'ok': False, 'message': f'Failed to launch PGV {mode}: {exc}'}), 500
+        _pgv_procs[mode] = proc
+        _pgv_logs[mode] = log_path
+
+        time.sleep(0.4)
+        exit_code = proc.poll()
+        if exit_code is not None:
+            _pgv_procs.pop(mode, None)
+            tail = _tail_file(log_path)
+            msg = f'PGV {mode} launch exited immediately with code {exit_code}. Log: {log_path}'
+            if tail:
+                msg += f' Last output: {tail}'
+            return jsonify({'ok': False, 'mode': mode, 'message': msg, 'log_path': log_path}), 500
+
+    # pure_pgv owns map->odom: silence AMCL so the two localizers do not fight.
+    if is_pure_pgv:
+        _pgv_set_amcl_active(False)
+
+    next_ops.record_event(
+        severity='info',
+        source='pgv',
+        message=f'PGV {mode} stack launched',
+        reason='User started PGV scanner from UI',
+        details={'mode': mode, 'port': port, 'pid': proc.pid},
+    )
+    return jsonify({
+        'ok': True,
+        'mode': mode,
+        'port': port,
+        'log_path': log_path,
+        'message': f'PGV {mode} stack launched on {port}. Log: {log_path}',
+    })
+
+
+@app.route('/api/pgv/shutdown', methods=['POST'])
+def pgv_shutdown():
+    role = next_ops.role_from_request(request, session)
+    running = _pgv_running_modes()
+    localization_only = bool(running) and set(running).issubset({'localization'})
+    if not localization_only and not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
+    with _pgv_lock:
+        stopped = _pgv_stop_all()
+        # Also reap detached strays from earlier restarts so STOP truly frees the
+        # serial port (tracked procs alone may miss leaked stacks).
+        _pgv_kill_strays()
+    if stopped:
+        # Restore lidar localization that pure_pgv had deactivated. Harmless if
+        # AMCL was already active or is not present.
+        _pgv_set_amcl_active(True)
+        next_ops.record_event(
+            severity='info',
+            source='pgv',
+            message='PGV stack stopped',
+            reason='User stopped PGV scanner from UI',
+            details={'processes': stopped},
+        )
+    return jsonify({
+        'ok': True,
+        'stopped': stopped,
+        'message': f'Stopped {stopped} PGV process(es).' if stopped else 'No PGV process was running.',
+    })
+
+
+@app.route('/api/pgv/plot', methods=['GET'])
+def pgv_plot():
+    if not os.path.isfile(_PGV_PLOT_PATH):
+        return jsonify({'ok': False, 'message': 'No calibration plot yet. Run a calibration first.'}), 404
+    resp = send_file(_PGV_PLOT_PATH, mimetype='image/png')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
+@app.route('/api/pgv/calibration', methods=['GET'])
+def pgv_calibration_result():
+    if not os.path.isfile(_PGV_CALIB_YAML):
+        return jsonify({'ok': True, 'exists': False})
+    try:
+        with open(_PGV_CALIB_YAML, 'r') as handle:
+            doc = yaml.safe_load(handle) or {}
+    except Exception as exc:
+        return jsonify({'ok': False, 'message': f'Failed to read calibration: {exc}'}), 500
+    params = (doc.get('pgv_localizer', {}) or {}).get('ros__parameters', {}) or {}
+    quality = doc.get('calibration_quality', {}) or {}
+    return jsonify({
+        'ok': True,
+        'exists': True,
+        'base_to_pgv_x': params.get('base_to_pgv_x'),
+        'base_to_pgv_y': params.get('base_to_pgv_y'),
+        'base_to_pgv_yaw_deg': params.get('base_to_pgv_yaw_deg'),
+        'rms_position_m': quality.get('rms_position_m'),
+        'rms_angle_deg': quality.get('rms_angle_deg'),
+        'num_samples': quality.get('num_samples'),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Matrix Tag / floor-code authoring. The API keeps the legacy /api/qr/* route
+# names for browser compatibility, but the stored objects are oriented Matrix
+# Tags: every tag has x/y and yaw_deg, and export writes the PGV tag_map.yaml
+# the localization stack reads.
+# ---------------------------------------------------------------------------
+
+def _pgv_tag_map_path() -> str:
+    override = os.getenv('NEXT_PGV_TAGMAP', '').strip()
+    if override:
+        return override
+    try:
+        share = get_package_share_directory('next_ros2ws_pgv')
+        return os.path.join(share, 'config', 'tag_map.yaml')
+    except Exception:
+        return '/tmp/pgv_tag_map.yaml'
+
+
+@app.route('/api/qr/add', methods=['POST'])
+def qr_add():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    if data.get('tag_id') is None or data.get('x') is None or data.get('y') is None:
+        return jsonify({'ok': False, 'message': 'tag_id, x and y are required'}), 400
+    try:
+        result = node.add_qr_code(
+            tag_id=int(data.get('tag_id')),
+            x=float(data.get('x')),
+            y=float(data.get('y')),
+            yaw_deg=float(data.get('yaw_deg', 0.0) or 0.0),
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({'ok': False, 'message': f'Invalid field: {exc}'}), 400
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/qr/capture', methods=['POST'])
+def qr_capture():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    if data.get('tag_id') is None:
+        return jsonify({'ok': False, 'message': 'tag_id is required'}), 400
+    try:
+        result = node.capture_qr_code(
+            tag_id=int(data.get('tag_id')),
+            apply_offset=_as_bool(data.get('apply_offset', True), True),
+            yaw_deg=data.get('yaw_deg'),
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({'ok': False, 'message': f'Invalid tag_id: {exc}'}), 400
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/qr/delete', methods=['POST'])
+def qr_delete():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    if data.get('tag_id') is None:
+        return jsonify({'ok': False, 'message': 'tag_id is required'}), 400
+    try:
+        result = node.delete_qr_code(int(data.get('tag_id')))
+    except (TypeError, ValueError) as exc:
+        return jsonify({'ok': False, 'message': f'Invalid tag_id: {exc}'}), 400
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/qr/clear', methods=['POST'])
+def qr_clear():
+    node, err = _node()
+    if err:
+        return err
+    return _status(node.clear_qr_codes(), fail_code=400)
+
+
+@app.route('/api/qr/align', methods=['POST'])
+def qr_align():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    spacing = data.get('spacing')
+    try:
+        spacing = float(spacing) if spacing not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'message': 'spacing must be a number'}), 400
+    return _status(node.align_qr_codes(spacing=spacing), fail_code=400)
+
+
+@app.route('/api/qr/create-action-points', methods=['POST'])
+def qr_create_action_points():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    prefix = str(data.get('prefix', 'QR') or 'QR').strip() or 'QR'
+    return _status(node.create_action_points_for_qr_codes(prefix=prefix), fail_code=400)
+
+
+@app.route('/api/qr/list', methods=['GET'])
+def qr_list():
+    node, err = _node()
+    if err:
+        return err
+    return _status(node.get_qr_codes(), fail_code=400)
+
+
+@app.route('/api/qr/export-tagmap', methods=['POST'])
+def qr_export_tagmap():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    path = str(data.get('path', '') or '').strip() or _pgv_tag_map_path()
+    result = node.export_tag_map(path)
+    if result.get('ok'):
+        next_ops.record_event(
+            severity='info',
+            source='pgv',
+            message='PGV tag map exported',
+            reason='User exported Matrix Tags to tag_map.yaml',
+            details={'path': result.get('path'), 'count': result.get('count')},
+        )
+    return _status(result, fail_code=400)
+
+
+# ---------------------------------------------------------------------------
+# PGV route graph: directed lanes between Matrix Tags that the route follower
+# drives. Nodes are the tags; edges carry length, heading, lateral tolerance.
+# ---------------------------------------------------------------------------
+
+def _pgv_route_graph_path() -> str:
+    override = os.getenv('NEXT_PGV_ROUTEGRAPH', '').strip()
+    if override:
+        return override
+    try:
+        share = get_package_share_directory('next_ros2ws_pgv')
+        return os.path.join(share, 'config', 'route_graph.yaml')
+    except Exception:
+        return '/tmp/pgv_route_graph.yaml'
+
+
+@app.route('/api/route/list', methods=['GET'])
+def route_list():
+    node, err = _node()
+    if err:
+        return err
+    return _status(node.get_route_edges(), fail_code=400)
+
+
+@app.route('/api/route/add', methods=['POST'])
+def route_add():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    if data.get('from_tag') is None or data.get('to_tag') is None:
+        return jsonify({'ok': False, 'message': 'from_tag and to_tag are required'}), 400
+    try:
+        result = node.save_route_edge(
+            from_tag=int(data.get('from_tag')),
+            to_tag=int(data.get('to_tag')),
+            length=data.get('length'),
+            expected_heading_deg=data.get('expected_heading_deg'),
+            max_lateral_error=float(data.get('max_lateral_error', 0.08) or 0.08),
+            turn=str(data.get('turn', 'straight') or 'straight'),
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({'ok': False, 'message': f'Invalid field: {exc}'}), 400
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/route/delete', methods=['POST'])
+def route_delete():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    if not data.get('edge_id'):
+        return jsonify({'ok': False, 'message': 'edge_id is required'}), 400
+    return _status(node.delete_route_edge(str(data.get('edge_id'))), fail_code=400)
+
+
+@app.route('/api/route/clear', methods=['POST'])
+def route_clear():
+    node, err = _node()
+    if err:
+        return err
+    return _status(node.clear_route_edges(), fail_code=400)
+
+
+@app.route('/api/route/auto', methods=['POST'])
+def route_auto():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    try:
+        mle = float(data.get('max_lateral_error', 0.08) or 0.08)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'message': 'max_lateral_error must be a number'}), 400
+    return _status(node.auto_generate_route_edges(max_lateral_error=mle), fail_code=400)
+
+
+@app.route('/api/route/export', methods=['POST'])
+def route_export():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    path = str(data.get('path', '') or '').strip() or _pgv_route_graph_path()
+    result = node.export_route_graph(path)
+    if result.get('ok'):
+        next_ops.record_event(
+            severity='info',
+            source='pgv',
+            message='PGV route graph exported',
+            reason='User exported route graph to route_graph.yaml',
+            details={'path': result.get('path'), 'edges': result.get('edges')},
+        )
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/pgv_route/follow', methods=['POST'])
+def pgv_route_follow():
+    node, err = _node()
+    if err:
+        return err
+    data = _json_body()
+    result = node.follow_pgv_route(tags=data.get('tags'), zones=data.get('zones'))
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/pgv_route/stop', methods=['POST'])
+def pgv_route_stop():
+    node, err = _node()
+    if err:
+        return err
+    return _status(node.stop_pgv_route(), fail_code=400)
 
 
 @app.route('/api/settings/mappings', methods=['GET'])
