@@ -62,6 +62,10 @@ pgv_localizer:
     base_to_pgv_y: 0.0
     base_to_pgv_yaw_deg: 0.0
     use_pgv_yaw: false
+    # Use R3138 relative angle to compute robot heading in map frame.
+    # Formula: robot_yaw = tag_yaw_map - pgv_angle
+    # More accurate than odom for absolute heading; only active when use_pgv_yaw is false.
+    use_pgv_angle_for_yaw: true
     max_reader_age_s: 0.5
     # Correction gates. max_offset_m is a sanity bound on how far the tag may sit
     # from the reader's optical centre. The R3138 only reports a tag while it is
@@ -149,9 +153,9 @@ route_follower:
     cmd_vel_topic: /cmd_vel_tracker
     odom_topic: /wheel_controller/odom
     control_rate_hz: 20.0
-    cruise_speed: 0.25
-    approach_speed: 0.10
-    max_angular: 0.6
+    cruise_speed: 0.50
+    approach_speed: 0.3
+    max_angular: 0.8
     k_lateral: 1.5
     k_heading: 1.2
     arrive_radius: 0.60

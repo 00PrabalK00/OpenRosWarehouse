@@ -67,6 +67,13 @@ class PgvLocalizer(Node):
         self.declare_parameter("base_to_pgv_y", 0.0)
         self.declare_parameter("base_to_pgv_yaw_deg", 0.0)
         self.declare_parameter("use_pgv_yaw", False)
+        # Use the R3138 relative angle to derive robot heading in map.
+        # Formula: robot_yaw = tag_yaw_map - pgv_angle
+        # This works because the R3138 reports how much the tag appears rotated
+        # in the camera frame; since the tag is fixed in the map, inverting that
+        # relative angle gives the camera (and robot) heading in map coordinates.
+        # Only active when use_pgv_yaw is False (position-only mode).
+        self.declare_parameter("use_pgv_angle_for_yaw", False)
         self.declare_parameter("max_reader_age_s", 0.5)
         # Gates.
         self.declare_parameter("max_offset_m", 0.30)
@@ -125,6 +132,7 @@ class PgvLocalizer(Node):
             self.get_parameter("allow_param_mount_fallback").value
         )
         self.use_pgv_yaw = bool(self.get_parameter("use_pgv_yaw").value)
+        self.use_pgv_angle_for_yaw = bool(self.get_parameter("use_pgv_angle_for_yaw").value)
         self.max_reader_age_s = float(self.get_parameter("max_reader_age_s").value)
         self.param_base_to_pgv = (
             float(self.get_parameter("base_to_pgv_x").value),
@@ -477,22 +485,30 @@ class PgvLocalizer(Node):
             bx, by, byaw = t_map_base
         else:
             # Position-only mode. Snap base_link to the tag's map coordinate,
-            # offset by the rear-camera MOUNT only (the measured sub-tag offset
-            # px/py is NOT used here: its frame convention vs the 190° code
-            # angle is unresolved and using it raw threw the pose ~0.7 m off).
-            #
-            # The tag's map coordinate is where the PGV camera sits. base_link
-            # is ~0.52 m ahead of the camera, rotated through the robot's
-            # current heading (from odom/EKF, never the tag) so it lands right
-            # for any orientation:
-            #       base = (tx, ty) - R(byaw) · mount_translation_xy
+            # offset by the rear-camera mount translation.
             tx, ty, _tyaw = self.tags[tag_id]
-            map_est = self._map_estimate()
-            byaw = map_est[2] if map_est is not None else (
-                self._odom_pose[2] if self._odom_pose is not None else 0.0
-            )
+
+            if self.use_pgv_angle_for_yaw:
+                # Derive robot heading from the R3138 relative angle.
+                # The sensor reports how much the tag appears rotated in the
+                # camera frame (tag_in_camera_yaw = pyaw). Since the tag is
+                # fixed in the map we can invert:
+                #   camera_yaw_in_map = tag_yaw_map - pgv_angle
+                # The mount yaw is 0° per the planar config (base_to_pgv_yaw_deg),
+                # so robot_yaw = camera_yaw_in_map.
+                # Chain: map ← tag ← (inv pgv_angle) ← camera ← (inv mount_yaw=0) ← robot
+                byaw = math.atan2(
+                    math.sin(_tyaw - pyaw),
+                    math.cos(_tyaw - pyaw),
+                )
+            else:
+                map_est = self._map_estimate()
+                byaw = map_est[2] if map_est is not None else (
+                    self._odom_pose[2] if self._odom_pose is not None else 0.0
+                )
+
             # Only the mount TRANSLATION matters for placing the camera origin;
-            # strip the 180° mount rotation so it cannot flip the offset.
+            # strip any rotation so it cannot flip the 0.52 m offset.
             mount_xy = (t_base_pgv[0], t_base_pgv[1], 0.0)
             bx, by, _ = compose((tx, ty, byaw), inverse(mount_xy))
 
