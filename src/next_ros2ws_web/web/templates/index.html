@@ -33332,6 +33332,37 @@
                     // Manual Mode Control
                     let manualModeActive = false;
 
+                    let isSuperOverrideActive = false;
+                    
+                    document.addEventListener('keydown', async (e) => {
+                        if (e.key === 'Shift' && manualModeActive && !isSuperOverrideActive) {
+                            isSuperOverrideActive = true;
+                            try {
+                                await fetch('/api/safety/super_override', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enable: true })
+                                });
+                                showStatus('SUPER OVERRIDE ACTIVE - ALL SAFETY BYPASSED', 'error');
+                            } catch (err) {}
+                        }
+                    });
+                    
+                    document.addEventListener('keyup', async (e) => {
+                        if (e.key === 'Shift' && isSuperOverrideActive) {
+                            isSuperOverrideActive = false;
+                            try {
+                                await fetch('/api/safety/super_override', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enable: false })
+                                });
+                                showStatus('Super override disabled', 'info');
+                            } catch (err) {}
+                        }
+                    });
+
+
                     async function setManualMode(active, showMessage = true) {
                         const btns = [
                             document.getElementById('manual-mode-btn'),
@@ -33347,6 +33378,16 @@
                                 throw new Error(data.message || 'Mode switch failed');
                             }
 
+                            if (!active && isSuperOverrideActive) {
+                                isSuperOverrideActive = false;
+                                try {
+                                    await fetch('/api/safety/super_override', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ enable: false })
+                                    });
+                                } catch (err) {}
+                            }
                             manualModeActive = active;
                             if (pip) {
                                 pip.classList.toggle('active', active);
