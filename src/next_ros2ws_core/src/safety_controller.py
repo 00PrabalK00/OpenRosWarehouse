@@ -2031,6 +2031,10 @@ class SafetyController(Node):
         if abs(self.last_cmd_linear_x) > self.ttc_min_speed_mps:
             self.last_nonzero_cmd_linear_x = float(self.last_cmd_linear_x)
 
+        if self.super_override:
+            self.safety_pub.publish(msg)
+            return
+
         should_stop, _reasons = self._current_cmd_gate_state()
         if should_stop:
             self.last_speed_scale = 0.0
@@ -2056,16 +2060,15 @@ class SafetyController(Node):
     
     def safety_check_callback(self):
         """Continuously enforce zero velocity while hard-stop gating is active.
-        """
-        if self.super_override:
-            return
-
 
         NOTE: _update_obstacle_state() is intentionally NOT called here.
         Obstacle state is updated in scan callbacks. Calling it here too would double-increment the
         stop/clear debounce frame counters on every timer tick, causing
         premature stop confirmation on a single scan frame.
         """
+        if self.super_override:
+            return
+
         should_stop, reasons = self._current_cmd_gate_state()
 
         if should_stop:
