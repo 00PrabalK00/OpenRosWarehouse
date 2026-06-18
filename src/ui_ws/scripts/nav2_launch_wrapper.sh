@@ -147,7 +147,15 @@ fi
 # only publisher to /wheel_controller/cmd_vel_unstamped.
 
 # Launch Nav2 with active map (don't override if user already provided map)
-if [[ "$*" == *"map:="* ]]; then
+if [[ "${NEXT_PGV_NAV_MODE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    # PGV owns map->odom in pure_pgv mode. Launch the repo navigation stack,
+    # which starts map_server + Nav2 planning/control but deliberately omits AMCL.
+    ros2 launch ugv_bringup navigation.launch.py "${SIM_TIME_ARG[@]}" autostart:=True map:=$ACTIVE_MAP "$@"
+elif [[ "${NEXT_REFLECTOR_NAV_MODE:-0}" =~ ^(1|true|yes|on)$ ]]; then
+    # Reflector mode also uses the custom navigation.launch.py to omit AMCL
+    # and include the reflector localizer.
+    ros2 launch ugv_bringup navigation.launch.py "${SIM_TIME_ARG[@]}" autostart:=True map:=$ACTIVE_MAP "$@"
+elif [[ "$*" == *"map:="* ]]; then
     # User provided map argument, use their values
     ros2 launch nav2_bringup bringup_launch.py "${SIM_TIME_ARG[@]}" use_composition:=False autostart:=True params_file:=$PARAMS_FILE "$@"
 else

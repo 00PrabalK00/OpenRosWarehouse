@@ -90,6 +90,9 @@ controller_server:
   ros__parameters:
     use_sim_time: false
     odom_topic: /odometry/filtered
+    # Speed-zone map rules: SpeedFilter (global costmap) publishes SpeedLimit here;
+    # controller_server forwards it to the controller's setSpeedLimit().
+    speed_limit_topic: /speed_limit
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
@@ -111,17 +114,23 @@ controller_server:
     FollowPath:
       plugin: next_nav2_controller::NextNav2Controller
       control_mode: rpp
-      max_v: 1.5
+      # AUTHORITATIVE linear-speed knob. base_max_v_ is loaded from this at boot
+      # and is the single baseline that /set_max_speed (global) and per-segment
+      # speed caps override at runtime; Nav2 SpeedFilter map zones scale it down.
+      max_v: 0.5
       max_w: 1.5
-      acc_lim_v: 1.0
-      decel_lim_v: 1.0
-      acc_lim_w: 1.5
+      # Anti-slip: gentle launch accel (no wheelspin) + firmer decel so the robot
+      # brakes in place instead of coasting/sliding past the stop point. Per-segment
+      # accel/decel overrides ride on top of these via dynamic parameters.
+      acc_lim_v: 0.25
+      decel_lim_v: 0.75
+      acc_lim_w: 0.35
       allow_reverse: false
       enforce_diff_drive_kinematics: true
       wheel_separation: 0.525
       max_wheel_linear_speed: 1.25
       min_tracking_speed: 0.05
-      min_cruise_speed: 0.4
+      min_cruise_speed: 0.12
       lookahead_distance: 0.7
       lookahead_speed_gain: 0.0
       lookahead_min_distance: 0.7
@@ -166,16 +175,10 @@ controller_server:
       abort_on_progress_stall: true
       blocked_timeout: 3.0
       abort_on_blocked_timeout: true
-      max_vel_x: 1.5
-      desired_linear_vel: 1.5
-      min_vel_x: 0.0
-      max_vel_theta: 1.5
-      min_speed_xy: 0.05
-      max_speed_xy: 1.5
-      acc_lim_x: 1.0
-      acc_lim_theta: 1.5
-      decel_lim_x: -1.0
-      decel_lim_theta: -1.5
+      # NOTE: DWB/RPP-style speed keys (max_vel_x, max_speed_xy, desired_linear_vel,
+      # max_vel_theta, acc_lim_x, ...) were removed here — NextNav2Controller does
+      # not read them, so setting them changed nothing and only hid the real knob.
+      # Use `max_v` / `max_w` / `acc_lim_v` / `acc_lim_w` / `decel_lim_v` above.
 controller_server_rclcpp_node:
   ros__parameters:
     use_sim_time: false
@@ -246,6 +249,7 @@ global_costmap:
       - obstacle_layer
       - inflation_layer
       - keepout_filter
+      - speed_filter
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
@@ -275,6 +279,12 @@ global_costmap:
         plugin: nav2_costmap_2d::KeepoutFilter
         enabled: true
         filter_info_topic: /costmap_filter_info
+        transform_tolerance: 0.1
+      speed_filter:
+        plugin: nav2_costmap_2d::SpeedFilter
+        enabled: true
+        filter_info_topic: /speed_filter_info
+        speed_limit_topic: /speed_limit
         transform_tolerance: 0.1
       always_send_full_costmap: true
       robot_radius: 0.3
@@ -322,7 +332,7 @@ behavior_server:
     global_frame: odom
     robot_base_frame: base_footprint
     transform_tolerance: 0.1
-    max_rotational_vel: 0.55
+    max_rotational_vel: 0.8
     min_rotational_vel: 0.2
     rotational_acc_lim: 1.5
 behavior_server_rclcpp_node:
@@ -338,6 +348,26 @@ waypoint_follower:
       plugin: nav2_waypoint_follower::WaitAtWaypoint
       enabled: true
       waypoint_pause_duration: 0
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: false
+    # Without this block the node ran nav2's DEFAULT max_velocity [0.5,...], which
+    # silently clamped the controller's cmd_vel_nav -> cmd_vel and made FollowPath
+    # max_v (1.5) and every dynamic speed change look like it "did nothing".
+    # Keep the linear/angular ceilings >= the controller (max_v / max_w) so the
+    # controller stays the speed authority; the smoother only shapes accel/jerk.
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.5, 0.0, 0.8]
+    min_velocity: [0.0, 0.0, -0.8]
+
+    max_accel: [0.25, 0.0, 0.35]
+    max_decel: [-0.7, 0.0, -0.9]
+    odom_topic: "odometry/filtered"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
 lifecycle_manager_localization:
   ros__parameters:
     use_sim_time: false

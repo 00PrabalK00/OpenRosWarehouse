@@ -808,7 +808,7 @@ class ShelfGeometricRefinerNode(Node):
         self.add_on_set_parameters_callback(self._on_params_changed)
 
         # ---- TF ----
-        self._tf_buf = tf2_ros.Buffer()
+        self._tf_buf = tf2_ros.Buffer(node=self)
         self._tf_listener = tf2_ros.TransformListener(self._tf_buf, self)
 
         # ---- State ----

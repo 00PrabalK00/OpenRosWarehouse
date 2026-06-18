@@ -13398,6 +13398,12 @@
                             <i class="fas fa-compass"></i>
                             <span class="mode-rail-label">Zone Hdg</span>
                         </button>
+                        <button class="mode-rail-btn zone-tool" id="rail-new-reflector-btn"
+                            onclick="setMapMode('filters'); setFilterLayer('reflector'); setFilterShape('point'); startFilterDraw();"
+                            title="Place a Reflector">
+                            <i class="fas fa-certificate"></i>
+                            <span class="mode-rail-label">Reflector</span>
+                        </button>
                         <!-- Path tools -->
                         <div class="mode-rail-sep" style="width:32px;"></div>
                         <button class="mode-rail-btn path-tool" id="rail-path-draw-btn"
@@ -13511,7 +13517,7 @@
                 <div id="mctrl-others-menu" role="menu">
                     <div class="map-dd-hdr">More Options</div>
                     <button class="map-dd-item" onclick="document.getElementById('mctrl-others-menu').classList.remove('open'); setStackMode('nav')"><i class="fas fa-wifi"></i> Start Nav Stack</button>
-                    <button class="map-dd-item" onclick="document.getElementById('mctrl-others-menu').classList.remove('open'); openFiltersPanel()"><i class="fas fa-sliders"></i> Map Rules / Filters</button>
+                    <button class="map-dd-item" onclick="document.getElementById('mctrl-others-menu').classList.remove('open'); openFiltersPanel()"><i class="fas fa-sliders"></i> Map Layers / Filters</button>
                     <button class="map-dd-item" onclick="document.getElementById('mctrl-others-menu').classList.remove('open'); setMapMode('zones')"><i class="fas fa-location-dot"></i> Zone Mode</button>
                     <div class="map-dd-sep"></div>
                     <button class="map-dd-item" onclick="document.getElementById('mctrl-others-menu').classList.remove('open'); fitToScreen()"><i class="fas fa-expand"></i> Fit to Screen</button>
@@ -13571,7 +13577,7 @@
                             <button class="sidebar-quick-btn" data-sidebar-mode-btn="paths"
                                 onclick="setMapMode('paths')" title="Paths"><i class="fas fa-route"></i></button>
                             <button class="sidebar-quick-btn" data-sidebar-mode-btn="filters"
-                                onclick="openFiltersPanel()" title="Map Rules"><i class="fas fa-sliders"></i></button>
+                                onclick="openFiltersPanel()" title="Map Layers"><i class="fas fa-sliders"></i></button>
                         </div>
 
                         <div class="card tool-panel sidebar-section" data-sidebar-mode="zones" id="zone-add-card">
@@ -13974,7 +13980,7 @@
 
                         <div class="card tool-panel sidebar-section" data-sidebar-mode="filters" id="filters-card">
                             <div class="card-header">
-                                <h3 class="card-title">MAP RULES</h3>
+                                <h3 class="card-title">MAP LAYERS</h3>
                             </div>
                             <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
                                 Build rules in 3 steps, then draw directly on the map.
@@ -13997,6 +14003,16 @@
                                             onclick="setFilterLayer('slow_zones')" style="flex: 1 1 30%;">
                                             <span class="filter-btn-title">Speed</span>
                                             <span class="filter-btn-count" id="filter-count-slow">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-safety"
+                                            onclick="setFilterLayer('safety_zones')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Safety</span>
+                                            <span class="filter-btn-count" id="filter-count-safety">(0)</span>
+                                        </button>
+                                        <button class="filter-btn filter-btn-type" id="filter-layer-localization_zones"
+                                            onclick="setFilterLayer('localization_zones')" style="flex: 1 1 30%;">
+                                            <span class="filter-btn-title">Localization</span>
+                                            <span class="filter-btn-count" id="filter-count-localization_zones">(0)</span>
                                         </button>
                                         <button class="filter-btn filter-btn-type" id="filter-layer-locate_config"
                                             onclick="setFilterLayer('locate_config')" style="flex: 1 1 30%;">
@@ -14055,7 +14071,24 @@
                                             Slow
                                         </button>
                                     </div>
-                                </div>
+                                    <div class="filter-speed-group" id="filter-safety-group" style="margin-top: 6px;">
+                                        <span class="filter-speed-label">Clearance</span>
+                                        <div style="display: flex; gap: 4px; flex: 1;">
+                                            <button class="filter-btn filter-speed-preset" id="filter-safety-preset-disabled" onclick="setFilterSafetyPreset('disabled')" title="Disable Lidar Safety in zone">OFF</button>
+                                            <button class="filter-btn filter-speed-preset" id="filter-safety-preset-tight" onclick="setFilterSafetyPreset('tight')" title="0.1m clearance">0.1m</button>
+                                            <button class="filter-btn filter-speed-preset" id="filter-safety-preset-medium" onclick="setFilterSafetyPreset('medium')" title="0.3m clearance">0.3m</button>
+                                            <button class="filter-btn filter-speed-preset" id="filter-safety-preset-wide" onclick="setFilterSafetyPreset('wide')" title="0.6m clearance">0.6m</button>
+                                        </div>
+                                    </div>
+                                    <div class="filter-speed-group" id="filter-localization-group" style="margin-top: 6px;">
+                                        <span class="filter-speed-label">Mode</span>
+                                        <div style="display: flex; gap: 4px; flex: 1;">
+                                            <button class="filter-btn filter-speed-preset active" id="filter-localization-mode-point_cloud" onclick="setFilterLocalizationMode('point_cloud')">Point Cloud</button>
+                                            <button class="filter-btn filter-speed-preset" id="filter-localization-mode-reflector" onclick="setFilterLocalizationMode('reflector')">Reflector</button>
+                                            <button class="filter-btn filter-speed-preset" id="filter-localization-mode-qr" onclick="setFilterLocalizationMode('qr')">QR</button>
+                                        </div>
+                                    </div>
+                                    </div>
 
                                 <div class="filter-step">
                                     <div class="filter-step-title">Step 3: Action</div>
@@ -14113,7 +14146,7 @@
                             <div class="filter-list-title">Saved Rules</div>
                             <div class="filter-list" id="filter-list">
                                 <div class="filter-empty">
-                                    No map rules
+                                    No map layers
                                 </div>
                             </div>
                         </div>
@@ -14502,6 +14535,7 @@
                             console.log('Stack mode status:', data, 'PGV status:', pgvData);
                             const modeLabel = {
                                 nav: 'Navigation',
+                                reflector_nav: 'R-Nav',
                                 slam: 'Mapping',
                                 stop: 'Stop Robot',
                             };
@@ -14521,7 +14555,9 @@
                                 });
                             });
                             if (data.mode) {
-                                [`${data.mode}-mode-btn`, `${data.mode}-mode-btn-top`].forEach((btnId) => {
+                                // Maps pgv_nav and reflector_nav to the nav button visual state
+                                const activeBtnPrefix = (data.mode === 'pgv_nav' || data.mode === 'reflector_nav') ? 'nav' : data.mode;
+                                [`${activeBtnPrefix}-mode-btn`, `${activeBtnPrefix}-mode-btn-top`].forEach((btnId) => {
                                     const btn = document.getElementById(btnId);
                                     if (btn) btn.classList.add('active');
                                 });
@@ -14534,6 +14570,10 @@
                                     btn.classList.add('active');
                                     if (label) label.textContent = 'STOP PGV';
                                     btn.title = 'Stop PGV Mode';
+                                } else if (data.mode === 'reflector_nav') {
+                                    btn.classList.add('active');
+                                    if (label) label.textContent = 'STOP R-NAV';
+                                    btn.title = 'Stop Reflector Nav';
                                 } else {
                                     if (label) label.textContent = data.mode === 'nav' ? 'STOP NAV' : 'START NAV';
                                     btn.title = 'Toggle Navigation Stack';
@@ -14950,6 +14990,8 @@
                         no_go_zones: { label: 'No Entry', color: 'rgba(239, 68, 68, 0.62)', fill: 'rgba(239, 68, 68, 0.07)' },
                         restricted: { label: 'Caution', color: 'rgba(245, 158, 11, 0.56)', fill: 'rgba(245, 158, 11, 0.07)' },
                         slow_zones: { label: 'Speed', color: 'rgba(59, 130, 246, 0.56)', fill: 'rgba(59, 130, 246, 0.08)' },
+                        safety_zones: { label: 'Safety', color: 'rgba(239, 68, 68, 0.56)', fill: 'rgba(239, 68, 68, 0.08)' },
+                        localization_zones: { label: 'Localization', color: 'rgba(14, 165, 233, 0.70)', fill: 'rgba(14, 165, 233, 0.08)' },
                         locate_config: { label: 'Locate Config', color: 'rgba(168, 85, 247, 0.56)', fill: 'rgba(168, 85, 247, 0.08)' },
                         reflector: { label: 'Reflector', color: 'rgba(236, 72, 153, 0.56)', fill: 'rgba(236, 72, 153, 0.08)' },
                         tag_area: { label: 'Matrix Tag', color: 'rgba(34, 197, 94, 0.56)', fill: 'rgba(34, 197, 94, 0.08)' },
@@ -14959,10 +15001,13 @@
                         description_area: { label: 'Description', color: 'rgba(100, 116, 139, 0.56)', fill: 'rgba(100, 116, 139, 0.08)' },
                     };
                     const FILTER_SPEED_PRESETS = { slow: 50 };
+                    const FILTER_SAFETY_PRESETS = { tight: 0.1, medium: 0.3, wide: 0.6, disabled: 0.0 };
                     let filterLayers = { 
                         no_go_zones: [], 
                         restricted: [], 
                         slow_zones: [],
+                        safety_zones: [],
+                        localization_zones: [],
                         locate_config: [],
                         reflector: [],
                         tag_area: [],
@@ -14974,6 +15019,8 @@
                     let activeFilterLayer = 'no_go_zones';
                     let activeFilterShape = 'rectangle';
                     let activeFilterSpeedPreset = 'slow';
+                    let activeFilterSafetyPreset = 'medium';
+                    let activeFilterLocalizationMode = 'point_cloud';
                     let filterDrawMode = null; // 'rectangle' | 'polygon'
                     let filterPolygonPoints = [];
                     let filterRectStart = null;
@@ -17545,7 +17592,7 @@
                     }
 
                     function setFilterShape(shape) {
-                        if (shape !== 'rectangle' && shape !== 'polygon') {
+                        if (shape !== 'rectangle' && shape !== 'polygon' && shape !== 'point') {
                             return;
                         }
                         activeFilterShape = shape;
@@ -17561,6 +17608,22 @@
                         updateFilterControls();
                     }
 
+                    function setFilterSafetyPreset(preset) {
+                        if (!Object.prototype.hasOwnProperty.call(FILTER_SAFETY_PRESETS, preset)) {
+                            return;
+                        }
+                        activeFilterSafetyPreset = preset;
+                        updateFilterControls();
+                    }
+
+                    function setFilterLocalizationMode(mode) {
+                        if (!['point_cloud', 'reflector', 'qr'].includes(mode)) {
+                            return;
+                        }
+                        activeFilterLocalizationMode = mode;
+                        updateFilterControls();
+                    }
+
                     function getFilterTypeCount(layer) {
                         const items = filterLayers[layer];
                         return Array.isArray(items) ? items.length : 0;
@@ -17571,6 +17634,8 @@
                             'no_go_zones': 'filter-count-no-go',
                             'restricted': 'filter-count-restricted',
                             'slow_zones': 'filter-count-slow',
+                            'safety_zones': 'filter-count-safety',
+                            'localization_zones': 'filter-count-localization_zones',
                             'locate_config': 'filter-count-locate_config',
                             'reflector': 'filter-count-reflector',
                             'tag_area': 'filter-count-tag_area',
@@ -17822,6 +17887,8 @@
                             no_go_zones: document.getElementById('filter-layer-no-go'),
                             restricted: document.getElementById('filter-layer-restricted'),
                             slow_zones: document.getElementById('filter-layer-slow'),
+                            safety_zones: document.getElementById('filter-layer-safety'),
+                            localization_zones: document.getElementById('filter-layer-localization_zones'),
                             locate_config: document.getElementById('filter-layer-locate_config'),
                             reflector: document.getElementById('filter-layer-reflector'),
                             tag_area: document.getElementById('filter-layer-tag_area'),
@@ -17851,6 +17918,26 @@
                         if (slowPresetBtn) {
                             slowPresetBtn.classList.toggle('active', activeFilterSpeedPreset === 'slow');
                         }
+
+                        const safetyGroup = document.getElementById('filter-safety-group');
+                        if (safetyGroup) {
+                            safetyGroup.style.display = activeFilterLayer === 'safety_zones' ? 'flex' : 'none';
+                        }
+
+                        const safetyPresets = ['disabled', 'tight', 'medium', 'wide'];
+                        safetyPresets.forEach(preset => {
+                            const btn = document.getElementById(`filter-safety-preset-${preset}`);
+                            if (btn) btn.classList.toggle('active', activeFilterSafetyPreset === preset);
+                        });
+
+                        const localizationGroup = document.getElementById('filter-localization-group');
+                        if (localizationGroup) {
+                            localizationGroup.style.display = activeFilterLayer === 'localization_zones' ? 'flex' : 'none';
+                        }
+                        ['point_cloud', 'reflector', 'qr'].forEach(mode => {
+                            const btn = document.getElementById(`filter-localization-mode-${mode}`);
+                            if (btn) btn.classList.toggle('active', activeFilterLocalizationMode === mode);
+                        });
 
                         const drawingActive = !!filterDrawMode;
                         const drawBtn = document.getElementById('filter-draw-btn');
@@ -17909,7 +17996,7 @@
                             sidebar.classList.toggle('sidebar-active', normalizedMode !== 'view');
                         }
                         // Update the panel title in the sidebar header
-                        const titleMap = { zones: 'Zones', paths: 'Paths', filters: 'Map Rules' };
+                        const titleMap = { zones: 'Zones', paths: 'Paths', filters: 'Map Layers' };
                         const titleEl = document.getElementById('sidebar-panel-title-text');
                         if (titleEl) titleEl.textContent = titleMap[normalizedMode] || 'Panel';
 
@@ -18342,7 +18429,7 @@
                         updateFilterControls();
 
                         switchTab('navigator');
-                        showStatus('Map rule drawing active', 'info');
+                        showStatus('Map layer drawing active', 'info');
                         drawMap();
                     }
 
@@ -18381,7 +18468,7 @@
                         updateFilterControls();
                         drawMap();
                         if (!silent && hadDrawState) {
-                            showStatus('Map rule drawing canceled', 'info');
+                            showStatus('Map layer drawing canceled', 'info');
                         }
                     }
 
@@ -18421,6 +18508,8 @@
                         }
 
                         applyFilterSpeedIfNeeded(obj);
+                        applyFilterSafetyIfNeeded(obj);
+                        applyFilterLocalizationIfNeeded(obj);
                         const ok = await addFilterObject(activeFilterLayer, obj);
                         if (ok) {
                             cancelFilterDraw(true);
@@ -18435,6 +18524,28 @@
                         obj.speed_percent = Math.max(1, Math.min(Number(presetValue) || 50, 100));
                     }
 
+                    function applyFilterSafetyIfNeeded(obj) {
+                        if (activeFilterLayer !== 'safety_zones') {
+                            return;
+                        }
+                        const presetValue = FILTER_SAFETY_PRESETS[activeFilterSafetyPreset] ?? FILTER_SAFETY_PRESETS.medium;
+                        obj.safety_distance_m = Number(presetValue) || 0.0;
+                        if (activeFilterSafetyPreset === 'disabled') {
+                            obj.lidar_safety_off = true;
+                        }
+                    }
+
+                    function applyFilterLocalizationIfNeeded(obj) {
+                        if (activeFilterLayer !== 'localization_zones') {
+                            return;
+                        }
+                        const mode = ['point_cloud', 'reflector', 'qr'].includes(activeFilterLocalizationMode)
+                            ? activeFilterLocalizationMode
+                            : 'point_cloud';
+                        obj.localization_mode = mode;
+                        obj.label = getLocalizationModeLabel(mode);
+                    }
+
                     async function addFilterObject(layer, obj) {
                         try {
                             const response = await fetch('/api/filters/add', {
@@ -18444,17 +18555,17 @@
                             });
                             const data = await response.json();
                             if (data.ok) {
-                                showStatus(data.message || 'Map rule added', 'success');
+                                showStatus(data.message || 'Map layer added', 'success');
                                 await loadFilters();
                                 return true;
                             }
                             showStatus(
-                                (data.result || data.message || 'Failed to add map rule')
+                                (data.result || data.message || 'Failed to add map layer')
                                 + ' (not saved to DB)',
                                 'error'
                             );
                         } catch (error) {
-                            showStatus('Error adding map rule (not saved to DB): ' + error, 'error');
+                            showStatus('Error adding map layer (not saved to DB): ' + error, 'error');
                         }
                         return false;
                     }
@@ -18462,7 +18573,7 @@
                     async function clearFilterLayer(layer) {
                         const isAll = layer === 'all';
                         const meta = FILTER_LAYER_META[layer];
-                        const label = isAll ? 'all map rules' : `${meta ? meta.label : layer} rules`;
+                        const label = isAll ? 'all map layers' : `${meta ? meta.label : layer} rules`;
                         const confirmed = await showConfirm(`Clear ${label}?`, 'Clear', 'Cancel');
                         if (!confirmed) return;
                         try {
@@ -18476,7 +18587,7 @@
                                 if (isAll || (selectedFilterRef && selectedFilterRef.layer === layer)) {
                                     selectedFilterRef = null;
                                 }
-                                showStatus(data.message || 'Map rules cleared', 'success');
+                                showStatus(data.message || 'Map layers cleared', 'success');
                                 await loadFilters();
                             } else {
                                 showStatus(data.message || 'Failed to clear rules', 'error');
@@ -18498,11 +18609,11 @@
                             const data = await response.json();
                             if (data.ok) {
                                 selectedFilterRef = null;
-                                showStatus(data.message || 'Map rule deleted', 'success');
+                                showStatus(data.message || 'Map layer deleted', 'success');
                                 await loadFilters();
                                 return true;
                             }
-                            showStatus(data.message || 'Failed to delete map rule', 'error');
+                            showStatus(data.message || 'Failed to delete map layer', 'error');
                         } catch (error) {
                             showStatus('Error: ' + error, 'error');
                         }
@@ -18512,7 +18623,7 @@
                     async function deleteSelectedFilter() {
                         const selected = resolveSelectedFilterObject();
                         if (!selected) {
-                            showStatus('Select a map rule first', 'error');
+                            showStatus('Select a map layer first', 'error');
                             return;
                         }
                         if (!selected.obj.id) {
@@ -18526,11 +18637,12 @@
                         try {
                             const response = await fetch('/api/filters');
                             const data = await response.json();
-                            filterLayers = {
-                                no_go_zones: data.no_go_zones || [],
-                                restricted: data.restricted || [],
-                                slow_zones: data.slow_zones || []
-                            };
+                            
+                            // Initialize all layers from the received data
+                            Object.keys(FILTER_LAYER_META).forEach(layer => {
+                                filterLayers[layer] = data[layer] || [];
+                            });
+
                             renderFilterList();
                             updateFilterControls();
                             drawMap();
@@ -18564,6 +18676,8 @@
                                 title.className = 'filter-item-title';
                                 if (key === 'slow_zones') {
                                     title.textContent = `Speed Slow ${index + 1}`;
+                                } else if (key === 'localization_zones') {
+                                    title.textContent = `${getLocalizationModeLabel(obj.localization_mode)} ${index + 1}`;
                                 } else {
                                     title.textContent = `${meta.label} ${index + 1}`;
                                 }
@@ -18590,7 +18704,7 @@
                         });
 
                         if (total === 0) {
-                            list.innerHTML = '<div class="filter-empty">No map rules</div>';
+                            list.innerHTML = '<div class="filter-empty">No map layers</div>';
                         }
 
                         updateFilterTypeCounts();
@@ -18614,6 +18728,9 @@
 
                     function formatFilterMeta(obj, layer) {
                         const parts = [formatFilterType(obj, layer)];
+                        if (layer === 'localization_zones') {
+                            parts.push(getLocalizationModeLabel(obj.localization_mode));
+                        }
                         if (obj.id) {
                             parts.push(`id: ${String(obj.id).slice(0, 8)}`);
                         }
@@ -18872,6 +18989,15 @@
                                     action: async () => {
                                         closeNotification();
                                         await startPgvNavigationMode();
+                                    },
+                                },
+                                {
+                                    text: 'R-Nav (Reflector)',
+                                    style: 'success',
+                                    action: async () => {
+                                        closeNotification();
+                                        navRuntimeMode = 'reflector';
+                                        await setStackMode('reflector_nav');
                                     },
                                 },
                                 { text: 'Cancel', style: 'secondary', action: closeNotification },
@@ -23537,6 +23663,7 @@
                             subscribeToVelocitySources();
                             initCmdVelPublisher();
                             initLiftControlTopics();
+                            initReflectorTopics();
                         });
 
                         ros.on('error', (error) => {
@@ -23562,6 +23689,7 @@
                             }
                             liftStatusTopic = null;
                             liftCmdTopic = null;
+                            teardownReflectorTopics();
                             actionNodePublishers = {};
                             clearSpeedSubscriptions();
                             // Stop any active joystick hold stream and reset manual state so
@@ -24585,6 +24713,79 @@
                         }
                     }
 
+                    // ── Reflector Localization Visualization ──────────────────
+                    let reflectorMarkers = [];
+                    let reflectorTopics = { markers: null, status: null };
+
+                    function initReflectorTopics() {
+                        if (!rosbridgeConnected || !ros) return;
+                        if (!reflectorTopics.markers) {
+                            reflectorTopics.markers = new ROSLIB.Topic({
+                                ros: ros,
+                                name: '/reflector/markers',
+                                messageType: 'visualization_msgs/MarkerArray'
+                            });
+                            reflectorTopics.markers.subscribe((msg) => {
+                                reflectorMarkers = msg.markers || [];
+                                requestMapDraw();
+                            });
+                        }
+                        if (!reflectorTopics.selected) {
+                            reflectorTopics.selected = new ROSLIB.Topic({
+                                ros: ros,
+                                name: '/reflector/selected_triangle',
+                                messageType: 'std_msgs/String'
+                            });
+                        }
+                    }
+
+                    function teardownReflectorTopics() {
+                        Object.keys(reflectorTopics).forEach((k) => {
+                            const t = reflectorTopics[k];
+                            if (t) { try { t.unsubscribe(); } catch (e) { /* noop */ } }
+                            reflectorTopics[k] = null;
+                        });
+                        reflectorMarkers = [];
+                    }
+
+                    function distancePointToSegment(px, py, ax, ay, bx, by) {
+                        const dx = bx - ax;
+                        const dy = by - ay;
+                        const lenSq = dx * dx + dy * dy;
+                        if (lenSq <= 1e-6) return Math.hypot(px - ax, py - ay);
+                        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+                        const sx = ax + t * dx;
+                        const sy = ay + t * dy;
+                        return Math.hypot(px - sx, py - sy);
+                    }
+
+                    function handleReflectorTriangleClick(px, py) {
+                        if (!reflectorMarkers || !reflectorMarkers.length || !reflectorTopics.selected) return false;
+                        let best = null;
+                        reflectorMarkers.forEach(marker => {
+                            if (marker.action !== 0 || marker.ns !== 'reflector_triangle_candidates' || marker.type !== 5) return;
+                            const points = marker.points || [];
+                            for (let i = 0; i + 1 < points.length; i += 2) {
+                                const [ax, ay] = worldToPixel(points[i].x, points[i].y);
+                                const [bx, by] = worldToPixel(points[i + 1].x, points[i + 1].y);
+                                const dist = distancePointToSegment(px, py, ax, ay, bx, by);
+                                if (!best || dist < best.dist) {
+                                    best = { marker, dist };
+                                }
+                            }
+                        });
+                        if (!best || best.dist > 14) return false;
+                        const payload = String(best.marker.text || '{}');
+                        reflectorTopics.selected.publish(new ROSLIB.Message({ data: payload }));
+                        try {
+                            const parsed = JSON.parse(payload);
+                            showStatus(`Reflector triangle locked: ${(parsed.map_ids || []).join(', ')}`, 'success');
+                        } catch (error) {
+                            showStatus('Reflector triangle locked.', 'success');
+                        }
+                        return true;
+                    }
+
                     // ── PGV floor-code scanner PIP ────────────────────────────
                     let pgvTopics = { pose: null, tag: null, angle: null, code: null, corrected: null, diag: null, status: null, route: null, odom: null };
                     let pgvLastMsgTs = 0;
@@ -24599,7 +24800,7 @@
                     let pgvLatestRouteState = null;
                     let pgvLatestAngleDeg = null;     // R3138 reported angle
                     let pgvLatestOdomYawDeg = null;   // current robot yaw from odom
-                    const PGV_MOUNT_YAW_DEG = 180.0;  // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
+                    const PGV_MOUNT_YAW_DEG = 0.0;  // camera mount yaw offset (matches pgv_camera_mount_yaw_deg config)
 
                     function pgvComputeAndShowYaw() {
                         const angleDeg = pgvLatestAngleDeg;
@@ -24607,8 +24808,12 @@
                             pgvSetText('pgv-computed-yaw', '—');
                             return;
                         }
-                        // robot_heading = pgv_angle - mount_yaw
-                        let computedDeg = angleDeg - PGV_MOUNT_YAW_DEG;
+                        // robot_heading = mount_yaw - pgv_angle
+                        // pgv_angle is negated: R3138 reports the tag angle in
+                        // the sensor frame, which rotates opposite to the robot
+                        // (visible on this rear-camera diff-drive when turning).
+                        // Matches pgv_localizer byaw = mount_yaw - pyaw.
+                        let computedDeg = PGV_MOUNT_YAW_DEG - angleDeg;
                         // Normalize to [-180, 180]
                         computedDeg = ((computedDeg + 180) % 360 + 360) % 360 - 180;
                         pgvSetText('pgv-computed-yaw', computedDeg.toFixed(1) + '°');
@@ -27576,6 +27781,7 @@
 
                         drawFilterLayers();
                         drawFilterPreview();
+                        drawReflectorMarkers();
                         drawPoseEstimatePreview();
                         const layerPreferences = getMapLayerPreferences();
                         const visualProfile = getMapVisualScaleProfile();
@@ -28841,6 +29047,9 @@
                                 if (key === 'slow_zones' && (selected || visualProfile.detailLabels || mapPresentationState.debugOverlays)) {
                                     drawSpeedLabel(obj);
                                 }
+                                if (key === 'localization_zones') {
+                                    drawLocalizationZoneLabel(obj, selected || visualProfile.detailLabels || currentMapMode === 'filters');
+                                }
                             });
                         });
                     }
@@ -28871,6 +29080,88 @@
                             }, false);
                             ctx.restore();
                         }
+                    }
+
+                    function drawReflectorMarkers() {
+                        if (!reflectorMarkers || !reflectorMarkers.length) return;
+                        
+                        reflectorMarkers.forEach(marker => {
+                            if (marker.action !== 0) return; // Marker.ADD is 0
+                            
+                            const r = Math.round((marker.color.r || 0) * 255);
+                            const g = Math.round((marker.color.g || 0) * 255);
+                            const b = Math.round((marker.color.b || 0) * 255);
+                            const a = marker.color.a || 1.0;
+                            const colorStr = `rgba(${r},${g},${b},${a})`;
+                            
+                            if (marker.type === 2 || marker.type === 3) { // SPHERE (2) or CYLINDER (3)
+                                if (!marker.pose || !marker.pose.position) return;
+                                const [px, py] = worldToPixel(marker.pose.position.x, marker.pose.position.y);
+                                const markerScale = marker.scale.x || 0.2;
+                                const radius = (markerScale / 2) * (scale / (Number(mapData.resolution) || 0.05));
+                                
+                                ctx.beginPath();
+                                ctx.arc(px, py, radius, 0, 2 * Math.PI);
+                                ctx.fillStyle = colorStr;
+                                ctx.fill();
+                                if (marker.ns === 'known_reflectors') {
+                                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                                    ctx.lineWidth = 1;
+                                    ctx.stroke();
+                                }
+                                if (marker.text) {
+                                    ctx.save();
+                                    ctx.font = `${Math.max(10, Math.round(12 * dpr))}px sans-serif`;
+                                    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+                                    ctx.lineWidth = Math.max(2, 3 * dpr);
+                                    const label = String(marker.text);
+                                    const tx = px + radius + (4 * dpr);
+                                    const ty = py - radius - (2 * dpr);
+                                    ctx.strokeText(label, tx, ty);
+                                    ctx.fillText(label, tx, ty);
+                                    ctx.restore();
+                                }
+                            } else if (marker.type === 5) { // LINE_LIST (5)
+                                ctx.beginPath();
+                                ctx.strokeStyle = colorStr;
+                                ctx.lineWidth = (marker.scale.x || 0.03) * (scale / (Number(mapData.resolution) || 0.05));
+                                
+                                const points = marker.points || [];
+                                for (let i = 0; i < points.length; i += 2) {
+                                    if (i + 1 >= points.length) break;
+                                    const [x1, y1] = worldToPixel(points[i].x, points[i].y);
+                                    const [x2, y2] = worldToPixel(points[i+1].x, points[i+1].y);
+                                    ctx.moveTo(x1, y1);
+                                    ctx.lineTo(x2, y2);
+                                }
+                                ctx.stroke();
+                                if (marker.ns === 'reflector_triangle_candidates' && marker.text && points.length) {
+                                    let sumX = 0, sumY = 0, count = 0;
+                                    points.forEach(point => {
+                                        const [tx, ty] = worldToPixel(point.x, point.y);
+                                        sumX += tx;
+                                        sumY += ty;
+                                        count += 1;
+                                    });
+                                    if (count > 0) {
+                                        let label = String(marker.text || '');
+                                        try {
+                                            const parsed = JSON.parse(label);
+                                            label = `${parsed.id || 'T'} ${Array.isArray(parsed.map_ids) ? parsed.map_ids.join('-') : ''} r=${parsed.residual}`;
+                                        } catch (error) { /* keep raw label */ }
+                                        ctx.save();
+                                        ctx.font = `${Math.max(10, Math.round(11 * dpr))}px sans-serif`;
+                                        ctx.fillStyle = 'rgba(255, 230, 128, 0.95)';
+                                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+                                        ctx.lineWidth = Math.max(2, 3 * dpr);
+                                        ctx.strokeText(label, (sumX / count) + (4 * dpr), (sumY / count) - (4 * dpr));
+                                        ctx.fillText(label, (sumX / count) + (4 * dpr), (sumY / count) - (4 * dpr));
+                                        ctx.restore();
+                                    }
+                                }
+                            }
+                        });
                     }
 
                     function drawPoseEstimatePreview() {
@@ -29007,7 +29298,23 @@
                             drawFilterPolygon(points, style, true);
                         } else if (type === 'circle') {
                             drawFilterCircle(obj, style);
+                        } else if (type === 'point') {
+                            drawFilterPoint(obj, style);
                         }
+                    }
+
+                    function drawFilterPoint(obj, style) {
+                        if (obj.x === undefined || obj.y === undefined) return;
+                        const [px, py] = worldToPixel(obj.x, obj.y);
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(px, py, 6, 0, Math.PI * 2);
+                        ctx.fillStyle = style.fill || style.stroke;
+                        ctx.fill();
+                        ctx.lineWidth = style.lineWidth + 1;
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.stroke();
+                        ctx.restore();
                     }
 
                     function drawFilterRect(start, end, style) {
@@ -29101,6 +29408,35 @@
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText(text, px, py - 10);
+                        ctx.restore();
+                    }
+
+                    function getLocalizationModeLabel(mode) {
+                        switch (String(mode || '').toLowerCase()) {
+                            case 'reflector': return 'Reflector Zone';
+                            case 'qr': return 'QR Zone';
+                            case 'point_cloud':
+                            default: return 'Point Cloud Zone';
+                        }
+                    }
+
+                    function drawLocalizationZoneLabel(obj, emphasized = false) {
+                        const center = getFilterObjectCenter(obj);
+                        if (!center) return;
+                        const [px, py] = worldToPixel(center.x, center.y);
+                        const label = String(obj.label || getLocalizationModeLabel(obj.localization_mode));
+                        ctx.save();
+                        ctx.font = `800 ${emphasized ? 12 : 11}px Inter, Arial, sans-serif`;
+                        const w = ctx.measureText(label).width + 16;
+                        drawRoundedRect(ctx, px - w / 2, py - 11, w, 22, 6, {
+                            fillStyle: 'rgba(2, 6, 23, 0.70)',
+                            strokeStyle: 'rgba(125, 211, 252, 0.82)',
+                            lineWidth: emphasized ? 1.4 : 1.0,
+                        });
+                        ctx.fillStyle = 'rgba(224, 242, 254, 0.96)';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(label, px, py);
                         ctx.restore();
                     }
 
@@ -29484,6 +29820,10 @@
 
                         const [wx, wy] = pixelToWorld(x, y);
 
+                        if (!qrPlaceMode && !qrLineMode && handleReflectorTriangleClick(x, y)) {
+                            return;
+                        }
+
                         if (qrPlaceMode) {
                             qrPlaceAt(wx, wy);
                             return;
@@ -29589,6 +29929,19 @@
                             }
                             updateFilterControls();
                             drawMap();
+                            return;
+                        }
+
+                        if (filterDrawMode === 'point') {
+                            const obj = { type: 'point', x: wx, y: wy };
+                            applyFilterSpeedIfNeeded(obj);
+                            applyFilterSafetyIfNeeded(obj);
+                            applyFilterLocalizationIfNeeded(obj);
+                            addFilterObject(activeFilterLayer, obj).then(ok => {
+                                if (ok) {
+                                    cancelFilterDraw(true);
+                                }
+                            });
                             return;
                         }
 
@@ -30320,6 +30673,10 @@
                                 filterCursorWorld = { x: wx, y: wy };
                                 drawMap();
                             }
+                            return;
+                        }
+
+                        if (filterDrawMode === 'point') {
                             return;
                         }
 
@@ -32947,6 +33304,8 @@
                             if (filter.layer === 'no_go_zones') tagClass = 'tag-red';
                             if (filter.layer === 'restricted') tagClass = 'tag-amber';
                             if (filter.layer === 'slow_zones') tagClass = 'tag-blue';
+                            if (filter.layer === 'safety_zones') tagClass = 'tag-red';
+                            if (filter.layer === 'localization_zones') tagClass = 'tag-blue';
 
                             html = `
                                 <div class="property-group">
@@ -32968,6 +33327,26 @@
                                     <div class="property-group">
                                         <div class="property-label"><i class="fas fa-gauge-high"></i>Velocity Limit</div>
                                         <div class="property-value">${filter.speed}% of max</div>
+                                    </div>
+                                `;
+                            }
+
+                            if (filter.layer === 'safety_zones') {
+                                const dist = filter.safety_distance_m ?? 0.5;
+                                const off = Boolean(filter.lidar_safety_off);
+                                html += `
+                                    <div class="property-group">
+                                        <div class="property-label"><i class="fas fa-shield-halved"></i>Safety Clearance</div>
+                                        <div class="property-value">${off ? '<span style="color:var(--accent-estop);">DISABLED</span>' : dist.toFixed(2) + 'm'}</div>
+                                    </div>
+                                `;
+                            }
+
+                            if (filter.layer === 'localization_zones') {
+                                html += `
+                                    <div class="property-group">
+                                        <div class="property-label"><i class="fas fa-location-crosshairs"></i>Localization Mode</div>
+                                        <div class="property-value">${escapeHtml(getLocalizationModeLabel(filter.localization_mode))}</div>
                                     </div>
                                 `;
                             }
@@ -33328,6 +33707,37 @@
                     // Manual Mode Control
                     let manualModeActive = false;
 
+                    let isSuperOverrideActive = false;
+                    
+                    document.addEventListener('keydown', async (e) => {
+                        if (e.key === 'Shift' && manualModeActive && !isSuperOverrideActive) {
+                            isSuperOverrideActive = true;
+                            try {
+                                await fetch('/api/safety/super_override', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enable: true })
+                                });
+                                showStatus('SUPER OVERRIDE ACTIVE - ALL SAFETY BYPASSED', 'error');
+                            } catch (err) {}
+                        }
+                    });
+                    
+                    document.addEventListener('keyup', async (e) => {
+                        if (e.key === 'Shift' && isSuperOverrideActive) {
+                            isSuperOverrideActive = false;
+                            try {
+                                await fetch('/api/safety/super_override', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enable: false })
+                                });
+                                showStatus('Super override disabled', 'info');
+                            } catch (err) {}
+                        }
+                    });
+
+
                     async function setManualMode(active, showMessage = true) {
                         const btns = [
                             document.getElementById('manual-mode-btn'),
@@ -33343,6 +33753,16 @@
                                 throw new Error(data.message || 'Mode switch failed');
                             }
 
+                            if (!active && isSuperOverrideActive) {
+                                isSuperOverrideActive = false;
+                                try {
+                                    await fetch('/api/safety/super_override', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ enable: false })
+                                    });
+                                } catch (err) {}
+                            }
                             manualModeActive = active;
                             if (pip) {
                                 pip.classList.toggle('active', active);

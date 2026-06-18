@@ -66,7 +66,7 @@ pgv_localizer:
     # The R3138 relative angle between camera and tag encodes absolute robot heading.
     # Tag map yaw is NOT involved. Flip mount to 180.0 if heading is 180° off.
     use_pgv_angle_for_yaw: true
-    pgv_camera_mount_yaw_deg: 180.0
+    pgv_camera_mount_yaw_deg: 0.0
     max_reader_age_s: 0.5
     # Correction gates. max_offset_m is a sanity bound on how far the tag may sit
     # from the reader's optical centre. The R3138 only reports a tag while it is
@@ -93,7 +93,7 @@ pgv_localizer:
     #   pure_pgv - this node owns localization: predict on wheel odometry, correct
     #              at tags, broadcast a filtered map->odom TF. Turn AMCL OFF when
     #              using this mode (only one node may own map->odom).
-    localization_mode: amcl
+    localization_mode: pure_pgv
     # Use EKF fused odom so pgv_localizer and the odom->base TF share the
     # same data source — map->odom and odom->base then cancel consistently.
     odom_topic: /odometry/filtered
@@ -154,7 +154,7 @@ route_follower:
     cmd_vel_topic: /cmd_vel_tracker
     odom_topic: /wheel_controller/odom
     control_rate_hz: 20.0
-    cruise_speed: 0.50
+    cruise_speed: 0.5
     approach_speed: 0.3
     max_angular: 0.8
     k_lateral: 1.5

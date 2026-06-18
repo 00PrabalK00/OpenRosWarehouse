@@ -138,6 +138,7 @@ class StackManager(Node):
         super().__init__("stack_manager")
 
         self.current_mode = "stopped"
+        self.nav_mode = None
         self.nav_proc = None
         self.slam_proc = None
         self.nav_log_fp = None
@@ -401,9 +402,9 @@ class StackManager(Node):
         if not mode:
             return
 
-        if mode not in ('nav', 'slam', 'stop'):
+        if mode not in ('nav', 'pgv_nav', 'reflector_nav', 'slam', 'stop'):
             self.get_logger().warn(
-                f'Ignoring invalid startup_mode="{mode}" (expected nav|slam|stop).'
+                f'Ignoring invalid startup_mode="{mode}" (expected nav|pgv_nav|reflector_nav|slam|stop).'
             )
             return
 
@@ -431,6 +432,26 @@ class StackManager(Node):
                 else:
                     response.ok = False
                     response.message = "Failed to start NAV stack."
+
+            elif mode == "pgv_nav":
+                self._stop_slam()
+                if self._start_nav(pgv_mode=True):
+                    self.current_mode = "pgv_nav"
+                    response.ok = True
+                    response.message = "Switched to PGV NAV mode."
+                else:
+                    response.ok = False
+                    response.message = "Failed to start PGV NAV stack."
+
+            elif mode == "reflector_nav":
+                self._stop_slam()
+                if self._start_nav(reflector_mode=True):
+                    self.current_mode = "reflector_nav"
+                    response.ok = True
+                    response.message = "Switched to REFLECTOR NAV mode."
+                else:
+                    response.ok = False
+                    response.message = "Failed to start REFLECTOR NAV stack."
 
             elif mode == "slam":
                 self._stop_nav()
@@ -467,6 +488,7 @@ class StackManager(Node):
             payload = {
                 "mode": self.current_mode,
                 "nav_running": self._is_running(self.nav_proc),
+                "nav_mode": str(self.nav_mode or ''),
                 "slam_running": self._is_running(self.slam_proc),
                 "nav_ready": bool(nav_health.get("nav_ready", False)),
                 "nav_lifecycle_state": str(nav_health.get("nav_lifecycle_state", "inactive")),
@@ -527,6 +549,10 @@ class StackManager(Node):
         # FastDDS shared-memory transport is currently unstable on this host
         # and causes intermittent topic discovery failures for spawned stacks.
         env.setdefault("FASTDDS_BUILTIN_TRANSPORTS", "UDPv4")
+        # Ensure child stacks inherit the same ROS_DOMAIN_ID as stack_manager
+        current_domain = os.getenv("ROS_DOMAIN_ID")
+        if current_domain:
+            env["ROS_DOMAIN_ID"] = current_domain
 
         log_fp, log_path = self._open_stack_log(stack_name)
         self.get_logger().info(f"Launching {stack_name} stack: {cmd}")
@@ -643,10 +669,14 @@ class StackManager(Node):
         self.get_logger().info(f"{stack_name} stack stopped.")
         return None
 
-    def _start_nav(self):
+    def _start_nav(self, pgv_mode: bool = False, reflector_mode: bool = False):
+        requested_mode = "pgv_nav" if pgv_mode else ("reflector_nav" if reflector_mode else "nav")
         if self.nav_proc is not None and self.nav_proc.poll() is None:
-            self.get_logger().info("Nav2 stack already running.")
-            return True
+            if self.nav_mode == requested_mode:
+                self.get_logger().info(f"Nav2 stack already running in {requested_mode} mode.")
+                return True
+            self.get_logger().info(f"Restarting Nav2 stack to switch {self.nav_mode or 'unknown'} -> {requested_mode}.")
+            self._stop_nav()
 
         if not os.path.isfile(self.setup_bash):
             self.get_logger().error(f"Setup bash not found: {self.setup_bash}")
@@ -666,17 +696,24 @@ class StackManager(Node):
 
         wrapper_script = os.path.join(self.repo_dir, 'scripts', 'nav2_launch_wrapper.sh')
         if os.path.isfile(wrapper_script):
+            prefix = ""
+            if pgv_mode:
+                prefix = "NEXT_PGV_NAV_MODE=1 "
+            elif reflector_mode:
+                prefix = "NEXT_REFLECTOR_NAV_MODE=1 "
+            
             cmd = (
                 f"source {shlex.quote(self.setup_bash)} && "
-                f"bash {shlex.quote(wrapper_script)} {sim_arg}"
+                f"{prefix}bash {shlex.quote(wrapper_script)} {sim_arg}"
             )
         else:
             self.get_logger().warn(
                 f"Nav wrapper not found at {wrapper_script}; falling back to navigation.launch.py"
             )
+            launch_file = 'navigation.launch.py'
             cmd = (
                 f"source {shlex.quote(self.setup_bash)} && "
-                f"ros2 launch {shlex.quote(self.bringup_package)} navigation.launch.py {sim_arg}"
+                f"ros2 launch {shlex.quote(self.bringup_package)} {launch_file} {sim_arg}"
             )
 
         try:
@@ -686,7 +723,9 @@ class StackManager(Node):
             self.nav_proc = None
             self.nav_log_fp = None
             self.nav_pgid = None
+            self.nav_mode = None
             return False
+        self.nav_mode = requested_mode
         self._ensure_nav_lifecycle_started()
         return True
 
@@ -700,6 +739,7 @@ class StackManager(Node):
         self._close_log(self.nav_log_fp)
         self.nav_log_fp = None
         self.nav_pgid = None
+        self.nav_mode = None
 
     def _start_slam(self):
         if self.slam_proc is not None and self.slam_proc.poll() is None:

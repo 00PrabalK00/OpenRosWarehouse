@@ -2,8 +2,9 @@
 
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
@@ -17,6 +18,9 @@ def generate_launch_description():
     enable_db_viewer = LaunchConfiguration('enable_db_viewer')
     db_viewer_port = LaunchConfiguration('db_viewer_port')
     enable_auto_reloc = LaunchConfiguration('enable_auto_reloc')
+    enable_pgv_localization = LaunchConfiguration('enable_pgv_localization')
+    pgv_port = LaunchConfiguration('pgv_port')
+    pgv_tag_map = LaunchConfiguration('pgv_tag_map')
     enable_shelf_detector = LaunchConfiguration('enable_shelf_detector')
     enable_ui_scan_overlay_processing = LaunchConfiguration('enable_ui_scan_overlay_processing')
     rosbridge_port = LaunchConfiguration('rosbridge_port')
@@ -68,6 +72,16 @@ def generate_launch_description():
     if auto_reloc_params is not None:
         auto_reloc_param_sources.append(auto_reloc_params)
 
+    pgv_launch = None
+    pgv_default_tag_map = ''
+    try:
+        pgv_share = get_package_share_directory('next_ros2ws_pgv')
+        pgv_launch = os.path.join(pgv_share, 'launch', 'pgv_localization.launch.py')
+        pgv_default_tag_map = os.path.join(pgv_share, 'config', 'tag_map.yaml')
+    except PackageNotFoundError:
+        pgv_launch = None
+        pgv_default_tag_map = ''
+
     launch_items = [
         DeclareLaunchArgument(
             'use_sim_time',
@@ -103,6 +117,21 @@ def generate_launch_description():
             'enable_auto_reloc',
             default_value='true',
             description='Launch the auto relocalization helper'
+        ),
+        DeclareLaunchArgument(
+            'enable_pgv_localization',
+            default_value='false',
+            description='Launch PGV Matrix Tag localization inside this bringup. Default false; PGV mode starts it explicitly.'
+        ),
+        DeclareLaunchArgument(
+            'pgv_port',
+            default_value='/dev/next/pgv',
+            description='Serial device used by the PGV Matrix Tag reader'
+        ),
+        DeclareLaunchArgument(
+            'pgv_tag_map',
+            default_value=pgv_default_tag_map,
+            description='Matrix Tag map YAML used by PGV localization'
         ),
         DeclareLaunchArgument(
             'enable_shelf_detector',
@@ -225,6 +254,17 @@ def generate_launch_description():
             ],
             condition=IfCondition(enable_auto_reloc),
         ),
+
+        *([
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(pgv_launch),
+                launch_arguments={
+                    'port': pgv_port,
+                    'tag_map': pgv_tag_map,
+                }.items(),
+                condition=IfCondition(enable_pgv_localization),
+            )
+        ] if pgv_launch else []),
 
         # Map/state services
         Node(

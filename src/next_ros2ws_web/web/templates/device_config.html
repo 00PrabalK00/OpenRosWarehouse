@@ -503,6 +503,32 @@
     .insp-pane::-webkit-scrollbar { width: 5px; }
     .insp-pane::-webkit-scrollbar-thumb { background: var(--border-chrome); border-radius: 3px; }
 
+    /* ── Canvas legend ───────────────────────────────────────── */
+    #canvas-legend {
+      position: absolute; left: 10px; bottom: 34px; z-index: 5;
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 6px 8px; border-radius: 4px;
+      background: rgba(13,16,22,0.82); border: 1px solid var(--border-chrome);
+      pointer-events: none; max-width: 150px;
+    }
+    #canvas-legend .lg-row {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 9px; color: var(--text-secondary); font-family: 'Roboto Mono', monospace;
+      white-space: nowrap;
+    }
+    #canvas-legend .lg-swatch {
+      width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+      border: 1.5px solid; box-sizing: border-box;
+    }
+
+    /* ── Canvas picking feedback ─────────────────────────────── */
+    #robot-svg [data-part]:hover { filter: brightness(1.45); }
+    #robot-svg .link-marker:hover circle[pointer-events="none"] { fill: var(--accent-blue); }
+    #robot-svg text.canvas-label,
+    #robot-svg .robot-heading-arrow,
+    #robot-svg .robot-origin-cross,
+    #robot-svg .robot-link-edge { pointer-events: none; }
+
     /* ── Inspector content primitives ───────────────────────────── */
     /* Section divider */
     .insp-section {
@@ -666,20 +692,38 @@
       fill: rgba(38,105,200,0.06); stroke: rgba(66,153,225,0.55); stroke-width: 1.5;
     }
     .robot-chassis {
-      fill: rgba(35,41,51,0.9); stroke: rgba(74,85,104,0.6); stroke-width: 1;
+      fill: rgba(45,53,66,0.85); stroke: rgba(113,128,150,0.85); stroke-width: 1.4;
     }
     .robot-wheel {
-      fill: rgba(20,20,28,0.95); stroke: rgba(86,154,86,0.7); stroke-width: 1.5;
+      fill: rgba(40,72,44,0.75); stroke: rgba(134,239,172,0.9); stroke-width: 1.6;
     }
     .robot-caster {
-      fill: rgba(25,29,38,0.9); stroke: rgba(113,128,150,0.5); stroke-width: 1;
+      fill: rgba(66,55,28,0.8); stroke: rgba(253,230,138,0.8); stroke-width: 1.3;
     }
     .robot-sensor-lidar {
-      fill: rgba(192,132,252,0.12); stroke: rgba(192,132,252,0.6); stroke-width: 1.5;
+      fill: rgba(192,132,252,0.22); stroke: rgba(192,132,252,0.95); stroke-width: 1.8;
     }
     .robot-sensor-camera {
-      fill: rgba(125,211,252,0.1); stroke: rgba(125,211,252,0.55); stroke-width: 1.2;
+      fill: rgba(125,211,252,0.2); stroke: rgba(125,211,252,0.9); stroke-width: 1.6;
     }
+    .robot-sensor-generic {
+      fill: rgba(94,234,212,0.18); stroke: rgba(94,234,212,0.85); stroke-width: 1.5;
+    }
+    .robot-actuator {
+      fill: rgba(237,137,54,0.16); stroke: rgba(237,137,54,0.85); stroke-width: 1.5;
+    }
+    .robot-power {
+      fill: rgba(250,204,21,0.14); stroke: rgba(250,204,21,0.75); stroke-width: 1.4;
+    }
+    .robot-io {
+      fill: rgba(148,163,184,0.16); stroke: rgba(148,163,184,0.7); stroke-width: 1.2;
+    }
+    .robot-device {
+      fill: rgba(96,165,250,0.14); stroke: rgba(96,165,250,0.7); stroke-width: 1.3;
+    }
+    .robot-glyph { pointer-events: none; }
+    .robot-glyph line { stroke: rgba(230,237,243,0.75); stroke-width: 1.2; }
+    .robot-glyph circle { fill: rgba(230,237,243,0.8); }
     .robot-fov-arc {
       fill: none; stroke: rgba(192,132,252,0.25); stroke-width: 1;
       stroke-dasharray: 4 3;
@@ -1059,6 +1103,7 @@
           <span class="ruler-label">0.5 m</span>
         </div>
 
+        <div id="canvas-legend" style="display:none;"></div>
       </div><!-- #robot-canvas-area -->
     </div><!-- #canvas-workspace -->
 
@@ -1074,6 +1119,7 @@
 
       <div class="insp-tabs">
         <button class="insp-tab active" data-tab="properties" onclick="openInspectorTab('properties')">Properties</button>
+        <button class="insp-tab" data-tab="params" onclick="openInspectorTab('params')">Params</button>
         <button class="insp-tab" data-tab="hierarchy" onclick="openInspectorTab('hierarchy')">Hierarchy</button>
         <button class="insp-tab" data-tab="validation" onclick="openInspectorTab('validation')">Check</button>
         <button class="insp-tab" data-tab="history" onclick="openInspectorTab('history')">History</button>
@@ -1257,6 +1303,30 @@
 
         </div><!-- #hierarchy-tree -->
       </div><!-- #pane-hierarchy -->
+
+      <!-- ── PARAMS TAB ───────────────────────────────────────── -->
+      <div class="insp-pane" id="pane-params">
+        <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);flex-shrink:0;display:flex;gap:5px;align-items:center;">
+          <select id="params-node-select" class="prop-select" style="flex:1;min-width:0;" onchange="handleParamsNodeChange(this.value)">
+            <option value="">Select a ROS node…</option>
+          </select>
+          <button class="btn" style="height:24px;padding:0 8px;font-size:9px;" onclick="loadNodeParams()" title="Load parameters from the selected node"><i class="fas fa-sync"></i></button>
+        </div>
+        <div id="params-list" style="flex:1;overflow-y:auto;">
+          <div class="insp-section">Node Parameters</div>
+          <div style="padding:10px;font-size:10px;color:var(--text-tertiary);">
+            Select a node and press <i class="fas fa-sync" style="font-size:8px;"></i> to read its live parameters.
+            Pick a sensor in the Hierarchy tab to jump straight to its driver node.
+          </div>
+        </div>
+        <div id="params-apply-bar" style="padding:8px 10px;border-top:1px solid var(--border-chrome);flex-shrink:0;display:none;gap:5px;">
+          <button class="btn btn-primary" style="flex:1;" id="params-apply-btn" onclick="applyNodeParams()"><i class="fas fa-check"></i> Apply Changes</button>
+          <button class="btn" onclick="loadNodeParams()"><i class="fas fa-undo"></i> Reload</button>
+        </div>
+        <div id="params-components" style="flex-shrink:0;max-height:38%;overflow-y:auto;border-top:1px solid var(--border-chrome);">
+          <!-- Runtime launch/stop controls populated by JS -->
+        </div>
+      </div><!-- #pane-params -->
 
       <!-- ── VALIDATION TAB ────────────────────────────────────── -->
       <div class="insp-pane" id="pane-validation">
@@ -1525,6 +1595,14 @@ const DC = {
   dragState: null,
   inspectorCollapsed: false,
   pending3DFit: false,
+  liveSensors: [],
+  liveNodes: [],
+  liveComponents: [],
+  liveLoadedAt: 0,
+  selectedLiveTopic: null,
+  paramsNode: '',
+  paramsValues: {},
+  paramsEdits: {},
 };
 
 const DEVICE_INSPECTOR_COLLAPSED_KEY = 'deviceConfigInspectorCollapsed';
@@ -1902,7 +1980,7 @@ function dcModeConfig(mode) {
       preferredView: 'iso',
       preferredTab: 'properties',
       layers: { frames: true, collision: true, sensors: true, safety: false },
-      labelsByDefault: false,
+      labelsByDefault: true,
       categories: ['Camera', 'Laser', 'Distance Sensor', 'GNSS', 'Scanner', 'Trigger', 'Force Sensor'],
       fallbackMatch: /(lidar|laser|scan|camera|sensor|imu|gnss|gps|rfid|barcode|trigger|distance)/,
     },
@@ -2022,6 +2100,14 @@ function openInspectorTab(tab) {
   });
   
   if (tab === 'history') loadHistory();
+  if (tab === 'params') {
+    if (!DC.liveSensors.length && !DC.liveNodes.length) {
+      loadLiveSensors().catch(() => {});
+    } else {
+      renderParamsNodeOptions();
+      renderRuntimeComponents();
+    }
+  }
   if (tab === 'system') {
     loadSystemUsers();
     loadSystemEvents();
@@ -2620,6 +2706,7 @@ let PART_DATA = {
 function selectLink(linkName, options = {}) {
   const preserveTab = Boolean(options && options.preserveTab);
   DC.selectedLink = linkName;
+  DC.selectedLiveTopic = null;
   renderCanvasFromModel();
 
   // Highlight tree node
@@ -2673,6 +2760,57 @@ function dcShapeKind(shape) {
   return type || 'device';
 }
 
+/* Canvas styling: one visual identity per device family so the viewport
+   reads at a glance instead of everything rendering as the same dark box. */
+function dcCanvasClassForShape(shape) {
+  const kind = dcShapeKind(shape);
+  const name = String(shape?.id || shape?.name || '').toLowerCase();
+  if (kind === 'wheel') return 'robot-wheel';
+  if (kind === 'laser') return 'robot-sensor-lidar';
+  if (kind === 'camera') return 'robot-sensor-camera';
+  if (['gnss', 'scanner', 'trigger', 'force_sensor', 'distance_sensor', 'distance_mode_group'].includes(kind) || /imu|gyro|accel|sensor/.test(name)) return 'robot-sensor-generic';
+  if (['gripper', 'arm', 'fork', 'hook', 'jack', 'controller'].includes(kind)) return 'robot-actuator';
+  if (['battery', 'charger'].includes(kind)) return 'robot-power';
+  if (['digital_input', 'digital_output', 'digital_output_motor', 'indicator', 'condition', 'container', 'dispatcher_parameters'].includes(kind)) return 'robot-io';
+  if (/caster/.test(name)) return 'robot-caster';
+  if (kind === 'chassis' || /chassis|body|base/.test(name)) return 'robot-chassis';
+  return 'robot-device';
+}
+
+const DC_CANVAS_LEGEND = {
+  'robot-chassis': ['Chassis', 'rgba(113,128,150,0.9)'],
+  'robot-wheel': ['Wheel / Motor', 'rgba(134,239,172,0.9)'],
+  'robot-caster': ['Caster', 'rgba(253,230,138,0.8)'],
+  'robot-sensor-lidar': ['Laser / LiDAR', 'rgba(192,132,252,0.95)'],
+  'robot-sensor-camera': ['Camera', 'rgba(125,211,252,0.9)'],
+  'robot-sensor-generic': ['Other Sensor', 'rgba(94,234,212,0.85)'],
+  'robot-actuator': ['Actuator', 'rgba(237,137,54,0.85)'],
+  'robot-power': ['Battery / Charger', 'rgba(250,204,21,0.75)'],
+  'robot-io': ['I/O / Indicator', 'rgba(148,163,184,0.7)'],
+  'robot-device': ['Device', 'rgba(96,165,250,0.7)'],
+  'robot-fov-arc': ['Collision Outline', 'rgba(192,132,252,0.45)'],
+  'robot-safety-zone': ['Safety Zone', 'rgba(237,137,54,0.55)'],
+  'link-marker': ['TF Frame', 'rgba(66,153,225,0.85)'],
+};
+
+function dcUpdateCanvasLegend(usedClasses) {
+  const legend = document.getElementById('canvas-legend');
+  if (!legend) return;
+  if (DC.canvasView === 'iso' || !usedClasses || !usedClasses.size) {
+    legend.style.display = 'none';
+    return;
+  }
+  const rows = Object.entries(DC_CANVAS_LEGEND)
+    .filter(([cls]) => usedClasses.has(cls))
+    .map(([_cls, [label, color]]) => {
+      const fill = color.replace(/[\d.]+\)$/, '0.2)');
+      return `<div class="lg-row"><span class="lg-swatch" style="border-color:${color};background:${fill};"></span>${label}</div>`;
+    })
+    .join('');
+  legend.innerHTML = rows;
+  legend.style.display = rows ? '' : 'none';
+}
+
 function dcRebuildPartData() {
   const base = String(DC.model?.base_link || 'base_link');
   const next = {
@@ -2720,11 +2858,56 @@ function dcRebuildPartData() {
   PART_DATA = next;
 }
 
-function handleCanvasClick(e) {
-  const target = e.target.closest('[data-part]');
-  if (target) {
-    selectLink(target.dataset.part);
+/* Smart canvas picking: overlapping geometry (frame markers sitting on top of
+   sensors, collision outlines over the chassis, …) is resolved by priority,
+   and clicking the same spot again cycles through everything under the cursor. */
+let dcSuppressNextCanvasClick = false;
+
+function dcCanvasPartPriority(el) {
+  if (String(el.getAttribute('data-draggable-kind') || '') === 'link') return 2;
+  const cls = String(el.getAttribute('class') || '');
+  if (/robot-sensor/.test(cls)) return 0;
+  if (/robot-wheel/.test(cls)) return 1;
+  if (/robot-fov-arc/.test(cls)) return 4;
+  if (/robot-safety-zone/.test(cls)) return 5;
+  return 3;
+}
+
+function dcCanvasPartsUnderPoint(clientX, clientY) {
+  const stack = (document.elementsFromPoint(clientX, clientY) || [])
+    .map(el => (el && typeof el.closest === 'function') ? el.closest('#robot-svg [data-part]') : null)
+    .filter(Boolean);
+  const unique = [];
+  stack.forEach(el => { if (!unique.includes(el)) unique.push(el); });
+  unique.sort((a, b) => dcCanvasPartPriority(a) - dcCanvasPartPriority(b));
+  return unique;
+}
+
+function dcPickCanvasPart(event) {
+  const candidates = dcCanvasPartsUnderPoint(event.clientX, event.clientY);
+  if (!candidates.length) return '';
+  const names = candidates.map(el => String(el.getAttribute('data-part') || ''));
+  const currentIdx = names.indexOf(String(DC.selectedLink || ''));
+  if (currentIdx >= 0 && names.length > 1) {
+    return names[(currentIdx + 1) % names.length];
   }
+  return names[0];
+}
+
+function handleCanvasClick(e) {
+  if (dcSuppressNextCanvasClick) {
+    dcSuppressNextCanvasClick = false;
+    return;
+  }
+  if (e.target.closest('#robot-3d-view')) return;
+  const picked = dcPickCanvasPart(e);
+  if (picked) {
+    selectLink(picked);
+    const others = dcCanvasPartsUnderPoint(e.clientX, e.clientY).length - 1;
+    if (others > 0) dcSetMessage(`Selected ${picked} — click again to cycle ${others} overlapping object${others === 1 ? '' : 's'}`);
+    return;
+  }
+  showOverview();
 }
 
 function selectAndShowIssue(partName) {
@@ -2753,6 +2936,7 @@ function showDetailEditor(linkName, { revealProperties = true } = {}) {
 
 function showOverview() {
   DC.selectedLink = null;
+  DC.selectedLiveTopic = null;
   renderCanvasFromModel();
   document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('selected'));
   document.querySelectorAll('[data-part]').forEach(el => el.classList.remove('selected-highlight'));
@@ -2836,10 +3020,15 @@ function buildDetailHTML(name, d) {
     `;
   }
 
+  const shapeTopic = shape ? String(shape.topic || shape.scan_topic || shape.image_topic || '').trim() : '';
+  const liveSensorMatch = shapeTopic ? dcFindLiveSensor(shapeTopic) : null;
+  const liveNode = liveSensorMatch ? (liveSensorMatch.publisher_nodes || [])[0] || '' : '';
+
   return `
     <div style="display:flex;align-items:center;gap:8px;padding:10px 10px 6px;">
       <span style="font-size:12px;font-weight:700;color:var(--text-primary);">${name}</span>
       <span class="tag ${tagClass(d.type)}">${d.type}</span>
+      ${liveSensorMatch ? `<span class="tag ${liveSensorMatch.alive ? 'tag-green' : 'tag-amber'}">${liveSensorMatch.alive ? 'live' : 'idle'}</span>` : ''}
       ${d.hasError ? `<span class="val-chip error" style="margin-left:auto;"><i class="fas fa-times-circle"></i> error</span>` : ''}
       ${(!d.hasError && d.isWarn) ? `<span class="val-chip warn" style="margin-left:auto;"><i class="fas fa-exclamation-triangle"></i> warn</span>` : ''}
     </div>
@@ -2847,6 +3036,7 @@ function buildDetailHTML(name, d) {
     ${sections}
     <div style="padding:8px 10px;border-top:1px solid var(--border-chrome);margin-top:4px;display:flex;gap:5px;flex-wrap:wrap;">
       <button class="btn btn-primary" style="flex:1;" onclick="handleApplyChanges('${name}')"><i class="fas fa-check"></i> Apply</button>
+      ${liveNode ? `<button class="btn" onclick="openParamsForNode('${dcJsString(liveNode)}')" title="Edit live parameters of ${dcAttr(liveNode)}"><i class="fas fa-sliders-h"></i> Params</button>` : ''}
       <button class="btn" onclick="handleToggleSelectedEnabled()"><i class="fas fa-power-off"></i> ${d.enabled === false ? 'Enable' : 'Disable'}</button>
       <button class="btn" onclick="handleDuplicateSelected()"><i class="fas fa-copy"></i></button>
       <button class="btn" onclick="handleDeleteSelected()"><i class="fas fa-trash"></i></button>
@@ -3201,6 +3391,7 @@ function renderHierarchyFromModel() {
     </div>
     ${linkTree || '<div class="tree-node" style="opacity:.55;"><div class="tree-node-main"><div class="tree-node-name">No transform frames yet</div><div class="tree-node-sub">Add a base frame to start the robot layout.</div></div></div>'}
     ${unlinkedDevices ? `<div class="insp-section">Unattached Objects</div>${unlinkedDevices}` : ''}
+    ${dcLiveSensorTreeHTML()}
   `;
 }
 
@@ -3326,8 +3517,7 @@ function renderCanvasFromModel() {
     if (!DC.labelsVisible) return false;
     if (view !== 'top' && mode !== 'diagnostics') return false;
     if (/_shape_\d+$/i.test(id) && mode !== 'diagnostics') return false;
-    if (mode === 'structure') return false;
-    return mode === 'sensors' || mode === 'diagnostics';
+    return true;
   };
   const shouldShowLinkLabel = (link) => {
     const id = String(link?.name || '').trim();
@@ -3357,6 +3547,7 @@ function renderCanvasFromModel() {
       view = 'top';
       dcSyncCanvasViewportState();
     } else {
+      dcUpdateCanvasLegend(new Set());
       return;
     }
   }
@@ -3411,13 +3602,43 @@ function renderCanvasFromModel() {
     const selected = pose.id && pose.id === selectedId;
     const source = String(shape?.source || '');
     if (source === 'visual') cls = 'robot-visual' + (selected ? ' selected' : '');
-    const opacity = selectedId && !selected && source !== 'visual' ? ' opacity="0.58"' : '';
+    const opacity = selectedId && !selected && source !== 'visual' ? ' opacity="0.75"' : '';
     if (type === 'cylinder' || type === 'sphere') {
       extendBounds(pose.x, pose.y, pose.radius);
       return `<circle class="${cls}" data-part="${dcAttr(pose.id)}" data-draggable-kind="shape" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${pose.radius.toFixed(2)}"${opacity} ${fillExtra}/>`;
     }
     extendBounds(pose.x, pose.y, pose.width / 2, pose.length / 2);
     return `<rect class="${cls}" data-part="${dcAttr(pose.id)}" data-draggable-kind="shape" x="${(-pose.width / 2).toFixed(2)}" y="${(-pose.length / 2).toFixed(2)}" width="${pose.width.toFixed(2)}" height="${pose.length.toFixed(2)}" rx="6" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"${opacity} ${fillExtra}/>`;
+  };
+  const dcProjectedAreaPx = (shape) => {
+    const pose = project(shape);
+    const type = String(shape?.type || 'box').toLowerCase();
+    if (type === 'cylinder' || type === 'sphere') return Math.PI * pose.radius * pose.radius;
+    return pose.width * pose.length;
+  };
+  // Small orientation/identity glyphs so a wheel, lidar and camera are
+  // recognizable even at a glance (top view only).
+  const renderShapeGlyph = (shape) => {
+    if (view !== 'top') return '';
+    const kind = dcShapeKind(shape);
+    const pose = project(shape);
+    if (kind === 'wheel') {
+      const half = Math.max(4, (pose.length / 2) * 0.66);
+      return `<g class="robot-glyph" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"><line x1="0" y1="${(-half).toFixed(2)}" x2="0" y2="${half.toFixed(2)}"/></g>`;
+    }
+    if (kind === 'laser') {
+      const r = Math.max(5, pose.radius || Math.min(pose.width, pose.length) / 2);
+      const ticks = [0, 60, 120, 180, 240, 300].map(deg => {
+        const rad = deg * Math.PI / 180;
+        return `<line x1="${(Math.cos(rad) * r * 0.45).toFixed(2)}" y1="${(Math.sin(rad) * r * 0.45).toFixed(2)}" x2="${(Math.cos(rad) * r * 0.85).toFixed(2)}" y2="${(Math.sin(rad) * r * 0.85).toFixed(2)}"/>`;
+      }).join('');
+      return `<g class="robot-glyph" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)})"><circle r="1.8"/>${ticks}</g>`;
+    }
+    if (kind === 'camera') {
+      const len = Math.max(6, pose.length * 0.8);
+      return `<g class="robot-glyph" transform="translate(${pose.x.toFixed(2)} ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"><circle r="1.8"/><line x1="0" y1="0" x2="0" y2="${(-len).toFixed(2)}"/></g>`;
+    }
+    return '';
   };
   const sensorLabels = visibleBodyShapes.map(shape => {
     const pose = project(shape);
@@ -3453,7 +3674,7 @@ function renderCanvasFromModel() {
     </g>
   ` : '';
   const safetyLayer = showSafety
-    ? `${safetyShapes.filter(shouldRenderShapeInMode).length ? safetyShapes.filter(shouldRenderShapeInMode).map(shape => renderShape(shape, 'robot-safety-zone')).join('') : '<ellipse class="robot-safety-zone" cx="0" cy="0" rx="110" ry="96" opacity="0.42"/>'}`
+    ? `${safetyShapes.filter(shouldRenderShapeInMode).length ? safetyShapes.filter(shouldRenderShapeInMode).map(shape => renderShape(shape, 'robot-safety-zone')).join('') : '<ellipse class="robot-safety-zone" pointer-events="none" cx="0" cy="0" rx="110" ry="96" opacity="0.42"/>'}`
     : '';
   if (showSafety && !safetyShapes.length) extendBounds(0, 0, 110, 96);
   const collisionLayer = showCollision
@@ -3478,9 +3699,9 @@ function renderCanvasFromModel() {
     const opacity = selected ? 0.28 : 0.16;
     extendBounds(pose.x, pose.y, rangePx, rangePx);
     if (/camera/.test(kind)) {
-      return `<path class="robot-camera-fov" d="M ${pose.x.toFixed(2)},${pose.y.toFixed(2)} L ${x1.toFixed(2)},${y1.toFixed(2)} A ${rangePx.toFixed(2)},${rangePx.toFixed(2)} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" opacity="${opacity.toFixed(2)}"/>`;
+      return `<path class="robot-camera-fov" pointer-events="none" d="M ${pose.x.toFixed(2)},${pose.y.toFixed(2)} L ${x1.toFixed(2)},${y1.toFixed(2)} A ${rangePx.toFixed(2)},${rangePx.toFixed(2)} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" opacity="${opacity.toFixed(2)}"/>`;
     }
-    return `<circle class="robot-fov-arc" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${rangePx.toFixed(2)}" opacity="${selected ? '0.32' : '0.18'}"/>`;
+    return `<circle class="robot-fov-arc" pointer-events="none" cx="${pose.x.toFixed(2)}" cy="${pose.y.toFixed(2)}" r="${rangePx.toFixed(2)}" opacity="${selected ? '0.32' : '0.18'}"/>`;
   }).join('') : '';
 
   const linkFrames = showFrames ? (DC.model.links || []).filter(shouldRenderLinkInMode).map(link => {
@@ -3490,9 +3711,10 @@ function renderCanvasFromModel() {
     return `
       <g class="link-marker" data-part="${dcAttr(link.name)}" data-draggable-kind="link" transform="translate(${pose.x.toFixed(2)}, ${pose.y.toFixed(2)}) rotate(${pose.yaw.toFixed(2)})"
          opacity="${opacity}" style="cursor:pointer;">
-        <circle r="3.5" fill="${selected ? 'var(--accent-blue)' : 'var(--text-tertiary)'}" />
-        <line x1="0" y1="0" x2="14" y2="0" stroke="rgba(252,129,129,0.85)" stroke-width="1.5" />
-        <line x1="0" y1="0" x2="0" y2="-14" stroke="rgba(134,239,172,0.85)" stroke-width="1.5" />
+        <circle r="8" fill="transparent" stroke="none" />
+        <circle r="3.5" fill="${selected ? 'var(--accent-blue)' : 'var(--text-tertiary)'}" pointer-events="none" />
+        <line x1="0" y1="0" x2="14" y2="0" stroke="rgba(252,129,129,0.85)" stroke-width="1.5" pointer-events="none" />
+        <line x1="0" y1="0" x2="0" y2="-14" stroke="rgba(134,239,172,0.85)" stroke-width="1.5" pointer-events="none" />
         ${(() => {
           if (!shouldShowLinkLabel(link)) return '';
           const label = formatCanvasLabel(link.name);
@@ -3511,11 +3733,19 @@ function renderCanvasFromModel() {
       </g>`;
   }).join('') : '';
 
+  // Large geometry first so small parts (sensors, casters) always sit on top
+  // and stay visible/clickable.
+  const sortedBodyShapes = visibleBodyShapes.slice().sort((a, b) => dcProjectedAreaPx(b) - dcProjectedAreaPx(a));
+  const bodyLayer = sortedBodyShapes.map(shape => renderShape(shape, dcCanvasClassForShape(shape)) + renderShapeGlyph(shape)).join('');
+  const usedLegendClasses = new Set(sortedBodyShapes.map(dcCanvasClassForShape));
+  if (collisionLayer) usedLegendClasses.add('robot-fov-arc');
+  if (safetyLayer) usedLegendClasses.add('robot-safety-zone');
+
   svg.innerHTML = `
     ${safetyLayer}
     ${sensorCoverage}
     ${collisionLayer}
-    ${visibleBodyShapes.map(shape => renderShape(shape, dcShapeKind(shape) === 'wheel' ? 'robot-wheel' : dcShapeKind(shape) === 'laser' ? 'robot-sensor-lidar' : dcShapeKind(shape) === 'camera' ? 'robot-sensor-camera' : 'robot-chassis')).join('')}
+    ${bodyLayer}
     ${headingArrow}
     <g class="robot-origin-cross">
       <line x1="-24" y1="0" x2="48" y2="0" class="robot-axis-x" stroke="rgba(252,129,129,0.5)"/>
@@ -3528,12 +3758,16 @@ function renderCanvasFromModel() {
     ${sensorLabels}
   `;
   DC.canvasBounds = bounds;
-  document.querySelectorAll('[data-part]').forEach(el => {
+  if (linkFrames) usedLegendClasses.add('link-marker');
+  dcUpdateCanvasLegend(usedLegendClasses);
+  // Clicks resolve through dcPickCanvasPart (see handleCanvasClick) so
+  // overlapping geometry stays reachable; per-element handlers would always
+  // win for the topmost element only.
+  document.querySelectorAll('#robot-svg [data-part]').forEach(el => {
     el.style.cursor = 'pointer';
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      selectLink(el.getAttribute('data-part'));
-    });
+    const tooltip = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    tooltip.textContent = el.getAttribute('data-part');
+    el.appendChild(tooltip);
   });
   applySvgScale();
 }
@@ -3554,22 +3788,25 @@ function dcSvgWorldPointFromEvent(event) {
   };
 }
 
-function dcCanvasDragTargetFromElement(element) {
-  const target = element && typeof element.closest === 'function'
-    ? element.closest('[data-draggable-kind][data-part]')
-    : null;
-  if (!target) return null;
-  return {
-    kind: String(target.getAttribute('data-draggable-kind') || '').trim(),
-    id: String(target.getAttribute('data-part') || '').trim(),
-    element: target,
-  };
+function dcCanvasDragTargetFromEvent(event) {
+  const candidates = dcCanvasPartsUnderPoint(event.clientX, event.clientY)
+    .filter(el => el.hasAttribute('data-draggable-kind'))
+    .map(el => ({
+      kind: String(el.getAttribute('data-draggable-kind') || '').trim(),
+      id: String(el.getAttribute('data-part') || '').trim(),
+      element: el,
+    }))
+    .filter(target => target.id);
+  if (!candidates.length) return null;
+  // Dragging always grabs the selected object first so a click-to-select
+  // followed by a drag moves what the user expects, not whatever is on top.
+  return candidates.find(target => target.id === String(DC.selectedLink || '')) || candidates[0];
 }
 
 function dcBeginCanvasDrag(event) {
   if (DC.canvasView !== 'top' || !DC.model) return;
-  const dragTarget = dcCanvasDragTargetFromElement(event.target);
-  if (!dragTarget || !dragTarget.id) return;
+  const dragTarget = dcCanvasDragTargetFromEvent(event);
+  if (!dragTarget) return;
 
   const world = dcSvgWorldPointFromEvent(event);
   if (!world) return;
@@ -3586,42 +3823,51 @@ function dcBeginCanvasDrag(event) {
       x: parentPose.x + (Number(shape.x || 0) * cosYaw - Number(shape.y || 0) * sinYaw),
       y: parentPose.y + (Number(shape.x || 0) * sinYaw + Number(shape.y || 0) * cosYaw),
     };
-    dcPushUndo();
     DC.dragState = {
       kind: 'shape',
       id: dragTarget.id,
       offsetX: world.x - shapeWorld.x,
       offsetY: world.y - shapeWorld.y,
       pointerId: event.pointerId,
+      moved: false,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
     };
-    selectLink(dragTarget.id);
   } else if (dragTarget.kind === 'link') {
     const link = dcFindLink(dragTarget.id);
     const baseLink = String(DC.model?.base_link || 'base_link').trim() || 'base_link';
     if (!link || dragTarget.id === baseLink) return;
     const absTransforms = dcComputeAbsoluteTransforms();
     const pose = absTransforms[dragTarget.id] || { x: 0, y: 0 };
-    dcPushUndo();
     DC.dragState = {
       kind: 'link',
       id: dragTarget.id,
       offsetX: world.x - Number(pose.x || 0),
       offsetY: world.y - Number(pose.y || 0),
       pointerId: event.pointerId,
+      moved: false,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
     };
-    selectLink(dragTarget.id);
   } else {
     return;
   }
 
   event.preventDefault();
-  event.stopPropagation();
   try { dragTarget.element.setPointerCapture(event.pointerId); } catch (_error) {}
 }
 
 function dcMoveCanvasDrag(event) {
   const drag = DC.dragState;
   if (!drag) return;
+  if (!drag.moved) {
+    // 4px dead zone so a plain click never nudges geometry by accident.
+    const dist = Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY);
+    if (dist < 4) return;
+    drag.moved = true;
+    dcPushUndo();
+    selectLink(drag.id);
+  }
   const world = dcSvgWorldPointFromEvent(event);
   if (!world) return;
 
@@ -3664,7 +3910,10 @@ function dcMoveCanvasDrag(event) {
 function dcEndCanvasDrag() {
   if (!DC.dragState) return;
   const dragId = DC.dragState.id;
+  const moved = !!DC.dragState.moved;
   DC.dragState = null;
+  if (!moved) return; // plain click — let handleCanvasClick resolve the selection
+  dcSuppressNextCanvasClick = true;
   dcMarkDirty(true);
   renderHierarchyFromModel();
   renderCanvasFromModel();
@@ -4025,6 +4274,10 @@ function handleAddObject(categoryName) {
 
 function dcRuntimeComponentForShape(shape) {
   if (!shape) return '';
+  if (String(shape.driver || '').trim()) {
+    // Driver start command makes the shape itself a launchable component.
+    return String(shape.id || shape.name || '').trim().toLowerCase();
+  }
   const id = String(shape.id || shape.name || '').trim().toLowerCase();
   const link = String(shape.link || '').trim().toLowerCase();
   const type = String(shape.type || '').trim().toLowerCase();
@@ -4603,6 +4856,411 @@ function handleManageProfiles() {
   window.location = '/dev';
 }
 
+/* ─── Live sensor discovery (ROS graph) ───────────────────── */
+const DC_LIVE_CATEGORY_TO_GROUP = {
+  laser: 'Laser',
+  camera: 'Camera',
+  imu: 'Custom Devices',
+  gnss: 'GNSS',
+  distance_sensor: 'Distance Sensor',
+  battery: 'Battery',
+  odometry: 'Custom Devices',
+  motion: 'Custom Devices',
+  environment: 'Custom Devices',
+};
+
+function dcFindLiveSensor(topic) {
+  return DC.liveSensors.find(sensor => String(sensor.topic) === String(topic || ''));
+}
+
+async function loadLiveSensors({ silent = false } = {}) {
+  try {
+    const data = await dcFetch('/api/device_config/sensors');
+    DC.liveSensors = Array.isArray(data.sensors) ? data.sensors : [];
+    DC.liveNodes = Array.isArray(data.nodes) ? data.nodes : [];
+    DC.liveComponents = Array.isArray(data.components) ? data.components : [];
+    DC.liveLoadedAt = Date.now();
+    renderHierarchyFromModel();
+    renderParamsNodeOptions();
+    renderRuntimeComponents();
+    if (DC.selectedLiveTopic && dcFindLiveSensor(DC.selectedLiveTopic)) {
+      // refresh open live detail with latest status
+      if (document.getElementById('detail-state')?.style.display !== 'none') {
+        selectLiveSensor(DC.selectedLiveTopic, { preserveTab: true });
+      }
+    }
+    if (!silent) dcSetMessage(data.message || `Discovered ${DC.liveSensors.length} sensor topics`);
+  } catch (exc) {
+    if (!silent) dcSetMessage(`Sensor discovery failed: ${exc.message}`, 'error');
+    throw exc;
+  }
+}
+
+function dcLiveSensorTreeHTML() {
+  if (!DC.liveSensors.length) {
+    return `
+      <div class="insp-section" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Live Sensors</span>
+        <button class="btn" style="height:18px;padding:0 6px;font-size:9px;" onclick="loadLiveSensors()"><i class="fas fa-satellite-dish"></i> Scan</button>
+      </div>
+      <div style="padding:8px 10px;font-size:10px;color:var(--text-tertiary);">No sensor topics discovered on the ROS graph yet. Press Scan to refresh.</div>`;
+  }
+  const byCategory = {};
+  DC.liveSensors.forEach(sensor => {
+    const key = String(sensor.category_label || sensor.category || 'Other');
+    if (!byCategory[key]) byCategory[key] = [];
+    byCategory[key].push(sensor);
+  });
+  const groups = Object.keys(byCategory).sort().map(label => {
+    const rows = byCategory[label].map(sensor => {
+      const selected = DC.selectedLiveTopic === sensor.topic ? ' selected' : '';
+      const dotColor = sensor.alive ? 'var(--accent-success)' : 'var(--text-tertiary)';
+      const node = (sensor.publisher_nodes || [])[0] || 'no publisher';
+      const bound = sensor.bound_shape_id ? ` · <i class="fas fa-link" style="font-size:7px;"></i> ${dcEscapeHtml(sensor.bound_shape_id)}` : '';
+      return `
+        <div class="tree-node${selected}" data-live-topic="${dcAttr(sensor.topic)}" onclick="selectLiveSensor('${dcJsString(sensor.topic)}', { preserveTab: true })" style="padding-left:24px;">
+          <span class="tree-node-expand" style="opacity:0.55;"><i class="fas fa-circle" style="font-size:6px;color:${dotColor};"></i></span>
+          <span class="tree-node-icon" style="color:#7dd3fc;"><i class="fas fa-${dcLiveSensorIcon(sensor.category)}"></i></span>
+          <div class="tree-node-main">
+            <div class="tree-node-name">${dcEscapeHtml(sensor.topic)}</div>
+            <div class="tree-node-sub">${dcEscapeHtml(node)}${bound}</div>
+          </div>
+          <span class="tree-node-badge sensor">${dcEscapeHtml(sensor.category)}</span>
+        </div>`;
+    }).join('');
+    return `<div style="padding:3px 10px 1px;font-size:8px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-tertiary);">${dcEscapeHtml(label)}</div>${rows}`;
+  }).join('');
+  return `
+    <div class="insp-section" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Live Sensors · ${DC.liveSensors.length} topics</span>
+      <button class="btn" style="height:18px;padding:0 6px;font-size:9px;" onclick="loadLiveSensors()" title="Rescan ROS graph"><i class="fas fa-sync"></i></button>
+    </div>
+    ${groups}`;
+}
+
+function dcLiveSensorIcon(category) {
+  return {
+    laser: 'broadcast-tower',
+    camera: 'video',
+    imu: 'microchip',
+    gnss: 'satellite-dish',
+    distance_sensor: 'ruler-horizontal',
+    battery: 'battery-three-quarters',
+    odometry: 'route',
+    motion: 'cogs',
+    environment: 'thermometer-half',
+  }[String(category || '')] || 'broadcast-tower';
+}
+
+function dcComponentForLiveSensor(sensor) {
+  if (!sensor) return null;
+  const byId = DC.liveComponents.find(c => c.component && sensor.bound_shape_id && String(c.component).toLowerCase() === String(sensor.bound_shape_id).toLowerCase());
+  if (byId) return byId;
+  const topic = String(sensor.topic || '').toLowerCase();
+  if (sensor.category === 'laser') {
+    const key = /rear/.test(topic) ? 'lidar_rear' : 'lidar_front';
+    return DC.liveComponents.find(c => c.component === key) || null;
+  }
+  if (sensor.category === 'imu') {
+    return DC.liveComponents.find(c => c.component === 'imu') || null;
+  }
+  return null;
+}
+
+function selectLiveSensor(topic, options = {}) {
+  const sensor = dcFindLiveSensor(topic);
+  if (!sensor) return;
+  DC.selectedLiveTopic = topic;
+  DC.selectedLink = null;
+  document.querySelectorAll('.tree-node').forEach(n => {
+    n.classList.toggle('selected', n.dataset.liveTopic === topic);
+  });
+  document.querySelectorAll('[data-part]').forEach(el => el.classList.remove('selected-highlight'));
+
+  const component = dcComponentForLiveSensor(sensor);
+  const nodesHtml = (sensor.publisher_nodes || []).map(n => propRow('Publisher', dcEscapeHtml(n), true)).join('')
+    || propRow('Publisher', '<span style="color:var(--accent-warning);">none (topic idle)</span>');
+  const firstNode = (sensor.publisher_nodes || [])[0] || '';
+  const boundRow = sensor.bound_shape_id
+    ? propRow('Model Object', `<a style="color:var(--accent-blue);cursor:pointer;" onclick="selectLink('${dcJsString(sensor.bound_shape_id)}')">${dcEscapeHtml(sensor.bound_shape_id)}</a>`)
+    : propRow('Model Object', '<span style="color:var(--text-tertiary);">not in model</span>');
+
+  const componentSection = component ? `
+    <div class="insp-section">Runtime Control</div>
+    ${propRow('Component', dcEscapeHtml(component.label || component.component))}
+    ${propRow('Process', component.running
+      ? `<span style="color:var(--accent-success);">running${component.pids?.length ? ' · pid ' + component.pids.join(', ') : ''}</span>`
+      : '<span style="color:var(--text-tertiary);">stopped</span>')}
+    <div style="padding:6px 10px;display:flex;gap:5px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="dcControlComponent('${dcJsString(component.component)}', true, '${dcJsString(component.label || component.component)}')"><i class="fas fa-play"></i> ${component.running ? 'Restart' : 'Launch'}</button>
+      <button class="btn" style="flex:1;${component.running ? '' : 'opacity:0.45;'}" ${component.running ? '' : 'disabled'} onclick="dcControlComponent('${dcJsString(component.component)}', false, '${dcJsString(component.label || component.component)}')"><i class="fas fa-stop"></i> Stop</button>
+    </div>` : `
+    <div class="insp-section">Runtime Control</div>
+    <div style="padding:6px 10px;font-size:10px;color:var(--text-tertiary);line-height:1.4;">
+      No launch target linked. Add this sensor to the model and set its <strong>Driver</strong> start command to make it launchable from here.
+    </div>`;
+
+  const detail = document.getElementById('detail-state');
+  const overview = document.getElementById('overview-state');
+  if (overview) overview.style.display = 'none';
+  if (detail) {
+    detail.style.display = '';
+    detail.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 10px 6px;">
+        <span style="font-size:12px;font-weight:700;color:var(--text-primary);">${dcEscapeHtml(sensor.topic)}</span>
+        <span class="tag ${sensor.alive ? 'tag-green' : 'tag-amber'}" style="margin-left:auto;">${sensor.alive ? 'live' : 'idle'}</span>
+      </div>
+      <div class="insp-section">Discovered Sensor</div>
+      ${propRow('Category', dcEscapeHtml(sensor.category_label || sensor.category))}
+      ${propRow('Msg Type', dcEscapeHtml((sensor.types || []).join(', ')), true)}
+      ${nodesHtml}
+      ${sensor.frame_hint ? propRow('Frame', dcEscapeHtml(sensor.frame_hint), true) : ''}
+      ${boundRow}
+      ${componentSection}
+      <div style="padding:8px 10px;border-top:1px solid var(--border-chrome);margin-top:4px;display:flex;gap:5px;flex-wrap:wrap;">
+        ${firstNode ? `<button class="btn btn-primary" style="flex:1;" onclick="openParamsForNode('${dcJsString(firstNode)}')"><i class="fas fa-sliders-h"></i> Params</button>` : ''}
+        ${!sensor.bound_shape_id ? `<button class="btn" style="flex:1;" onclick="addLiveSensorToModel('${dcJsString(sensor.topic)}')"><i class="fas fa-plus"></i> Add to Model</button>` : ''}
+        <button class="btn" onclick="showOverview()"><i class="fas fa-arrow-left"></i> Back</button>
+      </div>
+    `;
+  }
+  const title = document.getElementById('insp-header-title');
+  if (title) title.textContent = sensor.topic;
+  if (!options.preserveTab || currentInspectorTab() === 'properties') {
+    openInspectorTab('properties');
+  }
+}
+
+function addLiveSensorToModel(topic) {
+  const sensor = dcFindLiveSensor(topic);
+  if (!sensor || !DC.model) return;
+  const group = DC_LIVE_CATEGORY_TO_GROUP[sensor.category] || 'Custom Devices';
+  dcPushUndo();
+  if (!Array.isArray(DC.model.shapes)) DC.model.shapes = [];
+  const shape = dcDefaultShapeForCategory(group);
+  shape.topic = sensor.topic;
+  const seed = sensor.topic.replace(/^\//, '').replace(/\//g, '_') || sensor.category;
+  shape.id = dcUniqueId(seed);
+  shape.name = shape.id;
+  DC.model.shapes.push(shape);
+  dcMarkDirty(true);
+  renderHierarchyFromModel();
+  renderCanvasFromModel();
+  renderValidationReport();
+  selectLink(shape.id);
+  dcSetMessage(`Added ${sensor.topic} to model as ${shape.id}. Save Draft to persist.`);
+}
+
+/* ─── Params tab (live node parameters) ───────────────────── */
+function renderParamsNodeOptions() {
+  const select = document.getElementById('params-node-select');
+  if (!select) return;
+  const current = DC.paramsNode || select.value;
+  const options = ['<option value="">Select a ROS node…</option>']
+    .concat(DC.liveNodes.map(node => `<option value="${dcAttr(node)}"${node === current ? ' selected' : ''}>${dcEscapeHtml(node)}</option>`));
+  select.innerHTML = options.join('');
+}
+
+function handleParamsNodeChange(value) {
+  DC.paramsNode = String(value || '');
+  DC.paramsValues = {};
+  DC.paramsEdits = {};
+  if (DC.paramsNode) loadNodeParams();
+}
+
+function openParamsForNode(node) {
+  DC.paramsNode = String(node || '');
+  DC.paramsValues = {};
+  DC.paramsEdits = {};
+  openInspectorTab('params');
+  renderParamsNodeOptions();
+  if (DC.paramsNode) loadNodeParams();
+}
+
+async function loadNodeParams() {
+  const node = DC.paramsNode || document.getElementById('params-node-select')?.value || '';
+  if (!node) {
+    dcSetMessage('Select a node to load parameters', 'warn');
+    return;
+  }
+  DC.paramsNode = node;
+  const list = document.getElementById('params-list');
+  if (list) list.innerHTML = `<div class="insp-section">Node Parameters</div><div style="padding:10px;font-size:10px;color:var(--text-tertiary);"><i class="fas fa-spinner fa-spin"></i> Reading parameters from ${dcEscapeHtml(node)}…</div>`;
+  try {
+    const data = await dcFetch(`/api/device_config/node_params?node=${encodeURIComponent(node)}`);
+    DC.paramsValues = data.parameters && typeof data.parameters === 'object' ? data.parameters : {};
+    DC.paramsEdits = {};
+    renderParamsList();
+    dcSetMessage(data.message || `Loaded parameters from ${node}`);
+  } catch (exc) {
+    if (list) list.innerHTML = `<div class="insp-section">Node Parameters</div><div style="padding:10px;font-size:10px;color:var(--accent-critical);">${dcEscapeHtml(exc.message)}</div>`;
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+function dcParamInputHTML(name, value) {
+  const safeName = dcJsString(name);
+  if (typeof value === 'boolean') {
+    return `<select class="prop-select" onchange="handleParamEdit('${safeName}', this.value)">
+      <option value="true"${value ? ' selected' : ''}>true</option>
+      <option value="false"${!value ? ' selected' : ''}>false</option>
+    </select>`;
+  }
+  if (typeof value === 'number') {
+    return `<input class="prop-input" type="number" step="any" value="${dcAttr(value)}" onchange="handleParamEdit('${safeName}', this.value)">`;
+  }
+  const text = Array.isArray(value) || (value && typeof value === 'object') ? JSON.stringify(value) : String(value ?? '');
+  return `<input class="prop-input" type="text" value="${dcAttr(text)}" onchange="handleParamEdit('${safeName}', this.value)">`;
+}
+
+function renderParamsList() {
+  const list = document.getElementById('params-list');
+  if (!list) return;
+  const names = Object.keys(DC.paramsValues).sort();
+  const filterRow = `
+    <div style="padding:6px 10px;border-bottom:1px solid var(--border-chrome);">
+      <input class="prop-input" style="width:100%;flex:none;" placeholder="Filter parameters…" oninput="filterParamRows(this.value)">
+    </div>`;
+  if (!names.length) {
+    list.innerHTML = `<div class="insp-section">Node Parameters</div><div style="padding:10px;font-size:10px;color:var(--text-tertiary);">Node exposed no parameters.</div>`;
+    syncParamsApplyBar();
+    return;
+  }
+  const rows = names.map(name => {
+    const value = DC.paramsValues[name];
+    const edited = Object.prototype.hasOwnProperty.call(DC.paramsEdits, name);
+    return `<div class="prop-row" data-param-row="${dcAttr(name)}">
+      <span class="prop-lbl" style="${edited ? 'color:var(--accent-warning);' : ''}" title="${dcAttr(name)}">${dcEscapeHtml(name)}</span>
+      ${dcParamInputHTML(name, value)}
+    </div>`;
+  }).join('');
+  list.innerHTML = `
+    <div class="insp-section">Node Parameters · ${names.length} · ${dcEscapeHtml(DC.paramsNode)}</div>
+    ${filterRow}
+    ${rows}`;
+  syncParamsApplyBar();
+}
+
+function filterParamRows(query) {
+  const needle = String(query || '').trim().toLowerCase();
+  document.querySelectorAll('[data-param-row]').forEach(row => {
+    const name = String(row.dataset.paramRow || '').toLowerCase();
+    row.style.display = !needle || name.includes(needle) ? '' : 'none';
+  });
+}
+
+function handleParamEdit(name, rawValue) {
+  DC.paramsEdits[name] = rawValue;
+  const row = document.querySelector(`[data-param-row="${CSS.escape(name)}"] .prop-lbl`);
+  if (row) row.style.color = 'var(--accent-warning)';
+  syncParamsApplyBar();
+}
+
+function syncParamsApplyBar() {
+  const bar = document.getElementById('params-apply-bar');
+  const btn = document.getElementById('params-apply-btn');
+  const count = Object.keys(DC.paramsEdits).length;
+  if (bar) bar.style.display = count ? 'flex' : 'none';
+  if (btn) btn.innerHTML = `<i class="fas fa-check"></i> Apply ${count} Change${count === 1 ? '' : 's'}`;
+}
+
+function dcParseParamEdit(original, raw) {
+  if (typeof original === 'boolean') return String(raw) === 'true';
+  if (typeof original === 'number') {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) throw new Error(`"${raw}" is not a number`);
+    return Number.isInteger(original) && Number.isInteger(parsed) ? parsed : parsed;
+  }
+  if (Array.isArray(original) || (original && typeof original === 'object')) {
+    try {
+      return JSON.parse(raw);
+    } catch (_e) {
+      throw new Error(`"${raw}" is not valid JSON for an array parameter`);
+    }
+  }
+  return String(raw);
+}
+
+async function applyNodeParams() {
+  const node = DC.paramsNode;
+  const names = Object.keys(DC.paramsEdits);
+  if (!node || !names.length) return;
+  const params = {};
+  try {
+    names.forEach(name => {
+      params[name] = dcParseParamEdit(DC.paramsValues[name], DC.paramsEdits[name]);
+    });
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+    return;
+  }
+  try {
+    const data = await dcFetch('/api/device_config/node_params', {
+      method: 'POST',
+      body: JSON.stringify({ node, params }),
+    });
+    dcSetMessage(data.message || `Applied ${names.length} parameters to ${node}`, 'info');
+    await loadNodeParams();
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+/* ─── Runtime component launch/stop controls ──────────────── */
+function renderRuntimeComponents() {
+  const root = document.getElementById('params-components');
+  if (!root) return;
+  if (!DC.liveComponents.length) {
+    root.innerHTML = `
+      <div class="insp-section">Launch Targets</div>
+      <div style="padding:8px 10px;font-size:10px;color:var(--text-tertiary);">No controllable components. Devices get a launch target from the system runtime config or a Driver start command on the model object.</div>`;
+    return;
+  }
+  const rows = DC.liveComponents.map(component => {
+    const dot = component.running ? 'var(--accent-success)' : 'var(--text-tertiary)';
+    const sub = component.source === 'profile_driver' ? 'profile driver' : 'system runtime';
+    return `
+      <div class="prop-row">
+        <span class="prop-lbl" style="display:flex;align-items:center;gap:5px;" title="${dcAttr(component.start_command || '')}">
+          <i class="fas fa-circle" style="font-size:6px;color:${dot};"></i>
+          <span>${dcEscapeHtml(component.label || component.component)}<br><span style="color:var(--text-tertiary);font-size:8px;">${dcEscapeHtml(sub)}${component.running && component.pids?.length ? ' · pid ' + component.pids.join(',') : ''}</span></span>
+        </span>
+        <span style="display:flex;gap:4px;">
+          <button class="btn" style="height:20px;padding:0 7px;font-size:9px;" onclick="dcControlComponent('${dcJsString(component.component)}', true, '${dcJsString(component.label || component.component)}')" title="${component.running ? 'Restart' : 'Launch'}"><i class="fas fa-play"></i></button>
+          <button class="btn" style="height:20px;padding:0 7px;font-size:9px;${component.running ? '' : 'opacity:0.45;'}" ${component.running ? '' : 'disabled'} onclick="dcControlComponent('${dcJsString(component.component)}', false, '${dcJsString(component.label || component.component)}')" title="Stop"><i class="fas fa-stop"></i></button>
+        </span>
+      </div>`;
+  }).join('');
+  root.innerHTML = `<div class="insp-section">Launch Targets · ${DC.liveComponents.length}</div>${rows}`;
+}
+
+async function dcControlComponent(component, enabled, label) {
+  if (!enabled && !confirm(`Stop ${label}? The sensor stream will go down until relaunched.`)) return;
+  dcSetMessage(`${enabled ? 'Launching' : 'Stopping'} ${label}…`);
+  try {
+    const data = await dcFetch('/api/device_config/restart_component', {
+      method: 'POST',
+      body: JSON.stringify({ component, enabled }),
+    });
+    dcSetMessage(data.message || `${enabled ? 'Launched' : 'Stopped'} ${label}`);
+    setTimeout(() => loadLiveSensors({ silent: true }).catch(() => {}), 1500);
+  } catch (exc) {
+    dcSetMessage(exc.message, 'error');
+  }
+}
+
+/* ─── Live discovery polling ──────────────────────────────── */
+let dcLivePollTimer = null;
+function dcStartLivePolling() {
+  if (dcLivePollTimer) return;
+  dcLivePollTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    const wantsLive = DC.mode === 'sensors' || DC.mode === 'diagnostics' || currentInspectorTab() === 'params';
+    if (!wantsLive) return;
+    loadLiveSensors({ silent: true }).catch(() => {});
+  }, 12000);
+}
+
 /* ─── Close menus on outside click ───────────────────────── */
 document.addEventListener('click', e => {
   const menu   = document.getElementById('overflow-menu');
@@ -4615,12 +5273,8 @@ document.addEventListener('click', e => {
 });
 
 /* ─── Canvas interactions ─────────────────────────────────── */
-document.getElementById('robot-canvas-area').addEventListener('click', e => {
-  if (e.target.closest('#robot-3d-view')) return;
-  if (!e.target.closest('[data-part]')) {
-    showOverview();
-  }
-});
+/* Click handling (select / cycle / deselect) lives in handleCanvasClick,
+   wired through the #robot-canvas-area onclick attribute. */
 
 const robotSvgEl = document.getElementById('robot-svg');
 if (robotSvgEl) {
@@ -4645,6 +5299,8 @@ document.addEventListener('DOMContentLoaded', () => {
     dcSetMessage(exc.message || 'Failed loading robot model workspace', 'error');
     renderValidationReport();
   });
+  loadLiveSensors({ silent: true }).catch(() => {});
+  dcStartLivePolling();
 });
 </script>
 </body>

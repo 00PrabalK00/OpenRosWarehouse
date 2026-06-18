@@ -279,9 +279,25 @@ class ZoneManager(Node):
             SetParameters,
             self.safety_set_params_service,
         )
+        self.local_costmap_params_client = self.create_client(
+            SetParameters,
+            self._endpoint('/local_costmap/local_costmap/set_parameters')
+        )
+        self.global_costmap_params_client = self.create_client(
+            SetParameters,
+            self._endpoint('/global_costmap/global_costmap/set_parameters')
+        )
         self.controller_params_client = self.create_client(
             SetParameters,
             self.controller_set_params_service,
+        )
+        # Velocity smoother sits downstream of the controller (cmd_vel_nav ->
+        # cmd_vel) and enforces the final speed/accel/decel envelope. Keep it in
+        # lockstep with per-segment limits so it does not clamp or override them.
+        self.velocity_smoother_set_params_service = self._endpoint('/velocity_smoother/set_parameters')
+        self.velocity_smoother_params_client = self.create_client(
+            SetParameters,
+            self.velocity_smoother_set_params_service,
         )
         self.controller_get_params_client = self.create_client(
             GetParameters,
@@ -338,6 +354,20 @@ class ZoneManager(Node):
         # Default must match desired_linear_vel in nav2_params.yaml; overridden at
         # runtime by the UI /set_max_speed service call.
         self.max_speed = float(self.declare_parameter('default_max_speed', 0.80).value)
+        # Controller plugin ids, cached after first discovery so per-segment speed
+        # caps can be re-applied synchronously while a path is being followed.
+        self._controller_plugin_ids = ['FollowPath']
+        # Speed/accel/decel currently pushed for the active path, so we only
+        # re-dispatch when the per-segment envelope actually changes.
+        self._active_path_speed_cap = None
+        self._active_path_accel = None
+        self._active_path_decel = None
+        # Smoother angular ceilings + the default linear accel/decel restored when
+        # a segment carries no override (match nav2_params controller defaults).
+        self.path_default_max_w = float(self.declare_parameter('path_default_max_w', 1.5).value)
+        self.path_default_ang_accel = float(self.declare_parameter('path_default_ang_accel', 1.5).value)
+        self.path_default_accel = float(self.declare_parameter('path_default_accel', 1.0).value)
+        self.path_default_decel = float(self.declare_parameter('path_default_decel', 1.5).value)
         self.safety_override_owner_state = None
         self.estop_active = False
         self.distance_obstacle_hold_active = False
@@ -354,7 +384,7 @@ class ZoneManager(Node):
         self.paths_file = os.path.expanduser('~/paths.yaml')
 
         # TF for arrival validation
-        self.tf_buffer = Buffer()
+        self.tf_buffer = Buffer(node=self)
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
         # Arrival tolerance (metres). Nav2 is authoritative for success; keep
@@ -367,11 +397,12 @@ class ZoneManager(Node):
         default_zone_footprint = (
             '[[0.40, 0.37], [0.40, -0.37], [-0.40, -0.37], [-0.40, 0.37]]'
         )
-        self.zone_arrival_footprint = self._parse_footprint_polygon(
-            self.declare_parameter(
+        self.zone_arrival_footprint_polygon_str = self.declare_parameter(
                 'zone_arrival_footprint_polygon',
                 default_zone_footprint,
             ).value
+        self.zone_arrival_footprint = self._parse_footprint_polygon(
+            self.zone_arrival_footprint_polygon_str
         )
         self.zone_arrival_footprint_padding = max(
             0.0,
@@ -475,6 +506,13 @@ class ZoneManager(Node):
         )
         self.goal_pose_handoff_footprint_half_width = float(
             self.declare_parameter('goal_pose_handoff_footprint_half_width', -1.0).value
+        )
+        # How far a dragged shelf may trail the robot before the safety stop gate
+        # flags its lagging legs as an obstacle (pushed to the safety_controller
+        # as carried_body_rear_extra_m while carrying).
+        self.shelf_carry_rear_drag_margin_m = max(
+            0.0,
+            float(self.declare_parameter('shelf_carry_rear_drag_margin_m', 0.15).value),
         )
         self.goal_pose_handoff_local_insert_centerline_tolerance = max(
             0.01,
@@ -1569,23 +1607,24 @@ class ZoneManager(Node):
                 f'shelf_detector set_parameters unavailable ({service_name}); '
                 'detector will use existing defaults'
             )
-            return
-        future = self._shelf_set_params_client.call_async(req)
-        deadline = time.monotonic() + 3.0
-        while time.monotonic() < deadline:
-            if future.done():
-                try:
-                    future.result()
-                except Exception as exc:
-                    self.get_logger().warn(
-                        f'Could not update shelf_detector params from template: {exc} '
-                        '(detector will use existing defaults)'
-                    )
-                return
-            await self._non_blocking_wait(0.05)
-        self.get_logger().warn(
-            'shelf_detector set_parameters timed out; detector will use existing defaults'
-        )
+        else:
+            future = self._shelf_set_params_client.call_async(req)
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                if future.done():
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        self.get_logger().warn(
+                            f'Could not update shelf_detector params from template: {exc} '
+                            '(detector will use existing defaults)'
+                        )
+                    break
+                await self._non_blocking_wait(0.05)
+            else:
+                self.get_logger().warn(
+                    'shelf_detector set_parameters timed out; detector will use existing defaults'
+                )
         
         if self._active_shelf_template_opening_width_m and self._active_shelf_template_depth_m:
             refiner_params = [
@@ -1751,11 +1790,76 @@ class ZoneManager(Node):
                 return False
             if not bool(payload.get('candidate_valid', False)):
                 return False
+            hotspot_count = self._shelf_candidate_hotspot_count(payload)
+            if (
+                hotspot_count < int(self.goal_pose_handoff_min_hotspot_count)
+                and not self._stable_template_front_pair_ready(payload)
+            ):
+                return False
         except Exception:
             return False
 
         pose_dict = payload.get('center_pose')
         return isinstance(pose_dict, dict) and bool(pose_dict)
+
+    def _stable_template_front_pair_ready(self, payload: Dict[str, Any]) -> bool:
+        """Allow a stable front reflector pair to imply hidden back shelf legs."""
+        if self._shelf_candidate_hotspot_count(payload) != 2:
+            return False
+
+        try:
+            required_count = max(
+                2,
+                int(payload.get('candidate_consistency_required_count', 4)),
+            )
+            window_count = int(payload.get('candidate_consistency_window_count', 0))
+            inlier_count = int(payload.get('candidate_consistency_inlier_count', 0))
+            stable_tail_count = int(payload.get('candidate_stable_tail_count', 0))
+            position_std_m = float(payload.get('candidate_position_std_m'))
+            yaw_std_rad = float(payload.get('candidate_yaw_std_rad'))
+        except (TypeError, ValueError):
+            return False
+        if (
+            window_count < required_count
+            or inlier_count < required_count
+            or stable_tail_count < required_count
+            or not math.isfinite(position_std_m)
+            or position_std_m > 0.025
+            or not math.isfinite(yaw_std_rad)
+            or yaw_std_rad > math.radians(2.0)
+        ):
+            return False
+
+        template_width = self._safe_float(
+            getattr(self, '_active_shelf_template_opening_width_m', None)
+        )
+        template_depth = self._safe_float(
+            getattr(self, '_active_shelf_template_depth_m', None)
+        )
+        pose_dict = payload.get('center_pose')
+        if (
+            template_width is None
+            or template_width <= 0.0
+            or template_depth is None
+            or template_depth <= 0.0
+            or not isinstance(pose_dict, dict)
+        ):
+            return False
+
+        front_midpoint = pose_dict.get('front_midpoint')
+        detected_width = self._safe_float(
+            payload.get('candidate_front_width_m', pose_dict.get('front_width'))
+        )
+        if (
+            not isinstance(front_midpoint, (list, tuple))
+            or len(front_midpoint) != 2
+            or detected_width is None
+            or detected_width <= 0.0
+        ):
+            return False
+
+        width_tolerance = max(0.03, float(template_width) * 0.08)
+        return abs(float(detected_width) - float(template_width)) <= width_tolerance
 
     def _build_shelf_goal_pose_from_status(
         self,
@@ -2344,12 +2448,12 @@ class ZoneManager(Node):
 
         param_updates = []
         for plugin in unique_plugins:
-            # Update known speed keys across DWB/RPP/custom controller plugins.
-            param_updates.append((f'{plugin}.max_vel_x', float(speed_mps)))
-            param_updates.append((f'{plugin}.max_speed_xy', float(speed_mps)))
-            param_updates.append((f'{plugin}.desired_linear_vel', float(speed_mps)))
+            # NextNav2Controller's authoritative linear-speed knob is `max_v`; it
+            # is the only speed parameter the controller actually reads at runtime
+            # (handleDynamicParameters). The old DWB/RPP keys (max_vel_x,
+            # max_speed_xy, desired_linear_vel, ...) are not declared by this
+            # controller and were silently rejected — do not send them.
             param_updates.append((f'{plugin}.max_v', float(speed_mps)))
-            param_updates.append((f'{plugin}.rpp_desired_linear_vel', float(speed_mps)))
 
         req = SetParameters.Request()
         req.parameters = [
@@ -2412,6 +2516,7 @@ class ZoneManager(Node):
             return False, f'{self.controller_set_params_service} unavailable'
 
         if not self.controller_get_params_client.wait_for_service(timeout_sec=0.25):
+            self._controller_plugin_ids = ['FollowPath']
             self._dispatch_controller_speed_update(speed_mps, ['FollowPath'])
             return True, (
                 f'{self.controller_get_params_service} unavailable; '
@@ -2437,6 +2542,7 @@ class ZoneManager(Node):
                     'using fallback plugin list'
                 )
 
+            self._controller_plugin_ids = plugin_ids
             self._dispatch_controller_speed_update(speed_mps, plugin_ids)
 
         future.add_done_callback(_resolve_plugins)
@@ -2444,6 +2550,98 @@ class ZoneManager(Node):
             f'Speed cap update queued via {self.controller_set_params_service} '
             '(all configured controller plugins)'
         )
+
+    def _push_velocity_smoother_limits(
+        self,
+        speed_mps: Optional[float] = None,
+        accel: Optional[float] = None,
+        decel: Optional[float] = None,
+    ) -> None:
+        """Keep the downstream velocity smoother in lockstep with the active
+        per-segment envelope. The smoother enforces the FINAL speed/accel/decel
+        on cmd_vel, so without this it silently clamps or overrides the
+        controller. Smoother arrays are [x, y, theta]; we only touch linear x."""
+        client = getattr(self, 'velocity_smoother_params_client', None)
+        if client is None or not client.wait_for_service(timeout_sec=0.3):
+            return
+        max_w = float(getattr(self, 'path_default_max_w', 1.5))
+        params = []
+
+        def _arr_param(name: str, x_val: float, theta_val: float) -> Parameter:
+            pv = ParameterValue()
+            pv.type = ParameterType.PARAMETER_DOUBLE_ARRAY
+            pv.double_array_value = [float(x_val), 0.0, float(theta_val)]
+            return Parameter(name=name, value=pv)
+
+        if speed_mps is not None and float(speed_mps) > 0.0:
+            sx = float(speed_mps)
+            params.append(_arr_param('max_velocity', sx, max_w))
+            params.append(_arr_param('min_velocity', -sx, -max_w))
+        if accel is not None and float(accel) > 0.0:
+            params.append(_arr_param('max_accel', float(accel), float(getattr(self, 'path_default_ang_accel', max_w))))
+        if decel is not None and float(decel) > 0.0:
+            params.append(_arr_param('max_decel', -abs(float(decel)), -float(getattr(self, 'path_default_ang_accel', max_w))))
+        if not params:
+            return
+        req = SetParameters.Request()
+        req.parameters = params
+        client.call_async(req)
+
+    def _apply_path_motion_limits(
+        self,
+        speed_mps: float,
+        accel: Optional[float] = None,
+        decel: Optional[float] = None,
+    ) -> None:
+        """Push the active per-segment motion envelope to BOTH the controller and
+        the downstream velocity smoother. Speed -> controller max_v + smoother
+        max_velocity; accel/decel -> controller acc_lim_v/decel_lim_v + smoother
+        max_accel/max_decel. No-op when nothing changed from the last apply."""
+        try:
+            cap = float(speed_mps)
+        except (TypeError, ValueError):
+            return
+        if cap <= 0.0:
+            return
+        acc = float(accel) if (accel is not None and float(accel) > 0.0) else None
+        dec = float(decel) if (decel is not None and float(decel) > 0.0) else None
+
+        prev = (
+            getattr(self, '_active_path_speed_cap', None),
+            getattr(self, '_active_path_accel', None),
+            getattr(self, '_active_path_decel', None),
+        )
+        if (
+            prev[0] is not None and abs(float(prev[0]) - cap) < 1e-3
+            and prev[1] == acc and prev[2] == dec
+        ):
+            return
+
+        plugins = list(getattr(self, '_controller_plugin_ids', None) or ['FollowPath'])
+        # Controller side: max_v always; accel/decel only when overridden.
+        self._dispatch_controller_speed_update(cap, plugins)
+        if acc is not None or dec is not None:
+            extra = []
+            for plugin in plugins:
+                if acc is not None:
+                    extra.append((f'{plugin}.acc_lim_v', acc))
+                if dec is not None:
+                    extra.append((f'{plugin}.decel_lim_v', dec))
+            if extra and self.controller_params_client.wait_for_service(timeout_sec=0.3):
+                req = SetParameters.Request()
+                req.parameters = [self._make_double_parameter(n, v) for n, v in extra]
+                self.controller_params_client.call_async(req)
+
+        # Smoother side: mirror the same envelope downstream.
+        self._push_velocity_smoother_limits(cap, acc, dec)
+
+        self._active_path_speed_cap = cap
+        self._active_path_accel = acc
+        self._active_path_decel = dec
+
+    def _apply_path_speed_cap(self, speed_mps: float) -> None:
+        """Back-compat speed-only entry point."""
+        self._apply_path_motion_limits(speed_mps, None, None)
 
     def _lookup_robot_transform(self, target_frame: str, timeout_sec: float = 0.5):
         """Lookup transform target_frame -> robot base with base_footprint fallback."""
@@ -2603,6 +2801,72 @@ class ZoneManager(Node):
                 f'Footprint distance check failed ({target_frame}): {exc}'
             )
             return float('inf')
+
+
+    async def _set_nav2_footprint(self, polygon_str: str):
+        params = [Parameter(name='footprint', value=ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=polygon_str))]
+        req = SetParameters.Request()
+        req.parameters = params
+        if self.local_costmap_params_client.wait_for_service(timeout_sec=0.2):
+            self.local_costmap_params_client.call_async(req)
+        if self.global_costmap_params_client.wait_for_service(timeout_sec=0.2):
+            self.global_costmap_params_client.call_async(req)
+
+    @staticmethod
+    def _make_double_parameter(name: str, value: float) -> Parameter:
+        pv = ParameterValue()
+        pv.type = ParameterType.PARAMETER_DOUBLE
+        pv.double_value = float(value)
+        return Parameter(name=str(name), value=pv)
+
+    async def _push_carried_safety_profile(self, active: bool):
+        """Tell the safety_controller it is (not) carrying a shelf.
+
+        The nav2 costmap footprint only governs planning; the safety_controller
+        runs its own scan-based stop gate with a separate body-echo exclusion.
+        Without this, the shelf legs sit inside that gate's danger zone during the
+        carry and latch a hard stop. Switching on the carried profile grows the
+        body-echo exclusion to the shelf footprint (+5 cm) so the legs are treated
+        as the robot's own body, then shrinks back to the bare robot on restore.
+        """
+        if not self.safety_set_params_client.wait_for_service(timeout_sec=0.5):
+            self.get_logger().warn(
+                f'{self.safety_set_params_service} unavailable; '
+                f'carried safety profile not {"applied" if active else "cleared"}'
+            )
+            return
+        params = [self._make_bool_parameter('carried_profile_active', bool(active))]
+        if active:
+            L = getattr(self, '_active_shelf_template_depth_m', 0.90) or 0.90
+            W = getattr(self, '_active_shelf_template_opening_width_m', 1.00) or 1.00
+            pad = 0.05
+            # A dragged shelf trails the robot; allow its legs to lag this far
+            # behind the rigid carried footprint without tripping the stop gate.
+            rear_drag = max(0.0, float(getattr(self, 'shelf_carry_rear_drag_margin_m', 0.15)))
+            params.extend([
+                self._make_double_parameter('carried_body_length_m', float(L) + 2.0 * pad),
+                self._make_double_parameter('carried_body_width_m', float(W) + 2.0 * pad),
+                self._make_double_parameter('carried_body_padding_m', pad),
+                self._make_double_parameter('carried_body_exclusion_radius_m', 0.0),
+                self._make_double_parameter('carried_body_rear_extra_m', rear_drag),
+            ])
+        req = SetParameters.Request()
+        req.parameters = params
+        self.safety_set_params_client.call_async(req)
+
+    async def _expand_footprint_for_shelf(self):
+        L = getattr(self, '_active_shelf_template_depth_m', 0.90) or 0.90
+        W = getattr(self, '_active_shelf_template_opening_width_m', 1.00) or 1.00
+        pad = 0.05
+        hx = (L / 2.0) + pad
+        hy = (W / 2.0) + pad
+        poly_str = f"[[{hx}, {hy}], [{hx}, {-hy}], [{-hx}, {-hy}], [{-hx}, {hy}]]"
+        await self._set_nav2_footprint(poly_str)
+        await self._push_carried_safety_profile(True)
+
+    async def _restore_footprint(self):
+        await self._set_nav2_footprint(self.zone_arrival_footprint_polygon_str)
+        await self._push_carried_safety_profile(False)
 
     def _robot_footprint_extents(self) -> Tuple[float, float, float]:
         footprint_local = list(getattr(self, 'zone_arrival_footprint', []) or [])
@@ -3036,8 +3300,11 @@ class ZoneManager(Node):
                 pos_tol = max(pos_tol, 0.08)
                 heading_tol = max(heading_tol, math.radians(8.0))
             elif 'centerline' in label or 'setup' in label or 'lineup' in label:
-                pos_tol = min(pos_tol, 0.05)
-                lat_tol = min(lat_tol, 0.025)
+                # A dedicated heading-alignment phase runs immediately after
+                # centerline setup. Avoid dispatching a tiny FollowPath goal
+                # just to correct yaw, which makes differential drive oscillate.
+                pos_tol = max(pos_tol, 0.10)
+                lat_tol = max(lat_tol, min(float(plan.entry_lateral_tolerance), 0.05))
                 heading_tol = min(max(0.02, heading_tol), math.radians(3.0))
             elif 'entry alignment' in label:
                 pos_tol = max(0.025, min(float(plan.position_tolerance), 0.04))
@@ -3057,11 +3324,18 @@ class ZoneManager(Node):
                 return False, None, phase_error_msg
 
             pos_tol, lat_tol, heading_tol = _phase_acceptance_limits(phase_label)
-            satisfied = (
-                float(phase_error['distance']) <= pos_tol
-                and abs(float(phase_error['left_error'])) <= lat_tol
-                and abs(float(phase_error['heading_error'])) <= heading_tol
+            label = str(phase_label or '').strip().lower()
+            is_centerline_setup = (
+                'centerline' in label or 'setup' in label or 'lineup' in label
             )
+            if is_centerline_setup:
+                satisfied = float(phase_error['distance']) <= pos_tol
+            else:
+                satisfied = (
+                    float(phase_error['distance']) <= pos_tol
+                    and abs(float(phase_error['left_error'])) <= lat_tol
+                    and abs(float(phase_error['heading_error'])) <= heading_tol
+                )
             return satisfied, phase_error, ''
 
         async def _run_follow_path_phase(
@@ -3658,19 +3932,13 @@ class ZoneManager(Node):
             finally:
                 await self._clear_motion_intent(source='zone_manager:preinsert_align')
 
-        # Pre-insert gate is now advisory only: log what the gate would have said,
-        # but proceed to insertion regardless.  The minimal insertion controller has
-        # its own collision-aware lateral abort and bounded (compliant) correction
-        # inside the shelf, so it handles residual misalignment without a Nav2-based
-        # "correction dance" that was physically scraping the robot into shelf legs.
+        # The insertion controller owns the final lateral collision abort. Keep
+        # this gate advisory so perception jitter cannot prevent straight-in.
         gate_ok, gate_msg = await _require_stable_preinsert_alignment()
         if gate_ok is None:
             self._clear_active_goal_marker()
             return None, gate_msg
         if not gate_ok and 'lateral_error' in latest_gate_reasons:
-            # Lateral error means the insertion controller will abort immediately
-            # (same collision limit check). Run one pre-insert correction so the
-            # robot can reach the entry centerline before straight-in.
             self.get_logger().info(
                 f'Frozen shelf insert: gate failed with lateral_error for "{target_label}"; '
                 f'attempting one pre-insert alignment correction before straight-in.'
@@ -3691,7 +3959,7 @@ class ZoneManager(Node):
         if not gate_ok:
             self.get_logger().warn(
                 f'Frozen shelf insert: gate advisory failed for "{target_label}" '
-                f'({gate_msg}); proceeding to insertion — controller will handle residual error.'
+                f'({gate_msg}); proceeding to insertion controller.'
             )
 
         feedback.progress = 0.84
@@ -5860,6 +6128,9 @@ class ZoneManager(Node):
     def _lift_status_callback(self, msg: Int32):
         self._lift_status_raw = int(msg.data)
 
+    def _lift_is_at_top(self) -> bool:
+        return bool(int(self._lift_status_raw) & 0x01)
+
     def _load_action_mappings_for_path(self) -> Dict[str, Dict[str, str]]:
         try:
             payload = self.db_manager.get_ui_mappings()
@@ -6081,9 +6352,36 @@ class ZoneManager(Node):
         segment_bidirectional_list = list(
             getattr(goal_handle.request, 'segment_bidirectional', []) or []
         )
+        segment_speeds_list = [
+            self._safe_float(v, 0.0)
+            for v in (getattr(goal_handle.request, 'segment_speeds', []) or [])
+        ]
+        segment_accels_list = [
+            self._safe_float(v, 0.0)
+            for v in (getattr(goal_handle.request, 'segment_accels', []) or [])
+        ]
+        segment_decels_list = [
+            self._safe_float(v, 0.0)
+            for v in (getattr(goal_handle.request, 'segment_decels', []) or [])
+        ]
+        # New path: re-baseline the whole motion envelope (speed + accel + decel)
+        # to the global defaults so a leftover per-segment override from a
+        # previous path does not leak in — on the controller AND the smoother.
+        self._active_path_speed_cap = None
+        self._active_path_accel = None
+        self._active_path_decel = None
+        self._apply_path_motion_limits(
+            self.max_speed, self.path_default_accel, self.path_default_decel
+        )
         path_mode_selected_path = str(
             getattr(goal_handle.request, 'path_mode_selected_path', '') or ''
         ).strip()
+        
+        self._flip_pingpong_actions = path_mode_selected_path.endswith('|FLIP_PINGPONG')
+        self._pingpong_src_reco_cfg = None
+        if self._flip_pingpong_actions:
+            path_mode_selected_path = path_mode_selected_path.replace('|FLIP_PINGPONG', '')
+            
         path_mode_destination_poi = str(
             getattr(goal_handle.request, 'path_mode_destination_poi', '') or ''
         ).strip()
@@ -6105,6 +6403,18 @@ class ZoneManager(Node):
             segment_bidirectional_list.append(False)
         if len(segment_bidirectional_list) > total:
             segment_bidirectional_list = segment_bidirectional_list[:total]
+        def _normalize_parallel(values: List[float]) -> List[float]:
+            if total > 0 and len(values) == (total - 1):
+                values = [0.0] + values
+            while len(values) < total:
+                values.append(0.0)
+            if len(values) > total:
+                values = values[:total]
+            return values
+
+        segment_speeds_list = _normalize_parallel(segment_speeds_list)
+        segment_accels_list = _normalize_parallel(segment_accels_list)
+        segment_decels_list = _normalize_parallel(segment_decels_list)
         actioned_indices: set = set()
         completed_count = 1 if total > 0 else 0
         shelf_flip_flop_up_next = True
@@ -6312,7 +6622,49 @@ class ZoneManager(Node):
             stop_timer_s = self._safe_float(zone_meta.get('charge_duration', 0.0), 0.0)
             return max(0.0, float(stop_timer_s)), zone_name
 
+        def _segment_override_at(values: List[float], index: int) -> float:
+            """Per-segment override for the segment arriving at `index`, or 0.0."""
+            if index <= 0 or index >= len(values):
+                return 0.0
+            try:
+                val = float(values[index])
+            except (TypeError, ValueError):
+                return 0.0
+            return val if val > 0.0 else 0.0
+
+        def _segment_speed_override_at(index: int) -> float:
+            return _segment_override_at(segment_speeds_list, index)
+
+        def _apply_speed_cap_for_batch(indices) -> None:
+            """Apply the most restrictive per-segment speed/accel/decel across a
+            batch's traversed segments (every waypoint except the start) to both
+            controller and smoother. Falls back to the global defaults when no
+            segment in the batch overrides a given limit."""
+            def _min_override(values: List[float]) -> Optional[float]:
+                found = [
+                    _segment_override_at(values, i)
+                    for i in indices[1:]
+                    if _segment_override_at(values, i) > 0.0
+                ]
+                return min(found) if found else None
+
+            cap = _min_override(segment_speeds_list)
+            acc = _min_override(segment_accels_list)
+            dec = _min_override(segment_decels_list)
+            self._apply_path_motion_limits(
+                cap if cap is not None else float(self.max_speed),
+                acc if acc is not None else float(self.path_default_accel),
+                dec if dec is not None else float(self.path_default_decel),
+            )
+
         def _shelf_check_enabled_at(index: int) -> bool:
+            if getattr(self, '_flip_pingpong_actions', False):
+                cfg = _action_point_cfg_at(index)
+                dz = cfg.get('shelf_dropoff')
+                if isinstance(dz, dict) and bool(dz.get('enabled', False)):
+                    return True
+                return False
+
             if index < 0 or index >= len(shelf_checks_list):
                 return False
             return bool(shelf_checks_list[index])
@@ -6330,7 +6682,7 @@ class ZoneManager(Node):
             return cfg if isinstance(cfg, dict) else {}
 
         def _shelf_recognition_cfg_at(index: int) -> Dict[str, Any]:
-            cfg = _action_point_cfg_at(index)
+            cfg = _effective_action_point_cfg_at(index)
             if (
                 str(cfg.get('point_type', '') or '').strip().lower() == 'shelf'
                 and bool(cfg.get('recognize', False))
@@ -6342,6 +6694,11 @@ class ZoneManager(Node):
             """Return True if waypoint can be tracked continuously without stopping."""
             if index <= 0 or index >= (total - 1):
                 return False
+
+            # A waypoint that is only the pre-point of a later shelf action must
+            # not stop here on its own; the shelf MOVE_TO_PRE_POINT handles arrival.
+            if _is_pre_point_of_following_shelf(index):
+                return True
 
             # Phase 2: Align
             align_pose, _, _ = _semantic_align_target_at(index)
@@ -6434,6 +6791,125 @@ class ZoneManager(Node):
             pose, err = _zone_pose_from_meta(pre_zone_name, pre_meta if isinstance(pre_meta, dict) else {})
             return pose, pre_zone_name, err
 
+        def _is_pre_point_of_following_shelf(index: int) -> bool:
+            """True if this waypoint is the pre-point of a later shelf action point.
+
+            Such a waypoint must not get its own standalone MOVE_TO_POINT/align/stop
+            — the shelf action's MOVE_TO_PRE_POINT drives there exactly once. We fold
+            it into the continuous batch so the robot does not arrive twice.
+            """
+            zname = _zone_name_at(index)
+            if not zname:
+                return False
+            for j in range(index + 1, total):
+                cfg = _shelf_recognition_cfg_at(j)
+                if not cfg:
+                    continue
+                if _pre_point_zone_name_from_cfg(cfg) == zname:
+                    return True
+            return False
+
+        def _shelf_dropoff_cfg_at(index: int) -> Dict[str, Any]:
+            """Return the action-point cfg when this point is a shelf DROP-OFF.
+
+            A drop-off point carries a shelf, lowers/releases it at the point, then
+            reverses straight out to a configured exit point. Distinct from the
+            pickup flow (which scans + docks + lifts).
+            """
+            cfg = _action_point_cfg_at(index)
+            dz = cfg.get('shelf_dropoff')
+            is_dropoff = isinstance(dz, dict) and bool(dz.get('enabled', False))
+            
+            if getattr(self, '_flip_pingpong_actions', False):
+                if index >= 0 and index < len(shelf_checks_list) and shelf_checks_list[index]:
+                    # Ping-pong return leg: a point that is a shelf PICKUP on the
+                    # forward leg acts as a DROP-OFF on the way back. Reverse out to
+                    # the same pre-point the pickup approached from (it has no
+                    # standalone exit point of its own), and lower to release.
+                    pickup_cfg = _action_point_cfg_at(index)
+                    return {'shelf_dropoff': {
+                        'enabled': True,
+                        'exit_point': pickup_cfg.get('pre_point'),
+                        'action_id': 'lift_down',
+                    }}
+                return {}
+
+            if is_dropoff:
+                return cfg
+            return {}
+
+        def _pingpong_source_recognition_cfg() -> Dict[str, Any]:
+            """Recognition template used by the forward pickup(s) on this path.
+
+            On the ping-pong return leg a forward DROP-OFF point becomes a PICKUP
+            and must re-recognise the same shelf it dropped there. The shelf model
+            is a per-path constant, so borrow the template from the first forward
+            pickup/recognition point. Cached for the duration of this goal.
+            """
+            cached = getattr(self, '_pingpong_src_reco_cfg', None)
+            if cached is not None:
+                return cached
+            src: Dict[str, Any] = {}
+            for j in range(total):
+                cfg_j = _action_point_cfg_at(j)
+                template_id = str(cfg_j.get('template_id', '') or '').strip()
+                is_reco = (
+                    str(cfg_j.get('point_type', '') or '').strip().lower() == 'shelf'
+                    and bool(cfg_j.get('recognize', False))
+                )
+                is_pickup = j < len(shelf_checks_list) and bool(shelf_checks_list[j])
+                if template_id and (is_reco or is_pickup):
+                    src = {'template_id': template_id}
+                    break
+            self._pingpong_src_reco_cfg = src
+            return src
+
+        def _effective_action_point_cfg_at(index: int) -> Dict[str, Any]:
+            """Flip-aware action-point cfg for the recognition/pickup flow.
+
+            Normal operation returns the raw cfg. On the ping-pong return leg, a
+            forward DROP-OFF point is turned into a PICKUP: graft the forward
+            pickup's shelf template on, approach/scan from this point's exit
+            standoff, and lift the shelf back up.
+            """
+            cfg = _action_point_cfg_at(index)
+            if not getattr(self, '_flip_pingpong_actions', False):
+                return cfg
+            dz = cfg.get('shelf_dropoff')
+            is_forward_dropoff = isinstance(dz, dict) and bool(dz.get('enabled', False))
+            if not is_forward_dropoff:
+                return cfg
+            merged = dict(cfg)
+            merged['point_type'] = 'shelf'
+            merged['recognize'] = True
+            src = _pingpong_source_recognition_cfg()
+            if src.get('template_id'):
+                merged['template_id'] = src['template_id']
+            exit_point = dz.get('exit_point')
+            if exit_point is not None:
+                merged['pre_point'] = exit_point
+            merged.setdefault('action_id', 'lift_up')
+            return merged
+
+        def _dropoff_exit_pose_at(index: int) -> Tuple[Optional[PoseStamped], str, str]:
+            cfg = _shelf_dropoff_cfg_at(index)
+            if not cfg:
+                return None, '', ''
+            dz = cfg.get('shelf_dropoff', {})
+            exit_name = _pre_point_zone_name_from_cfg({'pre_point': dz.get('exit_point')})
+            if not exit_name:
+                return None, '', 'drop-off point has no exit point configured'
+            exit_meta = zones_for_path.get(exit_name, {})
+            pose, err = _zone_pose_from_meta(exit_name, exit_meta if isinstance(exit_meta, dict) else {})
+            return pose, exit_name, err
+
+        def _dropoff_release_action_id(index: int) -> str:
+            cfg = _shelf_dropoff_cfg_at(index)
+            dz = cfg.get('shelf_dropoff', {}) if cfg else {}
+            action_id = str(dz.get('action_id', '') or '').strip()
+            # Default to lowering the shelf to release it.
+            return action_id or 'lift_down'
+
         async def _validate_follow_move_arrival(
             waypoint_index: int,
             phase_label: str,
@@ -6521,6 +6997,15 @@ class ZoneManager(Node):
                 or (not isinstance(orientation, dict))
                 or (not any(key in orientation for key in ('x', 'y', 'z', 'w')))
             ):
+                return None, 0.0, ''
+
+            # Tag-linked POIs carry no meaningful heading: the Matrix Tag fixes
+            # localization (and the robot's heading is whatever the tag-derived
+            # pose says), so forcing an ALIGN_AT_POINT spin to the zone's stored
+            # orientation just wastes time and can fight the tag heading. Skip
+            # alignment entirely when this action point is linked to a tag.
+            ap_cfg = _action_point_cfg_at(index)
+            if bool(ap_cfg.get('use_pgv', False)) and str(ap_cfg.get('tag_id', '') or '').strip():
                 return None, 0.0, ''
 
             align_pose = PoseStamped()
@@ -7033,7 +7518,7 @@ class ZoneManager(Node):
         async def _run_optional_shelf_check_phase(waypoint_index: int, scan_label: str = ''):
             nonlocal shelf_flip_flop_up_next
 
-            ap_cfg = _action_point_cfg_at(waypoint_index)
+            ap_cfg = _effective_action_point_cfg_at(waypoint_index)
             recognize_via_config = (
                 str(ap_cfg.get('point_type', '') or '').strip().lower() == 'shelf'
                 and bool(ap_cfg.get('recognize', False))
@@ -7042,6 +7527,16 @@ class ZoneManager(Node):
                 return '', False
 
             target_label = _zone_name_at(waypoint_index) or f'waypoint {waypoint_index + 1}'
+            if self._lift_is_at_top():
+                self.get_logger().warn(
+                    f'SHELF_CHECK skipped for "{target_label}": lift is already at top'
+                )
+                _publish_feedback(
+                    waypoint_index,
+                    f'SHELF_CHECK: skipped "{target_label}" because lift is already at top',
+                )
+                return '', False
+
             scan_location_label = str(scan_label or target_label).strip() or target_label
             detector_service_name = str(self.shelf_detector_enable_service or '/shelf/set_enabled')
             enable_receipt_before = float(self.latest_shelf_status_receipt_monotonic or 0.0)
@@ -7222,6 +7717,7 @@ class ZoneManager(Node):
                         f'SHELF_CHECK lift action "{lift_action_id}" failed at waypoint '
                         f'{waypoint_index + 1}/{total}: {lift_msg}'
                     ), False
+                await self._expand_footprint_for_shelf()
                 self.get_logger().info(
                     f'FollowPath shelf check complete at waypoint {waypoint_index + 1}/{total}: '
                     f'dock="{dock_msg}" lift="{lift_msg}" next_action='
@@ -7414,6 +7910,56 @@ class ZoneManager(Node):
                 self._publish_docking_twist(0.0, 0.0)
                 self._set_navigation_lane_locked(False)
                 self._docking_motion_gate.clear()
+
+        async def _run_dropoff_phase(waypoint_index: int) -> Tuple[str, bool]:
+            """Shelf DROP-OFF: lower/release the carried shelf, then reverse out to
+            the configured exit point. Returns (error, performed)."""
+            exit_pose, exit_name, exit_err = _dropoff_exit_pose_at(waypoint_index)
+            if exit_err:
+                return (
+                    f'Shelf drop-off point "{_zone_name_at(waypoint_index)}" exit point '
+                    f'invalid: {exit_err}'
+                ), False
+            if exit_pose is None:
+                return (
+                    f'Shelf drop-off point "{_zone_name_at(waypoint_index)}" has no '
+                    f'reachable exit point'
+                ), False
+
+            release_action_id = _dropoff_release_action_id(waypoint_index)
+            _publish_feedback(
+                waypoint_index,
+                f'SHELF_DROPOFF: releasing shelf ({release_action_id}) at '
+                f'"{_zone_name_at(waypoint_index)}"',
+            )
+            release_ok, release_msg = await self._execute_named_path_action(release_action_id)
+            if not release_ok:
+                return (
+                    f'SHELF_DROPOFF release action "{release_action_id}" failed at '
+                    f'waypoint {waypoint_index + 1}/{total}: {release_msg}'
+                ), False
+
+            _publish_feedback(
+                waypoint_index,
+                f'SHELF_DROPOFF: reversing out to exit point "{exit_name}"',
+            )
+            retreat_err = await _run_reverse_retreat_to_pose(
+                waypoint_index,
+                exit_pose,
+                exit_name,
+            )
+            if retreat_err:
+                return retreat_err, False
+            # Shelf is released but the robot is still under it until the reverse
+            # completes — keep the shelf+5cm carry footprint clearing those legs
+            # from the scan, then drop back to the bare robot body now that we are
+            # fully backed out.
+            await self._restore_footprint()
+            self.get_logger().info(
+                f'SHELF_DROPOFF complete at waypoint {waypoint_index + 1}/{total}: '
+                f'released via "{release_action_id}", reversed to exit "{exit_name}"'
+            )
+            return '', True
 
         async def _run_explicit_align_pose_phase(
             waypoint_index: int,
@@ -7792,7 +8338,15 @@ class ZoneManager(Node):
                     target_idx += 1
                 batch_indices.append(target_idx)
 
-                pre_point_pose, pre_point_name, pre_point_err = _pre_point_pose_for_shelf_action_at(target_idx)
+                # Shelf DROP-OFF takes precedence over the pickup scan flow: a
+                # drop-off point carries a shelf in, lowers it, reverses to its
+                # exit point. It uses a plain approach, not MOVE_TO_PRE_POINT scan.
+                is_dropoff_point = bool(_shelf_dropoff_cfg_at(target_idx))
+
+                pre_point_pose, pre_point_name, pre_point_err = (
+                    (None, '', '') if is_dropoff_point
+                    else _pre_point_pose_for_shelf_action_at(target_idx)
+                )
                 shelf_pre_point_flow = pre_point_pose is not None
                 if pre_point_err:
                     result.success = False
@@ -7812,9 +8366,22 @@ class ZoneManager(Node):
                         f'MOVE_TO_PRE_POINT: "{pre_point_name}" before shelf action '
                         f'"{_zone_name_at(target_idx)}"',
                     )
-                
+
+                move_batch_indices = batch_indices
+                if (
+                    shelf_pre_point_flow
+                    and len(batch_indices) > 2
+                    and _zone_name_at(batch_indices[-2]) == pre_point_name
+                ):
+                    # The explicit pre-point is already in this batch. End there
+                    # instead of replacing the shelf point with a duplicate pose.
+                    move_batch_indices = batch_indices[:-1]
+
+                # Apply this batch's per-segment speed cap before traversing it.
+                _apply_speed_cap_for_batch(move_batch_indices)
+
                 _wrapped, phase_err = await _run_follow_path_batch_with_retries(
-                    batch_indices,
+                    move_batch_indices,
                     'MOVE_TO_PRE_POINT' if shelf_pre_point_flow else 'MOVE_TO_POINT',
                     current_seg_idx,
                     end_pose_override=pre_point_pose if shelf_pre_point_flow else None,
@@ -7842,6 +8409,13 @@ class ZoneManager(Node):
                         pre_point_pose,
                         pre_point_name,
                     )
+                elif is_dropoff_point:
+                    # Drop-off points are position-only: the robot lowers the shelf
+                    # where it stands, then reverses straight out to the exit point.
+                    # No heading alignment at the drop-off (or the exit) — a stored
+                    # zone orientation here would spin the robot for no reason and
+                    # skew the straight reverse direction.
+                    phase_err = ''
                 else:
                     phase_err = await _run_semantic_align_phase_with_retries(target_idx)
                 if phase_err:
@@ -7866,6 +8440,28 @@ class ZoneManager(Node):
                     result.message = phase_err
                     goal_handle.abort()
                     return result
+
+                # Phase 4a: shelf DROP-OFF — release the carried shelf then reverse
+                # out to the configured exit point. Mutually exclusive with the
+                # pickup scan/dock flow below.
+                if is_dropoff_point:
+                    phase_err, dropoff_done = await _run_dropoff_phase(target_idx)
+                    if phase_err:
+                        if phase_err == terminal_error:
+                            return result
+                        result.success = False
+                        result.completed = int(max(0, completed_count))
+                        result.message = phase_err
+                        goal_handle.abort()
+                        return result
+                    if dropoff_done:
+                        actioned_indices.add(target_idx)
+                    completed_count = max(completed_count, target_idx + 1)
+                    _publish_feedback(
+                        target_idx,
+                        f'WAYPOINT_READY: waypoint {target_idx + 1}/{total}',
+                    )
+                    continue
 
                 # Phase 4: optional shelf detection/docking after arrival.
                 phase_err, shelf_action_performed = await _run_optional_shelf_check_phase(
@@ -7948,6 +8544,12 @@ class ZoneManager(Node):
             goal_handle.succeed()
             return result
         finally:
+            # Path is over: release the per-segment envelope back to the global
+            # defaults (controller + smoother) so the next motion is not stuck at
+            # a slowed segment's speed/accel/decel.
+            self._apply_path_motion_limits(
+                self.max_speed, self.path_default_accel, self.path_default_decel
+            )
             self._clear_active_follow_path()
 
     async def execute_follow_path(self, goal_handle):

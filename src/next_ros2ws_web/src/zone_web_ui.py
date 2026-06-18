@@ -26,6 +26,7 @@ from flask_cors import CORS
 from PIL import Image
 from rclpy.executors import MultiThreadedExecutor
 import yaml
+from std_srvs.srv import SetBool
 
 from next_ros2ws_web.ros_bridge import RosBridge
 
@@ -99,7 +100,7 @@ _CAMERA_WARMUP_FRAMES = max(6, int(os.getenv('NEXT_WEB_CAMERA_WARMUP_FRAMES', '1
 
 
 def _node():
-    if ros_node is None:
+    if ros_node is None or getattr(ros_node, '_shutting_down', False):
         return None, (jsonify({'ok': False, 'message': 'ROS node not initialized'}), 500)
     return ros_node, None
 
@@ -1023,6 +1024,7 @@ def save_zone():
         pgv_dtheta=float(data.get('pgv_dtheta', 0.0)),
         description=str(data.get('description', '')),
         tag_id=data.get('tag_id'),
+        shelf_dropoff=data.get('shelf_dropoff'),
     )
     return _status(result, fail_code=503)
 
@@ -1150,6 +1152,7 @@ def update_zone_params():
         pgv_dtheta=float(data.get('pgv_dtheta', 0.0)),
         description=str(data.get('description', '')),
         tag_id=data.get('tag_id'),
+        shelf_dropoff=data.get('shelf_dropoff'),
     )
     return _status(result, fail_code=503)
 
@@ -1341,6 +1344,11 @@ def follow_path():
     loop_type = data.get('loop_type', 'none')
     loop_mode = _as_bool(data.get('loop_mode', False), default=False)
     settings = data.get('settings', {})
+    if not isinstance(settings, dict):
+        settings = {}
+    params = data.get('params', {})
+    if isinstance(params, dict) and params:
+        settings['motion_constraints'] = params
 
     result = node.follow_path(path_points, loop_type=loop_type, loop_mode=loop_mode, settings=settings)
     code = 200 if result.get('ok') else 503
@@ -1645,6 +1653,21 @@ def force_resume():
     }
     return _status(result, fail_code=503)
 
+
+@app.route('/api/safety/super_override', methods=['POST'])
+def set_safety_super_override():
+    role = next_ops.role_from_request(request, session)
+    if not next_ops.has_permission(role, 'test_mode:run'):
+        return jsonify(next_ops.permission_error(role, 'test_mode:run')), 403
+
+    node, err = _node()
+    if err: return err
+
+    data = _json_body()
+    enable = bool(data.get('enable', True))
+    
+    result = node.set_super_override(enable)
+    return _status(result, fail_code=503)
 
 @app.route('/api/safety/override', methods=['POST'])
 def set_safety_override():
@@ -2193,8 +2216,15 @@ def set_stack_mode():
 
     data = _json_body()
     mode = str(data.get('mode', '')).strip().lower()
-    if mode not in {'nav', 'slam', 'stop'}:
+    if mode not in {'nav', 'pgv_nav', 'reflector_nav', 'slam', 'stop'}:
         return jsonify({'ok': False, 'message': 'Invalid mode'}), 400
+
+    # Switching to AGV (nav/slam/stop) mode: kill any running PGV nodes so
+    # they don't fight AMCL for map->odom and don't trigger the safety halt.
+    if mode in {'nav', 'reflector_nav', 'slam', 'stop'}:
+        with _pgv_lock:
+            _pgv_stop_all()
+            _pgv_kill_strays()
 
     result = node.set_stack_mode(mode)
     code = 200 if result.get('ok') else 503
@@ -2348,7 +2378,12 @@ def get_available_topics():
         return err
 
     topics = []
-    for topic_name, type_list in node.get_topic_names_and_types():
+    try:
+        topic_pairs = list(node.get_topic_names_and_types())
+    except Exception as exc:
+        return jsonify({'ok': False, 'message': f'Failed to read ROS graph: {exc}', 'topics': []}), 503
+
+    for topic_name, type_list in topic_pairs:
         if type_list:
             topics.append({'topic': topic_name, 'type': type_list[0]})
 
@@ -2920,6 +2955,47 @@ def restart_device_config_component():
     return _status(result, fail_code=400)
 
 
+@app.route('/api/device_config/sensors', methods=['GET'])
+def get_device_config_sensors():
+    node, err = _node()
+    if err:
+        return err
+    result = node.discover_device_sensors()
+    return _status(result, fail_code=503)
+
+
+@app.route('/api/device_config/node_params', methods=['GET'])
+def get_device_config_node_params():
+    node, err = _node()
+    if err:
+        return err
+
+    node_name = str(request.args.get('node', '') or '').strip()
+    if not node_name:
+        return jsonify({'ok': False, 'message': 'node is required'}), 400
+
+    result = node.get_device_node_parameters(node_name)
+    return _status(result, fail_code=400)
+
+
+@app.route('/api/device_config/node_params', methods=['POST'])
+def set_device_config_node_params():
+    node, err = _node()
+    if err:
+        return err
+
+    data = _json_body()
+    node_name = str(data.get('node', '') or '').strip()
+    params = data.get('params', {})
+    if not node_name:
+        return jsonify({'ok': False, 'message': 'node is required'}), 400
+    if not isinstance(params, dict) or not params:
+        return jsonify({'ok': False, 'message': 'params object is required'}), 400
+
+    result = node.set_device_node_parameters(node_name, params)
+    return _status(result, fail_code=400)
+
+
 @app.route('/api/settings/update_firmware', methods=['POST'])
 def run_firmware_update():
     role = next_ops.role_from_request(request, session)
@@ -2988,13 +3064,31 @@ _pgv_lock = threading.Lock()
 
 
 def _pgv_running_modes() -> List[str]:
-    """Return modes whose process is still alive (reaping dead ones)."""
+    """Return modes whose process is still alive (reaping dead ones).
+
+    Also detects stray PGV processes not tracked in _pgv_procs — e.g. nodes
+    that survived a web server restart. Returns ['localization'] for strays so
+    the UI can restore pgvNavigationActive and call pgvShutdown() correctly.
+    """
     alive = []
     for mode, proc in list(_pgv_procs.items()):
         if proc.poll() is None:
             alive.append(mode)
         else:
             _pgv_procs.pop(mode, None)
+    if not alive:
+        try:
+            result = subprocess.run(
+                ['pgrep', '-f', 'next_ros2ws_pgv'],
+                stdout=subprocess.PIPE,
+                timeout=3.0,
+            )
+            pids = [int(p) for p in result.stdout.split() if p.strip().isdigit()]
+            pids = [p for p in pids if p not in (os.getpid(), os.getppid())]
+            if pids:
+                alive = ['localization']
+        except Exception:
+            pass
     return alive
 
 
@@ -3943,8 +4037,12 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node = ros_node
+        ros_node = None
         try:
-            ros_node.destroy_node()
+            if node is not None:
+                setattr(node, '_shutting_down', True)
+                node.destroy_node()
         except Exception:
             pass
         try:

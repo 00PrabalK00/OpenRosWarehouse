@@ -1,9 +1,9 @@
 schema_version: 1
 migration_warnings: []
-profile_version: 9
+profile_version: 8
 robot_id: UGV-01
 namespace: /
-base_frame: base_link
+base_frame: base_footprint
 sensor_frames:
   map: map
   odom: odom
@@ -11,7 +11,7 @@ sensor_frames:
   camera: camera_link
   lidar: base_scan
   camera_frame: camera_link
-urdf_source: artifacts/ugv-01/v9/robot_editor_generated.urdf
+urdf_source: artifacts/ugv-01/v7/robot_editor_generated.urdf
 nav2_params_file: ''
 map_association:
   active_map: ''
@@ -40,7 +40,7 @@ mappings:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
   robot_pose:
     topic: /tf
-    field: map->base_link
+    field: map->base_footprint
     type: tf2_msgs/msg/TFMessage
   map:
     topic: /map
@@ -66,16 +66,14 @@ mappings:
     topic: /lift/cmd_rpm
     field: '{"data": -1500}'
     type: std_msgs/msg/Int32
-topics:
-  subscription_slam_pose: /slam_toolbox/pose
-  subscription_odom: /odom
+topics: {}
 urdf_artifact:
   source_filename: robot_editor_generated.urdf
   source_type: urdf
-  source_path: artifacts/ugv-01/v9/robot_editor_generated.urdf
-  compiled_urdf_path: artifacts/ugv-01/v9/compiled.urdf
-  validation_report_path: artifacts/ugv-01/v9/validation.yaml
-  uploaded_at: 1778146884
+  source_path: artifacts/ugv-01/v7/robot_editor_generated.urdf
+  compiled_urdf_path: artifacts/ugv-01/v7/compiled.urdf
+  validation_report_path: artifacts/ugv-01/v7/validation.yaml
+  uploaded_at: 1781168238
   validation:
     valid: false
     parse_ok: true
@@ -85,7 +83,7 @@ urdf_artifact:
     message: 'missing required frames: base_scan, camera_link; optional frames absent
       from URDF: map, odom'
     required_frames:
-    - base_link
+    - base_footprint
     - base_scan
     - camera_link
     missing_required_frames:
@@ -99,20 +97,27 @@ urdf_artifact:
     joint_count: 11
   runtime:
     ok: false
-    message: ''
-    node_name: ''
-    namespace: ''
-    required_tf_frames: []
+    message: 'robot_state_publisher running (pid 99285) but missing TF frames: base_footprint,
+      base_scan, camera_link'
+    node_name: robot_state_publisher_profile
+    namespace: /
+    required_tf_frames:
+    - base_footprint
+    - base_scan
+    - camera_link
     observed_tf_frames: []
-    missing_tf_frames: []
-    pid: 0
+    missing_tf_frames:
+    - base_footprint
+    - base_scan
+    - camera_link
+    pid: 99285
 robot_builder:
   schema_version: 1
   source: robot_editor
-  base_link: base_link
+  base_link: base_footprint
   links:
   - name: base_link
-    parent: ''
+    parent: base_footprint
     joint_type: fixed
     joint_xyz:
     - 0.0
@@ -123,7 +128,7 @@ robot_builder:
     - 0.0
     - 0.0
   - name: base_footprint
-    parent: base_link
+    parent: ''
     joint_type: fixed
     joint_xyz:
     - 0.0
@@ -138,7 +143,7 @@ robot_builder:
     joint_type: continuous
     joint_xyz:
     - 0.0
-    - 0.255
+    - 0.2475
     - 0.0
     joint_rpy:
     - -1.570796
@@ -149,7 +154,7 @@ robot_builder:
     joint_type: continuous
     joint_xyz:
     - 0.0
-    - -0.255
+    - -0.2475
     - 0.0
     joint_rpy:
     - 1.570796
@@ -499,7 +504,7 @@ robot_builder:
     link: laser_front_frame
     child_frame: ''
     enabled: true
-    topic: /scan
+    topic: ''
     driver: ''
     safety_behavior: ''
     recovery_behavior: ''
@@ -530,7 +535,7 @@ robot_builder:
     link: laser_rear_frame
     child_frame: ''
     enabled: true
-    topic: /scan2
+    topic: ''
     driver: ''
     safety_behavior: ''
     recovery_behavior: ''
@@ -554,7 +559,7 @@ robot_builder:
     diagnostic_source: ''
     parameters: {}
     validation_records: []
-  updated_at: 1778146884
+  updated_at: 1781168238
 release:
   production: false
   production_marked_at: 0
@@ -573,5 +578,6 @@ bringup:
   last_run_message: Bringup wizard FAIL (1/5)
 nav2_config:
   curated: {}
-  advanced_overrides: {}
-  updated_at: 0
+  advanced_overrides:
+    behavior_server/ros__parameters/max_rotational_vel: 0.8
+  updated_at: 1781168724

@@ -12,7 +12,10 @@ from rcl_interfaces.msg import SetParametersResult
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from visualization_msgs.msg import Marker, MarkerArray
 import math
+import os
+import time
 from tf2_ros import Buffer, TransformException, TransformListener
+from next_ros2ws_core.db_manager import DatabaseManager
 
 # LiDAR drivers typically publish with BEST_EFFORT reliability.
 # Subscribing with RELIABLE (rclpy default) causes a QoS incompatibility
@@ -82,7 +85,24 @@ class SafetyController(Node):
         self.estop_active = False
         self.low_confidence_stop = False
         self.obstacle_stop = False
+        # PGV localization mode. In pure_pgv navigation AMCL is off, so the
+        # localization gate is driven by the PGV localizer status instead of the
+        # /amcl_pose covariance. Lidar distance safety stays fully active either
+        # way. pgv_active latches on the first /pgv/localization_status message
+        # and clears when the status goes silent for pgv_status_timeout_s.
+        self.pgv_active = False
+        self.pgv_status = 'INIT'
+        self._pgv_last_status_ns = None
+        self.pgv_status_timeout_s = max(
+            1.0, float(self.declare_parameter('pgv_status_timeout_s', 3.0).value)
+        )
         self.manual_override = bool(self.declare_parameter('manual_override_on_startup', False).value)
+        self.super_override = False
+        self.srv_super_override = self.create_service(
+            SetBool,
+            '~/super_override',
+            self.super_override_callback
+        )
         self.control_mode = 'unknown'
         self.distance_safety_enabled = bool(
             self.declare_parameter('distance_safety_enabled', True).value
@@ -190,6 +210,14 @@ class SafetyController(Node):
             0.0,
             float(self.declare_parameter('carried_body_exclusion_radius_m', self.obstacle_body_exclusion_radius_m).value),
         )
+        # A dragged (not rigidly lifted) shelf lags behind the robot, so its legs
+        # sit further back than the rigid carried footprint predicts. This extends
+        # the body-echo exclusion REARWARD only (x < 0) while carrying, so the
+        # trailing legs stay excluded without blinding forward obstacle detection.
+        self.carried_body_rear_extra_m = max(
+            0.0,
+            float(self.declare_parameter('carried_body_rear_extra_m', 0.0).value),
+        )
         # Drop stale obstacle state if scans stay invalid for a few frames.
         self.invalid_scan_clear_frames = max(1, int(self.declare_parameter('invalid_scan_clear_frames', 3).value))
         # Evaluate front/rear blocking based on commanded direction.
@@ -225,6 +253,29 @@ class SafetyController(Node):
         self.robot_base_frame = str(self.declare_parameter('robot_base_frame', 'base_link').value or 'base_link')
         self.tf_buffer = Buffer(cache_time=Duration(seconds=5.0))
         self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
+
+        # ---- Safety zones (drawn map areas that override the hard-stop distance) ----
+        # A user draws an area in the editor and assigns a safety_distance_m. When the
+        # robot is inside that area, the hard-stop clearance is raised to that value so
+        # the robot keeps a wider berth (e.g. 0.5 m near people instead of 0.3 m).
+        db_path = os.path.expanduser(
+            str(self.declare_parameter('db_path', '~/DB/robot_data.db').value or '~/DB/robot_data.db')
+        )
+        try:
+            self._safety_db = DatabaseManager(db_path=db_path)
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().error(f'Safety-zone DB unavailable ({exc}); zone overrides disabled')
+            self._safety_db = None
+        self._safety_zones = []
+        self._safety_zones_hash = ''
+        self._safety_zone_map_frame = str(
+            self.declare_parameter('safety_zone_map_frame', 'map').value or 'map'
+        )
+        self._safety_zone_reload_period_s = max(
+            0.5, float(self.declare_parameter('safety_zone_reload_period_s', 2.0).value)
+        )
+        self._safety_zone_last_reload = 0.0
+        self._reload_safety_zones()
 
         self.ttc_stop_sec = max(0.1, float(self.declare_parameter('ttc_stop_sec', 0.9).value))
         self.ttc_warn_sec = max(self.ttc_stop_sec, float(self.declare_parameter('ttc_warn_sec', 1.6).value))
@@ -349,7 +400,19 @@ class SafetyController(Node):
             self._nav2_filter_bridge_ready_callback,
             _STATE_QOS,
         )
-        
+        # PGV localizer status: drives the localization gate when running PGV mode
+        # (pure_pgv) since AMCL is off. STALE means the robot has dead-reckoned
+        # too far from the last Matrix Tag and has lost its absolute fix.
+        # NOTE: the localizer publishes this with default (RELIABLE/VOLATILE) QoS,
+        # so subscribe VOLATILE here - a TRANSIENT_LOCAL sub is QoS-incompatible
+        # and silently drops every message ("incompatible QoS: DURABILITY").
+        self.pgv_status_sub = self.create_subscription(
+            String,
+            '/pgv/localization_status',
+            self.pgv_status_callback,
+            10,
+        )
+
         self.get_logger().info(f'Preferred obstacle cloud: {self.obstacle_cloud_topic}')
         if self.obstacle_scan_topic:
             self.get_logger().info(f'Preferred obstacle scan fallback: {self.obstacle_scan_topic}')
@@ -875,9 +938,18 @@ class SafetyController(Node):
             return max(float(self.obstacle_body_exclusion_radius_m), float(self.carried_body_exclusion_radius_m))
         return float(self.obstacle_body_exclusion_radius_m)
 
+    def _rear_drag_extra_m(self) -> float:
+        if self.carried_profile_active:
+            return max(0.0, float(self.carried_body_rear_extra_m))
+        return 0.0
+
     def _body_support_radius_m(self, x_m: float, y_m: float, padding_m: float = 0.0) -> float:
         half_len = max(0.0, (0.5 * self._effective_body_length_m()) + float(padding_m))
         half_wid = max(0.0, (0.5 * self._effective_body_width_m()) + float(padding_m))
+        # A dragged shelf trails behind: stretch the rear half-length only so the
+        # lagging legs stay inside the exclusion while the front stays tight.
+        if float(x_m) < 0.0:
+            half_len = half_len + self._rear_drag_extra_m()
         distance = math.hypot(float(x_m), float(y_m))
         if distance <= 1e-9:
             return max(float(self._effective_body_exclusion_radius_m()), half_len, half_wid)
@@ -918,6 +990,8 @@ class SafetyController(Node):
                     self.carried_body_padding_m = max(0.0, float(value))
                 elif name == 'carried_body_exclusion_radius_m':
                     self.carried_body_exclusion_radius_m = max(0.0, float(value))
+                elif name == 'carried_body_rear_extra_m':
+                    self.carried_body_rear_extra_m = max(0.0, float(value))
             return SetParametersResult(successful=True)
         except Exception as exc:
             return SetParametersResult(successful=False, reason=str(exc))
@@ -1219,13 +1293,35 @@ class SafetyController(Node):
             smooth_distance = float(self.min_obstacle_distance_front)
             critical_count = int(self.critical_obstacles_front)
 
+        override_dist, lidar_off = self._eval_active_safety_zone()
+
+        # Operator turned the lidar safety STOP off inside this zone: no obstacle
+        # trigger from lidar here. (The sensor still runs; only the stop is muted.)
+        if lidar_off:
+            return {
+                'side': side_name,
+                'raw_distance': raw_distance,
+                'smooth_distance': smooth_distance,
+                'critical_count': critical_count,
+                'trigger': False,
+                'hard_stop': False,
+                'active': False,
+                'clear': True,
+            }
+
         hard_stop_distance = self._current_hard_stop_distance_m()
-        trigger = critical_count > 0
         hard_stop = math.isfinite(raw_distance) and raw_distance <= hard_stop_distance
+        if override_dist is not None:
+            # Inside a drawn zone the operator's distance is the single source of
+            # truth: stop only when something is within it, ignore the global
+            # critical-count trigger (so a 0.01 m zone really lets the robot creep).
+            trigger = hard_stop
+            clear_threshold = float(override_dist) + self.obstacle_clear_margin_m
+        else:
+            trigger = critical_count > 0
+            clear_threshold = self.critical_zone + self.obstacle_clear_margin_m
         active = bool(trigger or hard_stop)
-        clear = (not math.isfinite(smooth_distance)) or (
-            smooth_distance > (self.critical_zone + self.obstacle_clear_margin_m)
-        )
+        clear = (not math.isfinite(smooth_distance)) or (smooth_distance > clear_threshold)
 
         return {
             'side': side_name,
@@ -1327,7 +1423,7 @@ class SafetyController(Node):
         if self.estop_active:
             return True, ['E-STOP']
 
-        if self.low_confidence_stop and not self.manual_override:
+        if self.low_confidence_stop and not self.manual_override and self._control_mode_normalized() != 'manual':
             return True, [f'LOW_CONFIDENCE({self.localization_confidence:.1f}%)']
 
         if self._distance_hold_active():
@@ -1418,11 +1514,14 @@ class SafetyController(Node):
         return blocked
 
     def _update_obstacle_state(self):
-        if not self.distance_safety_enabled:
+        if (not self.distance_safety_enabled) or self._in_lidar_safety_off_zone():
             self.obstacle_stop = False
             self._obstacle_stop_frames = 0
             self._obstacle_clear_frames = 0
-            self._obstacle_reason = 'distance_safety_disabled'
+            self._obstacle_reason = (
+                'lidar_safety_off_zone' if self.distance_safety_enabled
+                else 'distance_safety_disabled'
+            )
             self._obstacle_blocked_direction = 'none'
             self._manual_blocked_direction = 'none'
             self._blocked_zones = set()
@@ -1522,11 +1621,133 @@ class SafetyController(Node):
                     f'cmd_vx={self.last_cmd_linear_x:.2f}m/s'
                 )
 
+    def _reload_safety_zones(self) -> None:
+        """Refresh the cached safety-zone list from the DB (cheap, hash-gated)."""
+        if self._safety_db is None:
+            return
+        try:
+            data = self._safety_db.get_map_layers()
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warning(f'Safety-zone reload failed: {exc}')
+            return
+        zones = data.get('safety_zones', []) if isinstance(data, dict) else []
+        zones = [z for z in zones if isinstance(z, dict)]
+        new_hash = str(zones)
+        if new_hash != self._safety_zones_hash:
+            self._safety_zones_hash = new_hash
+            self._safety_zones = zones
+            self.get_logger().info(f'Loaded {len(zones)} safety zone(s) from map layers')
+
+    def _maybe_reload_safety_zones(self) -> None:
+        now = time.monotonic()
+        if (now - self._safety_zone_last_reload) >= self._safety_zone_reload_period_s:
+            self._safety_zone_last_reload = now
+            self._reload_safety_zones()
+
+    def _robot_xy_in_map(self):
+        """Return (x, y) of the robot base in the map frame, or None if unavailable."""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                self._safety_zone_map_frame,
+                self.robot_base_frame,
+                Time(),
+                timeout=Duration(seconds=0.05),
+            )
+        except TransformException:
+            return None
+        t = transform.transform.translation
+        return (float(t.x), float(t.y))
+
+    @staticmethod
+    def _point_in_shape(px: float, py: float, obj: dict) -> bool:
+        t = str(obj.get('type', '') or '').lower()
+        if t == 'rectangle':
+            x1 = float(obj.get('x1', 0.0)); y1 = float(obj.get('y1', 0.0))
+            x2 = float(obj.get('x2', 0.0)); y2 = float(obj.get('y2', 0.0))
+            return (min(x1, x2) <= px <= max(x1, x2)) and (min(y1, y2) <= py <= max(y1, y2))
+        if t == 'circle':
+            cx = float(obj.get('x', 0.0)); cy = float(obj.get('y', 0.0))
+            r = float(obj.get('radius', 0.0))
+            return ((px - cx) ** 2 + (py - cy) ** 2) <= (r * r)
+        if t == 'polygon':
+            pts = obj.get('points', [])
+            poly = [(float(p.get('x', 0.0)), float(p.get('y', 0.0))) for p in pts if isinstance(p, dict)]
+            if len(poly) < 3:
+                return False
+            inside = False
+            n = len(poly)
+            j = n - 1
+            for i in range(n):
+                xi, yi = poly[i]
+                xj, yj = poly[j]
+                if ((yi > py) != (yj > py)) and (
+                    px < (xj - xi) * (py - yi) / ((yj - yi) or 1e-12) + xi
+                ):
+                    inside = not inside
+                j = i
+            return inside
+        return False
+
+    def _eval_active_safety_zone(self):
+        """Evaluate drawn safety zones at the robot's current map pose.
+
+        Returns (distance_override_m_or_None, lidar_safety_off_bool):
+          - distance_override: the safety_distance_m the operator drew for the
+            zone the robot sits in. Authoritative — it RAISES or LOWERS the
+            hard-stop clearance (a 0.01 m zone really does let the robot creep in).
+          - lidar_safety_off: when True the operator turned the lidar safety STOP
+            off inside that zone, so obstacle gating is suppressed there.
+        For overlapping zones: lidar-off wins if any zone sets it; the smallest
+        (most permissive) distance wins, since these are operator relaxations.
+
+        Result is cached for 0.1 s so the many per-tick callers share one TF
+        lookup. Time+hash gated reload also lets a freshly-drawn zone take effect
+        without restarting the node.
+        """
+        now = time.monotonic()
+        cache = getattr(self, '_safety_zone_eval_cache', None)
+        if cache is not None and (now - cache[0]) < 0.1:
+            return cache[1], cache[2]
+
+        self._maybe_reload_safety_zones()
+        dist_override = None
+        lidar_off = False
+        if self._safety_zones:
+            pose = self._robot_xy_in_map()
+            if pose is not None:
+                px, py = pose
+                for zone in self._safety_zones:
+                    try:
+                        if not self._point_in_shape(px, py, zone):
+                            continue
+                        if bool(zone.get('lidar_safety_off', False)):
+                            lidar_off = True
+                        d = float(zone.get('safety_distance_m', 0.0))
+                        if dist_override is None or d < dist_override:
+                            dist_override = d
+                    except Exception:
+                        continue
+        self._safety_zone_eval_cache = (now, dist_override, lidar_off)
+        return dist_override, lidar_off
+
+    def _safety_zone_distance_override(self):
+        return self._eval_active_safety_zone()[0]
+
+    def _in_lidar_safety_off_zone(self) -> bool:
+        return bool(self._eval_active_safety_zone()[1])
+
     def _current_hard_stop_distance_m(self) -> float:
         mode = self._control_mode_normalized()
         if mode == 'manual' and (not self.manual_mode_same_obstacle_gate):
-            return max(0.0, float(self.manual_critical_zone_m))
-        return max(float(self.critical_zone), float(self.obstacle_hard_stop_distance_m))
+            base = max(0.0, float(self.manual_critical_zone_m))
+        else:
+            base = max(float(self.critical_zone), float(self.obstacle_hard_stop_distance_m))
+        # A drawn safety zone is authoritative inside it: honor the operator's
+        # value whether it raises OR lowers the global clearance.
+        override = self._safety_zone_distance_override()
+        if override is not None:
+            return max(0.0, float(override))
+        return base
 
     def _active_obstacle_distance(self, cmd_linear_x: float) -> float:
         if cmd_linear_x > self.ttc_min_speed_mps:
@@ -1566,6 +1787,8 @@ class SafetyController(Node):
         return max(min_scale, min(1.0, min(distance_scale, ttc_scale)))
 
     def _distance_hold_active(self) -> bool:
+        if self._in_lidar_safety_off_zone():
+            return False
         return bool(self.distance_safety_enabled and self.obstacle_stop and (not self.manual_override))
 
     def _nav2_speed_limit_percent(self, cmd_linear_x: float) -> int:
@@ -1655,8 +1878,59 @@ class SafetyController(Node):
             self.base_critical_zone = self.autonomous_critical_zone_m
         self._apply_lenient_zones()
     
+    def _pgv_fresh(self) -> bool:
+        """True when PGV localizer status arrived recently (PGV mode is live)."""
+        if not self.pgv_active or self._pgv_last_status_ns is None:
+            return False
+        age_s = (self.get_clock().now().nanoseconds - self._pgv_last_status_ns) / 1e9
+        if age_s > self.pgv_status_timeout_s:
+            # PGV stack stopped publishing. In PGV mode this is a localization
+            # fault, so keep the localization stop engaged until a fresh OK/INIT
+            # status arrives.
+            if not self.manual_override:
+                self.low_confidence_stop = True
+                self.localization_confidence = 0.0
+            return False
+        return True
+
+    def pgv_status_callback(self, msg):
+        """Drive the localization gate from the PGV localizer in PGV mode.
+
+        Status payload is '<STATE>' or '<STATE>: <detail>' where STATE is one of
+        OK / INIT / STALE. Lidar distance safety is independent of this gate and
+        always remains active.
+        """
+        self.pgv_active = True
+        self._pgv_last_status_ns = self.get_clock().now().nanoseconds
+        state = (msg.data or '').strip().split(':', 1)[0].strip().upper()
+        self.pgv_status = state or 'INIT'
+
+        # PGV localization status now directly drives the localization gate.
+        # OK/INIT are acceptable; STALE (or a missing heartbeat) should stop
+        # localization-driven motion while keeping lidar safety active.
+        if state == 'STALE':
+            self.localization_confidence = 0.0
+            if not self.manual_override:
+                self.low_confidence_stop = True
+        else:
+            self.localization_confidence = 100.0
+            if self.low_confidence_stop and not self.manual_override:
+                self.low_confidence_stop = False
+        if state == 'STALE':
+            self.get_logger().warning(
+                'PGV localization STALE - dead-reckoned past the last Matrix Tag '
+                '(localization stop active; lidar safety still active)',
+                throttle_duration_sec=5.0,
+            )
+
     def pose_callback(self, msg):
         """Monitor localization confidence from AMCL"""
+        # In PGV mode AMCL is off; the PGV status drives the localization gate.
+        # Ignore any AMCL covariance while PGV owns localization so it cannot
+        # override the PGV gate.
+        if self.pgv_active:
+            self._pgv_fresh()
+            return
         # Calculate confidence from covariance (graph-SLAM proxy)
         cov = msg.pose.covariance
         self.localization_confidence = self._graph_slam_confidence_from_covariance(cov)
@@ -1757,6 +2031,10 @@ class SafetyController(Node):
         if abs(self.last_cmd_linear_x) > self.ttc_min_speed_mps:
             self.last_nonzero_cmd_linear_x = float(self.last_cmd_linear_x)
 
+        if self.super_override:
+            self.safety_pub.publish(msg)
+            return
+
         should_stop, _reasons = self._current_cmd_gate_state()
         if should_stop:
             self.last_speed_scale = 0.0
@@ -1788,6 +2066,9 @@ class SafetyController(Node):
         stop/clear debounce frame counters on every timer tick, causing
         premature stop confirmation on a single scan frame.
         """
+        if self.super_override:
+            return
+
         should_stop, reasons = self._current_cmd_gate_state()
 
         if should_stop:
@@ -1905,6 +2186,17 @@ class SafetyController(Node):
         response.message = 'Safety state cleared. Manual override disabled; normal safety checks active.'
         return response
         
+    def super_override_callback(self, request, response):
+        """Service to override ALL safety checks including E-STOP (DANGEROUS!)"""
+        self.super_override = request.data
+        if self.super_override:
+            self.get_logger().error('🚨 SUPER OVERRIDE ENABLED - ALL SAFETY (INCLUDING E-STOP) BYPASSED 🚨')
+        else:
+            self.get_logger().info('✅ Super override disabled')
+        response.success = True
+        response.message = 'Super override updated'
+        return response
+
     def override_callback(self, request, response):
         """Service to override safety checks (use with caution!)"""
         self.manual_override = request.data

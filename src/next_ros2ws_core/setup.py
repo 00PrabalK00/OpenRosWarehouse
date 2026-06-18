@@ -32,6 +32,7 @@ setup(
             'settings_manager = next_ros2ws_core.settings_manager:main',
             'stack_manager = next_ros2ws_core.stack_manager:main',
             'zone_manager = next_ros2ws_core.zone_manager:main',
+            'map_dotted_truth = next_ros2ws_core.map_dotted_truth:main',
         ],
     },
 )

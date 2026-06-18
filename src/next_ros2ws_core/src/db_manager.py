@@ -148,6 +148,7 @@ class DatabaseManager:
                     no_go_zones TEXT DEFAULT '[]',
                     restricted TEXT DEFAULT '[]',
                     slow_zones TEXT DEFAULT '[]',
+                    safety_zones TEXT DEFAULT '[]',
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -202,6 +203,34 @@ class DatabaseManager:
                 )
             ''')
 
+            # Floor Matrix Tags / PGV codes (a separate layer from action
+            # points). Each tag has a known oriented map pose; this is the
+            # source for tag_map.yaml.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS qr_codes (
+                    tag_id INTEGER PRIMARY KEY,
+                    x REAL NOT NULL DEFAULT 0.0,
+                    y REAL NOT NULL DEFAULT 0.0,
+                    yaw REAL NOT NULL DEFAULT 0.0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # PGV route graph edges. Nodes are Matrix Tags (qr_codes); an edge is
+            # a directed lane between two tags the route follower drives along.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS route_edges (
+                    id TEXT PRIMARY KEY,
+                    from_tag INTEGER NOT NULL,
+                    to_tag INTEGER NOT NULL,
+                    length REAL NOT NULL DEFAULT 0.0,
+                    expected_heading_deg REAL NOT NULL DEFAULT 0.0,
+                    max_lateral_error REAL NOT NULL DEFAULT 0.08,
+                    turn TEXT NOT NULL DEFAULT 'straight',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             # User management table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
@@ -223,6 +252,10 @@ class DatabaseManager:
             if self._get_schema_version(cursor) < self._schema_version:
                 self._ensure_zone_order_column(cursor)
                 self._set_schema_version(cursor, self._schema_version)
+
+            # Idempotent column migration (runs regardless of schema version so
+            # existing DBs gain the safety_zones column without a version bump).
+            self._ensure_map_layer_columns(cursor)
 
             # Create indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_zones_name ON zones(name)')
@@ -295,6 +328,24 @@ class DatabaseManager:
             ''',
             (str(int(version)),),
         )
+
+    def _ensure_map_layer_columns(self, cursor):
+        """Ensure map_layers has all optional JSON layer columns."""
+        cursor.execute('PRAGMA table_info(map_layers)')
+        cols = cursor.fetchall()
+        col_names = set()
+        for col in cols:
+            try:
+                col_names.add(str(col['name']))
+            except Exception:
+                if len(col) > 1:
+                    col_names.add(str(col[1]))
+        if 'safety_zones' not in col_names:
+            cursor.execute("ALTER TABLE map_layers ADD COLUMN safety_zones TEXT DEFAULT '[]'")
+        if 'reflector' not in col_names:
+            cursor.execute("ALTER TABLE map_layers ADD COLUMN reflector TEXT DEFAULT '[]'")
+        if 'localization_zones' not in col_names:
+            cursor.execute("ALTER TABLE map_layers ADD COLUMN localization_zones TEXT DEFAULT '[]'")
 
     def _ensure_zone_order_column(self, cursor):
         """Ensure zones.zone_order exists and has deterministic sequential values."""
@@ -841,13 +892,35 @@ class DatabaseManager:
                 return {
                     'no_go_zones': [],
                     'restricted': [],
-                    'slow_zones': []
+                    'slow_zones': [],
+                    'safety_zones': [],
+                    'localization_zones': [],
+                    'reflector': []
                 }
+
+            # Newer map layer columns may be absent on a row written before migrations.
+            try:
+                safety_raw = row['safety_zones']
+            except (IndexError, KeyError, TypeError):
+                safety_raw = '[]'
             
+            try:
+                reflector_raw = row['reflector']
+            except (IndexError, KeyError, TypeError):
+                reflector_raw = '[]'
+
+            try:
+                localization_raw = row['localization_zones']
+            except (IndexError, KeyError, TypeError):
+                localization_raw = '[]'
+
             return {
                 'no_go_zones': json.loads(row['no_go_zones']),
                 'restricted': json.loads(row['restricted']),
-                'slow_zones': json.loads(row['slow_zones'])
+                'slow_zones': json.loads(row['slow_zones']),
+                'safety_zones': json.loads(safety_raw or '[]'),
+                'localization_zones': json.loads(localization_raw or '[]'),
+                'reflector': json.loads(reflector_raw or '[]')
             }
     
     def save_map_layers(self, layers: Dict[str, List[Any]]) -> bool:
@@ -857,12 +930,16 @@ class DatabaseManager:
             
             cursor.execute('''
                 INSERT OR REPLACE INTO map_layers (
-                    id, no_go_zones, restricted, slow_zones, updated_at
-                ) VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)
+                    id, no_go_zones, restricted, slow_zones, safety_zones,
+                    localization_zones, reflector, updated_at
+                ) VALUES (1, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ''', (
                 json.dumps(layers.get('no_go_zones', [])),
                 json.dumps(layers.get('restricted', [])),
-                json.dumps(layers.get('slow_zones', []))
+                json.dumps(layers.get('slow_zones', [])),
+                json.dumps(layers.get('safety_zones', [])),
+                json.dumps(layers.get('localization_zones', [])),
+                json.dumps(layers.get('reflector', []))
             ))
             
             conn.commit()
@@ -1214,7 +1291,130 @@ class DatabaseManager:
             cursor.execute('DELETE FROM action_point_configs WHERE zone_name = ?', (target_zone_name,))
             conn.commit()
             return cursor.rowcount > 0
-    
+
+    # ==================== Floor Matrix Tags / PGV codes ====================
+
+    def get_qr_codes(self) -> Dict[int, Dict[str, float]]:
+        """Return all floor Matrix Tags keyed by integer tag id."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT tag_id, x, y, yaw FROM qr_codes ORDER BY tag_id ASC')
+            rows = cursor.fetchall()
+            codes: Dict[int, Dict[str, float]] = {}
+            for row in rows:
+                try:
+                    tid = int(row['tag_id'])
+                except (TypeError, ValueError):
+                    continue
+                codes[tid] = {
+                    'x': float(row['x'] or 0.0),
+                    'y': float(row['y'] or 0.0),
+                    'yaw': float(row['yaw'] or 0.0),
+                }
+            return codes
+
+    def save_qr_code(self, tag_id: int, x: float, y: float, yaw: float = 0.0) -> bool:
+        """Insert or update one floor Matrix Tag (yaw in radians)."""
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return False
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                INSERT OR REPLACE INTO qr_codes (tag_id, x, y, yaw, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''',
+                (tid, float(x), float(y), float(yaw)),
+            )
+            conn.commit()
+            return True
+
+    def delete_qr_code(self, tag_id: int) -> bool:
+        """Delete one floor Matrix Tag by tag id."""
+        try:
+            tid = int(tag_id)
+        except (TypeError, ValueError):
+            return False
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM qr_codes WHERE tag_id = ?', (tid,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def clear_qr_codes(self) -> int:
+        """Delete every floor Matrix Tag. Returns the number removed."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM qr_codes')
+            conn.commit()
+            return cursor.rowcount
+
+    # ==================== PGV Route Graph Edges ====================
+
+    def get_route_edges(self) -> List[Dict[str, Any]]:
+        """Return all route-graph edges (directed lanes between Matrix Tags)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT id, from_tag, to_tag, length, expected_heading_deg, '
+                'max_lateral_error, turn FROM route_edges ORDER BY from_tag, to_tag'
+            )
+            edges = []
+            for row in cursor.fetchall():
+                edges.append({
+                    'id': str(row['id']),
+                    'from_tag': int(row['from_tag']),
+                    'to_tag': int(row['to_tag']),
+                    'length': float(row['length'] or 0.0),
+                    'expected_heading_deg': float(row['expected_heading_deg'] or 0.0),
+                    'max_lateral_error': float(row['max_lateral_error'] or 0.08),
+                    'turn': str(row['turn'] or 'straight'),
+                })
+            return edges
+
+    def save_route_edge(self, from_tag: int, to_tag: int, length: float = 0.0,
+                        expected_heading_deg: float = 0.0,
+                        max_lateral_error: float = 0.08,
+                        turn: str = 'straight') -> bool:
+        """Insert or update a directed route edge (id = '<from>_<to>')."""
+        try:
+            ft, tt = int(from_tag), int(to_tag)
+        except (TypeError, ValueError):
+            return False
+        edge_id = f'{ft}_{tt}'
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                INSERT OR REPLACE INTO route_edges
+                    (id, from_tag, to_tag, length, expected_heading_deg,
+                     max_lateral_error, turn, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''',
+                (edge_id, ft, tt, float(length), float(expected_heading_deg),
+                 float(max_lateral_error), str(turn or 'straight')),
+            )
+            conn.commit()
+            return True
+
+    def delete_route_edge(self, edge_id: str) -> bool:
+        """Delete one route edge by id."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM route_edges WHERE id = ?', (str(edge_id),))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def clear_route_edges(self) -> int:
+        """Delete every route edge. Returns the number removed."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM route_edges')
+            conn.commit()
+            return cursor.rowcount
+
     # ==================== Utility Methods ====================
     
     def get_registry_data(self) -> Dict[str, Any]:

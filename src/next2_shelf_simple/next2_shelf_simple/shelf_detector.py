@@ -18,12 +18,14 @@ The shelf_inserter reads status_json for live center_pose and committed_target_p
 All poses are published in base_link frame (x+ = robot forward).
 """
 
+import itertools
 import json
 import math
 import time
 from collections import deque
 
 import rclpy
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
@@ -89,9 +91,10 @@ class ShelfDetector(Node):
         self._p = {}
         for p in self._parameters:
             self._p[p] = self.get_parameter(p).value
+        self.add_on_set_parameters_callback(self._on_params_changed)
 
         # --- TF ---
-        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_buffer = tf2_ros.Buffer(node=self)
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         # --- State ---
@@ -139,6 +142,22 @@ class ShelfDetector(Node):
         self.get_logger().info(
             f'shelf_detector ready — scan={self._p["scan_topic"]} '
             f'intensity_thr={self._p["intensity_threshold"]}')
+
+    def _on_params_changed(self, params):
+        for param in params:
+            if param.name in self._p:
+                self._p[param.name] = param.value
+        if any(
+            param.name in (
+                'expected_width_min',
+                'expected_width_max',
+                'expected_depth_min',
+                'expected_depth_max',
+            )
+            for param in params
+        ):
+            self._invalidate_candidate('template_geometry_updated')
+        return SetParametersResult(successful=True)
 
     @staticmethod
     def _safe_status_float(value):
@@ -292,6 +311,11 @@ class ShelfDetector(Node):
                 break
             centroids.append(transformed)
 
+        centroids, centroid_intensities = self._select_geometry_subset(
+            centroids,
+            centroid_intensities,
+        )
+        self.hotspot_count = len(centroids)
         self.hotspot_points = [[c[0], c[1]] for c in centroids]
 
         # Get yaw offset for transforming angles
@@ -571,6 +595,121 @@ class ShelfDetector(Node):
 
         return clusters, cluster_intensities
 
+    def _select_geometry_subset(self, centroids, intensities):
+        """Discard bright hotspot outliers that cannot belong to one shelf."""
+        n = len(centroids)
+        if n <= 2:
+            return list(centroids), list(intensities)
+
+        w_min = float(self._p['expected_width_min'])
+        w_max = float(self._p['expected_width_max'])
+        d_min = float(self._p['expected_depth_min'])
+        d_max = float(self._p['expected_depth_max'])
+        target_w = 0.5 * (w_min + w_max)
+        target_d = 0.5 * (d_min + d_max)
+
+        def _best_width_pair(indices):
+            best = None
+            for i, j in itertools.combinations(indices, 2):
+                width = _dist(centroids[i], centroids[j])
+                if not (w_min <= width <= w_max):
+                    continue
+                err = abs(width - target_w) / max(target_w, 1e-6)
+                if best is None or err < best[0]:
+                    best = (err, i, j)
+            return best
+
+        def _score_subset(indices):
+            subset_len = len(indices)
+            if subset_len == 4:
+                pairings = (
+                    ((indices[0], indices[1]), (indices[2], indices[3])),
+                    ((indices[0], indices[2]), (indices[1], indices[3])),
+                    ((indices[0], indices[3]), (indices[1], indices[2])),
+                )
+                best = None
+                for pair_a, pair_b in pairings:
+                    width_a = _dist(centroids[pair_a[0]], centroids[pair_a[1]])
+                    width_b = _dist(centroids[pair_b[0]], centroids[pair_b[1]])
+                    if not (w_min <= width_a <= w_max and w_min <= width_b <= w_max):
+                        continue
+                    mid_a = (
+                        0.5 * (centroids[pair_a[0]][0] + centroids[pair_a[1]][0]),
+                        0.5 * (centroids[pair_a[0]][1] + centroids[pair_a[1]][1]),
+                    )
+                    mid_b = (
+                        0.5 * (centroids[pair_b[0]][0] + centroids[pair_b[1]][0]),
+                        0.5 * (centroids[pair_b[0]][1] + centroids[pair_b[1]][1]),
+                    )
+                    depth = _dist(mid_a, mid_b)
+                    if not (d_min <= depth <= d_max):
+                        continue
+                    score = (
+                        (abs(width_a - target_w) + abs(width_b - target_w)) / max(target_w, 1e-6)
+                        + abs(depth - target_d) / max(target_d, 1e-6)
+                    )
+                    if best is None or score < best:
+                        best = score
+                return best
+
+            width_pair = _best_width_pair(indices)
+            if width_pair is None:
+                return None
+
+            score = float(width_pair[0])
+            if subset_len == 2:
+                return score + 1.0
+
+            _, i, j = width_pair
+            k = next(idx for idx in indices if idx not in (i, j))
+            pair_mid = (
+                0.5 * (centroids[i][0] + centroids[j][0]),
+                0.5 * (centroids[i][1] + centroids[j][1]),
+            )
+            tangent_x = centroids[j][0] - centroids[i][0]
+            tangent_y = centroids[j][1] - centroids[i][1]
+            tangent_norm = math.hypot(tangent_x, tangent_y)
+            if tangent_norm <= 1e-6:
+                return None
+            tangent_x /= tangent_norm
+            tangent_y /= tangent_norm
+
+            delta_x = centroids[k][0] - pair_mid[0]
+            delta_y = centroids[k][1] - pair_mid[1]
+            tangential = abs((delta_x * tangent_x) + (delta_y * tangent_y))
+            normal = abs((delta_x * -tangent_y) + (delta_y * tangent_x))
+
+            if tangential > max(0.50, 0.75 * w_max):
+                return None
+            if normal > (1.20 * d_max):
+                return None
+            if normal < (0.35 * d_min):
+                score += 0.30
+            else:
+                score += abs(normal - target_d) / max(target_d, 1e-6)
+            return score + 0.35
+
+        best_indices = None
+        best_score = None
+        for subset_len in (4, 3, 2):
+            if n < subset_len:
+                continue
+            for indices in itertools.combinations(range(n), subset_len):
+                score = _score_subset(indices)
+                if score is None:
+                    continue
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_indices = indices
+
+        if best_indices is None:
+            return list(centroids), list(intensities)
+
+        return (
+            [centroids[idx] for idx in best_indices],
+            [intensities[idx] for idx in best_indices],
+        )
+
     def _solve_shelf(self, centroids, centroid_intensities, yaw_offset):
         """
         Given 2-4 cluster centroids (already in base_link frame),
@@ -587,10 +726,10 @@ class ShelfDetector(Node):
                                  w_min, w_max, d_min, d_max)
         elif n == 3:
             return self._solve_3(centroids, centroid_intensities, yaw_offset,
-                                 w_min, w_max)
+                                 w_min, w_max, d_min, d_max)
         elif n == 2:
             return self._solve_2(centroids, centroid_intensities, yaw_offset,
-                                 w_min, w_max)
+                                 w_min, w_max, d_min, d_max)
         else:
             return None
 
@@ -655,7 +794,7 @@ class ShelfDetector(Node):
                 best = (front_pair, back_pair, front_width, back_width, fm, bm, depth)
 
         if best is None:
-            return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
+            return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max)
 
         front_pair, back_pair, fw, bw, fm, bm, depth = best
 
@@ -677,10 +816,10 @@ class ShelfDetector(Node):
             'depth': depth,
         }
 
-    def _solve_3(self, centroids, intensities, yaw_offset, w_min, w_max):
-        return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max)
+    def _solve_3(self, centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max):
+        return self._solve_2_best_pair(centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max)
 
-    def _solve_2_best_pair(self, centroids, intensities, yaw_offset, w_min, w_max):
+    def _solve_2_best_pair(self, centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max):
         best = None
         best_err = float('inf')
         n = len(centroids)
@@ -701,9 +840,9 @@ class ShelfDetector(Node):
         return self._solve_2(
             [centroids[best[0]], centroids[best[1]]],
             [intensities[best[0]], intensities[best[1]]],
-            yaw_offset, w_min, w_max)
+            yaw_offset, w_min, w_max, d_min, d_max)
 
-    def _solve_2(self, centroids, intensities, yaw_offset, w_min, w_max):
+    def _solve_2(self, centroids, intensities, yaw_offset, w_min, w_max, d_min, d_max):
         """2 centroids: treat as width pair, compute midpoint + perpendicular yaw."""
         w = _dist(centroids[0], centroids[1])
         if not (w_min <= w <= w_max):
@@ -729,12 +868,18 @@ class ShelfDetector(Node):
         self.front_intensity_sum = sum(intensities)
         self.back_intensity_sum = 0.0
 
+        # Use recognition template geometry (expected depth) to find true shelf center.
+        target_d = (d_min + d_max) / 2.0
+        cx = mx + (target_d / 2.0) * math.cos(yaw)
+        cy = my + (target_d / 2.0) * math.sin(yaw)
+
         return {
-            'x': mx, 'y': my, 'yaw': yaw,
+            'x': cx, 'y': cy, 'yaw': yaw,
             'frame_id': self._p['base_frame'],
             'front_midpoint': [float(mx), float(my)],
-            'front_width': w, 'back_width': -1.0,
-            'depth': -1.0,
+            'front_width': w,
+            'back_width': w,  # Fallback to front width for template-based solves
+            'depth': target_d,
         }
 
     # ---- Status publishing ----

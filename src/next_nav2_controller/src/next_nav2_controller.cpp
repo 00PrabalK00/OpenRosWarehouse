@@ -164,38 +164,101 @@ rcl_interfaces::msg::SetParametersResult NextNav2Controller::handleDynamicParame
   result.successful = true;
 
   const std::string allow_reverse_name = plugin_name_ + ".allow_reverse";
+  const std::string max_v_name = plugin_name_ + ".max_v";
+  const std::string acc_lim_v_name = plugin_name_ + ".acc_lim_v";
+  const std::string decel_lim_v_name = plugin_name_ + ".decel_lim_v";
+
   bool allow_reverse_changed = false;
   bool next_allow_reverse = allow_reverse_;
+  bool max_v_changed = false;
+  double next_base_max_v = base_max_v_;
+  bool acc_changed = false;
+  double next_acc = acc_lim_v_;
+  bool decel_changed = false;
+  double next_decel = decel_lim_v_;
+
+  auto read_positive_double = [&](const rclcpp::Parameter & p, const std::string & nm,
+      double & out) -> bool {
+      if (p.get_type() != rclcpp::PARAMETER_DOUBLE && p.get_type() != rclcpp::PARAMETER_INTEGER) {
+        result.successful = false;
+        result.reason = nm + " must be a number";
+        return false;
+      }
+      const double v = p.as_double();
+      if (v <= 0.0) {
+        result.successful = false;
+        result.reason = nm + " must be > 0";
+        return false;
+      }
+      out = v;
+      return true;
+    };
 
   for (const auto & parameter : parameters) {
-    if (parameter.get_name() != allow_reverse_name) {
-      continue;
+    const std::string & name = parameter.get_name();
+    if (name == allow_reverse_name) {
+      if (parameter.get_type() != rclcpp::PARAMETER_BOOL) {
+        result.successful = false;
+        result.reason = allow_reverse_name + " must be a bool";
+        return result;
+      }
+      next_allow_reverse = parameter.as_bool();
+      allow_reverse_changed = true;
+    } else if (name == max_v_name) {
+      if (!read_positive_double(parameter, max_v_name, next_base_max_v)) {return result;}
+      max_v_changed = true;
+    } else if (name == acc_lim_v_name) {
+      if (!read_positive_double(parameter, acc_lim_v_name, next_acc)) {return result;}
+      acc_changed = true;
+    } else if (name == decel_lim_v_name) {
+      if (!read_positive_double(parameter, decel_lim_v_name, next_decel)) {return result;}
+      decel_changed = true;
     }
-
-    if (parameter.get_type() != rclcpp::PARAMETER_BOOL) {
-      result.successful = false;
-      result.reason = allow_reverse_name + " must be a bool";
-      return result;
-    }
-
-    next_allow_reverse = parameter.as_bool();
-    allow_reverse_changed = true;
   }
 
-  if (!allow_reverse_changed) {
+  if (!allow_reverse_changed && !max_v_changed && !acc_changed && !decel_changed) {
     return result;
   }
 
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    allow_reverse_ = next_allow_reverse;
+    if (allow_reverse_changed) {
+      allow_reverse_ = next_allow_reverse;
+    }
+    if (acc_changed) {
+      acc_lim_v_ = next_acc;
+    }
+    if (decel_changed) {
+      decel_lim_v_ = next_decel;
+    }
+    if (max_v_changed) {
+      // max_v owns the commanded baseline; the active SpeedFilter map-zone factor
+      // is re-applied on top so the two compose instead of fighting.
+      base_max_v_ = next_base_max_v;
+      max_v_ = std::clamp(base_max_v_ * speed_limit_factor_, 0.0, base_max_v_);
+      rotate_in_place_max_v_ = std::min(base_rotate_in_place_max_v_, max_v_);
+      speed_profile_min_speed_ = std::clamp(speed_profile_min_speed_, 0.0, base_max_v_);
+    }
+    // Rebuild the per-segment velocity profile when the baseline OR the decel
+    // limit changed (the backward braking pass uses decel_lim_v_).
+    if (max_v_changed || decel_changed) {
+      buildVelocityProfile();
+    }
   }
 
-  RCLCPP_INFO(
-    node_->get_logger(),
-    "%s dynamic parameter update: allow_reverse=%s",
-    plugin_name_.c_str(),
-    allow_reverse_ ? "true" : "false");
+  if (allow_reverse_changed) {
+    RCLCPP_INFO(
+      node_->get_logger(), "%s dynamic parameter update: allow_reverse=%s",
+      plugin_name_.c_str(), allow_reverse_ ? "true" : "false");
+  }
+  if (max_v_changed || acc_changed || decel_changed) {
+    RCLCPP_INFO(
+      node_->get_logger(),
+      "%s dynamic parameter update: max_v=%.2f (eff=%.2f, zone_factor=%.2f) "
+      "acc_lim_v=%.2f decel_lim_v=%.2f",
+      plugin_name_.c_str(), base_max_v_, max_v_, speed_limit_factor_,
+      acc_lim_v_, decel_lim_v_);
+  }
 
   return result;
 }
@@ -568,13 +631,14 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   }
   const double total_path_length = segments_.back().cumulative_start + segments_.back().length;
   const double along_track_remaining = std::max(0.0, total_path_length - absolute_progress);
-  const bool on_last_segment = (current_segment_index_ + 1) >= segments_.size();
   // Issue 8: trigger final approach from along-track remaining, not Euclidean
   // distance to the goal pose. A laterally-offset robot that is spatially
   // "near" the goal would otherwise enter the terminal phase early and drop
   // strict-line precision before it has actually finished translating along
   // the shelf axis.
-  const bool final_approach = on_last_segment && along_track_remaining <= final_approach_distance_;
+  // Issue 34: allow final approach to trigger across multiple segments so
+  // deceleration can start at the correct distance even if segments are short.
+  const bool final_approach = along_track_remaining <= final_approach_distance_;
 
   // Issue 10: honor motion-intent tolerances for terminal behavior. When the
   // caller has not specified, fall back to sensible defaults.
@@ -588,8 +652,9 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // Issue 4: explicit terminal phase split. In TRANSLATE we drive forward with
   // corridor precision and no heading injection. In YAW_SETTLE we force v=0
   // and clean up residual yaw.
-  const bool arrived_xy =
-    on_last_segment && along_track_remaining <= terminal_xy_tol;
+  // Issue 34: remove on_last_segment check; if along_track_remaining is within
+  // tolerance, we have arrived regardless of segment index.
+  const bool arrived_xy = along_track_remaining <= terminal_xy_tol;
 
   const double abs_lateral_error = std::abs(projection.lateral_error);
 
@@ -720,7 +785,10 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   // stall-induced spike rewrite the rate envelope.
   const double dt_cmd = std::clamp((now - last_command_stamp_).seconds(), 0.02, 0.2);
 
-  const double v_window = std::max(0.05, std::abs(acc_lim_v_) * dt_cmd);
+  // Issue 34: separate acc and decel windows so the robot can brake more
+  // aggressively than it launches (as configured via decel_lim_v).
+  const double v_acc_window = std::max(0.05, std::abs(acc_lim_v_) * dt_cmd);
+  const double v_decel_window = std::max(0.05, std::abs(decel_lim_v_) * dt_cmd);
   const double w_window = std::max(0.05, std::abs(acc_lim_w_) * dt_cmd);
 
   // Issue 16: always use measured state. Substituting last_command_ near zero
@@ -729,8 +797,8 @@ geometry_msgs::msg::TwistStamped NextNav2Controller::computeVelocityCommands(
   const double v_feedback = velocity.linear.x;
   const double w_feedback = velocity.angular.z;
 
-  double v_min = std::clamp(v_feedback - v_window, runtime_min_v, runtime_max_v);
-  double v_max = std::clamp(v_feedback + v_window, runtime_min_v, runtime_max_v);
+  double v_min = std::clamp(v_feedback - v_decel_window, runtime_min_v, runtime_max_v);
+  double v_max = std::clamp(v_feedback + v_acc_window, runtime_min_v, runtime_max_v);
   if (v_max < v_min) {
     std::swap(v_min, v_max);
   }
@@ -1146,17 +1214,19 @@ void NextNav2Controller::setSpeedLimit(const double & speed_limit, const bool & 
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
 
+  // SpeedFilter map zones own only the environmental multiplier. We store it as a
+  // factor so a later change to base_max_v_ (global/segment speed) recomposes
+  // correctly instead of one authority clobbering the other.
   if (speed_limit <= 0.0) {
-    max_v_ = base_max_v_;
-    rotate_in_place_max_v_ = std::min(base_rotate_in_place_max_v_, max_v_);
-    return;
-  }
-
-  if (percentage) {
-    max_v_ = std::clamp(base_max_v_ * (speed_limit / 100.0), 0.0, base_max_v_);
+    speed_limit_factor_ = 1.0;
+  } else if (percentage) {
+    speed_limit_factor_ = std::clamp(speed_limit / 100.0, 0.0, 1.0);
   } else {
-    max_v_ = std::clamp(speed_limit, 0.0, base_max_v_);
+    speed_limit_factor_ = (base_max_v_ > kTiny)
+      ? std::clamp(speed_limit / base_max_v_, 0.0, 1.0)
+      : 1.0;
   }
+  max_v_ = std::clamp(base_max_v_ * speed_limit_factor_, 0.0, base_max_v_);
   rotate_in_place_max_v_ = std::min(base_rotate_in_place_max_v_, max_v_);
 }
 
@@ -1821,6 +1891,14 @@ void NextNav2Controller::buildVelocityProfile()
   // Initialize every segment to the robot's design-maximum speed.
   for (auto & seg : segments_) {
     seg.speed_limit = base_max_v_;
+  }
+
+  // Issue 34: ensure the robot plans to stop at the end of the path. The
+  // backward pass below will propagate this braking requirement upstream
+  // through previous segments so the robot enters the final approach at a
+  // manageable speed even if the last segment is very short.
+  if (!segments_.empty()) {
+    segments_.back().speed_limit = 0.0;
   }
 
   // ── Centripetal limit at each inter-segment junction ─────────────────────

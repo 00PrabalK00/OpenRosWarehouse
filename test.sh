@@ -73,21 +73,11 @@ set -u
 
 strip_blocked_overlay "$BLOCKED_OVERLAY_ROOT"
 
-# Start the standalone PGV reader (Pepperl+Fuchs R3138 over RS-485).
-# Backgrounded so it does not block the foreground ros2 launch. It is not part
-# of the bringup launch graph on purpose - the package is standalone. If the
-# serial device is absent the node just retries, so launch is always safe.
-PGV_PORT="${PGV_PORT:-/dev/next/pgv}"
-PGV_POLL_HZ="${PGV_POLL_HZ:-1.0}"
-PGV_LOG="${PGV_LOG:-$WORKSPACE_ROOT/pgv_reader.log}"
-if [[ "${NEXT_LAUNCH_PGV:-1}" != "0" ]]; then
-  echo "[test.sh] Launching PGV reader on $PGV_PORT @ ${PGV_POLL_HZ} Hz (log: $PGV_LOG)"
-  nohup ros2 run next_ros2ws_pgv pgv_reader \
-    --ros-args -p "port:=$PGV_PORT" -p "poll_hz:=$PGV_POLL_HZ" \
-    >"$PGV_LOG" 2>&1 &
-else
-  echo "[test.sh] NEXT_LAUNCH_PGV=0; skipping PGV reader launch."
-fi
+# The PGV Matrix Tag stack (reader + tag map + localizer + diagnostics) is now
+# part of the bringup launch graph (zone_nav_ui.launch.py, enable_pgv_localization
+# defaults true). Do NOT also start a standalone reader here: two readers on the
+# same RS-485 port interleave query/response frames, corrupting the data and
+# teleporting localization. Override the port/tag map via the launch args.
 
 # Start Node-RED (workflows UI on :1880) unless something already listens there.
 # Backgrounded so the foreground ros2 launch below stays the main process.

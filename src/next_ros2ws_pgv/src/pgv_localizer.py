@@ -493,20 +493,31 @@ class PgvLocalizer(Node):
             tx, ty, _tyaw = self.tags[tag_id]
 
             if self.use_pgv_angle_for_yaw:
-                # robot_heading = pgv_angle - mount_yaw
-                # R3138 reports the relative angle between camera and tag.
-                # That angle alone encodes the robot's absolute heading once
-                # the camera mount offset is subtracted. Tag yaw is irrelevant
-                # because the R3138 reading is already in the tag's frame.
+                # robot_heading = sensor_frame_offset - pgv_angle
+                #
+                # The R3138 reports the tag's angle in the SENSOR frame, so as
+                # the camera rotates one way the reported angle rotates the
+                # OTHER way (a frame-relative inversion). On this diff-drive
+                # robot the camera is rear-mounted, so a turn swings the rear
+                # camera opposite to the robot's heading change and the sign
+                # flip becomes visible: without negation the robot turned right
+                # but the corrected pose spun left. Negating pgv_angle makes the
+                # correction's rotation direction match the robot's. At a static
+                # 180° this is invisible (±180° coincide), which is why the bug
+                # only showed up mid-turn.
+                #
+                # pgv_camera_mount_yaw_deg is the additive offset that lines up
+                # the static heading; the negation fixes the turn DIRECTION.
+                mount_yaw = self.pgv_camera_mount_yaw
                 byaw = math.atan2(
-                    math.sin(pyaw - self.pgv_camera_mount_yaw),
-                    math.cos(pyaw - self.pgv_camera_mount_yaw),
+                    math.sin(mount_yaw - pyaw),
+                    math.cos(mount_yaw - pyaw),
                 )
                 odom_yaw = self._odom_pose[2] if self._odom_pose is not None else float('nan')
                 self.get_logger().info(
                     f"[PGV YAW] tag={tag_id} "
                     f"pgv_angle={math.degrees(pyaw):.1f}° "
-                    f"mount_yaw={math.degrees(self.pgv_camera_mount_yaw):.1f}° "
+                    f"mount_yaw(cfg)={math.degrees(mount_yaw):.1f}° "
                     f"→ computed={math.degrees(byaw):.1f}° "
                     f"odom={math.degrees(odom_yaw):.1f}°"
                 )

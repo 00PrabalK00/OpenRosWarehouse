@@ -19,7 +19,7 @@ class ControlModeManager(Node):
     def __init__(self):
         super().__init__('control_mode_manager')
 
-        self.valid_modes = ('manual', 'zones', 'sequence', 'path')
+        self.valid_modes = ('manual', 'zones', 'sequence', 'path', 'reflector')
         self.aliases = {
             'auto': 'zones',
             'autonomous': 'zones',

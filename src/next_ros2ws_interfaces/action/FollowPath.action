@@ -7,6 +7,13 @@ bool[] shelf_checks
 # Optional parallel bidirectional flags; true means the segment arriving at that waypoint allows reverse
 # (robot reverses back along this segment after completing the shelf action at that waypoint)
 bool[] segment_bidirectional
+# Optional parallel per-segment speed caps in m/s for the segment ARRIVING at that waypoint.
+# 0.0 (or negative) means "no override" — fall back to the global max speed.
+float64[] segment_speeds
+# Optional parallel per-segment linear accel / decel limits (m/s^2, magnitude) for the
+# segment ARRIVING at that waypoint. 0.0 (or negative) means "no override".
+float64[] segment_accels
+float64[] segment_decels
 # Optional Path Mode graph context. Empty strings preserve legacy free FollowPath behavior.
 string path_mode_selected_path
 string path_mode_destination_poi

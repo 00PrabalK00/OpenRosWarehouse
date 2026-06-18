@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    PGV Matrix Tag reader.
+
+    Mounting:
+      - rear center of robot
+      - 12 cm behind the rear chassis edge
+      - centered across robot width
+      - about 10 cm above base_link plane for floor tag reading
+
+    base_link is at chassis center, so the PGV x offset is derived from the
+    chassis length instead of assuming the rear edge is the origin.
+    pgv_link stays axis-aligned with base_link; the lens points downward.
+  -->
+  <xacro:property name="pgv_x_offset" value="${-(chassis_length / 2.0) - 0.12}"/>
+  <joint name="base_link_to_pgv_link" type="fixed">
+    <parent link="base_link"/>
+    <child link="pgv_link"/>
+    <origin xyz="${pgv_x_offset} 0 0.10" rpy="0 0 0"/>
+  </joint>
+
+  <link name="pgv_link">
+    <visual>
+      <geometry>
+        <box size="0.060 0.043 0.068"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.060 0.043 0.068"/>
+      </geometry>
+    </collision>
+  </link>
+
+</robot>

@@ -40,6 +40,16 @@ node_modules/
 npm-debug.log*
 
 # Misc local files
+graphify-out/
+.codex/
+.claude/
+.gemini/
+.gitnexus/
+tmp_screens/
+tmp_compare_maps/
+node-red.log
+pgv_reader.log
+image.png
 *.zip
 *.pdf
 tmp_*.js

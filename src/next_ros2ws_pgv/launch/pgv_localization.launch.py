@@ -34,7 +34,12 @@ def generate_launch_description():
     params_arg = DeclareLaunchArgument("params_file", default_value=default_params)
     tag_map_arg = DeclareLaunchArgument("tag_map", default_value=default_tag_map)
     port_arg = DeclareLaunchArgument("port", default_value="/dev/next/pgv")
-    mode_arg = DeclareLaunchArgument("localization_mode", default_value="amcl")
+    # PGV owns map->odom: default to pure_pgv to match nav2_launch_wrapper.sh,
+    # which starts Nav2 without AMCL in PGV mode. In pure_pgv the localizer
+    # broadcasts map->odom itself; in "amcl" it only publishes /initialpose,
+    # which goes nowhere when no AMCL node is running. Override on the command
+    # line (localization_mode:=amcl) only for a standalone AMCL-backed bringup.
+    mode_arg = DeclareLaunchArgument("localization_mode", default_value="pure_pgv")
     route_arg = DeclareLaunchArgument("launch_route_follower", default_value="true")
 
     params_file = LaunchConfiguration("params_file")

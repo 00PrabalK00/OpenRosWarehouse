@@ -2337,6 +2337,19 @@
                 }
             }
         }
+        // Drop-off exit selector visibility follows its toggle; shelf type only.
+        const dropoffCoordsEl = document.getElementById(`${prefix}-dropoff-coords`);
+        const dropoffEnabledEl = document.getElementById(`${prefix}-dropoff-enabled`);
+        if (dropoffCoordsEl && dropoffEnabledEl) {
+            const showDropoff = (pointType === 'shelf' && dropoffEnabledEl.checked);
+            dropoffCoordsEl.style.display = showDropoff ? 'block' : 'none';
+            if (showDropoff) {
+                const exitEl = document.getElementById(`${prefix}-dropoff-exit-poi`);
+                if (exitEl && (!exitEl.options.length || (exitEl.options.length === 1 && exitEl.options[0].value === ''))) {
+                    loadExitPointPois(prefix, null);
+                }
+            }
+        }
         if (summaryEl) {
             summaryEl.innerHTML = buildActionPointSummary(templateEl ? templateEl.value : '', pointType, Boolean(recognizeEl && recognizeEl.checked));
         }
@@ -2382,6 +2395,22 @@
                 } else {
                     payload.pre_point = { zone_name: zoneName, x: 0, y: 0, theta: 0 };
                 }
+            }
+
+            // Shelf drop-off: carry shelf in, release it, reverse out to an exit point.
+            const dropoffEnabledEl = document.getElementById(`${prefix}-dropoff-enabled`);
+            const dropoffExitEl = document.getElementById(`${prefix}-dropoff-exit-poi`);
+            const dropoffActionEl = document.getElementById(`${prefix}-dropoff-action`);
+            if (dropoffEnabledEl && dropoffEnabledEl.checked && dropoffExitEl && dropoffExitEl.value) {
+                const exitName = dropoffExitEl.value;
+                payload.shelf_dropoff = {
+                    enabled: true,
+                    exit_point: { zone_name: exitName },
+                };
+                const actionId = String(dropoffActionEl && dropoffActionEl.value || '').trim();
+                if (actionId) payload.shelf_dropoff.action_id = actionId;
+            } else {
+                payload.shelf_dropoff = { enabled: false };
             }
         }
         return payload;
@@ -2909,6 +2938,32 @@
     }
     window.recognitionLoadPrePointPois = loadPrePointPois;
 
+    async function loadExitPointPois(prefix, selectedZoneName) {
+        const selectEl = document.getElementById(`${prefix}-dropoff-exit-poi`);
+        if (!selectEl) return;
+        try {
+            const resp = await fetch('/api/zones');
+            const data = await resp.json();
+            const zonesObj = (data && data.zones) ? data.zones : {};
+            const options = ['<option value="">— Select an exit waypoint —</option>'];
+            const sortedNames = Object.keys(zonesObj).sort();
+            for (const name of sortedNames) {
+                // Share the pre-point zone cache so payload build can read poses.
+                _prePointZonesMap[name] = zonesObj[name];
+                const z = zonesObj[name];
+                const oz = Number((z.orientation && z.orientation.z) || 0);
+                const ow = Number((z.orientation && z.orientation.w) || 1);
+                const hdgDeg = (2 * Math.atan2(oz, ow) * 180 / Math.PI).toFixed(1);
+                const sel = (name === selectedZoneName) ? ' selected' : '';
+                options.push(`<option value="${name}"${sel}>${name} (${hdgDeg}°)</option>`);
+            }
+            selectEl.innerHTML = options.join('');
+        } catch (e) {
+            selectEl.innerHTML = '<option value="">Failed to load zones</option>';
+        }
+    }
+    window.recognitionLoadExitPointPois = loadExitPointPois;
+
     window.recognitionHandlePrePointToggle = function recognitionHandlePrePointToggle(prefix) {
         const enabledEl = document.getElementById(`${prefix}-pre-point-enabled`);
         const coordsEl  = document.getElementById(`${prefix}-pre-point-coords`);
@@ -2918,6 +2973,18 @@
         }
         if (show) {
             loadPrePointPois(prefix, null);
+        }
+    };
+
+    window.recognitionHandleDropoffToggle = function recognitionHandleDropoffToggle(prefix) {
+        const enabledEl = document.getElementById(`${prefix}-dropoff-enabled`);
+        const coordsEl  = document.getElementById(`${prefix}-dropoff-coords`);
+        const show = enabledEl && enabledEl.checked;
+        if (coordsEl) {
+            coordsEl.style.display = show ? 'block' : 'none';
+        }
+        if (show) {
+            loadExitPointPois(prefix, null);
         }
     };
 
