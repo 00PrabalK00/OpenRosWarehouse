@@ -458,6 +458,7 @@ class SafetyController(Node):
         self.localization_invalid_pub = self.create_publisher(Bool, '/safety/localization_invalid', 10)
         self.obstacle_stop_pub = self.create_publisher(Bool, '/safety/obstacle_stop_active', 10)
         self.override_state_pub = self.create_publisher(Bool, '/safety/override_active', 10)
+        self.super_override_pub = self.create_publisher(Bool, '/safety/super_override_active', 10)
         self.nav2_keepout_pub = self.create_publisher(
             Bool, '/safety/nav2_keepout_active', _STATE_QOS
         )
@@ -2106,6 +2107,10 @@ class SafetyController(Node):
         override_msg = Bool()
         override_msg.data = bool(self.manual_override)
         self.override_state_pub.publish(override_msg)
+
+        super_override_msg = Bool()
+        super_override_msg.data = bool(self.super_override)
+        self.super_override_pub.publish(super_override_msg)
 
         nav2_keepout_msg = Bool()
         nav2_keepout_msg.data = bool(self._nav2_filter_handoff_enabled() and self._distance_hold_active())
