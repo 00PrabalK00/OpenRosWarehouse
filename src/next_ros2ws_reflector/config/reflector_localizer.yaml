@@ -1,0 +1,74 @@
+reflector_localizer:
+  ros__parameters:
+    use_sim_time: false
+    reflector_map_file: ""
+    scan_topic: scan
+    odom_topic: /odometry/filtered
+    base_frame: base_link
+    map_frame: map
+    corrected_pose_topic: reflector_pose
+    detections_topic: reflector/detections
+    marker_topic: reflector/markers
+    status_topic: reflector/status_json
+    selected_triangle_topic: reflector/selected_triangle
+    min_reflectors: 3
+    intensity_threshold: 35.0
+    cluster_gap_threshold: 0.22
+    min_cluster_points: 2
+    max_detection_range: 25.0
+    max_match_distance: 0.75
+    triangle_side_tolerance: 0.45
+    candidate_side_tolerance: 1.2
+    max_triangle_candidates: 8
+    residual_threshold: 0.28
+    enable_geometry_fallback: true
+    require_geometry_scan_hit: true
+    scan_range_gate: 0.45
+    scan_beam_window: 4
+    publish_map_markers: true
+    base_frame: base_footprint
+map_odom_broadcaster:
+  ros__parameters:
+    use_sim_time: false
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+    odom_topic: /odometry/filtered
+    corrected_pose_topic: reflector_pose
+    publish_identity_until_first_correction: true
+    broadcast_rate_hz: 20.0
+
+reflector_control_ui:
+  ros__parameters:
+    use_sim_time: true
+    host: 127.0.0.1
+    port: 8088
+    cmd_vel_topic: cmd_vel
+    scan_topic: scan
+    odom_topic: odom
+    reflector_status_topic: reflector/status_json
+    reflector_pose_topic: reflector_pose
+    filtered_odom_topic: odometry/filtered
+
+test_route_driver:
+  ros__parameters:
+    use_sim_time: true
+    cmd_vel_topic: cmd_vel
+    auto_start: false
+    loop: true
+
+kinematic_sim_driver:
+  ros__parameters:
+    use_sim_time: true
+    entity_name: reflector_agv
+    cmd_vel_topic: cmd_vel
+    odom_topic: odom
+    odom_frame: odom
+    base_frame: base_link
+    publish_tf: true
+    update_rate_hz: 30.0
+    command_timeout_sec: 0.5
+    initial_x: 0.0
+    initial_y: 0.0
+    initial_z: 0.05
+    initial_yaw: 0.0

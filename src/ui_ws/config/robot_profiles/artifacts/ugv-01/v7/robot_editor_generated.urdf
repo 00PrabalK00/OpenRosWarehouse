@@ -1,4 +1,5 @@
 <robot name="UGV_01">
+  <link name="base_footprint" />
   <link name="base_link">
     <collision name="base_link_shape_1">
       <origin xyz="0.000000 0.000000 0.045000" rpy="0.000000 0.000000 0.000000" />
@@ -7,7 +8,6 @@
       </geometry>
     </collision>
   </link>
-  <link name="base_footprint" />
   <link name="left_wheel">
     <collision name="left_wheel_shape_1">
       <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
@@ -81,20 +81,20 @@
     </collision>
   </link>
   <link name="face_link" />
-  <joint name="base_link_to_base_footprint" type="fixed">
-    <parent link="base_link" />
-    <child link="base_footprint" />
+  <joint name="base_footprint_to_base_link" type="fixed">
+    <parent link="base_footprint" />
+    <child link="base_link" />
     <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
   </joint>
   <joint name="base_link_to_left_wheel" type="continuous">
     <parent link="base_link" />
     <child link="left_wheel" />
-    <origin xyz="0.000000 0.255000 0.000000" rpy="-1.570796 0.000000 0.000000" />
+    <origin xyz="0.000000 0.247500 0.000000" rpy="-1.570796 0.000000 0.000000" />
   </joint>
   <joint name="base_link_to_right_wheel" type="continuous">
     <parent link="base_link" />
     <child link="right_wheel" />
-    <origin xyz="0.000000 -0.255000 0.000000" rpy="1.570796 0.000000 0.000000" />
+    <origin xyz="0.000000 -0.247500 0.000000" rpy="1.570796 0.000000 0.000000" />
   </joint>
   <joint name="base_link_to_caster_front_left" type="fixed">
     <parent link="base_link" />

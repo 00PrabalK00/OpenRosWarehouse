@@ -145,8 +145,8 @@ class ZonePublisher(Node):
         self.tf_buffer = None
         self.tf_listener = None
         if self.dynamic_safety_filters_enabled:
-            self.tf_buffer = Buffer(cache_time=Duration(seconds=5.0))
-            self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
+            self.tf_buffer = Buffer(cache_time=Duration(seconds=5.0), node=self)
+            self.tf_listener = TransformListener(self.tf_buffer, self)
             self.create_subscription(
                 Bool,
                 "/safety/nav2_keepout_active",
@@ -350,6 +350,13 @@ class ZonePublisher(Node):
                 "no_go_zones": data.get("no_go_zones", []),
                 "restricted": data.get("restricted", []),
                 "slow_zones": data.get("slow_zones", []),
+                "do_area": data.get("do_area", []),
+                "di_area": data.get("di_area", []),
+                "tag_area": data.get("tag_area", []),
+                "locate_config": data.get("locate_config", []),
+                "reflector": data.get("reflector", []),
+                "clean_area": data.get("clean_area", []),
+                "description_area": data.get("description_area", []),
             }
             total = sum(len(v) for v in self._layers.values())
             self.get_logger().info(f"Loaded layers from database: {total} objects (hash changed)")
@@ -385,10 +392,9 @@ class ZonePublisher(Node):
         # 0 free everywhere by default
         mask = self._blank_mask_like_map(map_msg, 0)
 
-        # Mark keepout cells as 100
-        for layer_name in ("no_go_zones", "restricted"):
-            for obj in layers.get(layer_name, []):
-                self._apply_shape(mask, obj, 100, combine="override")
+        # Only hard no-entry zones become keepout; Caution (restricted) is a speed zone
+        for obj in layers.get("no_go_zones", []):
+            self._apply_shape(mask, obj, 100, combine="override")
 
         return mask
 
@@ -396,11 +402,17 @@ class ZonePublisher(Node):
         # 100% speed everywhere by default
         mask = self._blank_mask_like_map(map_msg, 100)
 
-        # In slow zones, set a smaller percent (e.g., 30 = 30% of max speed)
+        # Slow zones: configurable percent
         for obj in layers.get("slow_zones", []):
             pct = int(obj.get("speed_percent", 50))
-            pct = max(1, min(pct, 100))
-            self._apply_shape(mask, obj, pct, combine="min")  # stricter (lower) wins
+            pct = max(10, min(pct, 100))
+            self._apply_shape(mask, obj, pct, combine="min")
+
+        # Caution (restricted) zones: slow the robot down (default 30% of max)
+        for obj in layers.get("restricted", []):
+            pct = int(obj.get("speed_percent", 30))
+            pct = max(10, min(pct, 90))
+            self._apply_shape(mask, obj, pct, combine="min")
 
         return mask
 

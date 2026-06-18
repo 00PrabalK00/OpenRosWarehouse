@@ -154,7 +154,7 @@ route_follower:
     cmd_vel_topic: /cmd_vel_tracker
     odom_topic: /wheel_controller/odom
     control_rate_hz: 20.0
-    cruise_speed: 0.50
+    cruise_speed: 0.5
     approach_speed: 0.3
     max_angular: 0.8
     k_lateral: 1.5

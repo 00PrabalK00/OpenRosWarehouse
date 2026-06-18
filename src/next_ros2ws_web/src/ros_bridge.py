@@ -82,7 +82,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.time import Time as RosTime
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
-from rcl_interfaces.srv import GetParameters, SetParameters
+from rcl_interfaces.srv import GetParameters, ListParameters, SetParameters
 from sensor_msgs.msg import LaserScan, PointCloud2
 from sensor_msgs_py import point_cloud2
 from slam_toolbox.srv import SaveMap as SlamSaveMap, SerializePoseGraph as SlamSerializePoseGraph, DeserializePoseGraph as SlamDeserializePoseGraph
@@ -5183,6 +5183,11 @@ class RosBridge(Node):
             self._topic('service_safety_override'),
             callback_group=self.cb_group,
         )
+        self.super_override_client = self.create_client(
+            SetBool,
+            '/safety_controller/super_override',
+            callback_group=self.cb_group,
+        )
         self.safety_status_client = self.create_client(
             Trigger,
             self._topic('service_safety_status'),
@@ -5430,6 +5435,7 @@ class RosBridge(Node):
         self.create_subscription(BoolMsg, '/pgv/code_detected', self._pgv_detected_callback, 10)
         self.create_subscription(Int64, '/pgv/tag', self._pgv_tag_callback, 10)
         self.create_subscription(String, '/shelf/status_json', self._shelf_status_callback, 10)
+        self.create_subscription(String, self._topic('subscription_reflector_status'), self._reflector_status_callback, 10)
         self.create_subscription(
             PoseWithCovarianceStamped,
             self._topic('subscription_amcl_pose'),
@@ -5450,6 +5456,14 @@ class RosBridge(Node):
                 PoseWithCovarianceStamped,
                 pose_fallback_topic,
                 self._pose_fallback_callback,
+                10,
+            )
+        reflector_pose_topic = str(self._topic('subscription_reflector_pose') or '').strip()
+        if reflector_pose_topic:
+            self.create_subscription(
+                PoseWithCovarianceStamped,
+                reflector_pose_topic,
+                self._reflector_pose_callback,
                 10,
             )
         self.create_subscription(Odometry, self._topic('subscription_odom_filtered'), self._odom_filtered_callback, 10)
@@ -5527,6 +5541,9 @@ class RosBridge(Node):
         self.localization_confidence = 0.0
         self.localization_pose_seen = False
         self.covariance_confidence = 0.0
+        self.reflector_localization_confidence = 0.0
+        self.reflector_status_updated_at = 0.0
+        self.reflector_status = {}
         self.scan_map_match_confidence = 0.0
         self.scan_map_match_known_ratio = 0.0
         self.scan_map_match_hit_ratio = 0.0
@@ -5638,15 +5655,17 @@ class RosBridge(Node):
             self.service_call_worker_threads,
             int(self.declare_parameter('service_call_max_pending', 64).value),
         )
+        self.service_call_max_concurrent = self.service_call_worker_threads
         self._service_call_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=self.service_call_worker_threads,
             thread_name_prefix='rosbridge_svc',
         )
-        self._service_call_slots = threading.BoundedSemaphore(self.service_call_max_pending)
+        self._service_call_slots = threading.BoundedSemaphore(self.service_call_max_concurrent)
         self._service_call_client_locks: Dict[int, threading.Lock] = {}
         self._service_call_client_locks_guard = threading.Lock()
         self._service_calls_inflight = 0
         self._service_calls_inflight_guard = threading.Lock()
+        self._shutting_down = False
         self._service_overload_last_log_sec = 0.0
         self._service_overload_log_interval_sec = 2.0
 
@@ -5657,10 +5676,11 @@ class RosBridge(Node):
         self.get_logger().info(f'Active robot profile: {self.active_robot_profile_id or "none"}')
         self.get_logger().info(
             f'ROS service workers={self.service_call_worker_threads}, '
-            f'max_pending={self.service_call_max_pending}'
+            f'max_concurrent={self.service_call_max_concurrent}'
         )
 
     def destroy_node(self):
+        self._shutting_down = True
         try:
             self._stop_managed_robot_state_publisher()
         except Exception:
@@ -6005,16 +6025,36 @@ class RosBridge(Node):
             return self._set_kinco_motor_enabled(motor_targets[raw_component], bool(enabled), can_interface='can0')
 
         normalized_component = aliases.get(raw_component, '')
-        if not normalized_component:
+        spec: Dict[str, Any] = {}
+        if normalized_component:
+            spec = self.DEVICE_CONFIG_RUNTIME_TARGETS.get(normalized_component, {})
+        else:
+            # Fall back to devices defined in the active robot profile: any shape
+            # with a driver start command becomes a controllable component.
+            _active_robot_id, shapes = self._active_profile_device_shapes()
+            for shape in shapes:
+                shape_id = str(shape.get('id', '') or shape.get('name', '') or '').strip().lower()
+                if shape_id and shape_id == raw_component:
+                    spec = self._device_component_spec_from_shape(shape)
+                    normalized_component = shape_id
+                    break
+        if not normalized_component or not spec:
+            profile_targets = []
+            try:
+                _rid, shapes = self._active_profile_device_shapes()
+                profile_targets = sorted(
+                    str(shape.get('id', '') or shape.get('name', '') or '').strip()
+                    for shape in shapes if self._device_component_spec_from_shape(shape)
+                )
+            except Exception:
+                pass
+            if normalized_component and not spec:
+                return self._ok(False, f'Device-config component "{normalized_component}" is not configured')
             return self._ok(
                 False,
-                'Unknown device-config component',
-                available_targets=sorted(list(self.DEVICE_CONFIG_RUNTIME_TARGETS.keys())),
+                'Unknown device-config component. Set a Driver start command on the device to make it controllable.',
+                available_targets=sorted(list(self.DEVICE_CONFIG_RUNTIME_TARGETS.keys())) + profile_targets,
             )
-
-        spec = self.DEVICE_CONFIG_RUNTIME_TARGETS.get(normalized_component, {})
-        if not spec:
-            return self._ok(False, f'Device-config component "{normalized_component}" is not configured')
 
         if not enabled:
             stopped = self._stop_component_processes(spec)
@@ -6032,6 +6072,217 @@ class RosBridge(Node):
             pid=started.get('pid'),
             start_command=started.get('start_command', ''),
         )
+
+    # Message types that identify a topic as a sensor/device stream, mapped to
+    # (category, human label) used by the device-config sensor explorer.
+    DEVICE_SENSOR_TOPIC_TYPES: Dict[str, Tuple[str, str]] = {
+        'sensor_msgs/msg/LaserScan': ('laser', 'Laser Scanner'),
+        'sensor_msgs/msg/PointCloud2': ('laser', '3D Point Cloud'),
+        'sensor_msgs/msg/Image': ('camera', 'Camera'),
+        'sensor_msgs/msg/CompressedImage': ('camera', 'Camera (compressed)'),
+        'sensor_msgs/msg/CameraInfo': ('camera', 'Camera Intrinsics'),
+        'sensor_msgs/msg/Imu': ('imu', 'IMU'),
+        'sensor_msgs/msg/MagneticField': ('imu', 'Magnetometer'),
+        'sensor_msgs/msg/NavSatFix': ('gnss', 'GNSS / GPS'),
+        'sensor_msgs/msg/Range': ('distance_sensor', 'Range Sensor'),
+        'sensor_msgs/msg/BatteryState': ('battery', 'Battery'),
+        'sensor_msgs/msg/JointState': ('motion', 'Joint States'),
+        'sensor_msgs/msg/Temperature': ('environment', 'Temperature'),
+        'sensor_msgs/msg/FluidPressure': ('environment', 'Fluid Pressure'),
+        'sensor_msgs/msg/RelativeHumidity': ('environment', 'Humidity'),
+        'nav_msgs/msg/Odometry': ('odometry', 'Odometry'),
+    }
+
+    def _device_runtime_target_status(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+        pids: Set[int] = set()
+        for path in spec.get('pidfiles', ()) or ():
+            pid = self._read_pidfile(str(path))
+            if pid > 0 and self._pid_exists(pid):
+                pids.add(pid)
+        for pattern in spec.get('process_patterns', ()) or ():
+            pids.update(self._pgrep_pids(str(pattern)))
+        return {'running': bool(pids), 'pids': sorted(pids)}
+
+    def _active_profile_device_shapes(self) -> Tuple[str, List[Dict[str, Any]]]:
+        try:
+            profiles = self._load_robot_profiles()
+        except Exception:
+            return '', []
+        active_robot_id = str(getattr(self, 'active_robot_profile_id', '') or '').strip()
+        if not active_robot_id or active_robot_id not in profiles:
+            active_robot_id = sorted(profiles.keys())[0] if profiles else ''
+        profile = profiles.get(active_robot_id, {}) if active_robot_id else {}
+        builder = profile.get('robot_builder', {}) if isinstance(profile.get('robot_builder', {}), dict) else {}
+        shapes = builder.get('shapes', []) if isinstance(builder.get('shapes', []), list) else []
+        return active_robot_id, [shape for shape in shapes if isinstance(shape, dict)]
+
+    def _device_component_spec_from_shape(self, shape: Dict[str, Any]) -> Dict[str, Any]:
+        driver = str(shape.get('driver', '') or '').strip()
+        if not driver:
+            return {}
+        shape_id = str(shape.get('id', '') or shape.get('name', '') or '').strip() or 'device'
+        slug = re.sub(r'[^a-z0-9_]+', '_', shape_id.lower()).strip('_') or 'device'
+        return {
+            'label': str(shape.get('name', '') or shape_id),
+            'start_command': driver,
+            'pidfiles': (f'/tmp/next_runtime/device_{slug}.proc.pid',),
+            'process_patterns': (driver,),
+        }
+
+    def discover_device_sensors(self):
+        try:
+            topic_pairs = list(self.get_topic_names_and_types())
+        except Exception as exc:
+            return self._ok(False, f'Failed to read ROS graph: {exc}', sensors=[], nodes=[], components=[])
+
+        try:
+            node_pairs = list(self.get_node_names_and_namespaces())
+        except Exception:
+            node_pairs = []
+        node_fqns = sorted({
+            (str(ns).rstrip('/') + '/' + str(name)) if str(ns) != '/' else ('/' + str(name))
+            for name, ns in node_pairs if str(name or '').strip()
+        })
+
+        active_robot_id, shapes = self._active_profile_device_shapes()
+        shape_by_topic: Dict[str, Dict[str, Any]] = {}
+        for shape in shapes:
+            for key in ('topic', 'scan_topic', 'image_topic'):
+                topic = str(shape.get(key, '') or '').strip()
+                if topic and topic not in shape_by_topic:
+                    shape_by_topic[topic] = shape
+
+        sensors: List[Dict[str, Any]] = []
+        for topic, types in topic_pairs:
+            matched = [t for t in types if t in self.DEVICE_SENSOR_TOPIC_TYPES]
+            if not matched:
+                continue
+            category, label = self.DEVICE_SENSOR_TOPIC_TYPES[matched[0]]
+            publisher_nodes: List[str] = []
+            frame_hint = ''
+            try:
+                for info in self.get_publishers_info_by_topic(topic):
+                    ns = str(getattr(info, 'node_namespace', '/') or '/')
+                    name = str(getattr(info, 'node_name', '') or '').strip()
+                    if not name:
+                        continue
+                    fqn = (ns.rstrip('/') + '/' + name) if ns != '/' else ('/' + name)
+                    if fqn not in publisher_nodes:
+                        publisher_nodes.append(fqn)
+            except Exception:
+                pass
+            bound_shape = shape_by_topic.get(topic)
+            if bound_shape is not None:
+                frame_hint = str(bound_shape.get('child_frame', '') or bound_shape.get('frame_id', '') or bound_shape.get('link', '') or '')
+            sensors.append({
+                'topic': topic,
+                'types': sorted(types),
+                'category': category,
+                'category_label': label,
+                'publisher_nodes': publisher_nodes,
+                'publisher_count': len(publisher_nodes),
+                'alive': bool(publisher_nodes),
+                'bound_shape_id': str(bound_shape.get('id', '') or bound_shape.get('name', '') or '') if bound_shape is not None else '',
+                'frame_hint': frame_hint,
+            })
+        sensors.sort(key=lambda item: (item['category'], item['topic']))
+
+        components: List[Dict[str, Any]] = []
+        for key, spec in self.DEVICE_CONFIG_RUNTIME_TARGETS.items():
+            status = self._device_runtime_target_status(spec)
+            components.append({
+                'component': key,
+                'label': str(spec.get('label', key)),
+                'source': 'runtime_target',
+                'running': status['running'],
+                'pids': status['pids'],
+            })
+        for shape in shapes:
+            spec = self._device_component_spec_from_shape(shape)
+            if not spec:
+                continue
+            status = self._device_runtime_target_status(spec)
+            components.append({
+                'component': str(shape.get('id', '') or shape.get('name', '') or ''),
+                'label': str(spec.get('label', '')),
+                'source': 'profile_driver',
+                'running': status['running'],
+                'pids': status['pids'],
+                'start_command': str(spec.get('start_command', '')),
+            })
+
+        return self._ok(
+            True,
+            f'Discovered {len(sensors)} sensor topics across {len(node_fqns)} nodes',
+            robot_id=active_robot_id,
+            sensors=sensors,
+            nodes=node_fqns,
+            components=components,
+        )
+
+    def _list_runtime_node_parameter_names(self, node_name: str) -> Dict[str, Any]:
+        clean_node = str(node_name or '').strip()
+        if not clean_node:
+            return self._ok(False, 'Node name is required', names=[])
+        service_name = f'{clean_node}/list_parameters'
+        client = self.create_client(ListParameters, service_name, callback_group=self.cb_group)
+        try:
+            req = ListParameters.Request()
+            req.depth = ListParameters.Request.DEPTH_RECURSIVE
+            response, err = self._call_service(client, req, wait_timeout=0.6, response_timeout=3.0)
+        finally:
+            try:
+                self.destroy_client(client)
+            except Exception:
+                pass
+        if err == 'service_not_available':
+            return self._ok(False, f'{service_name} unavailable (node offline?)', names=[])
+        if err == 'timeout':
+            return self._ok(False, f'{service_name} timed out', names=[])
+        if response is None:
+            return self._ok(False, f'{service_name} failed', names=[])
+        names = sorted({str(name) for name in getattr(response.result, 'names', []) if str(name or '').strip()})
+        return self._ok(True, f'Listed {len(names)} parameters on {clean_node}', names=names)
+
+    def get_device_node_parameters(self, node_name: str):
+        clean_node = str(node_name or '').strip()
+        if not clean_node.startswith('/'):
+            clean_node = '/' + clean_node if clean_node else ''
+        listed = self._list_runtime_node_parameter_names(clean_node)
+        if not bool(listed.get('ok')):
+            return listed
+        names = list(listed.get('names', []))
+        values: Dict[str, Any] = {}
+        for start in range(0, len(names), 40):
+            chunk = names[start:start + 40]
+            chunk_result = self._get_runtime_node_parameters(clean_node, chunk)
+            if not bool(chunk_result.get('ok')):
+                return self._ok(False, str(chunk_result.get('message', 'parameter read failed')), parameters={})
+            chunk_values = chunk_result.get('values', {})
+            if isinstance(chunk_values, dict):
+                values.update(chunk_values)
+        return self._ok(True, f'Read {len(values)} parameters from {clean_node}', node=clean_node, parameters=values)
+
+    def set_device_node_parameters(self, node_name: str, params: Dict[str, Any]):
+        clean_node = str(node_name or '').strip()
+        if not clean_node.startswith('/'):
+            clean_node = '/' + clean_node if clean_node else ''
+        if not isinstance(params, dict) or not params:
+            return self._ok(False, 'Parameter updates are required')
+
+        # JSON cannot distinguish 2.0 from 2, so whole-number edits to double
+        # parameters arrive as ints; coerce against the node's current types.
+        current = self._get_runtime_node_parameters(clean_node, list(params.keys()))
+        current_values = current.get('values', {}) if isinstance(current.get('values', {}), dict) else {}
+        coerced: Dict[str, Any] = {}
+        for name, value in params.items():
+            existing = current_values.get(name)
+            if isinstance(existing, float) and isinstance(value, int) and not isinstance(value, bool):
+                value = float(value)
+            elif isinstance(existing, list) and existing and all(isinstance(v, float) for v in existing) and isinstance(value, list):
+                value = [float(v) for v in value]
+            coerced[name] = value
+        return self._set_runtime_node_parameters(clean_node, coerced)
 
     def _wait_future(self, future, timeout_sec: float):
         end_time = time.time() + max(0.0, float(timeout_sec))
@@ -6065,6 +6316,9 @@ class RosBridge(Node):
             return None, f'exception: {exc}'
 
     def _call_service(self, client, request, *, wait_timeout: float = 1.0, response_timeout: float = 4.0):
+        if getattr(self, '_shutting_down', False):
+            return None, 'shutdown'
+
         if not self._service_call_slots.acquire(blocking=False):
             now_sec = time.time()
             should_log = (now_sec - self._service_overload_last_log_sec) >= self._service_overload_log_interval_sec
@@ -6073,7 +6327,7 @@ class RosBridge(Node):
                     inflight = int(self._service_calls_inflight)
                 self.get_logger().warn(
                     f'Service dispatch overloaded: inflight={inflight}, '
-                    f'max_pending={self.service_call_max_pending}'
+                    f'max_workers={self.service_call_worker_threads}'
                 )
                 self._service_overload_last_log_sec = now_sec
             return None, 'timeout'
@@ -6387,6 +6641,30 @@ class RosBridge(Node):
         self.shelf_detected = bool(payload.get('shelf_detected', False))
         self.shelf_detected_updated_at = self.shelf_status_updated_at
 
+    def _reflector_status_callback(self, msg: String):
+        try:
+            parsed = json.loads(str(msg.data or '{}'))
+        except Exception as exc:
+            self.get_logger().warn(f'Failed to parse reflector status JSON: {exc}')
+            return
+
+        if not isinstance(parsed, dict):
+            self.get_logger().warn('Reflector status payload is not a JSON object.')
+            return
+
+        confidence = parsed.get('confidence')
+        if confidence is None:
+            confidence = 100.0 if bool(parsed.get('accepted', False)) else 0.0
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        self.reflector_status = parsed
+        self.reflector_status_updated_at = time.time()
+        self.reflector_localization_confidence = max(0.0, min(100.0, confidence))
+        self.localization_confidence = self.reflector_localization_confidence
+
     def _enforce_estop_stop_all(self):
         try:
             details = {
@@ -6662,6 +6940,9 @@ class RosBridge(Node):
     def _pose_fallback_callback(self, msg: PoseWithCovarianceStamped):
         self._update_pose_from_covariance_msg(msg, 'pose')
 
+    def _reflector_pose_callback(self, msg: PoseWithCovarianceStamped):
+        self._update_pose_from_covariance_msg(msg, 'reflector')
+
     def _odom_filtered_callback(self, msg: Odometry):
         self._update_pose_from_odometry_msg(msg, 'odometry_filtered')
 
@@ -6718,6 +6999,15 @@ class RosBridge(Node):
         self._update_scan_overlay(msg, self.scan_overlay_fallback_source)
 
     def _recompute_localization_confidence(self):
+        if self.reflector_status_updated_at > 0.0:
+            reflector_age = time.time() - float(self.reflector_status_updated_at)
+            if reflector_age <= 2.0:
+                self.localization_confidence = max(
+                    0.0,
+                    min(100.0, float(self.reflector_localization_confidence)),
+                )
+                return
+
         cov_conf = max(0.0, min(100.0, float(self.covariance_confidence)))
 
         if self._scan_map_match_ema is None:
@@ -7724,6 +8014,10 @@ class RosBridge(Node):
         if stored_pre_point is not None:
             normalized_config['pre_point'] = stored_pre_point
 
+        stored_dropoff = config.get('shelf_dropoff')
+        if isinstance(stored_dropoff, dict) and stored_dropoff:
+            normalized_config['shelf_dropoff'] = stored_dropoff
+
         metadata = zone_payload.get('metadata') if isinstance(zone_payload.get('metadata'), dict) else {}
         metadata = copy.deepcopy(metadata)
         metadata['action_point'] = normalized_config
@@ -8107,6 +8401,8 @@ class RosBridge(Node):
             'no_go_zones': [],
             'restricted': [],
             'slow_zones': [],
+            'safety_zones': [],
+            'localization_zones': [],
             'locate_config': [],
             'reflector': [],
             'tag_area': [],
@@ -8248,6 +8544,7 @@ class RosBridge(Node):
         pgv_dtheta: float = 0.0,
         description: str = '',
         tag_id: Any = None,
+        shelf_dropoff: Any = None,
     ):
         zone_name = (name or '').strip()
         if not zone_name:
@@ -8311,6 +8608,7 @@ class RosBridge(Node):
             pgv_dtheta=pgv_dtheta,
             description=description,
             tag_id=tag_id,
+            shelf_dropoff=shelf_dropoff,
         )
         if not meta.get('ok'):
             return self._ok(
@@ -8961,10 +9259,71 @@ class RosBridge(Node):
         if len(deduped) < 2:
             return self._ok(False, 'PGV route needs at least 2 linked Matrix Tags')
 
-        msg = String()
-        msg.data = json.dumps({'action': 'follow', 'tags': deduped}, separators=(',', ':'))
-        self.pgv_route_command_pub.publish(msg)
-        return self._ok(True, f'PGV route started through {len(deduped)} Matrix Tags', tags=deduped)
+        # Drive the tag chain through the AGV custom controller
+        # (NextNav2Controller via the FollowPath action), exactly like
+        # follow_pgv_saved_path / follow_pgv_path_mode_route, instead of the
+        # standalone graph route_follower. Each Matrix Tag has a stored map
+        # pose (qr_codes); the controller follows those poses as waypoints with
+        # its full state machine / error handling, while pgv_localizer
+        # re-anchors localization at every tag. This is what "PGV owns
+        # localization, the custom controller owns motion" means in practice.
+        tag_poses = {}
+        if manager is not None:
+            try:
+                tag_poses = manager.get_qr_codes()
+            except Exception:
+                tag_poses = {}
+
+        waypoints = []
+        missing = []
+        for tag_id in deduped:
+            pose = tag_poses.get(tag_id)
+            if pose is None:
+                pose = tag_poses.get(int(tag_id))
+            if (
+                not isinstance(pose, dict)
+                or pose.get('x') is None
+                or pose.get('y') is None
+            ):
+                missing.append(tag_id)
+                continue
+            try:
+                waypoints.append({
+                    'x': float(pose['x']),
+                    'y': float(pose['y']),
+                    'zone_name': f'tag_{tag_id}',
+                })
+            except (TypeError, ValueError):
+                missing.append(tag_id)
+
+        if len(waypoints) < 2:
+            detail = f' (missing map poses for tags {missing})' if missing else ''
+            return self._ok(
+                False,
+                f'PGV route needs at least 2 Matrix Tags with stored map poses{detail}',
+                tags=deduped,
+            )
+
+        follow = self.follow_path(
+            waypoints,
+            loop_type='none',
+            loop_mode=False,
+            settings={},
+        )
+        if not follow.get('ok'):
+            return self._ok(
+                False,
+                follow.get('message', 'Failed to start PGV route via controller'),
+                tags=deduped,
+            )
+        note = f' ({len(missing)} tag(s) skipped: no stored pose)' if missing else ''
+        return self._ok(
+            True,
+            f'PGV route started through {len(waypoints)} Matrix Tags '
+            f'via custom controller{note}',
+            tags=deduped,
+            waypoint_count=len(waypoints),
+        )
 
     @staticmethod
     def _infer_matrix_tag_id_from_zone_name(zone_name: str, known_tags=None):
@@ -9139,10 +9498,20 @@ class RosBridge(Node):
         )
 
     def stop_pgv_route(self):
+        # PGV routes now run through the FollowPath action (custom controller),
+        # so cancel that goal first. Also publish the legacy route_follower stop
+        # in case a graph route was ever started, so a single Stop button halts
+        # the robot regardless of which executor is active.
+        path_stop = self.stop_path()
         msg = String()
         msg.data = json.dumps({'action': 'stop'}, separators=(',', ':'))
         self.pgv_route_command_pub.publish(msg)
-        return self._ok(True, 'PGV route stop sent')
+        if not path_stop.get('ok'):
+            return self._ok(
+                True,
+                f"PGV route stop sent (path cancel: {path_stop.get('message', 'n/a')})",
+            )
+        return self._ok(True, 'PGV route stopped')
 
     def reorder_zones(self, zone_names: List[str]):
         req = ReorderZones.Request()
@@ -9177,6 +9546,7 @@ class RosBridge(Node):
         pgv_dtheta: float = 0.0,
         description: str = '',
         tag_id: Any = None,
+        shelf_dropoff: Any = None,
     ):
         req = UpdateZoneParams.Request()
         req.name = str(name or '')
@@ -9241,11 +9611,45 @@ class RosBridge(Node):
                 except (TypeError, ValueError):
                     pass
 
+            # Shelf drop-off config: { enabled, exit_point, action_id }. When the
+            # caller does not pass one, preserve any existing config so unrelated
+            # edits don't wipe the drop-off setup.
+            effective_dropoff = shelf_dropoff if shelf_dropoff is not None else existing_cfg.get('shelf_dropoff')
+            normalized_dropoff = self._normalize_shelf_dropoff(effective_dropoff)
+            if normalized_dropoff is not None:
+                db_payload['shelf_dropoff'] = normalized_dropoff
+
             self._save_action_point_config_to_db(
                 str(name or ''),
                 db_payload,
             )
         return self._ok(ok, str(response.message))
+
+    @staticmethod
+    def _normalize_shelf_dropoff(raw: Any) -> Optional[Dict[str, Any]]:
+        """Clean a shelf drop-off config. Returns None when not a drop-off point."""
+        if not isinstance(raw, dict):
+            return None
+        if not bool(raw.get('enabled', False)):
+            return None
+        exit_point = raw.get('exit_point')
+        exit_name = ''
+        if isinstance(exit_point, str):
+            exit_name = exit_point.strip()
+        elif isinstance(exit_point, dict):
+            for key in ('zone_name', 'name', 'id'):
+                value = str(exit_point.get(key, '') or '').strip()
+                if value:
+                    exit_name = value
+                    break
+        if not exit_name:
+            # A drop-off with no exit point is not actionable; drop the flag.
+            return None
+        action_id = str(raw.get('action_id', '') or '').strip()
+        cleaned = {'enabled': True, 'exit_point': {'zone_name': exit_name}}
+        if action_id:
+            cleaned['action_id'] = action_id
+        return cleaned
 
     # ---------- go-to-zone action ----------
 
@@ -9573,19 +9977,21 @@ class RosBridge(Node):
 
         return cleaned
 
-    @staticmethod
-    def _has_non_default_path_settings(settings: Dict[str, Any]) -> bool:
+    @classmethod
+    def _has_non_default_path_settings(cls, settings: Dict[str, Any]) -> bool:
         loop_type = str(settings.get('loop_type', 'none') or 'none')
         curved_segments = settings.get('curved_segments', [])
         curved_controls = settings.get('curved_segment_controls', {})
         direction = str(settings.get('direction', 'uni') or 'uni').strip().lower()
         segment_attrs = settings.get('segment_attrs', {})
+        pingpong_flip = cls._as_bool(settings.get('pingpong_flip_actions', False))
         return (
             loop_type != 'none'
             or bool(curved_segments)
             or bool(curved_controls)
             or direction in ('bi', 'reverse')
             or bool(segment_attrs)
+            or pingpong_flip
         )
 
     def _normalize_path_settings(
@@ -9629,6 +10035,7 @@ class RosBridge(Node):
 
         road_width = float(incoming.get('road_width', existing.get('road_width', 0.0)))
         description = str(incoming.get('description', existing.get('description', '')))
+        pingpong_flip_actions = self._as_bool(incoming.get('pingpong_flip_actions', existing.get('pingpong_flip_actions', False)))
 
         segment_attrs_raw = incoming.get('segment_attrs')
         if segment_attrs_raw is None:
@@ -9664,6 +10071,7 @@ class RosBridge(Node):
             'description': description,
             'segment_attrs': segment_attrs,
             'has_curves': bool(curved_segments),
+            'pingpong_flip_actions': pingpong_flip_actions,
         }
 
     @staticmethod
@@ -9761,6 +10169,11 @@ class RosBridge(Node):
             f"({len(segment_points)} wpts{' retry' if retry_same_target else ''})"
         )
 
+        path_context = {}
+        do_flip = self._as_bool(self._loop_path_settings.get('pingpong_flip_actions', False)) if isinstance(self._loop_path_settings, dict) else False
+        if self._loop_type == 'ping_pong' and direction == -1 and do_flip:
+            path_context['selected_path'] = '|FLIP_PINGPONG'
+
         start_result = self._start_follow_path_goal(
             segment_points,
             loop_type=self._loop_type,
@@ -9769,6 +10182,7 @@ class RosBridge(Node):
             state_current_index=current_idx,
             state_message=state_message,
             segment_attrs=self._loop_path_settings.get('segment_attrs') if isinstance(self._loop_path_settings, dict) else None,
+            path_mode_context=path_context,
         )
 
         if not start_result.get("ok"):
@@ -9819,7 +10233,7 @@ class RosBridge(Node):
                 settings_raw,
                 point_count=len(parsed_points),
             )
-            if not parsed_points and not self._has_non_default_path_settings(settings):
+            if not parsed_points and not self.__class__._has_non_default_path_settings(settings):
                 continue
             metadata[path_name] = {
                 'points': parsed_points,
@@ -9880,7 +10294,7 @@ class RosBridge(Node):
                 existing_settings=existing_settings,
             )
             keep_points_metadata = has_zone_reference or has_shelf_check or has_segment_metadata
-            keep_metadata = keep_points_metadata or self._has_non_default_path_settings(normalized_settings)
+            keep_metadata = keep_points_metadata or self.__class__._has_non_default_path_settings(normalized_settings)
             if keep_metadata:
                 self.path_metadata[path_name] = {
                     'points': cleaned if keep_points_metadata else [],
@@ -10678,12 +11092,38 @@ class RosBridge(Node):
             for point in points
         ]
 
-        # Build segment_bidirectional from point-level data or segment-level overrides.
+        # Build segment_bidirectional + segment_speeds from point-level data or
+        # segment-level overrides. Both are parallel to `points`: entry i describes
+        # the segment ARRIVING at points[i].
         bidirectional = []
+        segment_speeds = []
+        segment_accels = []
+        segment_decels = []
+
+        def _seg_num_from_override(seg_override, *keys):
+            if not isinstance(seg_override, dict):
+                return 0.0
+            for k in keys:
+                if k not in seg_override:
+                    continue
+                try:
+                    val = float(seg_override.get(k))
+                except (TypeError, ValueError):
+                    continue
+                if val > 0.0:
+                    return val
+            return 0.0
+
+        def _seg_speed_from_override(seg_override):
+            return _seg_num_from_override(seg_override, 'maxspeed', 'speed')
+
         for idx, point in enumerate(points):
             # Arriving segment index for waypoint idx is calculated based on original indices if available.
             is_bi = bool(self._as_bool(point.get('segment_bidirectional', point.get('segmentBidirectional', False))))
-            
+            seg_speed = _seg_speed_from_override({'maxspeed': point.get('maxspeed', point.get('speed'))})
+            seg_accel = _seg_num_from_override(point, 'maxaccel', 'accel')
+            seg_decel = _seg_num_from_override(point, 'maxdecel', 'decel')
+
             orig_idx = point.get('_original_index')
             if orig_idx is not None:
                 # If we have original indices, the segment ARRIVING at this point i is (original_index[i-1] -> original_index[i]).
@@ -10701,6 +11141,15 @@ class RosBridge(Node):
                                 is_bi = True
                             elif direction in {'uni', 'reverse'}:
                                 is_bi = False
+                            override_speed = _seg_speed_from_override(seg_override)
+                            if override_speed > 0.0:
+                                seg_speed = override_speed
+                            override_accel = _seg_num_from_override(seg_override, 'maxaccel', 'accel')
+                            if override_accel > 0.0:
+                                seg_accel = override_accel
+                            override_decel = _seg_num_from_override(seg_override, 'maxdecel', 'decel')
+                            if override_decel > 0.0:
+                                seg_decel = override_decel
             else:
                 # Fallback to local index if no original index info (e.g. non-loop path)
                 seg_idx = idx - 1
@@ -10712,10 +11161,28 @@ class RosBridge(Node):
                             is_bi = True
                         elif direction in {'uni', 'reverse'}:
                             is_bi = False
-            
+                        override_speed = _seg_speed_from_override(seg_override)
+                        if override_speed > 0.0:
+                            seg_speed = override_speed
+                        override_accel = _seg_num_from_override(seg_override, 'maxaccel', 'accel')
+                        if override_accel > 0.0:
+                            seg_accel = override_accel
+                        override_decel = _seg_num_from_override(seg_override, 'maxdecel', 'decel')
+                        if override_decel > 0.0:
+                            seg_decel = override_decel
+
             bidirectional.append(is_bi)
-        
+            segment_speeds.append(float(seg_speed))
+            segment_accels.append(float(seg_accel))
+            segment_decels.append(float(seg_decel))
+
         goal.segment_bidirectional = bidirectional
+        if hasattr(goal, 'segment_speeds'):
+            goal.segment_speeds = segment_speeds
+        if hasattr(goal, 'segment_accels'):
+            goal.segment_accels = segment_accels
+        if hasattr(goal, 'segment_decels'):
+            goal.segment_decels = segment_decels
 
         context = path_mode_context if isinstance(path_mode_context, dict) else {}
         if hasattr(goal, 'path_mode_selected_path'):
@@ -10803,6 +11270,9 @@ class RosBridge(Node):
         if isinstance(settings, dict) and settings:
             point_count_for_settings = len(points)
             self._normalize_path_settings(settings, point_count=point_count_for_settings)
+            motion_constraints = settings.get('motion_constraints')
+            if isinstance(motion_constraints, dict) and motion_constraints:
+                self._apply_path_motion_constraints(motion_constraints)
 
         requested_loop_type = self._normalize_loop_type(loop_type, loop_mode=loop_mode)
         context = path_mode_context if isinstance(path_mode_context, dict) else {}
@@ -12490,6 +12960,45 @@ class RosBridge(Node):
             return self._ok(False, str(getattr(response, 'message', '') or f'{service_name} rejected speed update'))
 
         return self._ok(True, str(getattr(response, 'message', '') or f'Applied {speed_mps:.2f} m/s to {service_name}'))
+
+    def _apply_path_motion_constraints(self, constraints: Dict[str, Any]) -> None:
+        """Apply motion constraints (from path properties panel) to the Nav2 stack before path dispatch."""
+        if not isinstance(constraints, dict) or not constraints:
+            return
+
+        def _pos(key: str) -> Optional[float]:
+            v = constraints.get(key)
+            if v is None:
+                return None
+            try:
+                f = float(v)
+                return f if f > 0 else None
+            except Exception:
+                return None
+
+        maxspeed = _pos('maxspeed')
+        if maxspeed is not None:
+            self._apply_runtime_zone_max_speed({'namespace': '/'}, maxspeed)
+
+        ctrl_params: Dict[str, float] = {}
+        maxrot = _pos('maxrot')
+        if maxrot is not None:
+            ctrl_params['FollowPath.max_vel_theta'] = maxrot
+        maxacc = _pos('maxacc')
+        if maxacc is not None:
+            ctrl_params['FollowPath.acc_lim_x'] = maxacc
+        maxdec = _pos('maxdec')
+        if maxdec is not None:
+            ctrl_params['FollowPath.decel_lim_x'] = maxdec
+        maxrotacc = _pos('maxrotacc')
+        if maxrotacc is not None:
+            ctrl_params['FollowPath.acc_lim_theta'] = maxrotacc
+        maxrotdec = _pos('maxrotdec')
+        if maxrotdec is not None:
+            ctrl_params['FollowPath.decel_lim_theta'] = maxrotdec
+
+        if ctrl_params:
+            self._set_runtime_node_parameters('/controller_server', ctrl_params)
 
     def _extract_nav2_curated_subset(self, nav2_payload: Dict[str, Any], footprint_config: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
         def _get(path: str, default: Any = None) -> Any:
@@ -14662,6 +15171,14 @@ class RosBridge(Node):
             timeout_msg='Timeout waiting for safety override service',
         )
 
+    def set_super_override(self, enabled: bool):
+        return self._call_setbool(
+            self.super_override_client,
+            enabled,
+            unavailable_msg='Super override service not available',
+            timeout_msg='Timeout waiting for super override service',
+        )
+
     def get_safety_status(self):
         req = Trigger.Request()
         response, err = self._call_service(self.safety_status_client, req, wait_timeout=1.0, response_timeout=3.0)
@@ -15028,6 +15545,8 @@ class RosBridge(Node):
             'pose_frame': self._map_frame(),
             'confidence': float(self.localization_confidence),
             'covariance_confidence': float(self.covariance_confidence),
+            'reflector_confidence': float(self.reflector_localization_confidence),
+            'reflector_status': self.reflector_status,
             'scan_map_match_confidence': float(self.scan_map_match_confidence),
             'scan_map_known_ratio': float(self.scan_map_match_known_ratio),
             'scan_map_hit_ratio': float(self.scan_map_match_hit_ratio),

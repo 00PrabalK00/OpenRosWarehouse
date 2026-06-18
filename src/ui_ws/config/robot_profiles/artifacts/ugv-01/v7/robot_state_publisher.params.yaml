@@ -1,0 +1,74 @@
+robot_state_publisher_profile:
+  ros__parameters:
+    use_sim_time: false
+    robot_description: "<robot name=\"UGV_01\">\n  <link name=\"base_footprint\" />\n\
+      \  <link name=\"base_link\">\n    <collision name=\"base_link_shape_1\">\n \
+      \     <origin xyz=\"0.000000 0.000000 0.045000\" rpy=\"0.000000 0.000000 0.000000\"\
+      \ />\n      <geometry>\n        <box size=\"0.800000 0.580000 0.090000\" />\n\
+      \      </geometry>\n    </collision>\n  </link>\n  <link name=\"left_wheel\"\
+      >\n    <collision name=\"left_wheel_shape_1\">\n      <origin xyz=\"0.000000\
+      \ 0.000000 0.000000\" rpy=\"0.000000 0.000000 0.000000\" />\n      <geometry>\n\
+      \        <sphere radius=\"0.100000\" />\n      </geometry>\n    </collision>\n\
+      \  </link>\n  <link name=\"right_wheel\">\n    <collision name=\"right_wheel_shape_1\"\
+      >\n      <origin xyz=\"0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n      <geometry>\n        <sphere radius=\"0.100000\" />\n\
+      \      </geometry>\n    </collision>\n  </link>\n  <link name=\"caster_front_left\"\
+      >\n    <collision name=\"caster_front_left_shape_1\">\n      <origin xyz=\"\
+      0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000 0.000000\" />\n      <geometry>\n\
+      \        <sphere radius=\"0.038000\" />\n      </geometry>\n    </collision>\n\
+      \  </link>\n  <link name=\"caster_front_right\">\n    <collision name=\"caster_front_right_shape_1\"\
+      >\n      <origin xyz=\"0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n      <geometry>\n        <sphere radius=\"0.038000\" />\n\
+      \      </geometry>\n    </collision>\n  </link>\n  <link name=\"caster_rear_left\"\
+      >\n    <collision name=\"caster_rear_left_shape_1\">\n      <origin xyz=\"0.000000\
+      \ 0.000000 0.000000\" rpy=\"0.000000 0.000000 0.000000\" />\n      <geometry>\n\
+      \        <sphere radius=\"0.038000\" />\n      </geometry>\n    </collision>\n\
+      \  </link>\n  <link name=\"caster_rear_right\">\n    <collision name=\"caster_rear_right_shape_1\"\
+      >\n      <origin xyz=\"0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n      <geometry>\n        <sphere radius=\"0.038000\" />\n\
+      \      </geometry>\n    </collision>\n  </link>\n  <link name=\"imu_link\">\n\
+      \    <collision name=\"imu_link_shape_1\">\n      <origin xyz=\"0.000000 0.000000\
+      \ 0.000000\" rpy=\"0.000000 0.000000 0.000000\" />\n      <geometry>\n     \
+      \   <box size=\"0.053800 0.048800 0.025200\" />\n      </geometry>\n    </collision>\n\
+      \  </link>\n  <link name=\"laser_front_frame\">\n    <collision name=\"laser_front_frame_shape_1\"\
+      >\n      <origin xyz=\"0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n      <geometry>\n        <cylinder radius=\"0.050000\" length=\"\
+      0.040000\" />\n      </geometry>\n    </collision>\n  </link>\n  <link name=\"\
+      laser_rear_frame\">\n    <collision name=\"laser_rear_frame_shape_1\">\n   \
+      \   <origin xyz=\"0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000 0.000000\"\
+      \ />\n      <geometry>\n        <cylinder radius=\"0.050000\" length=\"0.040000\"\
+      \ />\n      </geometry>\n    </collision>\n  </link>\n  <link name=\"face_link\"\
+      \ />\n  <joint name=\"base_footprint_to_base_link\" type=\"fixed\">\n    <parent\
+      \ link=\"base_footprint\" />\n    <child link=\"base_link\" />\n    <origin\
+      \ xyz=\"0.000000 0.000000 0.000000\" rpy=\"0.000000 0.000000 0.000000\" />\n\
+      \  </joint>\n  <joint name=\"base_link_to_left_wheel\" type=\"continuous\">\n\
+      \    <parent link=\"base_link\" />\n    <child link=\"left_wheel\" />\n    <origin\
+      \ xyz=\"0.000000 0.247500 0.000000\" rpy=\"-1.570796 0.000000 0.000000\" />\n\
+      \  </joint>\n  <joint name=\"base_link_to_right_wheel\" type=\"continuous\"\
+      >\n    <parent link=\"base_link\" />\n    <child link=\"right_wheel\" />\n \
+      \   <origin xyz=\"0.000000 -0.247500 0.000000\" rpy=\"1.570796 0.000000 0.000000\"\
+      \ />\n  </joint>\n  <joint name=\"base_link_to_caster_front_left\" type=\"fixed\"\
+      >\n    <parent link=\"base_link\" />\n    <child link=\"caster_front_left\"\
+      \ />\n    <origin xyz=\"0.350000 0.200000 -0.062000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n  </joint>\n  <joint name=\"base_link_to_caster_front_right\"\
+      \ type=\"fixed\">\n    <parent link=\"base_link\" />\n    <child link=\"caster_front_right\"\
+      \ />\n    <origin xyz=\"0.350000 -0.200000 -0.062000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n  </joint>\n  <joint name=\"base_link_to_caster_rear_left\"\
+      \ type=\"fixed\">\n    <parent link=\"base_link\" />\n    <child link=\"caster_rear_left\"\
+      \ />\n    <origin xyz=\"-0.350000 0.200000 -0.062000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n  </joint>\n  <joint name=\"base_link_to_caster_rear_right\"\
+      \ type=\"fixed\">\n    <parent link=\"base_link\" />\n    <child link=\"caster_rear_right\"\
+      \ />\n    <origin xyz=\"-0.350000 -0.200000 -0.062000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n  </joint>\n  <joint name=\"base_link_to_imu_link\" type=\"\
+      fixed\">\n    <parent link=\"base_link\" />\n    <child link=\"imu_link\" />\n\
+      \    <origin xyz=\"0.000000 0.000000 0.100000\" rpy=\"0.000000 0.000000 0.000000\"\
+      \ />\n  </joint>\n  <joint name=\"base_link_to_laser_front_frame\" type=\"fixed\"\
+      >\n    <parent link=\"base_link\" />\n    <child link=\"laser_front_frame\"\
+      \ />\n    <origin xyz=\"0.350000 0.000000 0.100000\" rpy=\"0.000000 0.000000\
+      \ 3.141590\" />\n  </joint>\n  <joint name=\"base_link_to_laser_rear_frame\"\
+      \ type=\"fixed\">\n    <parent link=\"base_link\" />\n    <child link=\"laser_rear_frame\"\
+      \ />\n    <origin xyz=\"-0.350000 0.000000 0.100000\" rpy=\"0.000000 0.000000\
+      \ 0.000000\" />\n  </joint>\n  <joint name=\"base_link_to_face_link\" type=\"\
+      fixed\">\n    <parent link=\"base_link\" />\n    <child link=\"face_link\" />\n\
+      \    <origin xyz=\"0.400000 0.000000 0.045000\" rpy=\"0.000000 0.000000 0.000000\"\
+      \ />\n  </joint>\n</robot>"

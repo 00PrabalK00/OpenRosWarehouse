@@ -26,6 +26,7 @@ from flask_cors import CORS
 from PIL import Image
 from rclpy.executors import MultiThreadedExecutor
 import yaml
+from std_srvs.srv import SetBool
 
 from next_ros2ws_web.ros_bridge import RosBridge
 
@@ -99,7 +100,7 @@ _CAMERA_WARMUP_FRAMES = max(6, int(os.getenv('NEXT_WEB_CAMERA_WARMUP_FRAMES', '1
 
 
 def _node():
-    if ros_node is None:
+    if ros_node is None or getattr(ros_node, '_shutting_down', False):
         return None, (jsonify({'ok': False, 'message': 'ROS node not initialized'}), 500)
     return ros_node, None
 
@@ -1665,17 +1666,8 @@ def set_safety_super_override():
     data = _json_body()
     enable = bool(data.get('enable', True))
     
-    req = SetBool.Request()
-    req.data = enable
-    cli = node.create_client(SetBool, '/safety_controller/super_override')
-    if cli.wait_for_service(timeout_sec=0.5):
-        fut = cli.call_async(req)
-        rclpy.spin_until_future_complete(node, fut, timeout_sec=1.0)
-        node.destroy_client(cli)
-        return jsonify({'ok': True})
-    
-    node.destroy_client(cli)
-    return jsonify({'ok': False, 'message': 'Service unavailable'}), 503
+    result = node.set_super_override(enable)
+    return _status(result, fail_code=503)
 
 @app.route('/api/safety/override', methods=['POST'])
 def set_safety_override():
@@ -2224,12 +2216,12 @@ def set_stack_mode():
 
     data = _json_body()
     mode = str(data.get('mode', '')).strip().lower()
-    if mode not in {'nav', 'pgv_nav', 'slam', 'stop'}:
+    if mode not in {'nav', 'pgv_nav', 'reflector_nav', 'slam', 'stop'}:
         return jsonify({'ok': False, 'message': 'Invalid mode'}), 400
 
     # Switching to AGV (nav/slam/stop) mode: kill any running PGV nodes so
     # they don't fight AMCL for map->odom and don't trigger the safety halt.
-    if mode in {'nav', 'slam', 'stop'}:
+    if mode in {'nav', 'reflector_nav', 'slam', 'stop'}:
         with _pgv_lock:
             _pgv_stop_all()
             _pgv_kill_strays()
@@ -2386,7 +2378,12 @@ def get_available_topics():
         return err
 
     topics = []
-    for topic_name, type_list in node.get_topic_names_and_types():
+    try:
+        topic_pairs = list(node.get_topic_names_and_types())
+    except Exception as exc:
+        return jsonify({'ok': False, 'message': f'Failed to read ROS graph: {exc}', 'topics': []}), 503
+
+    for topic_name, type_list in topic_pairs:
         if type_list:
             topics.append({'topic': topic_name, 'type': type_list[0]})
 
@@ -4040,8 +4037,12 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node = ros_node
+        ros_node = None
         try:
-            ros_node.destroy_node()
+            if node is not None:
+                setattr(node, '_shutting_down', True)
+                node.destroy_node()
         except Exception:
             pass
         try:

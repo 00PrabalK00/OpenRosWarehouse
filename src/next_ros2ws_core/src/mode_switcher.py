@@ -30,6 +30,7 @@ class ModeSwitcher(Node):
             'zones': 'navigation',
             'sequence': 'tracker',
             'path': 'navigation',
+            'reflector': 'navigation',
         }
 
         # Canonical mode input — transient-local so the current mode is delivered
@@ -72,6 +73,7 @@ class ModeSwitcher(Node):
             'path': {'navigation': False, 'tracker': False, 'joystick': False},
             # Sequence mode uses Nav2 via GoToZone, so navigation must remain free.
             'sequence': {'navigation': False, 'tracker': False, 'joystick': False},
+            'reflector': {'navigation': False, 'tracker': False, 'joystick': False},
         }
         selected = lock_policy.get(mode, {'navigation': False, 'tracker': False, 'joystick': False})
 

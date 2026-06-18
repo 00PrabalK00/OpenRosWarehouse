@@ -1,7 +1,7 @@
 """Mode-switching helpers for zone web UI."""
 
 
-VALID_STACK_MODES = {'nav', 'slam', 'stop'}
+VALID_STACK_MODES = {'nav', 'pgv_nav', 'slam', 'stop'}
 
 
 def set_mode_with_log(ros_node, mode, log_message):

@@ -210,8 +210,17 @@ private:
   double lookahead_min_distance_ {0.30};
   double lookahead_max_distance_ {1.25};
   double segment_finish_epsilon_ {0.12};
+  // Speed ownership (single source of truth):
+  //   base_max_v_         = commanded baseline (nav2 param max_v at boot,
+  //                         /set_max_speed global, or per-segment cap) — set via
+  //                         the max_v dynamic parameter.
+  //   speed_limit_factor_ = environmental multiplier from Nav2 SpeedFilter map
+  //                         zones, applied through setSpeedLimit().
+  //   max_v_              = base_max_v_ * speed_limit_factor_  (effective cap,
+  //                         further reduced per-segment by curvature/motion intent).
   double max_v_ {0.75};
   double base_max_v_ {0.75};
+  double speed_limit_factor_ {1.0};
   double max_w_ {1.2};
   double acc_lim_v_ {2.5};
   double decel_lim_v_ {2.5};  // separate deceleration limit for velocity profile braking pass

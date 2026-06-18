@@ -1,7 +1,7 @@
-map_yaml_path: /home/next/testBuild/src/ui_ws/maps/NextFactory.yaml
+map_yaml_path: /home/next/testBuild/src/ui_ws/maps/newtestarea.yaml
 origin:
-- -19.5
-- -13.800000190734863
-- 0.8734732313119734
+- -15.100000381469727
+- -9.510000228881836
+- 0.0
 resolution: 0.05
-saved_at: 1780289436.5251477
+saved_at: 1781754522.560078
