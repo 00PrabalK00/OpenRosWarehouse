@@ -2523,23 +2523,50 @@
 
             if (!pixelScan.length) return;
 
+            const scanType = (typeof lidarViewSettings !== 'undefined') ? lidarViewSettings.scan_type : 'point_cloud';
             const pointStep = Math.max(1, Math.floor(pixelScan.length / 350));
             mapCtx.save();
-            for (let i = 0; i < pixelScan.length; i += pointStep) {
-                const point = pixelScan[i];
-                const rgb = lidarRangeToRgb(point.range);
-                mapCtx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.28)`;
+
+            if (scanType === 'free_space_bubble') {
                 mapCtx.beginPath();
-                mapCtx.arc(point.x, point.y, 2.3, 0, 2 * Math.PI);
+                for (let i = 0; i < pixelScan.length; i += pointStep) {
+                    if (i === 0) mapCtx.moveTo(pixelScan[i].x, pixelScan[i].y);
+                    else mapCtx.lineTo(pixelScan[i].x, pixelScan[i].y);
+                }
+                mapCtx.closePath();
+                mapCtx.fillStyle = 'rgba(34, 197, 94, 0.12)';
                 mapCtx.fill();
-            }
-            for (let i = 0; i < pixelScan.length; i += pointStep) {
-                const point = pixelScan[i];
-                const rgb = lidarRangeToRgb(point.range);
-                mapCtx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.92)`;
+                mapCtx.strokeStyle = 'rgba(34, 197, 94, 0.35)';
+                mapCtx.lineWidth = 1.5;
+                mapCtx.stroke();
+            } else if (scanType === 'obstacle_ribbon') {
                 mapCtx.beginPath();
-                mapCtx.arc(point.x, point.y, 1.2, 0, 2 * Math.PI);
-                mapCtx.fill();
+                for (let i = 0; i < pixelScan.length; i += pointStep) {
+                    if (i === 0) mapCtx.moveTo(pixelScan[i].x, pixelScan[i].y);
+                    else mapCtx.lineTo(pixelScan[i].x, pixelScan[i].y);
+                }
+                mapCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+                mapCtx.lineWidth = 2.5;
+                mapCtx.lineJoin = 'round';
+                mapCtx.stroke();
+            } else {
+                // Default point cloud
+                for (let i = 0; i < pixelScan.length; i += pointStep) {
+                    const point = pixelScan[i];
+                    const rgb = lidarRangeToRgb(point.range);
+                    mapCtx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.28)`;
+                    mapCtx.beginPath();
+                    mapCtx.arc(point.x, point.y, 2.3, 0, 2 * Math.PI);
+                    mapCtx.fill();
+                }
+                for (let i = 0; i < pixelScan.length; i += pointStep) {
+                    const point = pixelScan[i];
+                    const rgb = lidarRangeToRgb(point.range);
+                    mapCtx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.92)`;
+                    mapCtx.beginPath();
+                    mapCtx.arc(point.x, point.y, 1.2, 0, 2 * Math.PI);
+                    mapCtx.fill();
+                }
             }
             mapCtx.restore();
         }

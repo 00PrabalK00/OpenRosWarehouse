@@ -28019,7 +28019,7 @@
                                 ctx.save();
 
                                 // Keep enough points for visual continuity without overdraw.
-                                const pointStep = Math.max(1, Math.floor(pixelScan.length / 300));
+                                const pointStep = Math.max(1, Math.floor(pixelScan.length / 350));
 
                                 if (effectiveScanType === 'beam' && beamOriginPose) {
                                     const [rx, ry] = worldToPixel(beamOriginPose.x, beamOriginPose.y);
@@ -28035,30 +28035,118 @@
                                             ctx.stroke();
                                         }
                                     }
+                                } else if (effectiveScanType === 'occupancy_arc' && rangeReferencePose) {
+                                    const [rx, ry] = worldToPixel(rangeReferencePose.x, rangeReferencePose.y);
+                                    const robotYaw = Number(rangeReferencePose.theta || 0.0);
+                                    const arcRadius = 2.5 / mapData.resolution; // 2.5m visualization
+                                    
+                                    // Draw background arc
+                                    ctx.beginPath();
+                                    ctx.arc(rx, ry, arcRadius, robotYaw - Math.PI/2, robotYaw + Math.PI/2);
+                                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                                    ctx.lineWidth = arcRadius * 0.4;
+                                    ctx.stroke();
+
+                                    // Find min range in 180 deg front arc
+                                    let minRange = 999;
+                                    for (let i = 0; i < pixelScan.length; i += pointStep) {
+                                        if (pixelScan[i].range < minRange) minRange = pixelScan[i].range;
+                                    }
+
+                                    const rgb = lidarRangeToRgb(minRange);
+                                    ctx.beginPath();
+                                    ctx.arc(rx, ry, arcRadius, robotYaw - Math.PI/2, robotYaw + Math.PI/2);
+                                    ctx.strokeStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.25)`;
+                                    ctx.lineWidth = arcRadius * 0.35;
+                                    ctx.stroke();
+                                } else if (effectiveScanType === 'heatmap_fan' && rangeReferencePose) {
+                                    const [rx, ry] = worldToPixel(rangeReferencePose.x, rangeReferencePose.y);
+                                    ctx.beginPath();
+                                    ctx.moveTo(rx, ry);
+                                    for (let i = 0; i < pixelScan.length; i += pointStep) {
+                                        ctx.lineTo(pixelScan[i].x, pixelScan[i].y);
+                                    }
+                                    ctx.closePath();
+                                    const grad = ctx.createRadialGradient(rx, ry, 0, rx, ry, 150);
+                                    grad.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+                                    grad.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+                                    ctx.fillStyle = grad;
+                                    ctx.fill();
+                                } else if (effectiveScanType === 'free_space_bubble' && rangeReferencePose) {
+                                    const [rx, ry] = worldToPixel(rangeReferencePose.x, rangeReferencePose.y);
+                                    ctx.beginPath();
+                                    for (let i = 0; i < pixelScan.length; i += pointStep) {
+                                        if (i === 0) ctx.moveTo(pixelScan[i].x, pixelScan[i].y);
+                                        else ctx.lineTo(pixelScan[i].x, pixelScan[i].y);
+                                    }
+                                    ctx.closePath();
+                                    ctx.fillStyle = 'rgba(34, 197, 94, 0.15)';
+                                    ctx.fill();
+                                    ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+                                    ctx.lineWidth = 2;
+                                    ctx.stroke();
+                                } else if (effectiveScanType === 'sector_ring' && rangeReferencePose) {
+                                    const [rx, ry] = worldToPixel(rangeReferencePose.x, rangeReferencePose.y);
+                                    const robotYaw = Number(rangeReferencePose.theta || 0.0);
+                                    const sectors = 8;
+                                    const sectorRanges = new Array(sectors).fill(999);
+                                    
+                                    // Populate sector min ranges
+                                    for (const p of laserScan) {
+                                        const angle = Math.atan2(p.y - rangeReferencePose.y, p.x - rangeReferencePose.x);
+                                        let normAngle = (angle - robotYaw + Math.PI) % (2 * Math.PI);
+                                        if (normAngle < 0) normAngle += 2 * Math.PI;
+                                        const sectorIdx = Math.floor((normAngle / (2 * Math.PI)) * sectors);
+                                        if (p.range < sectorRanges[sectorIdx]) sectorRanges[sectorIdx] = p.range;
+                                    }
+
+                                    const ringRadius = 45;
+                                    for (let s = 0; s < sectors; s++) {
+                                        const startAngle = robotYaw - Math.PI + (s * (2 * Math.PI / sectors));
+                                        const endAngle = startAngle + (2 * Math.PI / sectors);
+                                        const rgb = lidarRangeToRgb(sectorRanges[s]);
+                                        ctx.beginPath();
+                                        ctx.moveTo(rx, ry);
+                                        ctx.arc(rx, ry, ringRadius, startAngle + 0.05, endAngle - 0.05);
+                                        ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.4)`;
+                                        ctx.fill();
+                                    }
+                                } else if (effectiveScanType === 'obstacle_ribbon') {
+                                    ctx.beginPath();
+                                    for (let i = 0; i < pixelScan.length; i += pointStep) {
+                                        if (i === 0) ctx.moveTo(pixelScan[i].x, pixelScan[i].y);
+                                        else ctx.lineTo(pixelScan[i].x, pixelScan[i].y);
+                                    }
+                                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+                                    ctx.lineWidth = 3;
+                                    ctx.lineJoin = 'round';
+                                    ctx.stroke();
                                 }
 
-                                const outerRadius = effectiveScanType === 'ring' ? 2.8 : 2.3;
-                                const coreRadius = effectiveScanType === 'ring' ? 1.7 : 1.2;
-                                const outerAlpha = effectiveScanType === 'ring' ? 0.38 : 0.30;
+                                if (['point_cloud', 'ring', 'beam'].includes(effectiveScanType)) {
+                                    const outerRadius = effectiveScanType === 'ring' ? 2.8 : 2.3;
+                                    const coreRadius = effectiveScanType === 'ring' ? 1.7 : 1.2;
+                                    const outerAlpha = effectiveScanType === 'ring' ? 0.38 : 0.30;
 
-                                // Outer glow pass.
-                                for (let i = 0; i < pixelScan.length; i += pointStep) {
-                                    const point = pixelScan[i];
-                                    const rgb = getLidarPointRgb(point.range);
-                                    ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${outerAlpha})`;
-                                    ctx.beginPath();
-                                    ctx.arc(point.x, point.y, outerRadius, 0, 2 * Math.PI);
-                                    ctx.fill();
-                                }
+                                    // Outer glow pass.
+                                    for (let i = 0; i < pixelScan.length; i += pointStep) {
+                                        const point = pixelScan[i];
+                                        const rgb = getLidarPointRgb(point.range);
+                                        ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${outerAlpha})`;
+                                        ctx.beginPath();
+                                        ctx.arc(point.x, point.y, outerRadius, 0, 2 * Math.PI);
+                                        ctx.fill();
+                                    }
 
-                                // Core pass.
-                                for (let i = 0; i < pixelScan.length; i += pointStep) {
-                                    const point = pixelScan[i];
-                                    const rgb = getLidarPointRgb(point.range);
-                                    ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.95)`;
-                                    ctx.beginPath();
-                                    ctx.arc(point.x, point.y, coreRadius, 0, 2 * Math.PI);
-                                    ctx.fill();
+                                    // Core pass.
+                                    for (let i = 0; i < pixelScan.length; i += pointStep) {
+                                        const point = pixelScan[i];
+                                        const rgb = getLidarPointRgb(point.range);
+                                        ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.95)`;
+                                        ctx.beginPath();
+                                        ctx.arc(point.x, point.y, coreRadius, 0, 2 * Math.PI);
+                                        ctx.fill();
+                                    }
                                 }
 
                                 ctx.restore();
@@ -35018,6 +35106,11 @@
                                             <option value="point_cloud">Point Cloud</option>
                                             <option value="ring">Ring Points</option>
                                             <option value="beam">Beam Lines</option>
+                                            <option value="occupancy_arc">Occupancy Arc</option>
+                                            <option value="heatmap_fan">Heatmap Fan</option>
+                                            <option value="free_space_bubble">Free Space Bubble</option>
+                                            <option value="sector_ring">Sector Status Ring</option>
+                                            <option value="obstacle_ribbon">Obstacle Ribbon</option>
                                         </select>
                                     </div>
                                     <div class="settings-item">
